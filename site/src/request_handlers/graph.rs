@@ -235,7 +235,13 @@ async fn create_graphs(
         .collect();
 
     if request.benchmark.is_none() {
-        let summary_benchmark = create_summary(ctxt, &interpolated_responses, request.kind)?;
+        let request_profile = request
+            .profile
+            .as_ref()
+            .map(|p| p.parse::<Profile>())
+            .transpose()?;
+        let summary_benchmark =
+            create_summary(ctxt, &interpolated_responses, request.kind, request_profile)?;
         benchmarks.insert("Summary".to_string(), summary_benchmark);
     }
 
@@ -289,12 +295,16 @@ fn create_summary(
         Vec<((ArtifactId, Option<f64>), IsInterpolated)>,
     >],
     graph_kind: GraphKind,
+    profile: Option<Profile>,
 ) -> ServerResult<HashMap<Profile, HashMap<String, graphs::Series>>> {
     let mut baselines = HashMap::new();
     let mut summary_benchmark = HashMap::new();
     let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
-        vec![Profile::Check, Profile::Debug, Profile::Opt, Profile::Doc]
+        profile.map_or_else(
+            || vec![Profile::Check, Profile::Debug, Profile::Opt, Profile::Doc],
+            |p| vec![p]
+        )
     );
     for (scenario, profile) in summary_query_cases {
         let baseline = match baselines.entry((profile, scenario)) {
