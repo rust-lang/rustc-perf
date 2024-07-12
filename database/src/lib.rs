@@ -1,5 +1,5 @@
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
 use intern::intern;
 use serde::{Deserialize, Serialize};
@@ -51,32 +51,12 @@ impl std::str::FromStr for Date {
 }
 
 impl Date {
-    pub fn from_format(date: &str, format: &str) -> Result<Date, DateParseError> {
-        match DateTime::parse_from_str(date, format) {
-            Ok(value) => Ok(Date(value.with_timezone(&Utc))),
-            Err(_) => match Utc.datetime_from_str(date, format) {
-                Ok(dt) => Ok(Date(dt)),
-                Err(err) => Err(DateParseError {
-                    input: date.to_string(),
-                    format: format.to_string(),
-                    error: err,
-                }),
-            },
-        }
-    }
-
     pub fn ymd_hms(year: i32, month: u32, day: u32, h: u32, m: u32, s: u32) -> Date {
         Date(Utc.with_ymd_and_hms(year, month, day, h, m, s).unwrap())
     }
 
     pub fn empty() -> Date {
         Date::ymd_hms(2000, 1, 1, 1, 1, 1)
-    }
-
-    pub fn start_of_week(&self) -> Date {
-        let weekday = self.0.weekday();
-        // num_days_from_sunday is 0 for Sunday
-        Date(self.0 - chrono::Duration::days(weekday.num_days_from_sunday() as i64))
     }
 }
 
