@@ -89,7 +89,7 @@ function renderRuntime(element: string, data: [number], versions: [string]) {
       type: "line",
     },
     title: {
-      text: `Average time for a run`,
+      text: `Average time for a runtime benchmark`,
     },
     yAxis: {
       title: {text: "Seconds"},
