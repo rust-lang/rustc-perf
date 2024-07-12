@@ -1,19 +1,36 @@
 {% extends "layout.html" %}
+{% block head %}
+<style>
+    .graphs {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+
+        @media screen and (max-width: 768px) {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
 {% block content %}
 <details style="margin-top: 10px;">
-<summary>What data is in the dashboard?</summary>
+    <summary>What data is in the dashboard?</summary>
 
-The dashboard shows performance results for all stable Rust releases going back to
-<code>1.28.0</code>, along with the latest <code>beta</code> release. The displayed
-duration is an arithmetic mean amongst all
-<a href="https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks#stable">stable</a>
-benchmarks.
+    The dashboard shows performance results for all stable Rust releases going back to
+    <code>1.28.0</code>, along with the latest <code>beta</code> release. The displayed
+    duration is an arithmetic mean amongst all
+    <a href="https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks#stable">stable</a>
+    benchmarks. The dashboard also shows the average duration of runtime benchmarks, which measure the performance of
+    Rust programs
+    compiled by a given version of the Rust compiler.
 </details>
 
-<div id="check-average-times"></div>
-<div id="debug-average-times"></div>
-<div id="opt-average-times"></div>
-<div id="doc-average-times"></div>
+<div class="graphs">
+    <div id="check-average-times"></div>
+    <div id="debug-average-times"></div>
+    <div id="opt-average-times"></div>
+    <div id="doc-average-times"></div>
+    <div id="runtime-average-times"></div>
+</div>
 <div id="as-of"></div>
 {% endblock %}
 {% block script %}
