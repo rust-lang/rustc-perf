@@ -256,3 +256,7 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+@import "../benchmark-detail.scss";
+</style>

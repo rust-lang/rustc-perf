@@ -250,49 +250,11 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-.columns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  margin: 10px 0;
-
-  .grow {
-    flex-grow: 1;
-  }
-
-  &.graphs {
-    flex-wrap: nowrap;
-  }
-}
-
-.graphs {
-  margin-top: 15px;
-}
-
-.rows {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-
-  &.center-items {
-    align-items: center;
-  }
-}
+@import "../../benchmark-detail.scss";
 
 .shortcut {
   margin-top: 15px;
   text-align: left;
-}
-
-.title {
-  &.bold,
-  .bold {
-    font-weight: bold;
-  }
-
-  &.info {
-    margin-bottom: 15px;
-  }
 }
 
 table {
