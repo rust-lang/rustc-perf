@@ -952,7 +952,7 @@ impl Connection for SqliteConnection {
                     include: row.get(3).unwrap(),
                     exclude: row.get(4).unwrap(),
                     runs: row.get(5).unwrap(),
-                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap(), Utc)))
+                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap().and_utc()))
                 })
             })
             .collect::<Result<Vec<_>, _>>()
@@ -983,7 +983,7 @@ impl Connection for SqliteConnection {
                         include: row.get(3).unwrap(),
                         exclude: row.get(4).unwrap(),
                         runs: row.get(5).unwrap(),
-                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap(), Utc)))
+                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap().and_utc()))
                     })
                 },
             )
