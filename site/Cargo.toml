@@ -39,7 +39,8 @@ url = "2"
 analyzeme = "12.0.0"
 inferno = { version = "0.11", default-features = false }
 mime = "0.3"
-prometheus = "0.13"
+# prometheus currently uses plain text, so disable protobuf
+prometheus = { version = "0.13", default-features = false }
 uuid = { version = "1.3.0", features = ["v4"] }
 tera = { version = "1.19", default-features = false }
 rust-embed = { version = "6.6.0", features = ["include-exclude", "interpolate-folder-path"] }
