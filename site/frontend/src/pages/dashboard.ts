@@ -80,6 +80,13 @@ function render(
 }
 
 function renderRuntime(element: string, data: [number], versions: [string]) {
+  // Remove null and convert nanoseconds to miliseconds
+  // The null values, which indicate that the runtime data is missing, are only present at the beginning of the array.
+  const formattedData = data
+    .filter((data) => data != null)
+    .map((data) => data / 1_000_000);
+  const nullCount = data.length - formattedData.length;
+
   Highcharts.chart({
     chart: {
       renderTo: element,
@@ -92,11 +99,11 @@ function renderRuntime(element: string, data: [number], versions: [string]) {
       text: `Average time for a runtime benchmark`,
     },
     yAxis: {
-      title: {text: "Seconds"},
+      title: {text: "Miliseconds"},
       min: 0,
     },
     xAxis: {
-      categories: versions,
+      categories: versions.slice(nullCount),
       title: {text: "Version"},
     },
     series: [
@@ -104,7 +111,7 @@ function renderRuntime(element: string, data: [number], versions: [string]) {
         showInLegend: false,
         type: "line",
         animation: false,
-        data,
+        data: formattedData,
       },
     ],
   });
