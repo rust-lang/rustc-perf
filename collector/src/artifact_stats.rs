@@ -108,7 +108,7 @@ static RUSTC_HASH_REGEX: OnceLock<Regex> = OnceLock::new();
 /// Demangle the symbol and remove rustc mangling hashes.
 fn normalize_symbol_name(symbol: &str) -> String {
     let regex =
-        RUSTC_HASH_REGEX.get_or_init(|| Regex::new(r#"(::)?\b[a-z0-9]{15,17}\b(\.\d+)?"#).unwrap());
+        RUSTC_HASH_REGEX.get_or_init(|| Regex::new(r"(::)?\b[a-z0-9]{15,17}\b(\.\d+)?").unwrap());
 
     let symbol = rustc_demangle::demangle(symbol).to_string();
     regex.replace_all(&symbol, "").to_string()

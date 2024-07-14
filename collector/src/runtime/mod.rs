@@ -209,7 +209,7 @@ fn execute_runtime_benchmark_binary(
     let mut command = prepare_command(binary);
     command.arg("run");
     command.arg("--iterations");
-    command.arg(&iterations.to_string());
+    command.arg(iterations.to_string());
 
     if !filter.exclude.is_empty() {
         command.args(["--exclude", &filter.exclude.join(",")]);

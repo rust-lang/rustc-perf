@@ -13,7 +13,7 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<
     let ctx = format!("renaming file {:?} to {:?}", from, to);
 
     if fs::metadata(from)?.is_file() {
-        return Ok(fs::rename(from, to).with_context(|| ctx.clone())?);
+        return fs::rename(from, to).with_context(|| ctx.clone());
     }
 
     robocopy(from, to, &[&"/move"]).with_context(|| ctx.clone())

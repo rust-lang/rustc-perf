@@ -158,7 +158,7 @@ mod imp {
     impl<'a> Pipe<'a> {
         unsafe fn new<P: IntoRawHandle>(p: P, dst: &'a mut Vec<u8>) -> Pipe<'a> {
             Pipe {
-                dst: dst,
+                dst,
                 pipe: NamedPipe::from_raw_handle(p.into_raw_handle()),
                 overlapped: Overlapped::zero(),
                 done: false,
@@ -196,9 +196,6 @@ mod imp {
         if v.capacity() == v.len() {
             v.reserve(1);
         }
-        slice::from_raw_parts_mut(
-            v.as_mut_ptr().offset(v.len() as isize),
-            v.capacity() - v.len(),
-        )
+        slice::from_raw_parts_mut(v.as_mut_ptr().add(v.len()), v.capacity() - v.len())
     }
 }

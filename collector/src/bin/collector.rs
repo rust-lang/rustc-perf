@@ -1371,7 +1371,7 @@ fn print_binary_stats(
     // Fill in items from the second artifact that are not present in the first one
     if use_diff {
         for (section, size) in items2 {
-            if items.get(&section).is_none() {
+            if !items.contains_key(&section) {
                 rows.push(Row {
                     name: section,
                     before: 0,

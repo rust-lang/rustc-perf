@@ -197,9 +197,9 @@ pub struct UnrolledCommit<'a> {
 
 lazy_static::lazy_static! {
     static ref ROLLUP_PR_NUMBER: regex::Regex =
-        regex::Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
+        regex::Regex::new(r"^Auto merge of #(\d+)").unwrap();
     static ref ROLLEDUP_PR_NUMBER: regex::Regex =
-        regex::Regex::new(r#"^Rollup merge of #(\d+)"#).unwrap();
+        regex::Regex::new(r"^Rollup merge of #(\d+)").unwrap();
 }
 
 // Gets the pr number for the associated rollup PR message. Returns None if this is not a rollup PR
