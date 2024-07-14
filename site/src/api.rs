@@ -75,7 +75,7 @@ pub mod dashboard {
         pub debug: Cases,
         pub opt: Cases,
         pub doc: Cases,
-        pub runtime: Vec<f64>,
+        pub runtime: Vec<Option<f64>>,
     }
 }
 

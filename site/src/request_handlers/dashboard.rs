@@ -137,13 +137,26 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     let responses = ctxt
         .statistic_series(runtime_benchmark_query.clone(), aids.clone())
         .await?;
+
+    // The flag is used to ignore only the initial values where the runtime benchmark was not implemented.
+    let mut ignore_runtime_benchmark = true;
     let points = db::average(
         responses
             .into_iter()
             .map(|sr| sr.interpolate().series)
             .collect::<Vec<_>>(),
     )
-    .map(|((_id, point), _interpolated)| (point.expect("interpolated") * 100.0).round() / 100.0)
+    .map(|((_id, point), interpolated)| {
+        if !interpolated.as_bool() {
+            ignore_runtime_benchmark = false;
+        }
+
+        if ignore_runtime_benchmark && interpolated.as_bool() {
+            None
+        } else {
+            Some((point.expect("interpolated") * 100.0).round() / 100.0)
+        }
+    })
     .collect::<Vec<_>>();
 
     Ok(dashboard::Response {
