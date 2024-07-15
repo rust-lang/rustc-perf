@@ -717,6 +717,8 @@ impl Connection for SqliteConnection {
         _profile: Profile,
         _scenario: crate::Scenario,
     ) {
+        #![allow(clippy::diverging_sub_expression)]
+
         // FIXME: this is left for the future, if we ever need to support it. It
         // shouldn't be too hard, but we may also want to just intern the raw
         // self profile files into sqlite database or something like that, not
