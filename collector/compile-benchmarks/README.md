@@ -206,6 +206,13 @@ Rust code being written today.
       --id Test --profiles=Check --scenarios=IncrPatched
       --include=$NEW_BENCHMARK`
   - Add the new entry to `collector/compile-benchmarks/README.md`.
+  - Add a new licensing entry to `collector/compile-benchmarks/REUSE.toml` (see existing entries
+  for inspiration).
+    - If the benchmark is artificial, use the `MIT OR Apache-2.0` license and set Rust Project
+    developers as the copyright owners (see e.g. `await-call-tree` as an example).
+    - If the benchmark is a third-party crate, make sure to use its license. Try to find the
+    copyright owner in the crate's `COPYRIGHT` or `README` files. If you cannot find it, consider
+    using the copyright owner `<crate-name> contributors`.
   - `git add` the `Cargo.lock` file, if it's not already part of the
     benchmark's committed code.
     - If the benchmark has a `.gitignore` file that contains `Cargo.lock`,
