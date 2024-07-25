@@ -24,3 +24,4 @@ log = "0.4"
 bytes = "1"
 csv = "1"
 clap = { version = "4.1", features = ["cargo"] }
+x509-cert = { version = "0.2.5", features = ["pem"] }
