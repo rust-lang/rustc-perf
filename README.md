@@ -9,3 +9,7 @@ be found in the `README` files in the `collector` and `site` directories.
 
 Additional documentation on the benchmark programs can be found in the `README`
 file in the `collector/compile-benchmarks` and `collector/runtime-benchmarks` directories.
+
+## License
+The code of this repository is licensed under the `MIT` license, managed by the [`Reuse Specification`](REUSE.toml).
+The compile-time benchmarks have their own separate licenses, check the [`collector/compile-benchmarks/REUSE.toml`](collector/compile-benchmarks/REUSE.toml) file.
