@@ -51,6 +51,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Check licenses
+        run: |
+          pip install reuse==4.0.3
+          reuse lint
+
       - name: Deploy to production
         uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
         with:
