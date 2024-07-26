@@ -238,6 +238,12 @@ path = "tt-muncher/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
 
+# Vendored dependency of tt-muncher
+[[annotations]]
+path = "tt-muncher/quote-1.0.17-modified/**"
+SPDX-FileCopyrightText = "quote contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
 [[annotations]]
 path = "tuple-stress/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
