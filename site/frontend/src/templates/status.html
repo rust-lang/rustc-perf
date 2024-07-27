@@ -1,7 +1,11 @@
-{% extends "layout.html" %} {% block head %}
-<!-- <link rel="stylesheet" type="text/css" href="scripts/status.css"> -->
-{% endblock %} {% block content %}
-<div id="app"></div>
-{% endblock %} {% block script %}
-<script type="module" src="../pages/status.ts"></script>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <include src="src/templates/layout/head.html"></include>
+  </head>
+  <body class="container">
+    <include src="src/templates/layout/navbar.html"></include>
+    <div id="app"></div>
+    <script type="module" src="../pages/status.ts"></script>
+  </body>
+</html>

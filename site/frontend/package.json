@@ -15,9 +15,15 @@
     "@parcel/compressor-brotli": "^2.8.3",
     "@parcel/transformer-vue": "^2.8.3",
     "@types/msgpack-lite": "^0.1.8",
+    "posthtml-include": "^2.0.1",
     "prettier": "2.8.8",
     "typescript": "^5.0.2",
     "vue-tsc": "^1.8.3"
+  },
+  "@parcel/bundler-default": {
+    "minBundles": 999,
+    "minBundleSize": 9999999,
+    "maxParallelRequests": 20
   },
   "dependencies": {
     "date-fns": "^2.30.0",
@@ -51,10 +57,6 @@
     },
     "detailed-query": {
       "source": "src/templates/detailed-query.html",
-      "distDir": "dist/"
-    },
-    "layout": {
-      "source": "src/templates/layout.html",
       "distDir": "dist/"
     }
   },
