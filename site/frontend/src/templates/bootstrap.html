@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <include src="src/templates/layout/head.html"></include>
+    <link rel="stylesheet" href="../../node_modules/uplot/dist/uPlot.min.css" />
+    <style>
+      .uplot {
+        display: inline-block;
+        vertical-align: top;
+        width: min-content;
+      }
+
+      .u-over {
+        box-shadow: 0px 0px 0px 0.5px #ccc;
+      }
+
+      .u-legend {
+        text-align: left;
+        padding-left: 50px;
+      }
+
+      .u-inline tr {
+        margin-right: 8px;
+      }
+
+      .u-label {
+        font-size: 12px;
+      }
+
+      .u-tooltip {
+        font-size: 10pt;
+        position: absolute;
+        background: #fff;
+        display: none;
+        border: 2px solid black;
+        padding: 4px;
+        pointer-events: none;
+        z-index: 100;
+        white-space: pre;
+        font-family: monospace;
+      }
+
+      body {
+        padding: 1em;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body class="container">
+    <include src="src/templates/layout/navbar.html"></include>
+    <div id="app"></div>
+    <include src="src/templates/layout/footer.html"></include>
+    <script type="module" src="../pages/bootstrap.ts"></script>
+  </body>
+</html>
