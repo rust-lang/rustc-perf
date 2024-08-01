@@ -455,8 +455,12 @@ fn sort_queue(
             mr.parent_sha().map_or(true, |parent| done.contains(parent))
         });
 
+        // No commit is ready for benchmarking. This can happen e.g. when a try parent commit
+        // was forcefully removed from the master branch of rust-lang/rust. In this case, just
+        // let the commits be benchmarked in the current order that we have, these benchmark runs
+        // just won't have a parent result available.
         if level_len == 0 {
-            return vec![];
+            return unordered_queue;
         }
 
         let level = &mut unordered_queue[finished..][..level_len];
