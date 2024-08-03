@@ -1,10 +1,10 @@
 use crate::comparison::{
     deserves_attention_icount, write_summary_table, ArtifactComparison, ArtifactComparisonSummary,
-    Direction, Metric,
+    Direction,
 };
 use crate::load::SiteCtxt;
 
-use database::{ArtifactId, QueuedCommit};
+use database::{comparison::Metric, ArtifactId, QueuedCommit};
 
 use crate::github::{COMMENT_MARK_ROLLUP, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;

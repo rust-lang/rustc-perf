@@ -4,8 +4,7 @@ use lazy_static::lazy_static;
 
 use crate::api::{dashboard, ServerResult};
 use crate::benchmark_metadata::get_stable_benchmark_names;
-use crate::comparison::Metric;
-use crate::db::{self, ArtifactId, Profile, Scenario};
+use crate::db::{self, comparison::Metric, ArtifactId, Profile, Scenario};
 use crate::load::SiteCtxt;
 use crate::selector;
 

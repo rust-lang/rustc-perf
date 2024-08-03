@@ -25,12 +25,12 @@ use crate::db::{ArtifactId, Profile, Scenario};
 use crate::load::SiteCtxt;
 
 use collector::Bound;
+use database::comparison::Metric;
 use database::interpolate::Interpolate;
 use database::selector::StatisticSeries;
 use database::ArtifactIdIter;
 use database::{selector::Point, Benchmark, CodegenBackend, Commit, Connection, Index, Lookup};
 
-use crate::comparison::Metric;
 use async_trait::async_trait;
 use std::fmt::Debug;
 use std::hash::Hash;

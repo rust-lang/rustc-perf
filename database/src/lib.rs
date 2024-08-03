@@ -9,6 +9,7 @@ use std::ops::{Add, Sub};
 use std::sync::Arc;
 use std::time::Duration;
 
+pub mod comparison;
 pub mod interpolate;
 pub mod pool;
 pub mod selector;
