@@ -6,13 +6,13 @@ use crate::api;
 use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
-use crate::selector::{
-    self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase,
-};
 
 use collector::compile::benchmark::category::Category;
 use collector::Bound;
-use database::comparison::Metric;
+use database::{
+    comparison::Metric,
+    selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
+};
 use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;

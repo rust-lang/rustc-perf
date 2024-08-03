@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use database::selector;
 use lazy_static::lazy_static;
 
 use crate::api::{dashboard, ServerResult};
 use crate::benchmark_metadata::get_stable_benchmark_names;
 use crate::db::{self, comparison::Metric, ArtifactId, Profile, Scenario};
 use crate::load::SiteCtxt;
-use crate::selector;
 
 pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Response> {
     let index = ctxt.index.load();
