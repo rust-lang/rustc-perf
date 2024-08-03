@@ -245,7 +245,7 @@ impl fmt::Display for Profile {
 ///
 /// These are usually reported to users in a "flipped" way. For example,
 /// `Cache::Empty` means we're doing a "full" build. We present this to users as "full".
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize)]
 #[serde(tag = "variant", content = "name")]
 pub enum Scenario {
     /// Empty cache (i.e., full build)
