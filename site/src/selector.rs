@@ -26,6 +26,8 @@ use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use collector::Bound;
+use database::selector::StatisticSeries;
+use database::ArtifactIdIter;
 use database::{Benchmark, CodegenBackend, Commit, Connection, Index, Lookup};
 
 use crate::comparison::Metric;
@@ -83,34 +85,6 @@ pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Comm
             })
     } else {
         vec![]
-    }
-}
-
-#[derive(Debug)]
-struct ArtifactIdIter {
-    ids: Arc<Vec<ArtifactId>>,
-    idx: usize,
-}
-
-impl ArtifactIdIter {
-    fn new(artifact_ids: Arc<Vec<ArtifactId>>) -> ArtifactIdIter {
-        ArtifactIdIter {
-            ids: artifact_ids,
-            idx: 0,
-        }
-    }
-}
-
-impl Iterator for ArtifactIdIter {
-    type Item = ArtifactId;
-    fn next(&mut self) -> Option<Self::Item> {
-        let r = self.ids.get(self.idx)?;
-        self.idx += 1;
-        Some(r.clone())
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.ids.len(), Some(self.ids.len()))
     }
 }
 
@@ -425,13 +399,15 @@ impl SiteCtxt {
     }
 }
 
-#[derive(Debug)]
-pub struct StatisticSeries {
-    artifact_ids: ArtifactIdIter,
-    points: std::vec::IntoIter<Option<f64>>,
+trait StatisticSeriesExt {
+    async fn execute_query<Q: BenchmarkQuery>(
+        artifact_ids: Arc<Vec<ArtifactId>>,
+        ctxt: &SiteCtxt,
+        query: Q,
+    ) -> Result<Vec<SeriesResponse<Q::TestCase, StatisticSeries>>, String>;
 }
 
-impl StatisticSeries {
+impl StatisticSeriesExt for StatisticSeries {
     async fn execute_query<Q: BenchmarkQuery>(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
@@ -451,16 +427,5 @@ impl StatisticSeries {
             dumped
         );
         Ok(result)
-    }
-}
-
-impl Iterator for StatisticSeries {
-    type Item = (ArtifactId, Option<f64>);
-    fn next(&mut self) -> Option<Self::Item> {
-        Some((self.artifact_ids.next()?, self.points.next().unwrap()))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.artifact_ids.size_hint()
     }
 }

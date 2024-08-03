@@ -6,9 +6,11 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash;
 use std::ops::{Add, Sub};
+use std::sync::Arc;
 use std::time::Duration;
 
 pub mod pool;
+pub mod selector;
 
 pub use pool::{Connection, Pool};
 
@@ -430,6 +432,34 @@ intern!(pub struct QueryLabel);
 /// A database row ID for an artifact in the artifact table
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ArtifactIdNumber(pub u32);
+
+#[derive(Debug)]
+pub struct ArtifactIdIter {
+    ids: Arc<Vec<ArtifactId>>,
+    idx: usize,
+}
+
+impl ArtifactIdIter {
+    pub fn new(artifact_ids: Arc<Vec<ArtifactId>>) -> ArtifactIdIter {
+        ArtifactIdIter {
+            ids: artifact_ids,
+            idx: 0,
+        }
+    }
+}
+
+impl Iterator for ArtifactIdIter {
+    type Item = ArtifactId;
+    fn next(&mut self) -> Option<Self::Item> {
+        let r = self.ids.get(self.idx)?;
+        self.idx += 1;
+        Some(r.clone())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.ids.len(), Some(self.ids.len()))
+    }
+}
 
 /// Cached Id lookups for many database tables.
 ///
