@@ -7,12 +7,13 @@ use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
 use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
 use crate::db::{self, ArtifactId, Profile, Scenario};
-use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
 use crate::self_profile::get_or_download_self_profile;
+
+use database::interpolate::IsInterpolated;
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.

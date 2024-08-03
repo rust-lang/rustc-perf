@@ -1,4 +1,4 @@
-use crate::db::Point;
+use database::selector::Point;
 
 /// This aggregates interpolated iterators.
 ///
@@ -80,12 +80,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    use database::selector::Point;
+
     use super::average;
 
     #[test]
     fn test_no_interpolation_average() {
         // Test that averaging works without interpolation.
-        use crate::db::Point;
 
         let v = vec![
             vec![("a", 0.0), ("b", 200.0)],
@@ -109,8 +110,7 @@ mod tests {
     #[test]
     fn test_interpolation_average() {
         // Test that averaging works with interpolation.
-        use crate::db::Point;
-        use crate::interpolate::{Interpolate, IsInterpolated};
+        use database::interpolate::{Interpolate, IsInterpolated};
 
         let v = vec![
             vec![("a", Some(0.0)), ("b", Some(200.0))],

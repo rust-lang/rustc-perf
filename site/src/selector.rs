@@ -22,13 +22,13 @@
 //! there are multiple `None`s.
 
 use crate::db::{ArtifactId, Profile, Scenario};
-use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use collector::Bound;
+use database::interpolate::Interpolate;
 use database::selector::StatisticSeries;
 use database::ArtifactIdIter;
-use database::{Benchmark, CodegenBackend, Commit, Connection, Index, Lookup};
+use database::{selector::Point, Benchmark, CodegenBackend, Commit, Connection, Index, Lookup};
 
 use crate::comparison::Metric;
 use async_trait::async_trait;
@@ -149,7 +149,7 @@ impl<TestCase, T> SeriesResponse<TestCase, T> {
     pub fn interpolate(self) -> SeriesResponse<TestCase, Interpolate<T>>
     where
         T: Iterator,
-        T::Item: crate::db::Point,
+        T::Item: Point,
     {
         self.map(|s| Interpolate::new(s))
     }

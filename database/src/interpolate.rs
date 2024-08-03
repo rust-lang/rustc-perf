@@ -10,7 +10,7 @@
 //! Given a series with some missing data `[1, 2, ?, 4]`,
 //! this iterator yields `[1, 2, 2, 4]`.
 
-use crate::db::Point;
+use crate::selector::Point;
 
 /// Whether a point has been interpolated or not
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
