@@ -21,11 +21,12 @@ jobs:
           fetch-depth: 1
 
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.75.0
-          override: true
-          components: rustfmt, clippy
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: 1.75.0
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -77,11 +78,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install latest beta
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: beta
-          override: true
+      - name: Install latest beta toolchain
+        run: |
+          rustup install %RUST_TOOLCHAIN_VERSION%
+          rustup default %RUST_TOOLCHAIN_VERSION%
+          rustup component add --toolchain %RUST_TOOLCHAIN_VERSION% rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: beta
+        shell: cmd
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -90,7 +94,7 @@ jobs:
       - name: cargo check
         run: cargo check
         env:
-            RUSTFLAGS: -Dwarnings
+          RUSTFLAGS: -Dwarnings
 
       - name: Run unit tests
         run: cargo test --all
@@ -125,11 +129,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install latest beta
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: beta
-          override: true
+      - name: Install latest beta toolchain
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: beta
 
       - name: Configure environment
         run: |
@@ -162,11 +168,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install latest beta
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: beta
-          override: true
+      - name: Install latest beta toolchain
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: beta
 
       - name: Configure environment
         run: |
@@ -196,11 +204,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install latest beta
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: beta
-          override: true
+      - name: Install latest beta toolchain
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: beta
 
       - name: Configure environment
         run: |
@@ -227,11 +237,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install latest beta
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: beta
-          override: true
+      - name: Install latest beta toolchain
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: beta
 
       # We build a specific version of Valgrind because the one from the Ubuntu 22.04 repositories
       # has problems with Rust debuginfo.
@@ -294,10 +306,13 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v2
 
-      - name: Install stable
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - name: Install latest toolchain
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: stable
 
       - uses: Swatinem/rust-cache@v2
 
@@ -344,10 +359,13 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v2
 
-      - name: Install stable
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - name: Install latest stable toolchain
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: stable
 
       - name: Install nightly
         run: rustup install nightly
