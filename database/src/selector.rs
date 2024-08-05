@@ -27,8 +27,6 @@ use std::{
     sync::Arc,
 };
 
-use async_trait::async_trait;
-
 use crate::{
     interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
     CodegenBackend, Connection, Index, Lookup, Profile, Scenario,
@@ -175,10 +173,10 @@ impl<TestCase, T> SeriesResponse<TestCase, T> {
     }
 }
 
-#[async_trait]
 pub trait BenchmarkQuery: Debug + Clone {
     type TestCase: TestCase;
 
+    #[allow(async_fn_in_trait)]
     async fn execute(
         &self,
         connection: &mut dyn Connection,
@@ -241,7 +239,6 @@ impl Default for CompileBenchmarkQuery {
     }
 }
 
-#[async_trait]
 impl BenchmarkQuery for CompileBenchmarkQuery {
     type TestCase = CompileTestCase;
 
@@ -360,7 +357,6 @@ impl Default for RuntimeBenchmarkQuery {
     }
 }
 
-#[async_trait]
 impl BenchmarkQuery for RuntimeBenchmarkQuery {
     type TestCase = RuntimeTestCase;
 
