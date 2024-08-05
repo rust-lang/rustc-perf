@@ -14,7 +14,7 @@ jobs:
           echo "RUSTC_PERF_VERSION=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
 
       - name: Checkout the source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
@@ -26,7 +26,7 @@ jobs:
         env:
           RUST_TOOLCHAIN_VERSION: stable
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - uses: actions/setup-node@v3
         with:
