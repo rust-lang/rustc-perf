@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use database::selector;
 use lazy_static::lazy_static;
 
 use crate::api::{dashboard, ServerResult};
 use crate::benchmark_metadata::get_stable_benchmark_names;
-use crate::db::{self, comparison::Metric, ArtifactId, Profile, Scenario};
 use crate::load::SiteCtxt;
+use database::selector;
+use database::{self, comparison::Metric, ArtifactId, Profile, Scenario};
 
 pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Response> {
     let index = ctxt.index.load();
@@ -104,7 +104,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
                     )
                     .await?;
 
-                let points = db::average(
+                let points = crate::average::average(
                     responses
                         .into_iter()
                         .map(|sr| sr.interpolate().series)
@@ -139,7 +139,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
 
     // The flag is used to ignore only the initial values where the runtime benchmark was not implemented.
     let mut ignore_runtime_benchmark = true;
-    let points = db::average(
+    let points = crate::average::average(
         responses
             .into_iter()
             .map(|sr| sr.interpolate().series)

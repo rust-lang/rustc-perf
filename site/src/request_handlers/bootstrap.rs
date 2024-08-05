@@ -1,8 +1,8 @@
 use futures::stream::{FuturesOrdered, StreamExt};
 
 use crate::api::{bootstrap, ServerResult};
-use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
+use database::ArtifactId;
 
 use std::time::Duration;
 

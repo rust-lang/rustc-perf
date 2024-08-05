@@ -2,7 +2,6 @@
 extern crate itertools;
 
 pub mod api;
-pub mod db;
 pub mod github;
 pub mod load;
 pub mod server;

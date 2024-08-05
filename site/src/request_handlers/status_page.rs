@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use crate::api::status;
 use crate::api::status::FinishedRun;
-use crate::db::{ArtifactId, Lookup};
 use crate::load::SiteCtxt;
+
+use database::{ArtifactId, Lookup};
 
 // How many historical (finished) runs should be returned from the status API.
 const FINISHED_RUN_COUNT: u64 = 5;

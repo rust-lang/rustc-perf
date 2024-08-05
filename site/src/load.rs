@@ -12,7 +12,6 @@ use parking_lot::Mutex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::db;
 use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit};
@@ -128,7 +127,7 @@ pub struct SiteCtxt {
     /// Cached site landing page
     pub landing_page: ArcSwap<Option<Arc<crate::api::graphs::Response>>>,
     /// Index of various common queries
-    pub index: ArcSwap<crate::db::Index>,
+    pub index: ArcSwap<database::Index>,
     /// Cached master-branch Rust commits
     pub master_commits: Arc<ArcSwap<MasterCommitCache>>, // outer Arc enables mutation in background task
     /// Cache for self profile data
@@ -138,12 +137,12 @@ pub struct SiteCtxt {
 }
 
 impl SiteCtxt {
-    pub fn summary_scenarios(&self) -> Vec<crate::db::Scenario> {
+    pub fn summary_scenarios(&self) -> Vec<database::Scenario> {
         vec![
-            crate::db::Scenario::Empty,
-            crate::db::Scenario::IncrementalEmpty,
-            crate::db::Scenario::IncrementalFresh,
-            crate::db::Scenario::IncrementalPatch("println".into()),
+            database::Scenario::Empty,
+            database::Scenario::IncrementalEmpty,
+            database::Scenario::IncrementalFresh,
+            database::Scenario::IncrementalPatch("println".into()),
         ]
     }
 
@@ -160,7 +159,7 @@ impl SiteCtxt {
         let pool = Pool::open(db_url);
 
         let mut conn = pool.connection().await;
-        let index = db::Index::load(&mut *conn).await;
+        let index = database::Index::load(&mut *conn).await;
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?

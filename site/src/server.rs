@@ -24,10 +24,11 @@ pub use crate::api::{
     self, bootstrap, comparison, dashboard, github, graphs, info, self_profile, self_profile_raw,
     status, triage, ServerResult,
 };
-use crate::db::{self, ArtifactId};
 use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
 use crate::resources::{Payload, ResourceResolver};
+
+use database::{self, ArtifactId};
 
 pub type Request = http::Request<hyper::Body>;
 pub type Response = http::Response<hyper::Body>;
@@ -295,7 +296,7 @@ impl Server {
         let ctxt: Arc<SiteCtxt> = self.ctxt.read().as_ref().unwrap().clone();
         let _updating = self.updating.release_on_drop(channel);
         let mut conn = ctxt.conn().await;
-        let index = db::Index::load(&mut *conn).await;
+        let index = database::Index::load(&mut *conn).await;
         eprintln!("index has {} commits", index.commits().len());
         ctxt.index.store(Arc::new(index));
 

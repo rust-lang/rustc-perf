@@ -6,7 +6,6 @@ use collector::Bound;
 use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
 use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
-use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::load::SiteCtxt;
 use crate::self_profile::get_or_download_self_profile;
 
@@ -14,6 +13,7 @@ use database::interpolate::IsInterpolated;
 use database::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
+use database::{self, ArtifactId, Profile, Scenario};
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.
@@ -321,7 +321,7 @@ fn create_summary(
                     .map(|sr| sr.series.iter().cloned())
                     .collect();
 
-                let value = db::average(baseline_responses)
+                let value = crate::average::average(baseline_responses)
                     .next()
                     .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
                 *v.insert(value)
@@ -338,7 +338,7 @@ fn create_summary(
             .map(|sr| sr.series.iter().cloned())
             .collect();
 
-        let avg_vs_baseline = db::average(summary_case_responses)
+        let avg_vs_baseline = crate::average::average(summary_case_responses)
             .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / baseline)), i));
 
         let graph_series = graph_series(avg_vs_baseline, graph_kind);

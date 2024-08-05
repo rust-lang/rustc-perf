@@ -3,7 +3,6 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
 
@@ -13,6 +12,7 @@ use database::{
     comparison::Metric,
     selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
 };
+use database::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
