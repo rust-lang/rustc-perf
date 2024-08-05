@@ -6,7 +6,7 @@ use std::time::Instant;
 use bytes::Buf;
 use database::selector;
 use database::ArtifactId;
-use database::{comparison::Metric, CommitType};
+use database::{metric::Metric, CommitType};
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 

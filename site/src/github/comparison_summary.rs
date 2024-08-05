@@ -4,7 +4,7 @@ use crate::comparison::{
 };
 use crate::load::SiteCtxt;
 
-use database::{comparison::Metric, ArtifactId, QueuedCommit};
+use database::{metric::Metric, ArtifactId, QueuedCommit};
 
 use crate::github::{COMMENT_MARK_ROLLUP, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;

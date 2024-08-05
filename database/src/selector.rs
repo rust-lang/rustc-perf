@@ -30,7 +30,7 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
-    comparison::Metric, interpolate::Interpolate, ArtifactId, ArtifactIdIter, Benchmark,
+    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
     CodegenBackend, Connection, Index, Lookup, Profile, Scenario,
 };
 

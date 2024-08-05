@@ -6,7 +6,7 @@ use crate::api::{dashboard, ServerResult};
 use crate::benchmark_metadata::get_stable_benchmark_names;
 use crate::load::SiteCtxt;
 use database::selector;
-use database::{self, comparison::Metric, ArtifactId, Profile, Scenario};
+use database::{self, metric::Metric, ArtifactId, Profile, Scenario};
 
 pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Response> {
     let index = ctxt.index.load();

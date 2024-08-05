@@ -9,7 +9,7 @@ use crate::load::SiteCtxt;
 use collector::compile::benchmark::category::Category;
 use collector::Bound;
 use database::{
-    comparison::Metric,
+    metric::Metric,
     selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
 };
 use database::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
