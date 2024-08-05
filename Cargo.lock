@@ -2285,7 +2285,6 @@ dependencies = [
  "analyzeme",
  "anyhow",
  "arc-swap",
- "async-trait",
  "brotli",
  "bytes",
  "chrono",

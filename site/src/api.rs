@@ -252,9 +252,8 @@ pub mod bootstrap {
 
 pub mod comparison {
     use crate::benchmark_metadata::ProfileMetadata;
-    use crate::comparison::Metric;
     use collector::Bound;
-    use database::Date;
+    use database::{metric::Metric, Date};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -595,8 +594,8 @@ pub mod github {
 }
 
 pub mod triage {
-    use crate::comparison::Metric;
     use collector::Bound;
+    use database::metric::Metric;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

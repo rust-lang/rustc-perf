@@ -4,16 +4,15 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Buf;
-use database::CommitType;
+use database::selector;
+use database::ArtifactId;
+use database::{metric::Metric, CommitType};
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 
 use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
-use crate::comparison::Metric;
-use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
-use crate::selector::{self};
 use crate::self_profile::{get_or_download_self_profile, get_self_profile_raw_data};
 use crate::server::{Response, ResponseHeaders};
 

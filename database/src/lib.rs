@@ -6,9 +6,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash;
 use std::ops::{Add, Sub};
+use std::sync::Arc;
 use std::time::Duration;
 
+pub mod interpolate;
+pub mod metric;
 pub mod pool;
+pub mod selector;
 
 pub use pool::{Connection, Pool};
 
@@ -245,20 +249,15 @@ impl fmt::Display for Profile {
 ///
 /// These are usually reported to users in a "flipped" way. For example,
 /// `Cache::Empty` means we're doing a "full" build. We present this to users as "full".
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "variant", content = "name")]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Scenario {
     /// Empty cache (i.e., full build)
-    #[serde(rename = "full")]
     Empty,
     /// Empty cache but still incremental (i.e., a full incremental build)
-    #[serde(rename = "incr-full")]
     IncrementalEmpty,
     /// Cache is fully up-to-date (i.e., no code has changed)
-    #[serde(rename = "incr-unchanged")]
     IncrementalFresh,
     /// Cache is mostly up-to-date but some code has been changed
-    #[serde(rename = "incr-patched")]
     IncrementalPatch(PatchName),
 }
 
@@ -430,6 +429,34 @@ intern!(pub struct QueryLabel);
 /// A database row ID for an artifact in the artifact table
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ArtifactIdNumber(pub u32);
+
+#[derive(Debug)]
+pub struct ArtifactIdIter {
+    ids: Arc<Vec<ArtifactId>>,
+    idx: usize,
+}
+
+impl ArtifactIdIter {
+    pub fn new(artifact_ids: Arc<Vec<ArtifactId>>) -> ArtifactIdIter {
+        ArtifactIdIter {
+            ids: artifact_ids,
+            idx: 0,
+        }
+    }
+}
+
+impl Iterator for ArtifactIdIter {
+    type Item = ArtifactId;
+    fn next(&mut self) -> Option<Self::Item> {
+        let r = self.ids.get(self.idx)?;
+        self.idx += 1;
+        Some(r.clone())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.ids.len(), Some(self.ids.len()))
+    }
+}
 
 /// Cached Id lookups for many database tables.
 ///
