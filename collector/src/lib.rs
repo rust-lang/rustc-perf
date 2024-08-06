@@ -9,6 +9,7 @@ pub mod api;
 pub mod artifact_stats;
 pub mod cargo;
 pub mod codegen;
+pub mod compare;
 pub mod compile;
 pub mod runtime;
 pub mod toolchain;

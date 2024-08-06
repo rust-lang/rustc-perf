@@ -18,6 +18,7 @@ use std::{str, time::Instant};
 use anyhow::Context;
 use clap::builder::TypedValueParser;
 use clap::{Arg, Parser};
+use collector::compare::compare_artifacts;
 use humansize::{format_size, BINARY};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tabled::builder::Builder;
@@ -628,6 +629,18 @@ enum Commands {
         #[command(flatten)]
         db: DbOption,
     },
+
+    /// Displays diff between two local bench results.
+    BenchCmp {
+        #[command(flatten)]
+        db: DbOption,
+
+        /// The name of the base artifact to be compared.
+        base: String,
+
+        /// The name of the modified artifact to be compared.
+        modified: String,
+    },
 }
 
 #[derive(Debug, clap::Parser)]
@@ -1187,6 +1200,13 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             println!("Data of artifact {name} were removed");
             Ok(0)
         }
+        Commands::BenchCmp { db, base, modified } => {
+            let pool = Pool::open(&db.db);
+            let rt = build_async_runtime();
+            let conn = rt.block_on(pool.connection());
+            rt.block_on(compare_artifacts(conn, base, modified))?;
+            Ok(0)
+        }
     }
 }
 
@@ -1736,7 +1756,6 @@ fn bench_compile(
                 category,
             ));
             print_intro();
-
             let mut processor = BenchProcessor::new(
                 tx.conn(),
                 benchmark_name,
