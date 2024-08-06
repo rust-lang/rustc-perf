@@ -14,18 +14,19 @@ jobs:
           echo "RUSTC_PERF_VERSION=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
 
       - name: Checkout the source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        run: |
+          rustup install $RUST_TOOLCHAIN_VERSION --profile minimal
+          rustup default $RUST_TOOLCHAIN_VERSION
+          rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
+        env:
+          RUST_TOOLCHAIN_VERSION: stable
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - uses: actions/setup-node@v3
         with:
