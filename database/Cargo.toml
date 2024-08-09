@@ -8,6 +8,7 @@ edition = "2021"
 anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["cargo"] }
+env_logger = { workspace = true }
 hashbrown = { workspace = true, features = ["serde"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
@@ -21,7 +22,6 @@ intern = { path = "../intern" }
 reqwest = { version = "0.11" }
 postgres-native-tls = "0.5"
 native-tls = "0.2"
-env_logger = "0.10"
 futures-util = "0.3.5"
 bytes = "1"
 csv = "1"
