@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 hashbrown = { version = "0.14", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
 rusqlite = { version = "0.28", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
 anyhow = "1"

@@ -10,9 +10,8 @@ anyhow = "1"
 futures = "0.3"
 tokio = { version = "1.26", features = ["macros", "time"] }
 log = "0.4"
-serde = { version = "1", features = ["rc"] }
-serde_derive = "1"
-serde_json = "1"
+serde = { workspace = true, features = ["rc"] }
+serde_json = { workspace = true }
 hyper = { version = "0.14", features = ["server", "stream"] }
 headers = "0.3"
 http = "0.2"
@@ -55,6 +54,6 @@ jemalloc-ctl = "0.5"
 path = "../collector"
 
 [build-dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 toml = "0.7"

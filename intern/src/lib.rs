@@ -187,7 +187,7 @@ pub fn intern<T: InternString>(value: &str) -> T {
     })
 }
 
-#[derive(serde_derive::Serialize, Copy, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Copy, Clone, PartialEq, Eq)]
 #[serde(into = "&'static str")]
 pub struct ArenaStr(NonNull<u8>);
 

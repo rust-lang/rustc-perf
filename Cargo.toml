@@ -3,6 +3,10 @@ members = ["collector", "collector/benchlib", "site", "database", "intern"]
 exclude = ["rust/src"]
 resolver = "2"
 
+[workspace.dependencies]
+serde = "1"
+serde_json = "1"
+
 [profile.release.package.site]
 debug = 1
 
