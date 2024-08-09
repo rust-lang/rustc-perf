@@ -382,7 +382,6 @@ dependencies = [
  "libc",
  "log",
  "miow",
- "num_cpus",
  "object",
  "rayon",
  "regex",
