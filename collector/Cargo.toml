@@ -4,6 +4,7 @@ name = "collector"
 version = "0.1.0"
 edition = "2021"
 description = "Collects Rust performance data"
+rust-version = "1.75.0"
 
 [dependencies]
 clap = { version = "4.1", features = ["derive"] }
