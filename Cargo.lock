@@ -371,7 +371,6 @@ dependencies = [
  "console",
  "database",
  "env_logger",
- "filetime",
  "flate2",
  "futures",
  "humansize",

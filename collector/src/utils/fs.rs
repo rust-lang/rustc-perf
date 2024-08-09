@@ -2,9 +2,11 @@ use anyhow::Context;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::fs;
+use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::time::SystemTime;
 
 #[cfg(windows)]
 pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
@@ -43,7 +45,8 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<
 
 /// Touch a file, resetting its modification time.
 pub fn touch(path: &Path) -> anyhow::Result<()> {
-    filetime::set_file_mtime(path, filetime::FileTime::now())
+    let file = File::options().read(true).open(path)?;
+    file.set_modified(SystemTime::now())
         .with_context(|| format!("touching file {:?}", path))?;
 
     Ok(())
