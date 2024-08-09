@@ -17,8 +17,7 @@ serde = { workspace = true, features = ["derive"] }
 rusqlite = { version = "0.28", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
 async-trait = "0.1"
-tokio = { version = "1.6", features = ["sync", "macros", "parking_lot"] }
-intern = { path = "../intern" }
+tokio = { version = "1.6", features = ["sync", "macros"] }
 reqwest = { version = "0.11" }
 postgres-native-tls = "0.5"
 native-tls = "0.2"
@@ -26,3 +25,5 @@ futures-util = "0.3.5"
 bytes = "1"
 csv = "1"
 x509-cert = { version = "0.2.5", features = ["pem"] }
+
+intern = { path = "../intern" }
