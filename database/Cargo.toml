@@ -5,8 +5,9 @@ authors = ["Mark Rousskov <mark.simulacrum@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-hashbrown = { version = "0.14", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
+log = { workspace = true }
+hashbrown = { version = "0.14", features = ["serde"] }
 rusqlite = { version = "0.28", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
 anyhow = "1"
@@ -19,7 +20,6 @@ postgres-native-tls = "0.5"
 native-tls = "0.2"
 env_logger = "0.10"
 futures-util = "0.3.5"
-log = "0.4"
 bytes = "1"
 csv = "1"
 clap = { version = "4.1", features = ["cargo"] }
