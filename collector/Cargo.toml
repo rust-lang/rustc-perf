@@ -45,7 +45,6 @@ inquire = "0.7.5"
 
 benchlib = { path = "benchlib" }
 database = { path = "../database" }
-intern = { path = "../intern" }
 
 [target.'cfg(windows)'.dependencies]
 miow = "0.3"
