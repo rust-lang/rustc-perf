@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["cargo"] }
 hashbrown = { workspace = true, features = ["serde"] }
 log = { workspace = true }
@@ -16,7 +17,6 @@ tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
 async-trait = "0.1"
 tokio = { version = "1.6", features = ["sync", "macros", "parking_lot"] }
 intern = { path = "../intern" }
-chrono = { version = "0.4.38", features = ["serde"] }
 reqwest = { version = "0.11" }
 postgres-native-tls = "0.5"
 native-tls = "0.2"
