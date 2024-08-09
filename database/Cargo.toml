@@ -9,6 +9,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["cargo"] }
 hashbrown = { workspace = true, features = ["serde"] }
+lazy_static = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
@@ -20,7 +21,6 @@ intern = { path = "../intern" }
 reqwest = { version = "0.11", features = ["blocking"] }
 postgres-native-tls = "0.5"
 native-tls = "0.2"
-lazy_static = "1"
 env_logger = "0.10"
 futures-util = "0.3.5"
 bytes = "1"
