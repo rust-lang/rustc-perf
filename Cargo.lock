@@ -398,7 +398,6 @@ dependencies = [
  "flate2",
  "futures",
  "humansize",
- "intern",
  "jobserver",
  "lazy_static",
  "libc",

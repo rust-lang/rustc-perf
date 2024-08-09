@@ -44,7 +44,6 @@ analyzeme = "12.0.0"
 
 benchlib = { path = "benchlib" }
 database = { path = "../database" }
-intern = { path = "../intern" }
 
 [target.'cfg(windows)'.dependencies]
 miow = "0.3"
