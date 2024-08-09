@@ -11,6 +11,7 @@ env_logger = { workspace = true }
 hashbrown = { workspace = true, features = ["serde"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json"] }
 serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "time"] }
@@ -25,7 +26,6 @@ semver = "1.0"
 ring = "0.16.10"
 hex = "0.4.2"
 regex = "1"
-reqwest = { version = "0.11", features = ["json", "blocking"] }
 toml = "0.7"
 rust_team_data = { git = "https://github.com/rust-lang/team" }
 parking_lot = "0.12"

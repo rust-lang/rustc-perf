@@ -13,6 +13,7 @@ clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt", "process"] }
@@ -21,7 +22,6 @@ thiserror = "1"
 tempfile = "3"
 libc = "0.2"
 semver = "1.0"
-reqwest = { version = "0.11", features = ["json", "blocking"] }
 xz2 = "0.1.3"
 tar = "0.4"
 futures = "0.3.5"
