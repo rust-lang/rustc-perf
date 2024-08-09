@@ -7,13 +7,13 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+env_logger = { workspace = true }
 hashbrown = { workspace = true, features = ["serde"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 
-env_logger = "0.10"
 futures = "0.3"
 tokio = { version = "1.26", features = ["macros", "time"] }
 hyper = { version = "0.14", features = ["server", "stream"] }
