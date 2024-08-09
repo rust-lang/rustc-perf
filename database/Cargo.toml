@@ -13,11 +13,11 @@ hashbrown = { workspace = true, features = ["serde"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["sync", "macros"] }
 
 rusqlite = { version = "0.28", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
 async-trait = "0.1"
-tokio = { version = "1.6", features = ["sync", "macros"] }
 reqwest = { version = "0.11" }
 postgres-native-tls = "0.5"
 native-tls = "0.2"
