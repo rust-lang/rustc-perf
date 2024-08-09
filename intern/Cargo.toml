@@ -6,9 +6,9 @@ edition = "2021"
 
 [dependencies]
 hashbrown = { workspace = true }
+lazy_static = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
 bumpalo = "3.2"
 parking_lot = "0.12"
 arc-swap = "1.3"
-lazy_static = "1"

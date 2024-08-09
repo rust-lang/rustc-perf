@@ -9,6 +9,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["cargo"] }
 hashbrown = { workspace = true, features = ["serde"] }
+lazy_static = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
