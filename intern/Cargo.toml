@@ -5,8 +5,9 @@ authors = ["Mark Rousskov <mark.simulacrum@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
 hashbrown = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
 bumpalo = "3.2"
 parking_lot = "0.12"
 arc-swap = "1.3"

@@ -5,10 +5,11 @@ authors = ["Mark Rousskov <mark.simulacrum@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
-log = { workspace = true }
-hashbrown = { workspace = true, features = ["serde"] }
 anyhow = { workspace = true }
+clap = { workspace = true, features = ["cargo"] }
+hashbrown = { workspace = true, features = ["serde"] }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 
 rusqlite = { version = "0.28", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
@@ -23,5 +24,4 @@ env_logger = "0.10"
 futures-util = "0.3.5"
 bytes = "1"
 csv = "1"
-clap = { version = "4.1", features = ["cargo"] }
 x509-cert = { version = "0.2.5", features = ["pem"] }
