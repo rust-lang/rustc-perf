@@ -9,8 +9,9 @@ serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 log = { workspace = true }
 hashbrown = { workspace = true, features = ["serde"] }
+anyhow = { workspace = true }
+
 env_logger = "0.10"
-anyhow = "1"
 futures = "0.3"
 tokio = { version = "1.26", features = ["macros", "time"] }
 hyper = { version = "0.14", features = ["server", "stream"] }

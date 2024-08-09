@@ -8,9 +8,10 @@ edition = "2021"
 serde = { workspace = true, features = ["derive"] }
 log = { workspace = true }
 hashbrown = { workspace = true, features = ["serde"] }
+anyhow = { workspace = true }
+
 rusqlite = { version = "0.28", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
-anyhow = "1"
 async-trait = "0.1"
 tokio = { version = "1.6", features = ["sync", "macros", "parking_lot"] }
 intern = { path = "../intern" }

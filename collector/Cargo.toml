@@ -10,9 +10,10 @@ rust-version = "1.75.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 log = { workspace = true }
+anyhow = { workspace = true }
+
 clap = { version = "4.1", features = ["derive"] }
 env_logger = "0.10"
-anyhow = "1"
 thiserror = "1"
 tempfile = "3"
 libc = "0.2"
