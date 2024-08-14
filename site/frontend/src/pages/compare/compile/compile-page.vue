@@ -192,14 +192,14 @@ function refreshQuickLinks() {
   quickLinksKey.value += 1;
 }
 
-function exportData() {
-  exportToMarkdown(comparisons.value);
-}
-
 const urlParams = getUrlParams();
 
 const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
+
+function exportData() {
+  exportToMarkdown(comparisons.value, filter.value.showRawData);
+}
 
 const benchmarkMap = createCompileBenchmarkMap(props.data);
 const allComparisons = computed(() =>
