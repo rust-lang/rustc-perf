@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use database::{
     metric::Metric,
@@ -7,16 +7,95 @@ use database::{
 };
 use tabled::{Table, Tabled};
 
+static ALL_METRICS: &[Metric] = &[
+    Metric::InstructionsUser,
+    Metric::Cycles,
+    Metric::WallTime,
+    Metric::MaxRSS,
+    Metric::LinkedArtifactSize,
+    Metric::AssemblyFileSize,
+    Metric::BranchMisses,
+    Metric::CacheMisses,
+    Metric::CodegenUnitLlvmIrCount,
+    Metric::CodegenUnitSize,
+    Metric::ContextSwitches,
+    Metric::CpuClock,
+    Metric::CpuClockUser,
+    Metric::CrateMetadataSize,
+    Metric::CyclesUser,
+    Metric::DepGraphSize,
+    Metric::DocByteSize,
+    Metric::DwoFileSize,
+    Metric::Faults,
+    Metric::FaultsUser,
+    Metric::LlvmBitcodeSize,
+    Metric::LlvmIrSize,
+    Metric::ObjectFileSize,
+    Metric::QueryCacheSize,
+    Metric::TaskClock,
+    Metric::TaskClockUser,
+    Metric::WorkProductIndexSize,
+];
+
 /// Compare 2 artifacts and print the result.
 pub async fn compare_artifacts(
     mut conn: Box<dyn Connection>,
-    base: String,
-    modified: String,
+    metric: Option<Metric>,
+    base: Option<String>,
+    modified: Option<String>,
 ) -> anyhow::Result<()> {
     let index = database::Index::load(&mut *conn).await;
 
-    let query = CompileBenchmarkQuery::default()
-        .metric(database::selector::Selector::One(Metric::InstructionsUser));
+    let metric = match metric {
+        Some(v) => v,
+        None => {
+            let metric_str = inquire::Select::new(
+                "Choose metric:",
+                ALL_METRICS.iter().map(|m| m.as_str()).collect::<Vec<_>>(),
+            )
+            .prompt()?;
+            Metric::from_str(metric_str).map_err(|e| anyhow::anyhow!(e))?
+        }
+    };
+
+    let mut aids = index.artifacts().map(str::to_string).collect::<Vec<_>>();
+    if aids.len() < 2 {
+        return Err(anyhow::anyhow!(
+            "There are not enough artifacts to compare, at least two are needed"
+        ));
+    }
+
+    let select_artifact_id = |name: &str, aids: &Vec<String>| {
+        anyhow::Ok(
+            inquire::Select::new(
+                &format!("Choose {} artifact to compare:", name),
+                aids.clone(),
+            )
+            .prompt()?,
+        )
+    };
+
+    let base = match base {
+        Some(v) => v,
+        None => select_artifact_id("base", &aids)?.to_string(),
+    };
+    aids.retain(|id| id != &base);
+    let modified = if aids.len() == 1 {
+        let new_modified = aids[0].clone();
+        println!(
+            "Only 1 artifact remains, automatically selecting: {}",
+            new_modified
+        );
+
+        new_modified
+    } else {
+        match modified {
+            Some(v) => v,
+            None => select_artifact_id("modified", &aids)?.to_string(),
+        }
+    };
+
+    let query = CompileBenchmarkQuery::default().metric(database::selector::Selector::One(metric));
     let resp = query
         .execute(
             &mut *conn,

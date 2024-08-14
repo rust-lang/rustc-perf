@@ -635,11 +635,15 @@ enum Commands {
         #[command(flatten)]
         db: DbOption,
 
+        /// Metric used to compare artifacts.
+        #[arg(long)]
+        metric: Option<database::metric::Metric>,
+
         /// The name of the base artifact to be compared.
-        base: String,
+        base: Option<String>,
 
         /// The name of the modified artifact to be compared.
-        modified: String,
+        modified: Option<String>,
     },
 }
 
@@ -1200,11 +1204,16 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             println!("Data of artifact {name} were removed");
             Ok(0)
         }
-        Commands::BenchCmp { db, base, modified } => {
+        Commands::BenchCmp {
+            db,
+            base,
+            modified,
+            metric,
+        } => {
             let pool = Pool::open(&db.db);
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
-            rt.block_on(compare_artifacts(conn, base, modified))?;
+            rt.block_on(compare_artifacts(conn, metric, base, modified))?;
             Ok(0)
         }
     }
