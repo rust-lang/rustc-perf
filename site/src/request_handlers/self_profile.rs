@@ -3,6 +3,7 @@ use std::io::Read;
 use std::sync::Arc;
 use std::time::Instant;
 
+use brotli::enc::BrotliEncoderParams;
 use bytes::Buf;
 use database::selector;
 use database::ArtifactId;
@@ -14,11 +15,13 @@ use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
 use crate::load::SiteCtxt;
 use crate::self_profile::{get_or_download_self_profile, get_self_profile_raw_data};
+use crate::server::maybe_compressed_response;
 use crate::server::{Response, ResponseHeaders};
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
     ctxt: &SiteCtxt,
+    allow_compression: bool,
 ) -> http::Response<hyper::Body> {
     log::info!("handle_self_profile_processed_download({:?})", body);
     let mut params = body.params.clone();
@@ -148,7 +151,18 @@ pub async fn handle_self_profile_processed_download(
         hyper::header::HeaderValue::from_static("https://profiler.firefox.com"),
     );
 
-    builder.body(hyper::Body::from(output.data)).unwrap()
+    if output.filename.ends_with("json") && allow_compression {
+        maybe_compressed_response(
+            builder,
+            output.data,
+            &Some(BrotliEncoderParams {
+                quality: 4,
+                ..Default::default()
+            }),
+        )
+    } else {
+        builder.body(hyper::Body::from(output.data)).unwrap()
+    }
 }
 
 // Add query data entries to `profile` for any queries in `base_profile` which are not present in

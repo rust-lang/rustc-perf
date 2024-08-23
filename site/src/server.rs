@@ -342,7 +342,10 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     let allow_compression = req
         .headers()
         .get(hyper::header::ACCEPT_ENCODING)
-        .map_or(false, |e| e.to_str().unwrap().contains("br"));
+        .and_then(|e| e.to_str().ok())
+        .map_or(false, |s| {
+            s.split(',').any(|part| part.trim().starts_with("br"))
+        });
 
     let compression = if allow_compression {
         // In tests on /perf/graphs and /perf/get, quality = 2 reduces size by 20-40% compared to 0,
@@ -441,7 +444,12 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/processed-self-profile" => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
             let req = check!(parse_query_string(req.uri()));
-            return Ok(request_handlers::handle_self_profile_processed_download(req, &ctxt).await);
+            return Ok(request_handlers::handle_self_profile_processed_download(
+                req,
+                &ctxt,
+                allow_compression,
+            )
+            .await);
         }
         _ if req.method() == http::Method::GET => return Ok(not_found()),
         _ => {}
@@ -730,7 +738,7 @@ where
     }
 }
 
-fn maybe_compressed_response(
+pub fn maybe_compressed_response(
     response: http::response::Builder,
     body: Vec<u8>,
     compression: &Option<BrotliEncoderParams>,
