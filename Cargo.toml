@@ -3,6 +3,9 @@ members = ["collector", "collector/benchlib", "site", "database", "intern"]
 exclude = ["rust/src"]
 resolver = "2"
 
+[workspace.dependencies]
+flate2 = "1.0.32"
+
 [profile.release.package.site]
 debug = 1
 

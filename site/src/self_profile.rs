@@ -9,7 +9,10 @@ use analyzeme::ProfilingData;
 use anyhow::Context;
 use bytes::Buf;
 use database::ArtifactId;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use lru::LruCache;
+use std::io::Write;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 use std::{collections::HashMap, io::Read, time::Instant};
@@ -37,9 +40,15 @@ pub fn generate(
         ProcessorType::Crox => {
             let opt = serde_json::from_str(&serde_json::to_string(&params).unwrap())
                 .context("crox opts")?;
+            let data = crox::generate(self_profile_data, opt).context("crox")?;
+
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(&data)?;
+            let gzip_compressed_data = encoder.finish()?;
+
             Ok(Output {
-                filename: "chrome_profiler.json",
-                data: crox::generate(self_profile_data, opt).context("crox")?,
+                filename: "chrome_profiler.json.gz",
+                data: gzip_compressed_data,
                 is_download: true,
             })
         }

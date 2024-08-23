@@ -127,6 +127,8 @@ pub async fn handle_self_profile_processed_download(
             ContentType::from("image/svg+xml".parse::<mime::Mime>().unwrap())
         } else if output.filename.ends_with("html") {
             ContentType::html()
+        } else if output.filename.ends_with("gz") {
+            headers::ContentType::from("application/gzip".parse::<mime::Mime>().unwrap())
         } else {
             unreachable!()
         })
