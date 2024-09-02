@@ -11,6 +11,7 @@ use postgres_native_tls::MakeTlsConnector;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
@@ -24,21 +25,10 @@ impl Postgres {
 
 const CERT_URL: &str = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
 
-lazy_static::lazy_static! {
-    static ref CERTIFICATE_PEMS: Vec<u8> = {
-        let client = reqwest::blocking::Client::new();
-        let resp = client
-            .get(CERT_URL)
-            .send()
-            .expect("failed to get RDS cert");
-         resp.bytes().expect("failed to get RDS cert body").to_vec()
-    };
-}
-
 async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
     if db_url.contains("rds.amazonaws.com") {
         let mut builder = TlsConnector::builder();
-        for cert in make_certificates() {
+        for cert in make_certificates().await {
             builder.add_root_certificate(cert);
         }
         let connector = builder.build().context("built TlsConnector")?;
@@ -75,11 +65,28 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
         Ok(db_client)
     }
 }
-fn make_certificates() -> Vec<Certificate> {
+async fn make_certificates() -> Vec<Certificate> {
     use x509_cert::der::pem::LineEnding;
     use x509_cert::der::EncodePem;
 
-    let certs = x509_cert::Certificate::load_pem_chain(&CERTIFICATE_PEMS[..]).unwrap();
+    static CERTIFICATE_PEMS: Mutex<Option<Vec<u8>>> = Mutex::const_new(None);
+
+    let mut guard = CERTIFICATE_PEMS.lock().await;
+    if guard.is_none() {
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(CERT_URL)
+            .send()
+            .await
+            .expect("failed to get RDS cert");
+        let certificate_pems = resp
+            .bytes()
+            .await
+            .expect("failed to get RDS cert body")
+            .to_vec();
+        *guard = Some(certificate_pems.clone());
+    }
+    let certs = x509_cert::Certificate::load_pem_chain(&guard.as_ref().unwrap()[..]).unwrap();
     certs
         .into_iter()
         .map(|cert| Certificate::from_pem(cert.to_pem(LineEnding::LF).unwrap().as_bytes()).unwrap())
@@ -1365,9 +1372,9 @@ mod tests {
 
     // Makes sure we successfully parse the RDS certificates and load them into native-tls compatible
     // format.
-    #[test]
-    fn can_make_certificates() {
-        let certs = make_certificates();
+    #[tokio::test]
+    async fn can_make_certificates() {
+        let certs = make_certificates().await;
         assert!(!certs.is_empty());
     }
 }
