@@ -112,6 +112,9 @@ async fn record(
             )
             .current_dir(checkout)
             .env("RUSTC_PERF_REAL_RUSTC", &toolchain.components.rustc)
+            // When overriding the stage0 compiler, we want to avoid bootstrap's target checks. See
+            // https://github.com/rust-lang/rust/pull/129651 for more details.
+            .env("BOOTSTRAP_SKIP_TARGET_SANITY", "1")
             .arg("build")
             .arg("--stage")
             .arg("0")
