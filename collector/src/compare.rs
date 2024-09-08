@@ -165,7 +165,7 @@ pub async fn compare_artifacts(
                 if a == 0.0 {
                     None
                 } else {
-                    Some((b - a) / a)
+                    Some((b - a) / a * 100.0)
                 }
             }
             (_, _) => None,
