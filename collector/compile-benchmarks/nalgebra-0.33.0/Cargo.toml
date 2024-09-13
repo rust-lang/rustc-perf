@@ -325,3 +325,5 @@ std = [
 
 [badges.maintenance]
 status = "actively-developed"
+
+[workspace]

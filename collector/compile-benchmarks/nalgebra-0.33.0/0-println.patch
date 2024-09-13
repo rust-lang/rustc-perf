@@ -1,0 +1,12 @@
+diff --git a/src/base/matrix.rs b/src/base/matrix.rs
+index 6f358a84..6c4eb739 100644
+--- a/src/base/matrix.rs
++++ b/src/base/matrix.rs
+@@ -225,6 +225,7 @@ where
+     S: Default,
+ {
+     fn default() -> Self {
++        println!("testing");
+         Matrix {
+             data: Default::default(),
+             _phantoms: PhantomData,

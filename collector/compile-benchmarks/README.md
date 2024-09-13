@@ -41,6 +41,8 @@ They mostly consist of real-world crates.
 - **libc-0.2.124**: An interface to `libc`. Contains many declarations of
   types, constants, and functions, but relatively little normal code. Stresses
   the parser. A very widely-used crate.
+- **nalgebra-0.33.0**: A linear algebra library. It exercises the new trait solver
+  in different ways than the old solver.
 - **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
 - **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility, and a
   binary crate.
