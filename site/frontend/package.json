@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
+    "install-perfetto": "./download_perfetto.sh",
     "watch": "parcel watch --no-hmr",
     "build": "parcel build",
     "fmt": "prettier --write src",

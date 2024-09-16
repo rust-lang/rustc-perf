@@ -11,6 +11,11 @@ use rust_embed::RustEmbed;
 #[include = "*.css"]
 #[include = "*.svg"]
 #[include = "*.png"]
+#[include = "*.html"]
+#[include = "*.woff2"]
+#[include = "*.map"]
+#[include = "*.json"]
+#[include = "*.wasm"]
 struct StaticAssets;
 
 /// Frontend source files compiled by `npm`.
