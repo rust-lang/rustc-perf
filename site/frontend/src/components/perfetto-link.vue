@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed} from "vue";
+import {computed, inject} from "vue";
 import {openTraceInPerfetto} from "../perfetto";
 import {chromeProfileUrl} from "../self-profile";
 import {CompileTestCase} from "../pages/compare/compile/common";
@@ -22,14 +22,23 @@ const link = computed(() => {
 const traceTitle = computed(() => {
   return `${props.testCase.benchmark}-${props.testCase.profile}-${props.testCase.scenario} (${props.artifact.commit})`;
 });
+
+const isEmbeddedPerfettoEnabled = inject("isEmbeddedPerfettoEnabled");
 </script>
 
 <template>
   <a
-    @click="openTraceInPerfetto(link, traceTitle)"
-    title="Open the self-profile query trace in Perfetto. You have to wait a bit for the profile to be downloaded after clicking on the link."
+    :href="`/perfetto/index.html?url=${encodeURIComponent(link)}`"
+    v-if="isEmbeddedPerfettoEnabled"
     ><slot></slot
   ></a>
+  <a
+    @click="openTraceInPerfetto(link, traceTitle)"
+    title="Open the self-profile query trace in Perfetto. You have to wait a bit for the profile to be downloaded after clicking on the link."
+    v-else
+  >
+    <slot></slot>
+  </a>
 </template>
 
 <style scoped lang="scss">

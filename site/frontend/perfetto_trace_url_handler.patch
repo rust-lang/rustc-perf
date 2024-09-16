@@ -1,0 +1,15 @@
+--- ui/src/frontend/trace_url_handler.ts.bak	2024-09-15 21:20:31
++++ ui/src/frontend/trace_url_handler.ts	2024-09-15 21:34:02
+@@ -217,11 +217,7 @@
+ }
+ 
+ function loadTraceFromUrl(url: string) {
+-  const isLocalhostTraceUrl = ['127.0.0.1', 'localhost'].includes(
+-    new URL(url).hostname,
+-  );
+-
+-  if (isLocalhostTraceUrl) {
++  if (false) {
+     // This handles the special case of tools/record_android_trace serving the
+     // traces from a local webserver and killing it immediately after having
+     // seen the HTTP GET request. In those cases store the trace as a file, so
