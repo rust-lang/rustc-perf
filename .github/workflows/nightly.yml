@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "0 23 * * *"
 
+permissions:
+  contents: write
+
 jobs:
   publish_release:
     name: Publish release
