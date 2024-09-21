@@ -156,6 +156,11 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
+path = "nalgebra-0.33.0/**"
+SPDX-FileCopyrightText = "Sébastien Crozet"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
 path = "piston-image/**"
 SPDX-FileCopyrightText = "piston contributors"
 SPDX-License-Identifier = "MIT"
