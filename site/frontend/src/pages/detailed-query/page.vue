@@ -391,8 +391,18 @@ loadData();
       </table>
 
       <p>
-        'Time (%)' is the percentage of the cpu-clock time spent on this query
-        (we do not use wall-time as we want to account for parallelism).
+        'Instructions (%)' is the percentage of instructions executed on this
+        query (we do not use wall-time as we want to account for parallelism).
+      </p>
+      <p>
+        <b
+          >Note: self-profile measurements have been
+          <a href="https://github.com/rust-lang/rustc-perf/pull/1984"
+            >recently switched</a
+          >
+          from wall-time to HW counters (instruction count). If comparing with
+          an older artifact, the timings might not be directly comparable.</b
+        >
       </p>
       <p>Executions do not include cached executions.</p>
 
@@ -408,21 +418,21 @@ loadData();
               <a
                 href="#"
                 @click.prevent="changeSortParameters('timePercent', 'desc')"
-                >Time (%)</a
+                >Instructions (%)</a
               >
             </th>
             <th :class="getHeaderClass('timeSeconds')">
               <a
                 href="#"
                 @click.prevent="changeSortParameters('timeSeconds', 'desc')"
-                >Time (s)</a
+                >Instructions</a
               >
             </th>
             <th v-if="showDelta" :class="getHeaderClass('timeDelta')">
               <a
                 href="#"
                 @click.prevent="changeSortParameters('timeDelta', 'desc')"
-                >Time delta</a
+                >Instructions delta</a
               >
             </th>
             <th :class="getHeaderClass('executions')">
@@ -442,14 +452,14 @@ loadData();
             <th
               v-if="showIncr"
               :class="getHeaderClass('incrementalLoading')"
-              title="Incremental loading time"
+              title="Incremental loading instructions"
             >
               <a
                 href="#"
                 @click.prevent="
                   changeSortParameters('incrementalLoading', 'desc')
                 "
-                >Incremental loading (s)</a
+                >Incremental loading (icounts)</a
               >
             </th>
             <th

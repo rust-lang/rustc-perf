@@ -37,8 +37,8 @@ export interface SelfProfileResponse {
   base_profile_delta?: ProfileData;
 }
 
-export function toSeconds(time: number): number {
-  return time / 1000000000;
+export function normalizeValue(icounts: number): number {
+  return icounts;
 }
 
 export function createDelta(
@@ -259,24 +259,24 @@ export function createTableData(
             formatted: totals.percent_total_time.toFixed(2) + "%*",
             title: "% of cpu-time stat",
           },
-    timeSeconds: toSeconds(totals.self_time),
+    timeSeconds: normalizeValue(totals.self_time),
     timeDelta: totalsDelta
       ? createDelta(
-          toSeconds(totals.self_time),
-          toSeconds(totalsDelta.self_time),
-          false
+          normalizeValue(totals.self_time),
+          normalizeValue(totalsDelta.self_time),
+          true
         )
       : null,
     executions: totals.invocation_count,
     executionsDelta: totalsDelta
       ? createDelta(totals.invocation_count, totalsDelta.invocation_count, true)
       : null,
-    incrementalLoading: toSeconds(totals.incremental_load_time),
+    incrementalLoading: normalizeValue(totals.incremental_load_time),
     incrementalLoadingDelta: totalsDelta
       ? createDelta(
-          toSeconds(totals.incremental_load_time),
-          toSeconds(totalsDelta.incremental_load_time),
-          false
+          normalizeValue(totals.incremental_load_time),
+          normalizeValue(totalsDelta.incremental_load_time),
+          true
         )
       : null,
   });
@@ -299,24 +299,24 @@ export function createTableData(
               formatted: query.percent_total_time.toFixed(2) + "%",
               title: "",
             },
-      timeSeconds: toSeconds(query.self_time),
+      timeSeconds: normalizeValue(query.self_time),
       timeDelta: queryDelta
         ? createDelta(
-            toSeconds(query.self_time),
-            toSeconds(queryDelta.self_time),
-            false
+            normalizeValue(query.self_time),
+            normalizeValue(queryDelta.self_time),
+            true
           )
         : null,
       executions: query.invocation_count,
       executionsDelta: queryDelta
         ? createDelta(query.invocation_count, queryDelta.invocation_count, true)
         : null,
-      incrementalLoading: toSeconds(query.incremental_load_time),
+      incrementalLoading: normalizeValue(query.incremental_load_time),
       incrementalLoadingDelta: queryDelta
         ? createDelta(
-            toSeconds(query.incremental_load_time),
-            toSeconds(queryDelta.incremental_load_time),
-            false
+            normalizeValue(query.incremental_load_time),
+            normalizeValue(queryDelta.incremental_load_time),
+            true
           )
         : null,
     });
