@@ -325,8 +325,8 @@ fn write_metric_summary(
         match visibility {
             DefaultMetricVisibility::Shown => {
                 message.push_str(
-                    "This is a highly reliable metric that was used to determine the \
-                overall result at the top of this comment.\n\n",
+                    "This is the most reliable metric that we have; it was used to determine the \
+                overall result at the top of this comment. However, even this metric can sometimes exhibit noise.\n\n",
                 );
                 write_summary_table(&primary, &secondary, false, message);
             }
