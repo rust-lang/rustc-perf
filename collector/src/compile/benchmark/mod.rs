@@ -297,7 +297,12 @@ impl Benchmark {
         // different codegen backends are stored in separate directories.
         let preparation_start = std::time::Instant::now();
         std::thread::scope::<_, anyhow::Result<()>>(|s| {
-            let server = jobserver::Client::new(num_cpus::get()).context("jobserver::new")?;
+            let server = jobserver::Client::new(
+                std::thread::available_parallelism()
+                    .expect("Cannot get core count")
+                    .get(),
+            )
+            .context("jobserver::new")?;
             let mut threads = Vec::with_capacity(target_dirs.len());
             for ((backend, profile), prep_dir) in &target_dirs {
                 let server = server.clone();
