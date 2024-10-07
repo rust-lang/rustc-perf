@@ -214,7 +214,7 @@ async fn summarize_run(
         if has_broken_benchmarks {
             " - BENCHMARK(S) FAILED"
         } else if is_regression {
-            " - ACTION NEEDED"
+            " - please read the text below"
         } else {
             " - no action needed"
         },
@@ -325,8 +325,8 @@ fn write_metric_summary(
         match visibility {
             DefaultMetricVisibility::Shown => {
                 message.push_str(
-                    "This is a highly reliable metric that was used to determine the \
-                overall result at the top of this comment.\n\n",
+                    "This is the most reliable metric that we have; it was used to determine the \
+                overall result at the top of this comment. However, even this metric can sometimes exhibit noise.\n\n",
                 );
                 write_summary_table(&primary, &secondary, false, message);
             }
@@ -363,18 +363,24 @@ fn write_metric_summary(
 
 fn master_run_body(is_regression: bool) -> String {
     if is_regression {
-        "
-**Next Steps**: If you can justify the \
-regressions found in this perf run, please indicate this with \
-`@rustbot label: +perf-regression-triaged` along with \
-sufficient written justification. If you cannot justify the regressions \
-please open an issue or create a new PR that fixes the regressions, \
-add a comment linking to the newly created issue or PR, \
-and then add the `perf-regression-triaged` label to this PR.
+        r#"
+Our benchmarks found a performance regression caused by this PR.
+This might be an actual regression, but it can also be just noise.
+
+**Next Steps**:
+
+- If the regression was expected or you think it can be justified,
+please write a comment with sufficient written justification, and add
+`@rustbot label: +perf-regression-triaged` to it, to mark the regression as triaged.
+- If you think that you know of a way to resolve the regression, try to create
+a new PR with a fix for the regression.
+- If you do not understand the regression or you think that it is just noise,
+you can ask the `@rust-lang/wg-compiler-performance` working group for help (members of this group
+were already notified of this PR).
 
 @rustbot label: +perf-regression
 cc @rust-lang/wg-compiler-performance
-"
+"#
     } else {
         "
 @rustbot label: -perf-regression
