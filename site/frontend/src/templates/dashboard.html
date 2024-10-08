@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <include src="src/templates/layout/head.html"></include>
+    <style>
+      .graphs {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+
+        @media screen and (max-width: 768px) {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body class="container">
+    <include src="src/templates/layout/navbar.html"></include>
+    <details style="margin-top: 10px">
+      <summary>What data is in the dashboard?</summary>
+
+      The dashboard shows performance results for all stable Rust releases going
+      back to
+      <code>1.28.0</code>, along with the latest <code>beta</code> release. The
+      displayed duration is an arithmetic mean amongst all
+      <a
+        href="https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks#stable"
+        >stable</a
+      >
+      benchmarks. The dashboard also shows the average duration of runtime
+      benchmarks, which measure the performance of Rust programs compiled by a
+      given version of the Rust compiler.
+    </details>
+
+    <div class="graphs">
+      <div id="check-average-times"></div>
+      <div id="debug-average-times"></div>
+      <div id="opt-average-times"></div>
+      <div id="doc-average-times"></div>
+      <div id="runtime-average-times"></div>
+    </div>
+    <div id="as-of"></div>
+    <include src="src/templates/layout/footer.html"></include>
+    <script type="module" src="../pages/dashboard.ts"></script>
+  </body>
+</html>

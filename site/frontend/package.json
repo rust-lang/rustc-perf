@@ -16,9 +16,15 @@
     "@parcel/compressor-brotli": "^2.8.3",
     "@parcel/transformer-vue": "^2.8.3",
     "@types/msgpack-lite": "^0.1.8",
+    "posthtml-include": "^2.0.1",
     "prettier": "2.8.8",
     "typescript": "^5.0.2",
     "vue-tsc": "^1.8.3"
+  },
+  "@parcel/bundler-default": {
+    "minBundles": 999,
+    "minBundleSize": 9999999,
+    "maxParallelRequests": 20
   },
   "dependencies": {
     "date-fns": "^2.30.0",
@@ -31,32 +37,28 @@
   },
   "targets": {
     "dashboard": {
-      "source": "src/pages/dashboard.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/dashboard.html",
+      "distDir": "dist/"
     },
     "status": {
-      "source": "src/pages/status.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/status.html",
+      "distDir": "dist/"
     },
     "bootstrap": {
-      "source": "src/pages/bootstrap.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/bootstrap.html",
+      "distDir": "dist/"
     },
     "graphs": {
-      "source": "src/pages/graphs.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/graphs.html",
+      "distDir": "dist/"
     },
     "compare": {
-      "source": "src/pages/compare.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/compare.html",
+      "distDir": "dist/"
     },
     "detailed-query": {
-      "source": "src/pages/detailed-query.ts",
-      "distDir": "dist/scripts"
-    },
-    "uplot": {
-      "source": "node_modules/uplot/dist/uPlot.min.css",
-      "distDir": "dist/styles"
+      "source": "src/templates/detailed-query.html",
+      "distDir": "dist/"
     }
   },
   "browserslist": "> 0.5%, last 3 years, not dead",
