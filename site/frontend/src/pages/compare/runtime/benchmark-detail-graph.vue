@@ -109,6 +109,7 @@ async function renderGraph(
 ) {
   const opts: GraphRenderOpts = {
     width: Math.min(window.innerWidth - 40, 465),
+    height: 300,
     renderTitle: false,
   };
   if (date !== null) {

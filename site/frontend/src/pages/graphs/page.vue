@@ -68,8 +68,26 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // Then draw the plots.
   await nextTick();
 
-  const width = Math.max(Math.floor(window.innerWidth / 4) - 40, 380);
-  const opts = {width};
+  const countGraphs = Object.keys(graphData.benchmarks)
+    .map((benchmark) => Object.keys(graphData.benchmarks[benchmark]).length)
+    .reduce((sum, item) => sum + item, 0);
+
+  const columns = countGraphs === 1 ? 1 : 4;
+
+  const root = document.getElementById("app")!;
+  const width = Math.max(Math.floor(root.clientWidth / columns), 380);
+
+  const bodyEl = document.querySelector("body.container")!;
+  const chartsEl = document.getElementById("charts")!;
+  const height =
+    countGraphs === 1
+      ? window.innerHeight - bodyEl.clientHeight + chartsEl.clientHeight - 60
+      : 300;
+
+  const opts = {
+    width,
+    height,
+  };
 
   // If we select a smaller subset of benchmarks, then just show them.
   if (hasSpecificSelection(selector)) {
