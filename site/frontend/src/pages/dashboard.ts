@@ -44,7 +44,7 @@ function render(
     },
     yAxis: {
       title: {text: "Seconds"},
-      min: 0.1,
+      min: Math.min(...Object.keys(data).flatMap((key) => data[key])),
       type: "logarithmic",
     },
     xAxis: {
@@ -101,7 +101,7 @@ function renderRuntime(element: string, data: [number], versions: [string]) {
     },
     yAxis: {
       title: {text: "Miliseconds"},
-      min: 0.1,
+      min: Math.min(...formattedData),
       type: "logarithmic",
     },
     xAxis: {
