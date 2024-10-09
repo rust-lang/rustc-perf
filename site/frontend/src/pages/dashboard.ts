@@ -44,7 +44,8 @@ function render(
     },
     yAxis: {
       title: {text: "Seconds"},
-      min: 0,
+      min: 0.1,
+      type: "logarithmic",
     },
     xAxis: {
       categories: versions,
@@ -100,7 +101,8 @@ function renderRuntime(element: string, data: [number], versions: [string]) {
     },
     yAxis: {
       title: {text: "Miliseconds"},
-      min: 0,
+      min: 0.1,
+      type: "logarithmic",
     },
     xAxis: {
       categories: versions.slice(nullCount),
