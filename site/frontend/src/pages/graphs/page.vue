@@ -85,12 +85,8 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // of the parent.
   const width = Math.floor(wrapperRef.value.clientWidth / columns) - 10;
 
-  const bodyEl = document.querySelector("body.container")!;
-  const chartsEl = document.getElementById("charts")!;
-  const height =
-    countGraphs === 1
-      ? window.innerHeight - bodyEl.clientHeight + chartsEl.clientHeight - 60
-      : 300;
+  const top = wrapperRef.value.getBoundingClientRect().top;
+  const height = countGraphs === 1 ? window.innerHeight - top - 100 : 300;
 
   const opts = {
     width,
