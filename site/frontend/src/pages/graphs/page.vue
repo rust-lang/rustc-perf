@@ -72,10 +72,18 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
     .map((benchmark) => Object.keys(graphData.benchmarks[benchmark]).length)
     .reduce((sum, item) => sum + item, 0);
 
-  const columns = countGraphs === 1 ? 1 : 4;
+  const parentWidth = wrapperRef.value.clientWidth;
+  let columns = countGraphs === 1 ? 1 : 4;
 
-  const root = document.getElementById("app")!;
-  const width = Math.max(Math.floor(root.clientWidth / columns), 380);
+  // Small display, reduce column count to 1
+  if (parentWidth < 1000) {
+    columns = 1;
+  }
+
+  // Calculate the width of each column.
+  // Provide a 10px buffer to avoid wrapping if the size is just at the limit
+  // of the parent.
+  const width = Math.floor(wrapperRef.value.clientWidth / columns) - 10;
 
   const bodyEl = document.querySelector("body.container")!;
   const chartsEl = document.getElementById("charts")!;
@@ -133,8 +141,10 @@ function updateSelection(params: SelectionParams) {
 const info: BenchmarkInfo = await loadBenchmarkInfo();
 
 const loading = ref(true);
+const wrapperRef = ref(null);
 
 const selector: GraphsSelector = loadSelectorFromUrl(getUrlParams());
+
 loadGraphData(selector, loading);
 </script>
 
@@ -156,21 +166,29 @@ loadGraphData(selector, loading);
     interpolated due to missing data. Interpolated data is simply the last known
     data point repeated until another known data point is found.
   </div>
-  <div v-if="loading">
-    <h2>Loading &amp; rendering data..</h2>
-    <h3>This may take a while!</h3>
-  </div>
-  <div v-else>
-    <div id="charts"></div>
-    <div
-      v-if="!hasSpecificSelection(selector)"
-      style="margin-top: 50px; border-top: 1px solid #ccc"
-    >
-      <div style="padding: 20px 0">
-        <strong>Benchmarks optimized for small binary size</strong>
-      </div>
-      <div id="size-charts"></div>
+  <div class="wrapper" ref="wrapperRef">
+    <div v-if="loading">
+      <h2>Loading &amp; rendering data..</h2>
+      <h3>This may take a while!</h3>
     </div>
-    <AsOf :info="info" />
+    <div v-else>
+      <div id="charts"></div>
+      <div
+        v-if="!hasSpecificSelection(selector)"
+        style="margin-top: 50px; border-top: 1px solid #ccc"
+      >
+        <div style="padding: 20px 0">
+          <strong>Benchmarks optimized for small binary size</strong>
+        </div>
+        <div id="size-charts"></div>
+      </div>
+      <AsOf :info="info" />
+    </div>
   </div>
 </template>
+
+<style lang="scss" scoped>
+.wrapper {
+  width: 100%;
+}
+</style>
