@@ -119,6 +119,7 @@ async fn handle_rust_timer(
                     cmd.params.include,
                     cmd.params.exclude,
                     cmd.params.runs,
+                    cmd.params.backends,
                 )
                 .await;
                 format!(
@@ -158,6 +159,7 @@ async fn handle_rust_timer(
                 command.params.include,
                 command.params.exclude,
                 command.params.runs,
+                command.params.backends,
             )
             .await;
         }
@@ -225,6 +227,7 @@ fn parse_benchmark_parameters<'a>(
         include: args.remove("include"),
         exclude: args.remove("exclude"),
         runs: None,
+        backends: args.remove("backends"),
     };
     if let Some(runs) = args.remove("runs") {
         let Ok(runs) = runs.parse::<u32>() else {
@@ -280,6 +283,7 @@ struct BenchmarkParameters<'a> {
     include: Option<&'a str>,
     exclude: Option<&'a str>,
     runs: Option<i32>,
+    backends: Option<&'a str>,
 }
 
 pub async fn get_authorized_users() -> Result<Vec<u64>, String> {

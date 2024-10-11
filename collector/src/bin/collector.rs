@@ -961,7 +961,25 @@ fn main_result() -> anyhow::Result<i32> {
                         include,
                         exclude,
                         runs,
+                        backends: requested_backends,
                     } => {
+                        // Parse the requested backends, with LLVM as a fallback if none or no valid
+                        // ones were explicitly specified, which will be the case for the vast
+                        // majority of cases.
+                        let mut backends = vec![];
+                        if let Some(requested_backends) = requested_backends {
+                            if requested_backends.contains("Llvm") {
+                                backends.push(CodegenBackend::Llvm);
+                            }
+                            if requested_backends.contains("Cranelift") {
+                                backends.push(CodegenBackend::Cranelift);
+                            }
+                        }
+
+                        if backends.is_empty() {
+                            backends.push(CodegenBackend::Llvm);
+                        }
+
                         // FIXME: remove this when/if NextArtifact::Commit's include/exclude
                         // changed from Option<String> to Vec<String>
                         // to not to manually parse args
@@ -973,12 +991,10 @@ fn main_result() -> anyhow::Result<i32> {
                             }
                         };
                         let sha = commit.sha.to_string();
-                        let sysroot = Sysroot::install(
-                            sha.clone(),
-                            &target_triple,
-                            vec![CodegenBackend::Llvm],
-                        )
-                        .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
+                        let sysroot = Sysroot::install(sha.clone(), &target_triple, &backends)
+                            .with_context(|| {
+                                format!("failed to install sysroot for {:?}", commit)
+                            })?;
 
                         let mut benchmarks = get_compile_benchmarks(
                             &compile_benchmark_dir,
@@ -1001,7 +1017,7 @@ fn main_result() -> anyhow::Result<i32> {
                                 Profile::Opt,
                             ],
                             scenarios: Scenario::all(),
-                            backends: vec![CodegenBackend::Llvm],
+                            backends,
                             iterations: runs.map(|v| v as usize),
                             is_self_profile: self_profile.self_profile,
                             bench_rustc: bench_rustc.bench_rustc,
@@ -1174,7 +1190,7 @@ fn main_result() -> anyhow::Result<i32> {
             let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
             let commit = get_commit_or_fake_it(last_sha).expect("success");
-            let mut sysroot = Sysroot::install(commit.sha, &target_triple, codegen_backends.0)?;
+            let mut sysroot = Sysroot::install(commit.sha, &target_triple, &codegen_backends.0)?;
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.
