@@ -5,15 +5,13 @@ use crate::github::{
 };
 use crate::load::SiteCtxt;
 
-use std::sync::Arc;
-
+use hashbrown::HashMap;
 use regex::Regex;
+use std::sync::Arc;
 
 lazy_static::lazy_static! {
     static ref BODY_TIMER_BUILD: Regex =
         Regex::new(r"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?").unwrap();
-    static ref BODY_TIMER_QUEUE: Regex =
-        Regex::new(r"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?").unwrap();
 }
 
 pub async fn handle_github(
@@ -118,26 +116,25 @@ async fn handle_rust_timer(
         return Ok(github::Response);
     }
 
-    if let Some(captures) = BODY_TIMER_QUEUE.captures(&comment.body) {
-        let include = captures.get(1).map(|v| v.as_str());
-        let exclude = captures.get(2).map(|v| v.as_str());
-        let runs = captures.get(3).and_then(|v| v.as_str().parse::<i32>().ok());
-        {
-            let conn = ctxt.conn().await;
-            conn.queue_pr(issue.number, include, exclude, runs).await;
-        }
-        main_client
-            .post_comment(
-                issue.number,
+    if let Some(queue) = parse_queue_command(&comment.body) {
+        let msg = match queue {
+            Ok(cmd) => {
+                let conn = ctxt.conn().await;
+                conn.queue_pr(issue.number, cmd.include, cmd.exclude, cmd.runs)
+                    .await;
                 format!(
                     "Awaiting bors try build completion.
 
 @rustbot label: +S-waiting-on-perf
 
 {COMMENT_MARK_TEMPORARY}"
-                ),
-            )
-            .await;
+                )
+            }
+            Err(error) => {
+                format!("Error occurred while parsing comment: {error}")
+            }
+        };
+        main_client.post_comment(issue.number, msg).await;
         return Ok(github::Response);
     }
 
@@ -161,6 +158,68 @@ async fn handle_rust_timer(
     .await?;
 
     Ok(github::Response)
+}
+
+/// Parses the first occurrence of a `@rust-timer queue <...>` command
+/// in the input string.
+fn parse_queue_command(body: &str) -> Option<Result<QueueCommand, String>> {
+    let prefix = "@rust-timer";
+    let bot_line = body.lines().find_map(|line| {
+        let line = line.trim();
+        line.find(prefix)
+            .map(|index| line[index + prefix.len()..].trim())
+    })?;
+
+    let args = bot_line.strip_prefix("queue").map(|l| l.trim())?;
+    let mut args = match parse_command_arguments(args) {
+        Ok(args) => args,
+        Err(error) => return Some(Err(error)),
+    };
+    let mut cmd = QueueCommand {
+        include: args.remove("include"),
+        exclude: args.remove("exclude"),
+        runs: None,
+    };
+    if let Some(runs) = args.remove("runs") {
+        let Ok(runs) = runs.parse::<u32>() else {
+            return Some(Err(format!("Cannot parse runs {runs} as a number")));
+        };
+        cmd.runs = Some(runs as i32);
+    }
+
+    if let Some((key, _)) = args.into_iter().next() {
+        return Some(Err(format!("Unknown command argument {key}")));
+    }
+
+    Some(Ok(cmd))
+}
+
+/// Parses command arguments from a single line of text.
+/// Expects that arguments are separated by whitespace, and each argument
+/// has the format `<key>=<value>`.
+fn parse_command_arguments(args: &str) -> Result<HashMap<&str, &str>, String> {
+    let mut argmap = HashMap::new();
+    for arg in args.split_whitespace() {
+        let Some((key, value)) = arg.split_once('=') else {
+            return Err(format!(
+                "Invalid command argument `{arg}` (there may be no spaces around the `=` character)"
+            ));
+        };
+        let key = key.trim();
+        let value = value.trim();
+        if argmap.insert(key, value).is_some() {
+            return Err(format!("Duplicate command argument `{key}`"));
+        }
+    }
+
+    Ok(argmap)
+}
+
+#[derive(Debug)]
+struct QueueCommand<'a> {
+    include: Option<&'a str>,
+    exclude: Option<&'a str>,
+    runs: Option<i32>,
 }
 
 /// Run the `@rust-timer build` regex over the comment message extracting the commit and the other captures
@@ -196,6 +255,7 @@ pub async fn get_authorized_users() -> Result<Vec<u64>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn captures_all_shas() {
         let comment_body = r#"
@@ -214,5 +274,81 @@ Going to do perf runs for a few of these:
                 "23936af287657fa4148aeab40cc2a780810fae52"
             ]
         );
+    }
+
+    #[test]
+    fn command_missing() {
+        assert!(parse_queue_command("").is_none());
+    }
+
+    #[test]
+    fn unknown_command() {
+        assert!(parse_queue_command("@rust-timer foo").is_none());
+    }
+
+    #[test]
+    fn queue_command() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue"),
+            @"Some(Ok(QueueCommand { include: None, exclude: None, runs: None }))");
+    }
+
+    #[test]
+    fn queue_command_unknown_arg() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue foo=bar"),
+            @r###"Some(Err("Unknown command argument foo"))"###);
+    }
+
+    #[test]
+    fn queue_command_duplicate_arg() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=a exclude=c include=b"),
+            @r###"Some(Err("Duplicate command argument `include`"))"###);
+    }
+
+    #[test]
+    fn queue_command_include() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=abcd,feih"),
+            @r###"Some(Ok(QueueCommand { include: Some("abcd,feih"), exclude: None, runs: None }))"###);
+    }
+
+    #[test]
+    fn queue_command_exclude() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue exclude=foo134,barzbaz41baf"),
+            @r###"Some(Ok(QueueCommand { include: None, exclude: Some("foo134,barzbaz41baf"), runs: None }))"###);
+    }
+
+    #[test]
+    fn queue_command_runs() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=5"),
+            @"Some(Ok(QueueCommand { include: None, exclude: None, runs: Some(5) }))");
+    }
+
+    #[test]
+    fn queue_command_runs_nan() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=xxx"),
+            @r###"Some(Err("Cannot parse runs xxx as a number"))"###);
+    }
+
+    #[test]
+    fn queue_command_combination() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=acda,13asd exclude=c13,DA runs=5"),
+            @r###"Some(Ok(QueueCommand { include: Some("acda,13asd"), exclude: Some("c13,DA"), runs: Some(5) }))"###);
+    }
+
+    #[test]
+    fn queue_command_argument_spaces() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include  =  abcd,das"),
+            @r###"Some(Err("Invalid command argument `include` (there may be no spaces around the `=` character)"))"###);
+    }
+
+    #[test]
+    fn queue_command_spaces() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer     queue     include=abcd,das   "),
+            @r###"Some(Ok(QueueCommand { include: Some("abcd,das"), exclude: None, runs: None }))"###);
+    }
+
+    #[test]
+    fn queue_command_with_bors() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@bors try @rust-timer queue include=foo,bar"),
+            @r###"Some(Ok(QueueCommand { include: Some("foo,bar"), exclude: None, runs: None }))"###);
     }
 }
