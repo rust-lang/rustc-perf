@@ -238,11 +238,12 @@ is attached to the entry in this table, it can be benchmarked.
 * exclude: which benchmarks should be excluded (corresponds to the `--exclude` benchmark parameter)
 * runs: how many iterations should be used by default for the benchmark run
 * commit_date: when was the commit created
+* backends: the codegen backends to use for the benchmarks (corresponds to the `--backends` benchmark parameter)
 
 ```
 sqlite> select * from pull_request_build limit 1;
-bors_sha    pr  parent_sha  complete  requested    include  exclude  runs  commit_date
-----------  --  ----------  --------  ---------    -------  -------  ----  -----------
+bors_sha    pr  parent_sha  complete  requested    include  exclude  runs  commit_date  backends
+----------  --  ----------  --------  ---------    -------  -------  ----  -----------  --------
 1w0p83...   42  fq24xq...   true      <timestamp>                    3     <timestamp>
 ```
 
