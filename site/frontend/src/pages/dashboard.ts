@@ -3,6 +3,22 @@ import {DASHBOARD_DATA_URL} from "../urls";
 
 import {getJson} from "../utils/requests";
 
+type ScaleKind = "linear" | "log";
+let scale: ScaleKind = "linear";
+
+const buttons = Array.from(
+  document.querySelectorAll<HTMLInputElement>("#scale-select-form input")
+);
+
+buttons.map((button) => {
+  button.addEventListener("change", () => {
+    if (button.checked) {
+      scale = button.value as ScaleKind;
+      make_data();
+    }
+  });
+});
+
 interface DashboardCompileBenchmarkCases {
   clean_averages: [number];
   base_incr_averages: [number];
@@ -44,7 +60,8 @@ function render(
     },
     yAxis: {
       title: {text: "Seconds"},
-      min: 0,
+      min: scale === "linear" ? 0 : undefined,
+      type: scale === "log" ? "logarithmic" : undefined,
     },
     xAxis: {
       categories: versions,
@@ -100,7 +117,8 @@ function renderRuntime(element: string, data: [number], versions: [string]) {
     },
     yAxis: {
       title: {text: "Miliseconds"},
-      min: 0,
+      min: scale === "linear" ? 0 : undefined,
+      type: scale === "log" ? "logarithmic" : undefined,
     },
     xAxis: {
       categories: versions.slice(nullCount),
@@ -126,8 +144,12 @@ function populate_data(response: DashboardResponse) {
   renderRuntime("runtime-average-times", data.runtime, data.versions);
 }
 
+let response: DashboardResponse | null = null;
 async function make_data() {
-  const response = await getJson<DashboardResponse>(DASHBOARD_DATA_URL);
+  if (!response) {
+    response = await getJson<DashboardResponse>(DASHBOARD_DATA_URL);
+  }
+
   populate_data(response);
 }
 
