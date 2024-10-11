@@ -278,6 +278,7 @@ static MIGRATIONS: &[&str] = &[
     alter table pstat_series drop constraint pstat_series_crate_profile_cache_statistic_key;
     alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, metric);
     "#,
+    r#"alter table pull_request_build add column backends text;"#,
 ];
 
 #[async_trait::async_trait]
@@ -736,14 +737,15 @@ where
         include: Option<&str>,
         exclude: Option<&str>,
         runs: Option<i32>,
+        backends: Option<&str>,
     ) {
         if let Err(e) = self.conn()
             .execute(
-                "insert into pull_request_build (pr, complete, requested, include, exclude, runs) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4)",
-                &[&(pr as i32), &include, &exclude, &runs],
+                "insert into pull_request_build (pr, complete, requested, include, exclude, runs, backends) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4, $5)",
+                &[&(pr as i32), &include, &exclude, &runs, &backends],
             )
             .await {
-            log::error!("failed to queue_pr({}, {:?}, {:?}, {:?}): {:?}", pr, include, exclude, runs, e);
+            log::error!("failed to queue_pr({}, {:?}, {:?}, {:?}, {:?}): {:?}", pr, include, exclude, runs, backends, e);
         }
     }
     async fn pr_attach_commit(
@@ -767,7 +769,7 @@ where
         let rows = self
             .conn()
             .query(
-                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date from pull_request_build
+                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
                 where complete is false and bors_sha is not null
                 order by requested asc",
                 &[],
@@ -783,6 +785,7 @@ where
                 exclude: row.get(4),
                 runs: row.get(5),
                 commit_date: row.get::<_, Option<_>>(6).map(Date),
+                backends: row.get(7),
             })
             .collect()
     }
@@ -792,7 +795,7 @@ where
             .query_opt(
                 "update pull_request_build SET complete = true
                 where bors_sha = $1
-                returning pr, bors_sha, parent_sha, include, exclude, runs, commit_date",
+                returning pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends",
                 &[&sha],
             )
             .await
@@ -805,6 +808,7 @@ where
             exclude: row.get(4),
             runs: row.get(5),
             commit_date: row.get::<_, Option<_>>(6).map(Date),
+            backends: row.get(7),
         })
     }
     async fn collection_id(&self, version: &str) -> CollectionId {

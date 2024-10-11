@@ -275,13 +275,13 @@ impl Table for PullRequestBuild {
     }
 
     fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
-        "select bors_sha, pr, parent_sha, complete, requested, include, exclude, runs from "
+        "select bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, backends from "
             .to_string()
             + self.name()
     }
 
     fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into pull_request_build (bors_sha, pr, parent_sha, complete, requested, include, exclude, runs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "insert into pull_request_build (bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, backends) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     }
 
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
@@ -296,6 +296,7 @@ impl Table for PullRequestBuild {
                 row.get::<_, Option<&str>>(5),
                 row.get::<_, Option<&str>>(6),
                 row.get::<_, Option<i32>>(7),
+                row.get::<_, Option<&str>>(8),
             ])
             .unwrap();
     }

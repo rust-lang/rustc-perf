@@ -121,6 +121,7 @@ pub trait Connection: Send + Sync {
         include: Option<&str>,
         exclude: Option<&str>,
         runs: Option<i32>,
+        backends: Option<&str>,
     );
     /// Returns true if this PR was queued waiting for a commit
     async fn pr_attach_commit(

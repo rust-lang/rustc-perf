@@ -11,9 +11,9 @@ use regex::Regex;
 
 lazy_static::lazy_static! {
     static ref BODY_TIMER_BUILD: Regex =
-        Regex::new(r"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?").unwrap();
+        Regex::new(r"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?\s*(?:backends=(\S+))?").unwrap();
     static ref BODY_TIMER_QUEUE: Regex =
-        Regex::new(r"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?").unwrap();
+        Regex::new(r"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?\s*(?:backends=(\S+))?").unwrap();
 }
 
 pub async fn handle_github(
@@ -122,9 +122,11 @@ async fn handle_rust_timer(
         let include = captures.get(1).map(|v| v.as_str());
         let exclude = captures.get(2).map(|v| v.as_str());
         let runs = captures.get(3).and_then(|v| v.as_str().parse::<i32>().ok());
+        let backends = captures.get(4).map(|v| v.as_str());
         {
             let conn = ctxt.conn().await;
-            conn.queue_pr(issue.number, include, exclude, runs).await;
+            conn.queue_pr(issue.number, include, exclude, runs, backends)
+                .await;
         }
         main_client
             .post_comment(
@@ -145,9 +147,11 @@ async fn handle_rust_timer(
         let include = captures.get(2).map(|v| v.as_str());
         let exclude = captures.get(3).map(|v| v.as_str());
         let runs = captures.get(4).and_then(|v| v.as_str().parse::<i32>().ok());
+        let backends = captures.get(5).map(|v| v.as_str());
         {
             let conn = ctxt.conn().await;
-            conn.queue_pr(issue.number, include, exclude, runs).await;
+            conn.queue_pr(issue.number, include, exclude, runs, backends)
+                .await;
         }
     }
 

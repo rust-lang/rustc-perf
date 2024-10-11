@@ -9,6 +9,7 @@ pub mod next_artifact {
             include: Option<String>,
             exclude: Option<String>,
             runs: Option<i32>,
+            backends: Option<String>,
         },
     }
 

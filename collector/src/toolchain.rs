@@ -20,11 +20,7 @@ pub struct Sysroot {
 }
 
 impl Sysroot {
-    pub fn install(
-        sha: String,
-        triple: &str,
-        backends: Vec<CodegenBackend>,
-    ) -> anyhow::Result<Self> {
+    pub fn install(sha: String, triple: &str, backends: &[CodegenBackend]) -> anyhow::Result<Self> {
         let unpack_into = "cache";
 
         fs::create_dir_all(unpack_into)?;

@@ -369,6 +369,7 @@ struct PullRequestBuildRow<'a> {
     exclude: Nullable<&'a str>,
     runs: Nullable<i32>,
     commit_date: Nullable<DateTime<Utc>>,
+    backends: Nullable<&'a str>,
 }
 
 impl Table for PullRequestBuild {
@@ -377,11 +378,11 @@ impl Table for PullRequestBuild {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date"
+        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date, backends"
     }
 
     fn postgres_attributes() -> &'static str {
-        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date"
+        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date, backends"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -407,6 +408,7 @@ impl Table for PullRequestBuild {
                 commit_date: Nullable(
                     commit_date.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()),
                 ),
+                backends: row.get_ref(9).unwrap().try_into().unwrap(),
             })
             .unwrap();
     }

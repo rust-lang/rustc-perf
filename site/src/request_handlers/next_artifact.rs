@@ -30,7 +30,7 @@ pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Respons
             let conn = ctxt.conn().await;
             // TODO: add capability of doing the following in one step
             // to avoid possibile illegal inbetween states.
-            conn.queue_pr(pr, None, None, None).await;
+            conn.queue_pr(pr, None, None, None, None).await;
             if !conn
                 .pr_attach_commit(pr, &commit.sha, parent_sha, None)
                 .await
@@ -38,27 +38,29 @@ pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Respons
                 log::error!("failed to attach commit {} to PR queue", commit.sha);
             }
         }
-        let (include, exclude, runs) = match missing_reason {
+        let (include, exclude, runs, backends) = match missing_reason {
             crate::load::MissingReason::Try {
                 include,
                 exclude,
                 runs,
+                backends,
                 ..
-            } => (include, exclude, runs),
+            } => (include, exclude, runs, backends),
             crate::load::MissingReason::InProgress(Some(previous)) => {
                 if let crate::load::MissingReason::Try {
                     include,
                     exclude,
                     runs,
+                    backends,
                     ..
                 } = *previous
                 {
-                    (include, exclude, runs)
+                    (include, exclude, runs, backends)
                 } else {
-                    (None, None, None)
+                    (None, None, None, None)
                 }
             }
-            _ => (None, None, None),
+            _ => (None, None, None, None),
         };
         log::debug!(
             "next_commit: {} (missing: {})",
@@ -70,6 +72,7 @@ pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Respons
             include,
             exclude,
             runs,
+            backends,
         })
     } else {
         None

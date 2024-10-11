@@ -33,6 +33,7 @@ pub enum MissingReason {
         include: Option<String>,
         exclude: Option<String>,
         runs: Option<i32>,
+        backends: Option<String>,
     },
     InProgress(Option<Box<MissingReason>>),
 }
@@ -382,6 +383,7 @@ fn calculate_missing_from(
         exclude,
         runs,
         commit_date,
+        backends,
     } in queued_pr_commits
         .into_iter()
         // filter out any queued PR master commits (leaving only try commits)
@@ -407,6 +409,7 @@ fn calculate_missing_from(
                 include,
                 exclude,
                 runs,
+                backends,
             },
         ));
     }
@@ -579,6 +582,7 @@ mod tests {
                 exclude: None,
                 runs: None,
                 commit_date: None,
+                backends: None,
             },
             QueuedCommit {
                 sha: "b".into(),
@@ -588,6 +592,7 @@ mod tests {
                 exclude: None,
                 runs: None,
                 commit_date: None,
+                backends: None,
             },
             QueuedCommit {
                 sha: "a".into(),
@@ -597,6 +602,7 @@ mod tests {
                 exclude: None,
                 runs: None,
                 commit_date: None,
+                backends: None,
             },
         ];
         let in_progress_artifacts = vec![];
@@ -640,6 +646,7 @@ mod tests {
                     include: None,
                     exclude: None,
                     runs: None,
+                    backends: None,
                 },
             ),
         ];
@@ -689,6 +696,7 @@ mod tests {
                 exclude: None,
                 runs: None,
                 commit_date: None,
+                backends: None,
             },
             // A try run
             QueuedCommit {
@@ -699,6 +707,7 @@ mod tests {
                 exclude: None,
                 runs: None,
                 commit_date: None,
+                backends: None,
             },
         ];
         let in_progress_artifacts = vec![];
@@ -746,6 +755,7 @@ mod tests {
                     include: None,
                     exclude: None,
                     runs: None,
+                    backends: None,
                 },
             ),
         ];
