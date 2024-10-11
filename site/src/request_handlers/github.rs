@@ -10,6 +10,10 @@ use std::sync::Arc;
 use regex::Regex;
 
 lazy_static::lazy_static! {
+    // FIXME: the BODY_TIMER_BUILD regex handling looks broken when mixing multiple commands with
+    // and without parameters/trailing text. To reproduce the issue, in the `captures_all_shas` test
+    // at the bottom of this file, remove the link at the end of the first `build` command, and the
+    // second command's SHA won't be captured.
     static ref BODY_TIMER_BUILD: Regex =
         Regex::new(r"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?\s*(?:backends=(\S+))?").unwrap();
     static ref BODY_TIMER_QUEUE: Regex =
