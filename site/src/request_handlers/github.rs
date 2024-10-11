@@ -223,4 +223,67 @@ Going to do perf runs for a few of these:
             ]
         );
     }
+
+    #[test]
+    fn captures_backends() {
+        // First, check that the `build` command captures the `backends` parameter correctly.
+        // Note that the build command without parameters is the last one, so that parsing doesn't
+        // miss commands. See the FIXME on BODY_TIMER_BUILD for more details.
+        let comment_body = r#"
+@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995A backends=Llvm
+@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5B backends=Cranelift
+@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C backends=Cranelift,Llvm
+@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995D include=hello backends=Llvm
+@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995E runs=10 backends=Llvm
+@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995F backends=Llvm
+@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995G
+        "#;
+        let backends = build_captures(comment_body)
+            .map(|(_, captures)| captures.get(5).map(|v| v.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            backends,
+            &[
+                Some("Llvm"),
+                Some("Cranelift"),
+                Some("Cranelift,Llvm"),
+                Some("Llvm"),
+                Some("Llvm"),
+                Some("Llvm"),
+                None,
+            ]
+        );
+
+        // Then, check that the `queue` command captures the `backends` parameter correctly
+        let capture_backends = |comment_body| {
+            BODY_TIMER_QUEUE
+                .captures(comment_body)
+                .and_then(|captures| captures.get(4).map(|v| v.as_str()))
+        };
+
+        assert_eq!(
+            capture_backends("@rust-timer queue backends=Llvm"),
+            Some("Llvm")
+        );
+        assert_eq!(
+            capture_backends("@rust-timer queue backends=Cranelift"),
+            Some("Cranelift")
+        );
+        assert_eq!(
+            capture_backends("@rust-timer queue backends=Cranelift,Llvm"),
+            Some("Cranelift,Llvm")
+        );
+        assert_eq!(capture_backends("@rust-timer queue backends="), None);
+        assert_eq!(capture_backends("@rust-timer queue"), None);
+        assert_eq!(
+            capture_backends("@rust-timer queue include=hello backends=Llvm"),
+            Some("Llvm")
+        );
+        assert_eq!(
+            capture_backends(
+                "@rust-timer queue include=hello exclude=ripgrep runs=3 backends=Llvm"
+            ),
+            Some("Llvm")
+        );
+    }
 }
