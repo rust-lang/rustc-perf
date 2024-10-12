@@ -165,7 +165,6 @@ async fn handle_rust_timer(
 fn parse_queue_command(body: &str) -> Option<Result<QueueCommand, String>> {
     let prefix = "@rust-timer";
     let bot_line = body.lines().find_map(|line| {
-        let line = line.trim();
         line.find(prefix)
             .map(|index| line[index + prefix.len()..].trim())
     })?;
@@ -187,8 +186,11 @@ fn parse_queue_command(body: &str) -> Option<Result<QueueCommand, String>> {
         cmd.runs = Some(runs as i32);
     }
 
-    if let Some((key, _)) = args.into_iter().next() {
-        return Some(Err(format!("Unknown command argument {key}")));
+    if !args.is_empty() {
+        return Some(Err(format!(
+            "Unknown command argument(s) `{}`",
+            args.into_keys().collect::<Vec<_>>().join(",")
+        )));
     }
 
     Some(Ok(cmd))
@@ -295,7 +297,7 @@ Going to do perf runs for a few of these:
     #[test]
     fn queue_command_unknown_arg() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue foo=bar"),
-            @r###"Some(Err("Unknown command argument foo"))"###);
+            @r###"Some(Err("Unknown command argument(s) `foo`"))"###);
     }
 
     #[test]
@@ -350,5 +352,11 @@ Going to do perf runs for a few of these:
     fn queue_command_with_bors() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@bors try @rust-timer queue include=foo,bar"),
             @r###"Some(Ok(QueueCommand { include: Some("foo,bar"), exclude: None, runs: None }))"###);
+    }
+
+    #[test]
+    fn queue_command_parameter_order() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=3 exclude=c,a include=b"),
+        @r###"Some(Ok(QueueCommand { include: Some("b"), exclude: Some("c,a"), runs: Some(3) }))"###);
     }
 }
