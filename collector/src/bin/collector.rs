@@ -16,6 +16,7 @@ use std::time::Duration;
 use std::{str, time::Instant};
 
 use anyhow::Context;
+use chrono::Utc;
 use clap::builder::TypedValueParser;
 use clap::{Arg, Parser};
 use collector::compare::compare_artifacts;
@@ -731,7 +732,12 @@ fn main_result() -> anyhow::Result<i32> {
 
             let mut rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
-            let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+            let artifact_id = ArtifactId::Commit(Commit {
+                sha: toolchain.id.clone(),
+                date: Utc::now().into(),
+                r#type: CommitType::Master,
+            });
+
             rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
 
             let runtime_suite = rt.block_on(load_runtime_benchmarks(
@@ -880,7 +886,12 @@ fn main_result() -> anyhow::Result<i32> {
             )?;
             benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
-            let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+            let artifact_id = ArtifactId::Commit(Commit {
+                sha: toolchain.id.clone(),
+                date: Utc::now().into(),
+                r#type: CommitType::Master,
+            });
+
             let mut rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
             rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
