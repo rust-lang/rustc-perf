@@ -120,8 +120,13 @@ async fn handle_rust_timer(
         let msg = match queue {
             Ok(cmd) => {
                 let conn = ctxt.conn().await;
-                conn.queue_pr(issue.number, cmd.include, cmd.exclude, cmd.runs)
-                    .await;
+                conn.queue_pr(
+                    issue.number,
+                    cmd.params.include,
+                    cmd.params.exclude,
+                    cmd.params.runs,
+                )
+                .await;
                 format!(
                     "Awaiting bors try build completion.
 
@@ -160,40 +165,59 @@ async fn handle_rust_timer(
     Ok(github::Response)
 }
 
-/// Parses the first occurrence of a `@rust-timer queue <...>` command
+/// Parses the first occurrence of a `@rust-timer queue <shared-args>` command
 /// in the input string.
 fn parse_queue_command(body: &str) -> Option<Result<QueueCommand, String>> {
-    let prefix = "@rust-timer";
-    let bot_line = body.lines().find_map(|line| {
-        line.find(prefix)
-            .map(|index| line[index + prefix.len()..].trim())
-    })?;
-
-    let args = bot_line.strip_prefix("queue").map(|l| l.trim())?;
-    let mut args = match parse_command_arguments(args) {
+    let args = get_command_lines(body, "queue").next()?;
+    let args = match parse_command_arguments(args) {
         Ok(args) => args,
         Err(error) => return Some(Err(error)),
     };
-    let mut cmd = QueueCommand {
+    let params = match parse_benchmark_parameters(args) {
+        Ok(params) => params,
+        Err(error) => return Some(Err(error)),
+    };
+
+    Some(Ok(QueueCommand { params }))
+}
+
+fn get_command_lines<'a: 'b, 'b>(
+    body: &'a str,
+    command: &'b str,
+) -> impl Iterator<Item = &'a str> + 'b {
+    let prefix = "@rust-timer";
+    body.lines()
+        .filter_map(move |line| {
+            line.find(prefix)
+                .map(|index| line[index + prefix.len()..].trim())
+        })
+        .filter_map(move |line| line.strip_prefix(command))
+        .map(move |l| l.trim())
+}
+
+fn parse_benchmark_parameters<'a>(
+    mut args: HashMap<&'a str, &'a str>,
+) -> Result<BenchmarkParameters<'a>, String> {
+    let mut params = BenchmarkParameters {
         include: args.remove("include"),
         exclude: args.remove("exclude"),
         runs: None,
     };
     if let Some(runs) = args.remove("runs") {
         let Ok(runs) = runs.parse::<u32>() else {
-            return Some(Err(format!("Cannot parse runs {runs} as a number")));
+            return Err(format!("Cannot parse runs {runs} as a number"));
         };
-        cmd.runs = Some(runs as i32);
+        params.runs = Some(runs as i32);
     }
 
     if !args.is_empty() {
-        return Some(Err(format!(
+        Err(format!(
             "Unknown command argument(s) `{}`",
             args.into_keys().collect::<Vec<_>>().join(",")
-        )));
+        ))
+    } else {
+        Ok(params)
     }
-
-    Some(Ok(cmd))
 }
 
 /// Parses command arguments from a single line of text.
@@ -219,6 +243,11 @@ fn parse_command_arguments(args: &str) -> Result<HashMap<&str, &str>, String> {
 
 #[derive(Debug)]
 struct QueueCommand<'a> {
+    params: BenchmarkParameters<'a>,
+}
+
+#[derive(Debug)]
+struct BenchmarkParameters<'a> {
     include: Option<&'a str>,
     exclude: Option<&'a str>,
     runs: Option<i32>,
@@ -291,7 +320,7 @@ Going to do perf runs for a few of these:
     #[test]
     fn queue_command() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue"),
-            @"Some(Ok(QueueCommand { include: None, exclude: None, runs: None }))");
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None } }))");
     }
 
     #[test]
@@ -309,19 +338,19 @@ Going to do perf runs for a few of these:
     #[test]
     fn queue_command_include() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=abcd,feih"),
-            @r###"Some(Ok(QueueCommand { include: Some("abcd,feih"), exclude: None, runs: None }))"###);
+            @r###"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("abcd,feih"), exclude: None, runs: None } }))"###);
     }
 
     #[test]
     fn queue_command_exclude() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue exclude=foo134,barzbaz41baf"),
-            @r###"Some(Ok(QueueCommand { include: None, exclude: Some("foo134,barzbaz41baf"), runs: None }))"###);
+            @r###"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: Some("foo134,barzbaz41baf"), runs: None } }))"###);
     }
 
     #[test]
     fn queue_command_runs() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=5"),
-            @"Some(Ok(QueueCommand { include: None, exclude: None, runs: Some(5) }))");
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: Some(5) } }))");
     }
 
     #[test]
@@ -333,7 +362,7 @@ Going to do perf runs for a few of these:
     #[test]
     fn queue_command_combination() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=acda,13asd exclude=c13,DA runs=5"),
-            @r###"Some(Ok(QueueCommand { include: Some("acda,13asd"), exclude: Some("c13,DA"), runs: Some(5) }))"###);
+            @r###"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("acda,13asd"), exclude: Some("c13,DA"), runs: Some(5) } }))"###);
     }
 
     #[test]
@@ -345,18 +374,18 @@ Going to do perf runs for a few of these:
     #[test]
     fn queue_command_spaces() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer     queue     include=abcd,das   "),
-            @r###"Some(Ok(QueueCommand { include: Some("abcd,das"), exclude: None, runs: None }))"###);
+            @r###"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("abcd,das"), exclude: None, runs: None } }))"###);
     }
 
     #[test]
     fn queue_command_with_bors() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@bors try @rust-timer queue include=foo,bar"),
-            @r###"Some(Ok(QueueCommand { include: Some("foo,bar"), exclude: None, runs: None }))"###);
+            @r###"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("foo,bar"), exclude: None, runs: None } }))"###);
     }
 
     #[test]
     fn queue_command_parameter_order() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=3 exclude=c,a include=b"),
-        @r###"Some(Ok(QueueCommand { include: Some("b"), exclude: Some("c,a"), runs: Some(3) }))"###);
+        @r###"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("b"), exclude: Some("c,a"), runs: Some(3) } }))"###);
     }
 }
