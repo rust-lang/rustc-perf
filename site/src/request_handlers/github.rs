@@ -137,10 +137,9 @@ async fn handle_rust_timer(
         return Ok(github::Response);
     }
 
-    let build_cmds: Vec<_> = parse_build_commands(&comment.body).collect();
     let mut valid_build_cmds = vec![];
     let mut errors = String::new();
-    for cmd in build_cmds {
+    for cmd in parse_build_commands(&comment.body) {
         match cmd {
             Ok(cmd) => valid_build_cmds.push(cmd),
             Err(error) => errors.push_str(&format!("Cannot parse build command: {error}\n")),
@@ -208,10 +207,7 @@ fn parse_build_commands(body: &str) -> impl Iterator<Item = Result<BuildCommand,
     })
 }
 
-fn get_command_lines<'a: 'b, 'b>(
-    body: &'a str,
-    command: &'b str,
-) -> impl Iterator<Item = &'a str> + 'b {
+fn get_command_lines<'a>(body: &'a str, command: &'a str) -> impl Iterator<Item = &'a str> {
     let prefix = "@rust-timer";
     body.lines()
         .filter_map(move |line| {
@@ -219,7 +215,7 @@ fn get_command_lines<'a: 'b, 'b>(
                 .map(|index| line[index + prefix.len()..].trim())
         })
         .filter_map(move |line| line.strip_prefix(command))
-        .map(move |l| l.trim_start())
+        .map(|l| l.trim_start())
 }
 
 fn parse_benchmark_parameters<'a>(
