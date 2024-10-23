@@ -1344,6 +1344,13 @@ where
             .execute("delete from artifact where name = $1", &[&info.name])
             .await
             .unwrap();
+        self.conn()
+            .execute(
+                "delete from pull_request_build where bors_sha = $1",
+                &[&info.name],
+            )
+            .await
+            .unwrap();
     }
 }
 

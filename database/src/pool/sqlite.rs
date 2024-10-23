@@ -1216,6 +1216,12 @@ impl Connection for SqliteConnection {
         self.raw_ref()
             .execute("delete from artifact where name = ?1", [info.name])
             .unwrap();
+        self.raw_ref()
+            .execute(
+                "delete from pull_request_build where bors_sha = ?1",
+                [info.name],
+            )
+            .unwrap();
     }
 }
 
