@@ -224,12 +224,12 @@ fn parse_benchmark_parameters<'a>(
     mut args: HashMap<&'a str, &'a str>,
 ) -> Result<BenchmarkParameters<'a>, String> {
     let mut params = BenchmarkParameters {
-        include: args.remove("include"),
-        exclude: args.remove("exclude"),
+        include: args.remove("include").filter(|s| !s.is_empty()),
+        exclude: args.remove("exclude").filter(|s| !s.is_empty()),
         runs: None,
-        backends: args.remove("backends"),
+        backends: args.remove("backends").filter(|s| !s.is_empty()),
     };
-    if let Some(runs) = args.remove("runs") {
+    if let Some(runs) = args.remove("runs").filter(|s| !s.is_empty()) {
         let Ok(runs) = runs.parse::<u32>() else {
             return Err(format!("Cannot parse runs {runs} as a number"));
         };
@@ -483,5 +483,17 @@ Otherwise LGTM."#),
             @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("hello"), exclude: None, runs: None, backends: Some("Llvm") } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=hello exclude=ripgrep runs=3 backends=Llvm"),
             @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("hello"), exclude: Some("ripgrep"), runs: Some(3), backends: Some("Llvm") } }))"#);
+    }
+
+    #[test]
+    fn no_empty_arguments_thank_you() {
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include="),
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None } }))");
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue exclude="),
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None } }))");
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs="),
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None } }))");
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue backends="),
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None } }))");
     }
 }
