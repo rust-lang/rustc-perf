@@ -421,7 +421,7 @@ The mandatory `<PROFILER>` argument must be one of the following.
     are hit, or to see what values particular expressions have each time they
     are executed. Alternatively, you can trigger some of rustc's built-in
     profiling modes via environment variables, such as
-    `RUSTFLAGS=-Ztime-passes` or `RUSTFLAGS=-Zhir-stats`.
+    `RUSTFLAGS=-Ztime-passes` or `RUSTFLAGS=-Zinput-stats`.
   - **Slowdown**. Depends on how much extra output is being produced on stderr.
   - **Output**. Everything written to stderr is copied to files with an
     `eprintln` prefix. Those files can be post-processed in any appropriate
