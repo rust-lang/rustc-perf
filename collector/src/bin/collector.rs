@@ -968,10 +968,11 @@ fn main_result() -> anyhow::Result<i32> {
                         // majority of cases.
                         let mut backends = vec![];
                         if let Some(requested_backends) = requested_backends {
-                            if requested_backends.contains("Llvm") {
+                            let requested_backends = requested_backends.to_lowercase();
+                            if requested_backends.contains("llvm") {
                                 backends.push(CodegenBackend::Llvm);
                             }
-                            if requested_backends.contains("Cranelift") {
+                            if requested_backends.contains("cranelift") {
                                 backends.push(CodegenBackend::Cranelift);
                             }
                         }
