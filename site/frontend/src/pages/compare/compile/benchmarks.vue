@@ -16,6 +16,7 @@ export interface BenchmarkProps {
   benchmarkMap: CompileBenchmarkMap;
   filter: CompileBenchmarkFilter;
   stat: string;
+  showBackend: boolean;
 }
 
 const props = defineProps<BenchmarkProps>();
@@ -77,6 +78,7 @@ const secondaryHasNonRelevant = computed(
       :commit-b="data.b"
       :stat="stat"
       :benchmark-map="benchmarkMap"
+      :show-backend="showBackend"
     >
       <template #header>
         <Section title="Primary" link="secondary" :linkUp="false"></Section>
@@ -92,6 +94,7 @@ const secondaryHasNonRelevant = computed(
       :commit-b="data.b"
       :stat="stat"
       :benchmark-map="benchmarkMap"
+      :show-backend="showBackend"
     >
       <template #header>
         <Section title="Secondary" link="primary" :linkUp="true"></Section>

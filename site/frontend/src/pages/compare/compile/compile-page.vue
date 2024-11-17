@@ -260,6 +260,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :filter="filter"
     :stat="selector.stat"
     :benchmark-map="benchmarkMap"
+    :show-backend="!selfCompareBackend"
   ></Benchmarks>
 </template>
 <style lang="scss" scoped>
