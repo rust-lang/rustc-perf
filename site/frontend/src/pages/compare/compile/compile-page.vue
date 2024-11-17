@@ -193,8 +193,11 @@ function updateFilter(newFilter: CompileBenchmarkFilter) {
   refreshQuickLinks();
 }
 
-function updateSelfCompareBackend(value: boolean) {
-  updateFilter({...filter.value, selfCompareBackend: value});
+// We pass the event target here, because Parcel cannot handle the `as`
+// cast directly in the template.
+function updateSelfCompareBackend(target: EventTarget) {
+  const element = target as HTMLInputElement;
+  updateFilter({...filter.value, selfCompareBackend: element.checked});
 }
 
 /**
@@ -260,7 +263,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     <input
       type="checkbox"
       :checked="selfCompareBackend"
-      @change="(e) => updateSelfCompareBackend(e.target.checked)"
+      @change="(e) => updateSelfCompareBackend(e.target)"
     />
   </div>
   <Filters
