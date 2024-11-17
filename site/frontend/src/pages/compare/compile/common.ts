@@ -206,5 +206,5 @@ export function createCompileBenchmarkMap(
 }
 
 export function testCaseKey(testCase: CompileTestCase): string {
-  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.category}`;
+  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.category}`;
 }
