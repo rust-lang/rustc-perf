@@ -14,6 +14,7 @@ import {
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
   defaultCompileFilter,
+  transformDataForBackendComparison,
 } from "./common";
 import {BenchmarkInfo} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
@@ -197,15 +198,31 @@ const urlParams = getUrlParams();
 const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
+// Should we use the backend as the source of before/after data?
+const selfCompareBackend = ref(false);
+
 function exportData() {
   exportToMarkdown(comparisons.value, filter.value.showRawData);
 }
 
+// Are we currently comparing the same commit against each other?
+const comparesIdenticalCommits = computed(() => {
+  return props.data.a.commit === props.data.b.commit;
+});
 const benchmarkMap = createCompileBenchmarkMap(props.data);
+
+// Artificially restructure the data to create a comparison between backends
+const compileComparisons = computed(() => {
+  if (selfCompareBackend.value) {
+    return transformDataForBackendComparison(props.data.compile_comparisons);
+  } else {
+    return props.data.compile_comparisons;
+  }
+});
 const allComparisons = computed(() =>
   computeCompileComparisonsWithNonRelevant(
     filter.value,
-    props.data.compile_comparisons,
+    compileComparisons.value,
     benchmarkMap
   )
 );
@@ -222,6 +239,9 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :selected-metric="selector.stat"
     :metrics="benchmarkInfo.compile_metrics"
   />
+  <div v-if="comparesIdenticalCommits">
+    Self-compare backend: <input type="checkbox" v-model="selfCompareBackend" />
+  </div>
   <Filters
     :defaultFilter="defaultCompileFilter"
     :initialFilter="filter"
@@ -230,6 +250,9 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
   />
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
+  <div class="warning" v-if="selfCompareBackend">
+    Comparing LLVM against Cranelift!
+  </div>
   <Benchmarks
     :data="data"
     :test-cases="comparisons"
@@ -239,3 +262,9 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :benchmark-map="benchmarkMap"
   ></Benchmarks>
 </template>
+<style lang="scss" scoped>
+.warning {
+  color: red;
+  font-weight: bold;
+}
+</style>
