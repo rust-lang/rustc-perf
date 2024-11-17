@@ -27,6 +27,7 @@ export type CompileBenchmarkFilter = {
     binary: boolean;
     library: boolean;
   };
+  selfCompareBackend: boolean;
 } & BenchmarkFilter;
 
 export const defaultCompileFilter: CompileBenchmarkFilter = {
@@ -57,6 +58,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     binary: true,
     library: true,
   },
+  selfCompareBackend: false,
 };
 
 export type Profile = "check" | "debug" | "opt" | "doc";

@@ -102,6 +102,11 @@ function loadFilterFromUrl(
         defaultFilter.artifact.library
       ),
     },
+    selfCompareBackend: getBoolOrDefault(
+      urlParams,
+      "selfCompareBackend",
+      defaultFilter.selfCompareBackend
+    ),
   };
 }
 
@@ -173,6 +178,11 @@ function storeFilterToUrl(
     filter.artifact.library,
     defaultFilter.artifact.library
   );
+  storeOrReset(
+    "selfCompareBackend",
+    filter.selfCompareBackend,
+    defaultFilter.selfCompareBackend
+  );
 
   changeUrl(urlParams);
 }
@@ -181,6 +191,10 @@ function updateFilter(newFilter: CompileBenchmarkFilter) {
   storeFilterToUrl(newFilter, defaultCompileFilter, getUrlParams());
   filter.value = newFilter;
   refreshQuickLinks();
+}
+
+function updateSelfCompareBackend(value: boolean) {
+  updateFilter({...filter.value, selfCompareBackend: value});
 }
 
 /**
@@ -199,7 +213,9 @@ const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 // Should we use the backend as the source of before/after data?
-const selfCompareBackend = ref(false);
+const selfCompareBackend = computed(
+  () => comparesIdenticalCommits.value && filter.value.selfCompareBackend
+);
 
 function exportData() {
   exportToMarkdown(comparisons.value, filter.value.showRawData);
@@ -240,7 +256,12 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :metrics="benchmarkInfo.compile_metrics"
   />
   <div v-if="comparesIdenticalCommits">
-    Self-compare backend: <input type="checkbox" v-model="selfCompareBackend" />
+    Self-compare backend:
+    <input
+      type="checkbox"
+      :checked="selfCompareBackend"
+      @change="(e) => updateSelfCompareBackend(e.target.checked)"
+    />
   </div>
   <Filters
     :defaultFilter="defaultCompileFilter"
