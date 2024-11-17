@@ -385,6 +385,7 @@ static MIGRATIONS: &[Migration] = &[
         alter table pstat_series_new rename to pstat_series;
     "#,
     ),
+    Migration::new("alter table pull_request_build add column backends text"),
 ];
 
 #[async_trait::async_trait]
@@ -909,13 +910,14 @@ impl Connection for SqliteConnection {
         include: Option<&str>,
         exclude: Option<&str>,
         runs: Option<i32>,
+        backends: Option<&str>,
     ) {
         self.raw_ref()
             .prepare_cached(
-                "insert into pull_request_build (pr, complete, requested, include, exclude, runs) VALUES (?, 0, strftime('%s','now'), ?, ?, ?)",
+                "insert into pull_request_build (pr, complete, requested, include, exclude, runs, backends) VALUES (?, 0, strftime('%s','now'), ?, ?, ?, ?)",
             )
             .unwrap()
-            .execute(params![pr, include, exclude, &runs])
+            .execute(params![pr, include, exclude, &runs, backends])
             .unwrap();
     }
     async fn pr_attach_commit(
@@ -939,7 +941,7 @@ impl Connection for SqliteConnection {
     async fn queued_commits(&self) -> Vec<QueuedCommit> {
         self.raw_ref()
             .prepare_cached(
-                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date from pull_request_build
+                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
                 where complete is false and bors_sha is not null
                 order by requested asc",
             )
@@ -954,7 +956,8 @@ impl Connection for SqliteConnection {
                     include: row.get(3).unwrap(),
                     exclude: row.get(4).unwrap(),
                     runs: row.get(5).unwrap(),
-                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_timestamp(timestamp, 0).unwrap()))
+                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_timestamp(timestamp, 0).unwrap())),
+                    backends: row.get(7).unwrap(),
                 })
             })
             .collect::<Result<Vec<_>, _>>()
@@ -974,7 +977,7 @@ impl Connection for SqliteConnection {
         assert_eq!(count, 1, "sha is unique column");
         self.raw_ref()
             .query_row(
-                "select pr, sha, parent_sha, include, exclude, runs, commit_date from pull_request_build
+                "select pr, sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
             where sha = ?",
                 params![sha],
                 |row| {
@@ -985,7 +988,8 @@ impl Connection for SqliteConnection {
                         include: row.get(3).unwrap(),
                         exclude: row.get(4).unwrap(),
                         runs: row.get(5).unwrap(),
-                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_timestamp(timestamp, 0).unwrap()))
+                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_timestamp(timestamp, 0).unwrap())),
+                        backends: row.get(7).unwrap(),
                     })
                 },
             )
