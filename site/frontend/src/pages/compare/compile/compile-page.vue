@@ -272,7 +272,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
   <div class="warning" v-if="selfCompareBackend">
-    Comparing LLVM against Cranelift!
+    Comparing Cranelift against LLVM baseline!
   </div>
   <Benchmarks
     :data="data"
