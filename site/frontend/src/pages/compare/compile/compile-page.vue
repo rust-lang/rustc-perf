@@ -216,22 +216,28 @@ const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 // Should we use the backend as the source of before/after data?
-const selfCompareBackend = computed(
-  () => comparesIdenticalCommits.value && filter.value.selfCompareBackend
-);
+const selfCompareBackend = computed(() => {
+  const hasMultipleBackends =
+    new Set(props.data.compile_comparisons.map((c) => c.backend)).size > 1;
+  return (
+    comparesIdenticalCommits.value &&
+    filter.value.selfCompareBackend &&
+    hasMultipleBackends
+  );
+});
 
 function exportData() {
   exportToMarkdown(comparisons.value, filter.value.showRawData);
 }
 
-// Are we currently comparing the same commit against each other?
+// Are we currently comparing the same commit in the before/after toolchains?
 const comparesIdenticalCommits = computed(() => {
   return props.data.a.commit === props.data.b.commit;
 });
 const benchmarkMap = createCompileBenchmarkMap(props.data);
 
-// Artificially restructure the data to create a comparison between backends
 const compileComparisons = computed(() => {
+  // If requested, artificially restructure the data to create a comparison between backends
   if (selfCompareBackend.value) {
     return transformDataForBackendComparison(props.data.compile_comparisons);
   } else {
@@ -258,8 +264,11 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :selected-metric="selector.stat"
     :metrics="benchmarkInfo.compile_metrics"
   />
-  <div v-if="comparesIdenticalCommits">
-    Self-compare backend:
+  <div
+    v-if="comparesIdenticalCommits"
+    :title="`Compare codegen backends for commit '${props.data.a.commit}'`"
+  >
+    Compare codegen backends for this commit:
     <input
       type="checkbox"
       :checked="selfCompareBackend"
@@ -275,7 +284,8 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
   <div class="warning" v-if="selfCompareBackend">
-    Comparing Cranelift against LLVM baseline!
+    Note: comparing results of the baseline LLVM backend to the Cranelift
+    backend.
   </div>
   <Benchmarks
     :data="data"

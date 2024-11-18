@@ -245,13 +245,12 @@ export function transformDataForBackendComparison(
     }
   }
 
-  const transformed = [];
-  benchmarkMap.forEach((entry) => {
+  return Array.from(benchmarkMap, ([_, entry]) => {
     const comparison: CompileBenchmarkComparison = {
       benchmark: entry.benchmark,
       profile: entry.profile,
       scenario: entry.scenario,
-      // Treat the backend as LLVM
+      // Treat LLVM as the baseline
       backend: "llvm",
       comparison: {
         statistics: [entry.llvm, entry.cranelift],
@@ -260,8 +259,6 @@ export function transformDataForBackendComparison(
         significance_threshold: 1.0,
       },
     };
-    transformed.push(comparison);
+    return comparison;
   });
-
-  return transformed;
 }
