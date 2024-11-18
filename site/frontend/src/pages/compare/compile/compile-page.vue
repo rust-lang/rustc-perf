@@ -217,23 +217,20 @@ const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 // Should we use the backend as the source of before/after data?
 const selfCompareBackend = computed(() => {
+  return canCompareBackends.value && filter.value.selfCompareBackend;
+});
+const canCompareBackends = computed(() => {
   const hasMultipleBackends =
     new Set(props.data.compile_comparisons.map((c) => c.backend)).size > 1;
-  return (
-    comparesIdenticalCommits.value &&
-    filter.value.selfCompareBackend &&
-    hasMultipleBackends
-  );
+  // Are we currently comparing the same commit in the before/after toolchains?
+  const comparesSameCommit = props.data.a.commit === props.data.b.commit;
+  return hasMultipleBackends && comparesSameCommit;
 });
 
 function exportData() {
   exportToMarkdown(comparisons.value, filter.value.showRawData);
 }
 
-// Are we currently comparing the same commit in the before/after toolchains?
-const comparesIdenticalCommits = computed(() => {
-  return props.data.a.commit === props.data.b.commit;
-});
 const benchmarkMap = createCompileBenchmarkMap(props.data);
 
 const compileComparisons = computed(() => {
@@ -265,7 +262,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :metrics="benchmarkInfo.compile_metrics"
   />
   <div
-    v-if="comparesIdenticalCommits"
+    v-if="canCompareBackends"
     :title="`Compare codegen backends for commit '${props.data.a.commit}'`"
   >
     Compare codegen backends for this commit:
