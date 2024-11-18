@@ -18,6 +18,7 @@ const props = defineProps<{
   commitA: ArtifactDescription;
   commitB: ArtifactDescription;
   stat: string;
+  showBackend: boolean;
 }>();
 
 function prettifyRawNumber(number: number): string {
@@ -56,7 +57,7 @@ const unit = computed(() => {
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
-          <th>Backend</th>
+          <th v-if="showBackend">Backend</th>
           <th>% Change</th>
           <th class="narrow">
             Significance Threshold
@@ -95,7 +96,7 @@ const unit = computed(() => {
                 {{ comparison.testCase.profile }}
               </td>
               <td>{{ comparison.testCase.scenario }}</td>
-              <td>{{ comparison.testCase.backend }}</td>
+              <td v-if="showBackend">{{ comparison.testCase.backend }}</td>
               <td>
                 <div class="numeric-aligned">
                   <span v-bind:class="percentClass(comparison.percent)">

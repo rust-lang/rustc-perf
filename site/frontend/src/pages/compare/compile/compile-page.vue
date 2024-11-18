@@ -14,6 +14,7 @@ import {
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
   defaultCompileFilter,
+  transformDataForBackendComparison,
 } from "./common";
 import {BenchmarkInfo} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
@@ -101,6 +102,11 @@ function loadFilterFromUrl(
         defaultFilter.artifact.library
       ),
     },
+    selfCompareBackend: getBoolOrDefault(
+      urlParams,
+      "selfCompareBackend",
+      defaultFilter.selfCompareBackend
+    ),
   };
 }
 
@@ -172,6 +178,11 @@ function storeFilterToUrl(
     filter.artifact.library,
     defaultFilter.artifact.library
   );
+  storeOrReset(
+    "selfCompareBackend",
+    filter.selfCompareBackend,
+    defaultFilter.selfCompareBackend
+  );
 
   changeUrl(urlParams);
 }
@@ -180,6 +191,13 @@ function updateFilter(newFilter: CompileBenchmarkFilter) {
   storeFilterToUrl(newFilter, defaultCompileFilter, getUrlParams());
   filter.value = newFilter;
   refreshQuickLinks();
+}
+
+// We pass the event target here, because Parcel cannot handle the `as`
+// cast directly in the template.
+function updateSelfCompareBackend(target: EventTarget) {
+  const element = target as HTMLInputElement;
+  updateFilter({...filter.value, selfCompareBackend: element.checked});
 }
 
 /**
@@ -197,15 +215,36 @@ const urlParams = getUrlParams();
 const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
+// Should we use the backend as the source of before/after data?
+const selfCompareBackend = computed(() => {
+  return canCompareBackends.value && filter.value.selfCompareBackend;
+});
+const canCompareBackends = computed(() => {
+  const hasMultipleBackends =
+    new Set(props.data.compile_comparisons.map((c) => c.backend)).size > 1;
+  // Are we currently comparing the same commit in the before/after toolchains?
+  const comparesSameCommit = props.data.a.commit === props.data.b.commit;
+  return hasMultipleBackends && comparesSameCommit;
+});
+
 function exportData() {
   exportToMarkdown(comparisons.value, filter.value.showRawData);
 }
 
 const benchmarkMap = createCompileBenchmarkMap(props.data);
+
+const compileComparisons = computed(() => {
+  // If requested, artificially restructure the data to create a comparison between backends
+  if (selfCompareBackend.value) {
+    return transformDataForBackendComparison(props.data.compile_comparisons);
+  } else {
+    return props.data.compile_comparisons;
+  }
+});
 const allComparisons = computed(() =>
   computeCompileComparisonsWithNonRelevant(
     filter.value,
-    props.data.compile_comparisons,
+    compileComparisons.value,
     benchmarkMap
   )
 );
@@ -222,6 +261,17 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :selected-metric="selector.stat"
     :metrics="benchmarkInfo.compile_metrics"
   />
+  <div
+    v-if="canCompareBackends"
+    :title="`Compare codegen backends for commit '${props.data.a.commit}'`"
+  >
+    Compare codegen backends for this commit:
+    <input
+      type="checkbox"
+      :checked="selfCompareBackend"
+      @change="(e) => updateSelfCompareBackend(e.target)"
+    />
+  </div>
   <Filters
     :defaultFilter="defaultCompileFilter"
     :initialFilter="filter"
@@ -230,6 +280,10 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
   />
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
+  <div class="warning" v-if="selfCompareBackend">
+    Note: comparing results of the baseline LLVM backend to the Cranelift
+    backend.
+  </div>
   <Benchmarks
     :data="data"
     :test-cases="comparisons"
@@ -237,5 +291,12 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :filter="filter"
     :stat="selector.stat"
     :benchmark-map="benchmarkMap"
+    :show-backend="!selfCompareBackend"
   ></Benchmarks>
 </template>
+<style lang="scss" scoped>
+.warning {
+  color: red;
+  font-weight: bold;
+}
+</style>

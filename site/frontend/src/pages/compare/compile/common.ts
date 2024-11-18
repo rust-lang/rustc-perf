@@ -27,6 +27,7 @@ export type CompileBenchmarkFilter = {
     binary: boolean;
     library: boolean;
   };
+  selfCompareBackend: boolean;
 } & BenchmarkFilter;
 
 export const defaultCompileFilter: CompileBenchmarkFilter = {
@@ -57,6 +58,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     binary: true,
     library: true,
   },
+  selfCompareBackend: false,
 };
 
 export type Profile = "check" | "debug" | "opt" | "doc";
@@ -206,5 +208,57 @@ export function createCompileBenchmarkMap(
 }
 
 export function testCaseKey(testCase: CompileTestCase): string {
-  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.category}`;
+  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.category}`;
+}
+
+// Transform compile comparisons to compare LLVM vs Cranelift, instead of
+// before/after. Assumes that the data comes from the same commit.
+export function transformDataForBackendComparison(
+  comparisons: CompileBenchmarkComparison[]
+): CompileBenchmarkComparison[] {
+  const benchmarkMap: Map<
+    string,
+    {
+      llvm: number | null;
+      cranelift: number | null;
+      benchmark: string;
+      profile: Profile;
+      scenario: string;
+    }
+  > = new Map();
+  for (const comparison of comparisons) {
+    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario}`;
+    if (!benchmarkMap.has(key)) {
+      benchmarkMap.set(key, {
+        llvm: null,
+        cranelift: null,
+        benchmark: comparison.benchmark,
+        profile: comparison.profile,
+        scenario: comparison.scenario,
+      });
+    }
+    const record = benchmarkMap.get(key);
+    if (comparison.backend === "llvm") {
+      record.llvm = comparison.comparison.statistics[0];
+    } else if (comparison.backend === "cranelift") {
+      record.cranelift = comparison.comparison.statistics[0];
+    }
+  }
+
+  return Array.from(benchmarkMap, ([_, entry]) => {
+    const comparison: CompileBenchmarkComparison = {
+      benchmark: entry.benchmark,
+      profile: entry.profile,
+      scenario: entry.scenario,
+      // Treat LLVM as the baseline
+      backend: "llvm",
+      comparison: {
+        statistics: [entry.llvm, entry.cranelift],
+        is_relevant: true,
+        significance_factor: 1.0,
+        significance_threshold: 1.0,
+      },
+    };
+    return comparison;
+  });
 }
