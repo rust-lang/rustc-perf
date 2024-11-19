@@ -193,13 +193,6 @@ function updateFilter(newFilter: CompileBenchmarkFilter) {
   refreshQuickLinks();
 }
 
-// We pass the event target here, because Parcel cannot handle the `as`
-// cast directly in the template.
-function updateSelfCompareBackend(target: EventTarget) {
-  const element = target as HTMLInputElement;
-  updateFilter({...filter.value, selfCompareBackend: element.checked});
-}
-
 /**
  * When the filter changes, the URL is updated.
  * After that happens, we want to re-render the quick links component, because
@@ -261,20 +254,10 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :selected-metric="selector.stat"
     :metrics="benchmarkInfo.compile_metrics"
   />
-  <div
-    v-if="canCompareBackends"
-    :title="`Compare codegen backends for commit '${props.data.a.commit}'`"
-  >
-    Compare codegen backends for this commit:
-    <input
-      type="checkbox"
-      :checked="selfCompareBackend"
-      @change="(e) => updateSelfCompareBackend(e.target)"
-    />
-  </div>
   <Filters
-    :defaultFilter="defaultCompileFilter"
-    :initialFilter="filter"
+    :default-filter="defaultCompileFilter"
+    :initial-filter="filter"
+    :can-compare-backends="canCompareBackends"
     @change="updateFilter"
     @export="exportData"
   />

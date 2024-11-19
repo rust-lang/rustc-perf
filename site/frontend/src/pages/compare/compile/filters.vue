@@ -12,6 +12,7 @@ const props = defineProps<{
   defaultFilter: CompileBenchmarkFilter;
   // Initialize the filter with this value
   initialFilter: CompileBenchmarkFilter;
+  canCompareBackends: boolean;
 }>();
 const emit = defineEmits<{
   (e: "change", filter: CompileBenchmarkFilter): void;
@@ -192,7 +193,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                   <input type="checkbox" v-model="filter.backend.llvm" />
                   <span class="label">LLVM</span>
                 </label>
-                <Tooltip>The default LLVM backend. </Tooltip>
+                <Tooltip>The default LLVM backend.</Tooltip>
               </li>
               <li>
                 <label>
@@ -288,6 +289,14 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
               v-model="filter.showRawData"
               style="margin-left: 20px"
             />
+          </div>
+          <div
+            class="section"
+            v-if="canCompareBackends"
+            :title="`Compare codegen backends for this commit`"
+          >
+            Compare codegen backends for this commit:
+            <input type="checkbox" v-model="filter.selfCompareBackend" />
           </div>
           <button @click="reset" style="margin-right: 10px">
             Reset filters
