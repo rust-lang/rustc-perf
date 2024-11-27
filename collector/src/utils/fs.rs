@@ -45,7 +45,7 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<
 
 /// Touch a file, resetting its modification time.
 pub fn touch(path: &Path) -> anyhow::Result<()> {
-    let file = File::options().read(true).open(path)?;
+    let file = File::options().read(true).write(true).open(path)?;
     file.set_modified(SystemTime::now())
         .with_context(|| format!("touching file {:?}", path))?;
 
