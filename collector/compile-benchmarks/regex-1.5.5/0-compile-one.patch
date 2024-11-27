@@ -4,7 +4,7 @@ index 9db743f..ef1948e 100644
 +++ b/src/compile.rs
 @@ -137,6 +137,8 @@ impl Compiler {
      }
-
+ 
      fn compile_one(mut self, expr: &Hir) -> result::Result<Program, Error> {
 +        {} // @030
 +

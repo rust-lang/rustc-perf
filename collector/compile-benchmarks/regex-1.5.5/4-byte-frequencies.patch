@@ -4,7 +4,7 @@ index 92bafc1..6eb5799 100644
 +++ b/src/freqs.rs
 @@ -2,7 +2,7 @@
  // edit directly
-
+ 
  pub const BYTE_FREQUENCIES: [u8; 256] = [
 -    55,  // '\x00'
 +    54+1,  // '\x00'

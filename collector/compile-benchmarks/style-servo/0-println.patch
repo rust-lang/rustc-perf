@@ -7,5 +7,5 @@ diff --git a/components/style/matching.rs b/components/style/matching.rs
          if replacements.intersects(RestyleHint::for_animations()) {
 +            println!("{:?}", context.shared.traversal_flags.for_animation_only());
              debug_assert!(context.shared.traversal_flags.for_animation_only());
-
+ 
              if replacements.contains(RESTYLE_SMIL) {
