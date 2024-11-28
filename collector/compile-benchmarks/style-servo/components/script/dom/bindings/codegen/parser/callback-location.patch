@@ -8,7 +8,7 @@ index da32340..81c52b7 100644
              assert self.name.name == obj.identifier.name
 -            return IDLCallbackType(self.location, obj)
 +            return IDLCallbackType(obj.location, obj)
-
+ 
          if self._promiseInnerType and not self._promiseInnerType.isComplete():
              self._promiseInnerType = self._promiseInnerType.complete(scope)
 @@ -6521,7 +6521,7 @@ class Parser(Tokenizer):

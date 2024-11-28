@@ -3,7 +3,7 @@ index 576fd03c..a825007a 100644
 --- a/src/de/utf8.rs
 +++ b/src/de/utf8.rs
 @@ -41,6 +41,7 @@ pub struct Encode {
-
+ 
  impl Encode {
      pub fn as_str(&self) -> &str {
 +        println!();

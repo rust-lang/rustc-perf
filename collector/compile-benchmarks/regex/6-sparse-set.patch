@@ -16,5 +16,5 @@ index 34c05e7..ef5188e 100644
 -    /// The number of elements in the set.
 -    size: usize,
  }
-
+ 
  impl SparseSet {

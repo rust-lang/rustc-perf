@@ -10,5 +10,5 @@ index 3c06254..4b72fd4 100644
      SaveRestore { slot: usize, old_pos: Option<usize> },
 +    Inst { ip: InstPtr, at: InputAt },
  }
-
+ 
  impl<'a, 'm, 'r, 's, I: Input> Bounded<'a, 'm, 'r, 's, I> {
