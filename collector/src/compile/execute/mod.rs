@@ -574,7 +574,21 @@ fn process_stat_output(
         return Err(DeserializeStatError::NoOutput(output));
     }
     let (profile, files) = match (self_profile_dir, self_profile_crate) {
-        (Some(dir), Some(krate)) => parse_self_profile(dir, krate)?,
+        (Some(dir), Some(krate)) => {
+            // FIXME: errors reading the self-profile data should be recorded as benchmark failures
+            // and made more visible in the UI. Until then, we only log errors and continue with the
+            // run, as if we had no self-profile data.
+            // The self-profile page already supports missing data, but it's unclear exactly how the
+            // rest of the site handles this situation.
+            // In any case it's better than crashing the collector and looping indefinitely trying
+            // to to complete a run -- which happens if we propagate `parse_self_profile`'s errors
+            // up to the caller.
+            if let Ok(self_profile_data) = parse_self_profile(dir, krate) {
+                self_profile_data
+            } else {
+                (None, None)
+            }
+        }
         _ => (None, None),
     };
     Ok((stats, profile, files))
