@@ -574,7 +574,21 @@ fn process_stat_output(
         return Err(DeserializeStatError::NoOutput(output));
     }
     let (profile, files) = match (self_profile_dir, self_profile_crate) {
-        (Some(dir), Some(krate)) => parse_self_profile(dir, krate)?,
+        (Some(dir), Some(krate)) => {
+            // FIXME: errors reading the self-profile data should be recorded as benchmark failures
+            // and made more visible in the UI. Until then, we only log errors and continue with the
+            // run, as if we had no self-profile data.
+            // The self-profile page already supports missing data, but it's unclear exactly how the
+            // rest of the site handles this situation.
+            // In any case it's better than crashing the collector and looping indefinitely trying
+            // to to complete a run -- which happens if we propagate `parse_self_profile`'s errors
+            // up to the caller.
+            if let Ok(self_profile_data) = parse_self_profile(dir, krate) {
+                self_profile_data
+            } else {
+                (None, None)
+            }
+        }
         _ => (None, None),
     };
     Ok((stats, profile, files))
@@ -636,12 +650,27 @@ fn parse_self_profile(
     let (profile, files) = if let Some(profile_path) = full_path {
         // measureme 0.8+ uses a single file
         let data = fs::read(&profile_path)?;
-        let results = analyzeme::ProfilingData::from_paged_buffer(data, None)
-            .map_err(|error| {
-                eprintln!("Cannot read self-profile data: {error:?}");
-                std::io::Error::new(ErrorKind::InvalidData, error)
-            })?
-            .perform_analysis();
+
+        // HACK: `decodeme` can unexpectedly panic on invalid data produced by rustc. We catch this
+        // here until it's fixed and emits a proper error.
+        let res =
+            std::panic::catch_unwind(|| analyzeme::ProfilingData::from_paged_buffer(data, None));
+        let results = match res {
+            Ok(Ok(profiling_data)) => profiling_data.perform_analysis(),
+            Ok(Err(error)) => {
+                // A "regular" error in measureme.
+                log::error!("Cannot read self-profile data: {error:?}");
+                return Err(std::io::Error::new(ErrorKind::InvalidData, error));
+            }
+            Err(error) => {
+                // An unexpected panic in measureme: it sometimes happens when encountering some
+                // cases of invalid mm_profdata files.
+                let error = format!("Unexpected measureme error with self-profile data: {error:?}");
+                log::error!("{error}");
+                return Err(std::io::Error::new(ErrorKind::InvalidData, error));
+            }
+        };
+
         let profile = SelfProfile {
             artifact_sizes: results.artifact_sizes,
         };
