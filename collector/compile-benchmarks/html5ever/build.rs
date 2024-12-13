@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![allow(soft_unstable)]
+#![feature(rustc_encodable_decodable)]
 
 extern crate phf_codegen;
 extern crate rustc_serialize;
