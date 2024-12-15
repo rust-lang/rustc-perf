@@ -589,13 +589,15 @@ pub fn create_toolchain_from_published_version(
 }
 
 fn get_lib_dir_from_rustc(rustc: &Path) -> anyhow::Result<PathBuf> {
-    let sysroot = Command::new(rustc)
-        .arg("--print")
-        .arg("sysroot")
-        .output()?
-        .stdout;
-    let sysroot_path = String::from_utf8_lossy(&sysroot);
-
+    let output = Command::new(rustc).arg("--print").arg("sysroot").output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "rustc failed to provide sysroot, exit status: {}\nstderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let sysroot_path = String::from_utf8_lossy(&output.stdout);
     Ok(Path::new(sysroot_path.as_ref().trim()).join("lib"))
 }
 
