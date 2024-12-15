@@ -278,7 +278,7 @@ impl ToolchainComponents {
     /// Finds known library components in the given `dir` and stores them in `self`.
     fn fill_libraries(&mut self, dir: &Path) -> anyhow::Result<()> {
         let files: Vec<(PathBuf, String)> = fs::read_dir(dir)
-            .context("Cannot read lib dir to find components")?
+            .with_context(|| format!("Cannot read lib dir `{}` to find components", dir.display()))?
             .map(|entry| Ok(entry?))
             .collect::<anyhow::Result<Vec<_>>>()?
             .into_iter()
