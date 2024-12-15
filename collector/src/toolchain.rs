@@ -598,7 +598,14 @@ fn get_lib_dir_from_rustc(rustc: &Path) -> anyhow::Result<PathBuf> {
         );
     }
     let sysroot_path = String::from_utf8_lossy(&output.stdout);
-    Ok(Path::new(sysroot_path.as_ref().trim()).join("lib"))
+    let lib_dir = Path::new(sysroot_path.as_ref().trim()).join("lib");
+    if !lib_dir.exists() {
+        anyhow::bail!(
+            "rustc returned non-existent sysroot: `{}`",
+            lib_dir.display()
+        );
+    }
+    Ok(lib_dir)
 }
 
 #[cfg(test)]
