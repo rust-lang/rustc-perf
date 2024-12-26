@@ -278,7 +278,7 @@ impl ToolchainComponents {
     /// Finds known library components in the given `dir` and stores them in `self`.
     fn fill_libraries(&mut self, dir: &Path) -> anyhow::Result<()> {
         let files: Vec<(PathBuf, String)> = fs::read_dir(dir)
-            .context("Cannot read lib dir to find components")?
+            .with_context(|| format!("Cannot read lib dir `{}` to find components", dir.display()))?
             .map(|entry| Ok(entry?))
             .collect::<anyhow::Result<Vec<_>>>()?
             .into_iter()
@@ -589,14 +589,23 @@ pub fn create_toolchain_from_published_version(
 }
 
 fn get_lib_dir_from_rustc(rustc: &Path) -> anyhow::Result<PathBuf> {
-    let sysroot = Command::new(rustc)
-        .arg("--print")
-        .arg("sysroot")
-        .output()?
-        .stdout;
-    let sysroot_path = String::from_utf8_lossy(&sysroot);
-
-    Ok(Path::new(sysroot_path.as_ref().trim()).join("lib"))
+    let output = Command::new(rustc).arg("--print").arg("sysroot").output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "rustc failed to provide sysroot, exit status: {}\nstderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let sysroot_path = String::from_utf8_lossy(&output.stdout);
+    let lib_dir = Path::new(sysroot_path.as_ref().trim()).join("lib");
+    if !lib_dir.exists() {
+        anyhow::bail!(
+            "rustc returned non-existent sysroot: `{}`",
+            lib_dir.display()
+        );
+    }
+    Ok(lib_dir)
 }
 
 #[cfg(test)]
