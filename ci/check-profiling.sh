@@ -55,7 +55,7 @@ test -f results/cgout-Test-helloworld-Check-Full
 grep -q "events: Ir" results/cgout-Test-helloworld-Check-Full
 test -f results/cgann-Test-helloworld-Check-Full
 grep -q "PROGRAM TOTALS" results/cgann-Test-helloworld-Check-Full
-# Ensure that we also profile the memry allocator
+# Ensure that we also profile the memory allocator
 grep -q "malloc" results/cgann-Test-helloworld-Check-Full
 
 # Callgrind.
