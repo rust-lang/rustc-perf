@@ -1158,18 +1158,15 @@ fn main_result() -> anyhow::Result<i32> {
                         scenarios,
                         &mut errors,
                     );
-                    match diffs.len().cmp(&1) {
-                        Ordering::Equal => {
-                            let short = out_dir.join("cgann-diff-latest");
-                            std::fs::copy(&diffs[0], &short).expect("copy to short path");
-                            eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
-                            eprintln!("Short path: {}", short.to_string_lossy());
-                        }
-                        _ => {
-                            eprintln!("Diffs:");
-                            for diff in diffs {
-                                eprintln!("{}", diff.to_string_lossy());
-                            }
+                    if diffs.len() == 1 {
+                        let short = out_dir.join("cgann-diff-latest");
+                        std::fs::copy(&diffs[0], &short).expect("copy to short path");
+                        eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
+                        eprintln!("Short path: {}", short.to_string_lossy());
+                    } else {
+                        eprintln!("Diffs:");
+                        for diff in diffs {
+                            eprintln!("{}", diff.to_string_lossy());
                         }
                     }
                 }
