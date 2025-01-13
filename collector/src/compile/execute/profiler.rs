@@ -371,13 +371,13 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 Profiler::DepGraph => {
                     let tmp_file = filepath(data.cwd, "dep_graph.txt");
                     let output =
-                        filepath(self.output_dir, &out_file("dep-graph")).with_extension("txt");
+                        filepath(self.output_dir, &format!("{}.txt", out_file("dep-graph")));
 
                     fs::copy(tmp_file, output)?;
 
                     let tmp_file = filepath(data.cwd, "dep_graph.dot");
                     let output =
-                        filepath(self.output_dir, &out_file("dep-graph")).with_extension("dot");
+                        filepath(self.output_dir, &format!("{}.dot", out_file("dep-graph")));
 
                     // May not exist if not incremental, but then that's OK.
                     fs::copy(tmp_file, output)?;
