@@ -1,5 +1,5 @@
 use std::future::Future;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 pub mod cachegrind;
 pub mod fs;
@@ -17,5 +17,9 @@ pub fn wait_for_future<F: Future<Output = R>, R>(f: F) -> R {
 
 /// Checks if the given binary can be executed.
 pub fn is_installed(name: &str) -> bool {
-    Command::new(name).output().is_ok()
+    Command::new(name)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok()
 }
