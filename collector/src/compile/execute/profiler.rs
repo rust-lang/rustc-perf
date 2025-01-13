@@ -1,6 +1,7 @@
 use crate::compile::execute::{PerfTool, ProcessOutputData, Processor, Retry};
-use crate::utils;
-use crate::utils::cachegrind::cachegrind_annotate;
+use crate::utils::cachegrind::{cachegrind_annotate, cachegrind_diff};
+use crate::utils::diff::run_diff;
+use crate::utils::{self};
 use anyhow::Context;
 use std::collections::HashMap;
 use std::fs::File;
@@ -50,6 +51,42 @@ impl Profiler {
                 | Profiler::MonoItems
                 | Profiler::DepGraph
         )
+    }
+
+    /// A file prefix added to all files of this profiler.
+    pub fn prefix(&self) -> &'static str {
+        use Profiler::*;
+        match self {
+            Cachegrind => "cgout",
+            DepGraph => "dep-graph",
+
+            SelfProfile | PerfRecord | Oprofile | Samply | Callgrind | Dhat | DhatCopy | Massif
+            | Bytehound | Eprintln | LlvmLines | MonoItems | LlvmIr => "",
+        }
+    }
+
+    /// A postfix added to the file that gets diffed.
+    pub fn postfix(&self) -> &'static str {
+        use Profiler::*;
+        match self {
+            Cachegrind => "",
+            DepGraph => ".txt",
+
+            SelfProfile | PerfRecord | Oprofile | Samply | Callgrind | Dhat | DhatCopy | Massif
+            | Bytehound | Eprintln | LlvmLines | MonoItems | LlvmIr => "",
+        }
+    }
+
+    /// Actually perform the diff
+    pub fn diff(&self, left: &Path, right: &Path, output: &Path) -> anyhow::Result<()> {
+        use Profiler::*;
+        match self {
+            Cachegrind => cachegrind_diff(left, right, output),
+            DepGraph => run_diff(left, right, output),
+
+            SelfProfile | PerfRecord | Oprofile | Samply | Callgrind | Dhat | DhatCopy | Massif
+            | Bytehound | Eprintln | LlvmLines | MonoItems | LlvmIr => Ok(()),
+        }
     }
 }
 

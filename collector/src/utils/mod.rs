@@ -2,6 +2,7 @@ use std::future::Future;
 use std::process::{Command, Stdio};
 
 pub mod cachegrind;
+pub mod diff;
 pub mod fs;
 pub mod git;
 pub mod mangling;
@@ -22,4 +23,12 @@ pub fn is_installed(name: &str) -> bool {
         .stderr(Stdio::null())
         .status()
         .is_ok()
+}
+
+/// Checks if the given binary can be executed and bails otherwise.
+pub fn check_installed(name: &str) -> anyhow::Result<()> {
+    if !is_installed(name) {
+        anyhow::bail!("`{}` is not installed but must be", name);
+    }
+    Ok(())
 }
