@@ -1158,10 +1158,10 @@ fn main_result() -> anyhow::Result<i32> {
                         scenarios,
                         &mut errors,
                     );
-                    if diffs.len() == 1 {
+                    if let [diff] = &diffs[..] {
                         let short = out_dir.join("cgann-diff-latest");
-                        std::fs::copy(&diffs[0], &short).expect("copy to short path");
-                        eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
+                        std::fs::copy(diff, &short).expect("copy to short path");
+                        eprintln!("Original diff at: {}", diff.to_string_lossy());
                         eprintln!("Short path: {}", short.to_string_lossy());
                     } else {
                         eprintln!("Diffs:");
