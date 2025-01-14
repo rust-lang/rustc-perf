@@ -418,9 +418,10 @@ pub fn get_local_toolchain(
             .output()
             .context("failed to run `rustup which rustc`")?;
 
-        if !output.status.success() {
-            anyhow::bail!("did not manage to obtain toolchain {}", toolchain);
-        }
+        anyhow::ensure!(
+            output.status.success(),
+            "did not manage to obtain toolchain {toolchain}"
+        );
 
         let s = String::from_utf8(output.stdout)
             .context("failed to convert `rustup which rustc` output to utf8")?;

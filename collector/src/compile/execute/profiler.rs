@@ -1,8 +1,10 @@
 use crate::compile::execute::{PerfTool, ProcessOutputData, Processor, Retry};
-use crate::utils;
-use crate::utils::cachegrind::cachegrind_annotate;
+use crate::utils::cachegrind::{cachegrind_annotate, cachegrind_diff};
+use crate::utils::diff::run_diff;
+use crate::utils::{self};
 use anyhow::Context;
 use std::collections::HashMap;
+use std::fs::File;
 use std::future::Future;
 use std::io::BufRead;
 use std::io::Write;
@@ -49,6 +51,42 @@ impl Profiler {
                 | Profiler::MonoItems
                 | Profiler::DepGraph
         )
+    }
+
+    /// A file prefix added to all files of this profiler.
+    pub fn prefix(&self) -> &'static str {
+        use Profiler::*;
+        match self {
+            Cachegrind => "cgout",
+            DepGraph => "dep-graph",
+
+            SelfProfile | PerfRecord | Oprofile | Samply | Callgrind | Dhat | DhatCopy | Massif
+            | Bytehound | Eprintln | LlvmLines | MonoItems | LlvmIr => "",
+        }
+    }
+
+    /// A postfix added to the file that gets diffed.
+    pub fn postfix(&self) -> &'static str {
+        use Profiler::*;
+        match self {
+            Cachegrind => "",
+            DepGraph => ".txt",
+
+            SelfProfile | PerfRecord | Oprofile | Samply | Callgrind | Dhat | DhatCopy | Massif
+            | Bytehound | Eprintln | LlvmLines | MonoItems | LlvmIr => "",
+        }
+    }
+
+    /// Actually perform the diff
+    pub fn diff(&self, left: &Path, right: &Path, output: &Path) -> anyhow::Result<()> {
+        use Profiler::*;
+        match self {
+            Cachegrind => cachegrind_diff(left, right, output),
+            DepGraph => run_diff(left, right, output),
+
+            SelfProfile | PerfRecord | Oprofile | Samply | Callgrind | Dhat | DhatCopy | Massif
+            | Bytehound | Eprintln | LlvmLines | MonoItems | LlvmIr => Ok(()),
+        }
     }
 }
 
@@ -143,10 +181,8 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     // Run `summarize`.
                     let mut summarize_cmd = Command::new("summarize");
                     summarize_cmd.arg("summarize").arg(&zsp_files_prefix);
-                    fs::write(
-                        summarize_file,
-                        summarize_cmd.output().context("summarize")?.stdout,
-                    )?;
+                    summarize_cmd.stdout(File::create(summarize_file)?);
+                    summarize_cmd.status().context("summarize")?;
 
                     // Run `flamegraph`.
                     let mut flamegraph_cmd = Command::new("flamegraph");
@@ -198,8 +234,9 @@ impl<'a> Processor for ProfileProcessor<'a> {
                         .arg("--debug-info")
                         .arg("--threshold")
                         .arg("0.5")
-                        .arg(&session_dir_arg);
-                    fs::write(oprep_file, op_report_cmd.output()?.stdout)?;
+                        .arg(&session_dir_arg)
+                        .stdout(File::create(oprep_file)?);
+                    op_report_cmd.status()?;
 
                     let mut op_annotate_cmd = Command::new("opannotate");
                     // Other possibly useful args: --assembly
@@ -207,8 +244,9 @@ impl<'a> Processor for ProfileProcessor<'a> {
                         .arg("--source")
                         .arg("--threshold")
                         .arg("0.5")
-                        .arg(&session_dir_arg);
-                    fs::write(opann_file, op_annotate_cmd.output()?.stdout)?;
+                        .arg(&session_dir_arg)
+                        .stdout(File::create(opann_file)?);
+                    op_annotate_cmd.status()?;
                 }
 
                 // Samply produces (via rustc-fake) a data file called
@@ -248,8 +286,9 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     clg_annotate_cmd
                         .arg("--auto=yes")
                         .arg("--show-percs=yes")
-                        .arg(&clgout_file);
-                    fs::write(clgann_file, clg_annotate_cmd.output()?.stdout)?;
+                        .arg(&clgout_file)
+                        .stdout(File::create(clgann_file)?);
+                    clg_annotate_cmd.status()?;
                 }
 
                 // DHAT produces (via rustc-fake) a data file called `dhout`. We
@@ -371,13 +410,13 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 Profiler::DepGraph => {
                     let tmp_file = filepath(data.cwd, "dep_graph.txt");
                     let output =
-                        filepath(self.output_dir, &out_file("dep-graph")).with_extension("txt");
+                        filepath(self.output_dir, &format!("{}.txt", out_file("dep-graph")));
 
                     fs::copy(tmp_file, output)?;
 
                     let tmp_file = filepath(data.cwd, "dep_graph.dot");
                     let output =
-                        filepath(self.output_dir, &out_file("dep-graph")).with_extension("dot");
+                        filepath(self.output_dir, &format!("{}.dot", out_file("dep-graph")));
 
                     // May not exist if not incremental, but then that's OK.
                     fs::copy(tmp_file, output)?;

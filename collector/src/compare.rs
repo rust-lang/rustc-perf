@@ -80,8 +80,8 @@ pub async fn compare_artifacts(
         None => select_artifact_id("base", &aids)?.to_string(),
     };
     aids.retain(|id| id != &base);
-    let modified = if aids.len() == 1 {
-        let new_modified = aids[0].clone();
+    let modified = if let [new_modified] = &aids[..] {
+        let new_modified = new_modified.clone();
         println!(
             "Only 1 artifact remains, automatically selecting: {}",
             new_modified

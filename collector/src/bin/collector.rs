@@ -132,14 +132,8 @@ fn check_measureme_installed() -> Result<(), String> {
     }
 }
 
-fn check_installed(name: &str) -> anyhow::Result<()> {
-    if !is_installed(name) {
-        anyhow::bail!("`{}` is not installed but must be", name);
-    }
-    Ok(())
-}
-
-fn generate_cachegrind_diffs(
+#[allow(clippy::too_many_arguments)]
+fn generate_diffs(
     id1: &str,
     id2: &str,
     out_dir: &Path,
@@ -147,6 +141,7 @@ fn generate_cachegrind_diffs(
     profiles: &[Profile],
     scenarios: &[Scenario],
     errors: &mut BenchmarkErrors,
+    profiler: &Profiler,
 ) -> Vec<PathBuf> {
     let mut annotated_diffs = Vec::new();
     for benchmark in benchmarks {
@@ -166,22 +161,28 @@ fn generate_cachegrind_diffs(
             }) {
                 let filename = |prefix, id| {
                     format!(
-                        "{}-{}-{}-{:?}-{}",
-                        prefix, id, benchmark.name, profile, scenario
+                        "{}-{}-{}-{:?}-{}{}",
+                        prefix,
+                        id,
+                        benchmark.name,
+                        profile,
+                        scenario,
+                        profiler.postfix()
                     )
                 };
                 let id_diff = format!("{}-{}", id1, id2);
-                let cgout1 = out_dir.join(filename("cgout", id1));
-                let cgout2 = out_dir.join(filename("cgout", id2));
-                let cgann_diff = out_dir.join(filename("cgann-diff", &id_diff));
+                let prefix = profiler.prefix();
+                let left = out_dir.join(filename(prefix, id1));
+                let right = out_dir.join(filename(prefix, id2));
+                let output = out_dir.join(filename(&format!("{prefix}-diff"), &id_diff));
 
-                if let Err(e) = cachegrind_diff(&cgout1, &cgout2, &cgann_diff) {
+                if let Err(e) = profiler.diff(&left, &right, &output) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
                 }
 
-                annotated_diffs.push(cgann_diff);
+                annotated_diffs.push(output);
             }
         }
     }
@@ -1145,32 +1146,25 @@ fn main_result() -> anyhow::Result<i32> {
                 let id1 = get_toolchain_and_profile(local.rustc.as_str(), "1")?;
                 let id2 = get_toolchain_and_profile(rustc2.as_str(), "2")?;
 
-                if profiler == Profiler::Cachegrind {
-                    check_installed("valgrind")?;
-                    check_installed("cg_annotate")?;
-
-                    let diffs = generate_cachegrind_diffs(
-                        &id1,
-                        &id2,
-                        &out_dir,
-                        &benchmarks,
-                        profiles,
-                        scenarios,
-                        &mut errors,
-                    );
-                    match diffs.len().cmp(&1) {
-                        Ordering::Equal => {
-                            let short = out_dir.join("cgann-diff-latest");
-                            std::fs::copy(&diffs[0], &short).expect("copy to short path");
-                            eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
-                            eprintln!("Short path: {}", short.to_string_lossy());
-                        }
-                        _ => {
-                            eprintln!("Diffs:");
-                            for diff in diffs {
-                                eprintln!("{}", diff.to_string_lossy());
-                            }
-                        }
+                let diffs = generate_diffs(
+                    &id1,
+                    &id2,
+                    &out_dir,
+                    &benchmarks,
+                    profiles,
+                    scenarios,
+                    &mut errors,
+                    &profiler,
+                );
+                if let [diff] = &diffs[..] {
+                    let short = out_dir.join(format!("{}-diff-latest", profiler.prefix()));
+                    std::fs::copy(diff, &short).expect("copy to short path");
+                    eprintln!("Original diff at: {}", diff.to_string_lossy());
+                    eprintln!("Short path: {}", short.to_string_lossy());
+                } else {
+                    eprintln!("Diffs:");
+                    for diff in diffs {
+                        eprintln!("{}", diff.to_string_lossy());
                     }
                 }
             } else {

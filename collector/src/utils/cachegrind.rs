@@ -1,10 +1,12 @@
-use crate::utils::is_installed;
 use crate::utils::mangling::demangle_file;
 use anyhow::Context;
+use std::fs::File;
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{fs, io};
+
+use super::check_installed;
 
 /// Annotate and demangle the output of Cachegrind using the `cg_annotate` tool.
 pub fn cachegrind_annotate(
@@ -61,13 +63,15 @@ pub fn cachegrind_annotate(
     cg_annotate_cmd
         .arg("--auto=yes")
         .arg("--show-percs=yes")
-        .arg(cgout_output);
-    fs::write(cgann_output, cg_annotate_cmd.output()?.stdout)?;
+        .arg(cgout_output)
+        .stdout(File::create(cgann_output)?);
+    cg_annotate_cmd.status()?;
     Ok(())
 }
 
 /// Creates a diff between two `cgout` files, and annotates the diff.
 pub fn cachegrind_diff(cgout_a: &Path, cgout_b: &Path, output: &Path) -> anyhow::Result<()> {
+    check_installed("valgrind")?;
     let cgout_diff = tempfile::NamedTempFile::new()?.into_temp_path();
 
     run_cg_diff(cgout_a, cgout_b, &cgout_diff).context("Cannot run cg_diff")?;
@@ -78,41 +82,34 @@ pub fn cachegrind_diff(cgout_a: &Path, cgout_b: &Path, output: &Path) -> anyhow:
 
 /// Compares two Cachegrind output files using `cg_diff` and writes the result to `path`.
 fn run_cg_diff(cgout1: &Path, cgout2: &Path, path: &Path) -> anyhow::Result<()> {
-    if !is_installed("cg_diff") {
-        anyhow::bail!("`cg_diff` not installed.");
-    }
-    let output = Command::new("cg_diff")
+    check_installed("cg_diff")?;
+    let status = Command::new("cg_diff")
         .arg(r"--mod-filename=s/\/rustc\/[^\/]*\///")
         .arg("--mod-funcname=s/[.]llvm[.].*//")
         .arg(cgout1)
         .arg(cgout2)
         .stderr(Stdio::inherit())
-        .output()
+        .stdout(File::create(path)?)
+        .status()
         .context("failed to run `cg_diff`")?;
 
-    if !output.status.success() {
-        anyhow::bail!("failed to generate cachegrind diff");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `cg_diff` output")?;
+    anyhow::ensure!(status.success(), "failed to generate cachegrind diff");
 
     Ok(())
 }
 
 /// Postprocess Cachegrind output file and writes the result to `path`.
 fn annotate_diff(cgout: &Path, path: &Path) -> anyhow::Result<()> {
-    let output = Command::new("cg_annotate")
+    check_installed("cg_annotate")?;
+    let status = Command::new("cg_annotate")
         .arg("--show-percs=no")
         .arg(cgout)
         .stderr(Stdio::inherit())
-        .output()
+        .stdout(File::create(path)?)
+        .status()
         .context("failed to run `cg_annotate`")?;
 
-    if !output.status.success() {
-        anyhow::bail!("failed to annotate cachegrind output");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `cg_annotate` output")?;
+    anyhow::ensure!(status.success(), "failed to annotate cachegrind output");
 
     Ok(())
 }
