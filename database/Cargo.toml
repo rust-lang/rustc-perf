@@ -14,7 +14,7 @@ lazy_static = { workspace = true }
 log = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["sync", "macros"] }
+tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread"] }
 
 rusqlite = { version = "0.28", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
