@@ -24,7 +24,8 @@ use humansize::{format_size, BINARY};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tabled::builder::Builder;
 use tabled::settings::object::{Columns, Rows};
-use tabled::settings::{Alignment, Border, Color, Modify, Width};
+use tabled::settings::style::Border;
+use tabled::settings::{Alignment, Color, Modify, Width};
 use tokio::runtime::Runtime;
 
 use collector::api::next_artifact::NextArtifact;
@@ -1383,7 +1384,7 @@ fn print_binary_stats(
 
     let mut builder = Builder::default();
     if use_diff {
-        builder.set_header([
+        builder.push_record([
             name_header,
             "Size (before)",
             "Size (after)",
@@ -1391,7 +1392,7 @@ fn print_binary_stats(
             "Diff (%)",
         ]);
     } else {
-        builder.set_header([name_header, "Size"]);
+        builder.push_record([name_header, "Size"]);
     }
 
     struct Row {
@@ -1522,8 +1523,10 @@ fn print_binary_stats(
     table.with(tabled::settings::Style::sharp());
     table.with(
         Modify::new(Rows::last()).with(
-            Border::default()
+            Border::new()
                 .top('─')
+                .left('│')
+                .right('│')
                 .corner_top_left('│')
                 .corner_top_right('│'),
         ),
