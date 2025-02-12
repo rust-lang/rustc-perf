@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use std::{fmt, str};
 
@@ -257,9 +257,7 @@ impl Server {
     }
 
     async fn handle_push(&self, _req: Request) -> Response {
-        lazy_static::lazy_static! {
-            static ref LAST_UPDATE: Mutex<Option<Instant>> = Mutex::new(None);
-        }
+        static LAST_UPDATE: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
 
         let last = *LAST_UPDATE.lock();
         if let Some(last) = last {
@@ -603,10 +601,9 @@ where
     }
 }
 
-lazy_static::lazy_static! {
-    static ref VERSION_UUID: Uuid = Uuid::new_v4(); // random UUID used as ETag for cache revalidation
-    static ref TEMPLATES: ResourceResolver = ResourceResolver::new().expect("Cannot load resources");
-}
+static VERSION_UUID: LazyLock<Uuid> = LazyLock::new(Uuid::new_v4); // random UUID used as ETag for cache revalidation
+static TEMPLATES: LazyLock<ResourceResolver> =
+    LazyLock::new(|| ResourceResolver::new().expect("Cannot load resources"));
 
 /// Handle the case where the path is to a static file
 async fn handle_fs_path(

@@ -10,7 +10,6 @@ chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["cargo"] }
 env_logger = { workspace = true }
 hashbrown = { workspace = true, features = ["serde"] }
-lazy_static = { workspace = true }
 log = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

@@ -6,7 +6,6 @@ edition = "2021"
 
 [dependencies]
 hashbrown = { workspace = true }
-lazy_static = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
 bumpalo = "3.2"

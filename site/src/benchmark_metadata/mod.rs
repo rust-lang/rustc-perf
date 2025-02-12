@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use hashbrown::HashMap;
 use rust_embed::RustEmbed;
 
@@ -23,9 +25,8 @@ pub struct CompileBenchmarkMetadata {
 struct EmbeddedCompileBenchmarks;
 
 pub fn get_compile_benchmarks_metadata() -> &'static HashMap<String, CompileBenchmarkMetadata> {
-    lazy_static::lazy_static! {
-        static ref METADATA: HashMap<String, CompileBenchmarkMetadata> = load_compile_benchmark_metadata();
-    }
+    static METADATA: LazyLock<HashMap<String, CompileBenchmarkMetadata>> =
+        LazyLock::new(load_compile_benchmark_metadata);
     &METADATA
 }
 

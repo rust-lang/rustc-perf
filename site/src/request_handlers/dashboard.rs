@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use lazy_static::lazy_static;
+use std::sync::{Arc, LazyLock};
 
 use crate::api::{dashboard, ServerResult};
 use crate::benchmark_metadata::get_stable_benchmark_names;
@@ -77,9 +75,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
             .collect::<Vec<_>>(),
     );
 
-    lazy_static! {
-        static ref STABLE_BENCHMARKS: Vec<String> = get_stable_benchmark_names();
-    }
+    static STABLE_BENCHMARKS: LazyLock<Vec<String>> = LazyLock::new(get_stable_benchmark_names);
 
     let compile_benchmark_query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))

@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::RangeInclusive;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 
 use arc_swap::{ArcSwap, Guard};
 use chrono::{Duration, Utc};
-use lazy_static::lazy_static;
 use log::error;
 use parking_lot::Mutex;
 use regex::Regex;
@@ -218,10 +217,6 @@ impl SiteCtxt {
             .text()
             .await?;
 
-        lazy_static! {
-            static ref VERSION_REGEX: Regex = Regex::new(r"(\d+\.\d+.\d+)").unwrap();
-        }
-
         let conn = self.conn().await;
 
         let index = self.index.load();
@@ -292,9 +287,8 @@ impl SiteCtxt {
 /// Parses an artifact tag like `1.63.0` or `beta-2022-08-19` from a line taken from
 /// `https://static.rust-lang.org/manifests.txt`.
 fn parse_published_artifact_tag(line: &str) -> Option<String> {
-    lazy_static! {
-        static ref VERSION_REGEX: Regex = Regex::new(r"(\d+\.\d+.\d+)").unwrap();
-    }
+    static VERSION_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(\d+\.\d+.\d+)").unwrap());
 
     let mut parts = line.rsplit('/');
     let name = parts.next();
