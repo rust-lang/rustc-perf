@@ -91,10 +91,10 @@ async fn record(
     .arg("--set")
     .arg("rust.deny-warnings=false")
     .arg("--set")
-    .arg(&format!("build.rustc={}", fake_rustc.to_str().unwrap()))
+    .arg(format!("build.rustc={}", fake_rustc.to_str().unwrap()))
     .env("RUSTC_PERF_REAL_RUSTC", &toolchain.components.rustc)
     .arg("--set")
-    .arg(&format!(
+    .arg(format!(
         "build.cargo={}",
         toolchain.components.cargo.to_str().unwrap()
     ))

@@ -326,7 +326,7 @@ impl ConnectionManager for Postgres {
 }
 
 #[async_trait::async_trait]
-impl<'a> Transaction for PostgresTransaction<'a> {
+impl Transaction for PostgresTransaction<'_> {
     async fn commit(self: Box<Self>) -> Result<(), anyhow::Error> {
         Ok(self.conn.commit().await?)
     }

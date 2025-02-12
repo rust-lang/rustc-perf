@@ -113,7 +113,7 @@ impl<'de> Deserialize<'de> for Date {
     {
         struct DateVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for DateVisitor {
+        impl serde::de::Visitor<'_> for DateVisitor {
             type Value = Date;
 
             fn visit_str<E>(self, value: &str) -> ::std::result::Result<Date, E>

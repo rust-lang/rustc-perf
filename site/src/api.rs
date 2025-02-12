@@ -21,7 +21,7 @@ where
 {
     struct CommaSeparatedVisitor<T>(PhantomData<T>);
 
-    impl<'de, T: DeserializeOwned> serde::de::Visitor<'de> for CommaSeparatedVisitor<T> {
+    impl<T: DeserializeOwned> serde::de::Visitor<'_> for CommaSeparatedVisitor<T> {
         type Value = Vec<T>;
 
         fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {

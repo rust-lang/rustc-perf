@@ -118,10 +118,7 @@ fn main() {
 
                 let prof_out_dir = create_self_profile_dir();
                 if wrapper == "PerfStatSelfProfile" {
-                    cmd.arg(&format!(
-                        "-Zself-profile={}",
-                        prof_out_dir.to_str().unwrap()
-                    ));
+                    cmd.arg(format!("-Zself-profile={}", prof_out_dir.to_str().unwrap()));
                     let _ = fs::remove_dir_all(&prof_out_dir);
                     let _ = fs::create_dir_all(&prof_out_dir);
                 }
@@ -189,10 +186,7 @@ fn main() {
 
                 let prof_out_dir = create_self_profile_dir();
                 if wrapper == "XperfStatSelfProfile" {
-                    tool.arg(&format!(
-                        "-Zself-profile={}",
-                        prof_out_dir.to_str().unwrap()
-                    ));
+                    tool.arg(format!("-Zself-profile={}", prof_out_dir.to_str().unwrap()));
                     let _ = fs::remove_dir_all(&prof_out_dir);
                     let _ = fs::create_dir_all(&prof_out_dir);
                 }

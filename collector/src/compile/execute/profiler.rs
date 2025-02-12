@@ -106,7 +106,7 @@ impl<'a> ProfileProcessor<'a> {
     }
 }
 
-impl<'a> Processor for ProfileProcessor<'a> {
+impl Processor for ProfileProcessor<'_> {
     fn perf_tool(&self) -> PerfTool {
         PerfTool::ProfileTool(self.profiler)
     }

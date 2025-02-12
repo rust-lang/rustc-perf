@@ -107,11 +107,11 @@ impl ArtifactStats {
 /// Normalizes the following things, in the following order:
 /// - Demangles the symbol.
 /// - Removes `.cold` and `.warm` from the end of the symbol, to merge cold and hot parts of a function
-/// into the same symbol.
+///   into the same symbol.
 /// - Removes rustc hashes from the symbol, e.g. `foo::[abcdef]` -> `foo::[]` or
-/// `foo::abcd` -> `foo`.
+///   `foo::abcd` -> `foo`.
 /// - Removes suffixes after a dot from the symbol, e.g. `anon.abcdef.123` -> `anon` or
-/// `foo.llvm.123` -> `foo`.
+///   `foo.llvm.123` -> `foo`.
 ///
 /// These modifications should remove things added by LLVM in the LTO/PGO phase.
 /// See more information here: https://rust-lang.github.io/rfcs/2603-rust-symbol-name-mangling-v0.html#vendor-specific-suffix

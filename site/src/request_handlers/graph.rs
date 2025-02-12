@@ -183,9 +183,8 @@ pub async fn handle_graphs(
         };
 
     if is_default_query {
-        match &**ctxt.landing_page.load() {
-            Some(resp) => return Ok(resp.clone()),
-            None => {}
+        if let Some(resp) = &**ctxt.landing_page.load() {
+            return Ok(resp.clone());
         }
     }
 
