@@ -20,7 +20,7 @@ pub struct SqliteTransaction<'a> {
 }
 
 #[async_trait::async_trait]
-impl<'a> Transaction for SqliteTransaction<'a> {
+impl Transaction for SqliteTransaction<'_> {
     async fn commit(mut self: Box<Self>) -> Result<(), anyhow::Error> {
         self.finished = true;
         Ok(self.conn.raw().execute_batch("COMMIT")?)

@@ -24,7 +24,7 @@ fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Ve
     let mut start = None;
     for event in data
         .iter()
-        .filter(|e| e.timestamp().map_or(false, |t| !t.is_instant()))
+        .filter(|e| e.timestamp().is_some_and(|t| !t.is_instant()))
     {
         let full_event = data.to_full_event(&event);
         if is_interesting(&full_event.label) {
@@ -43,7 +43,7 @@ fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Ve
     let mut by_thread = HashMap::new();
     for event in data
         .iter()
-        .filter(|e| e.timestamp().map_or(false, |t| !t.is_instant()))
+        .filter(|e| e.timestamp().is_some_and(|t| !t.is_instant()))
     {
         let full_event = data.to_full_event(&event);
 

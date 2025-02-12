@@ -4,7 +4,7 @@ name = "collector"
 version = "0.1.0"
 edition = "2021"
 description = "Collects Rust performance data"
-rust-version = "1.75.0"
+rust-version = "1.81.0"
 
 [dependencies]
 anyhow = { workspace = true }

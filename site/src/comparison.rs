@@ -994,7 +994,7 @@ impl ArtifactComparison {
                 if let Some(b) = master_commits.iter().find(|c| c.sha == b.sha) {
                     b.parent_sha == a.sha
                 } else {
-                    conn.parent_of(&b.sha).await.map_or(false, |p| p == a.sha)
+                    conn.parent_of(&b.sha).await.as_ref() == Some(&a.sha)
                 }
             }
             _ => false,

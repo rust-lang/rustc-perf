@@ -583,11 +583,7 @@ fn process_stat_output(
             // In any case it's better than crashing the collector and looping indefinitely trying
             // to to complete a run -- which happens if we propagate `parse_self_profile`'s errors
             // up to the caller.
-            if let Ok(self_profile_data) = parse_self_profile(dir, krate) {
-                self_profile_data
-            } else {
-                (None, None)
-            }
+            parse_self_profile(dir, krate).unwrap_or_default()
         }
         _ => (None, None),
     };
@@ -640,9 +636,11 @@ fn parse_self_profile(
     // `perf` pid. So just blindly look in the directory to hopefully find it.
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
-        if entry.file_name().to_str().map_or(false, |s| {
-            s.starts_with(&crate_name) && s.ends_with("mm_profdata")
-        }) {
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|s| s.starts_with(&crate_name) && s.ends_with("mm_profdata"))
+        {
             full_path = Some(entry.path());
             break;
         }

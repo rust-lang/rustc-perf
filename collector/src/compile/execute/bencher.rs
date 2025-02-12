@@ -120,7 +120,7 @@ impl<'a> BenchProcessor<'a> {
     }
 }
 
-impl<'a> Processor for BenchProcessor<'a> {
+impl Processor for BenchProcessor<'_> {
     fn perf_tool(&self) -> PerfTool {
         if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {
@@ -309,7 +309,7 @@ impl SelfProfileS3Upload {
             .arg("INTELLIGENT_TIERING")
             .arg("--only-show-errors")
             .arg(upload.path())
-            .arg(&format!(
+            .arg(format!(
                 "s3://rustc-perf/{}",
                 &prefix.join(filename).to_str().unwrap()
             ))

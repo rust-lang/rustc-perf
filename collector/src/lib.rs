@@ -85,7 +85,7 @@ impl<'de> Deserialize<'de> for Bound {
     {
         struct BoundVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for BoundVisitor {
+        impl serde::de::Visitor<'_> for BoundVisitor {
             type Value = Bound;
 
             fn visit_str<E>(self, value: &str) -> ::std::result::Result<Bound, E>

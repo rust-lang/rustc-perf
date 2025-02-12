@@ -343,9 +343,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         .headers()
         .get(hyper::header::ACCEPT_ENCODING)
         .and_then(|e| e.to_str().ok())
-        .map_or(false, |s| {
-            s.split(',').any(|part| part.trim().starts_with("br"))
-        });
+        .is_some_and(|s| s.split(',').any(|part| part.trim().starts_with("br")));
 
     let compression = if allow_compression {
         // In tests on /perf/graphs and /perf/get, quality = 2 reduces size by 20-40% compared to 0,

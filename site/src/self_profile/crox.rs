@@ -144,7 +144,7 @@ pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>>
     // only handle Interval events for now
     for event in data
         .iter()
-        .filter(|e| e.timestamp().map_or(false, |t| !t.is_instant()))
+        .filter(|e| e.timestamp().is_some_and(|t| !t.is_instant()))
     {
         let duration = event.duration().unwrap();
         if let Some(minimum_duration) = opt.minimum_duration {
