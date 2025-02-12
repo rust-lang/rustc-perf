@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{self, Command};
 use std::str;
+use std::sync::LazyLock;
 
 pub mod bencher;
 mod etw_parser;
@@ -366,44 +367,42 @@ impl<'a> CargoProcess<'a> {
     }
 }
 
-lazy_static::lazy_static! {
-    static ref FAKE_RUSTC: PathBuf = {
-        let mut fake_rustc = env::current_exe().unwrap();
-        fake_rustc.pop();
-        fake_rustc.push("rustc-fake");
-        fake_rustc
-    };
-    static ref FAKE_RUSTDOC: PathBuf = {
-        let mut fake_rustdoc = env::current_exe().unwrap();
-        fake_rustdoc.pop();
-        fake_rustdoc.push("rustdoc-fake");
-        // link from rustc-fake to rustdoc-fake
-        if !fake_rustdoc.exists() {
-            #[cfg(unix)]
-            use std::os::unix::fs::symlink;
-            #[cfg(windows)]
-            use std::os::windows::fs::symlink_file as symlink;
+static FAKE_RUSTC: LazyLock<PathBuf> = LazyLock::new(|| {
+    let mut fake_rustc = env::current_exe().unwrap();
+    fake_rustc.pop();
+    fake_rustc.push("rustc-fake");
+    fake_rustc
+});
+static FAKE_RUSTDOC: LazyLock<PathBuf> = LazyLock::new(|| {
+    let mut fake_rustdoc = env::current_exe().unwrap();
+    fake_rustdoc.pop();
+    fake_rustdoc.push("rustdoc-fake");
+    // link from rustc-fake to rustdoc-fake
+    if !fake_rustdoc.exists() {
+        #[cfg(unix)]
+        use std::os::unix::fs::symlink;
+        #[cfg(windows)]
+        use std::os::windows::fs::symlink_file as symlink;
 
-            symlink(&*FAKE_RUSTC, &fake_rustdoc).expect("failed to make symbolic link");
-        }
-        fake_rustdoc
-    };
-    static ref FAKE_CLIPPY: PathBuf = {
-        let mut fake_clippy = env::current_exe().unwrap();
-        fake_clippy.pop();
-        fake_clippy.push("clippy-fake");
-        // link from rustc-fake to rustdoc-fake
-        if !fake_clippy.exists() {
-            #[cfg(unix)]
-            use std::os::unix::fs::symlink;
-            #[cfg(windows)]
-            use std::os::windows::fs::symlink_file as symlink;
+        symlink(&*FAKE_RUSTC, &fake_rustdoc).expect("failed to make symbolic link");
+    }
+    fake_rustdoc
+});
+static FAKE_CLIPPY: LazyLock<PathBuf> = LazyLock::new(|| {
+    let mut fake_clippy = env::current_exe().unwrap();
+    fake_clippy.pop();
+    fake_clippy.push("clippy-fake");
+    // link from rustc-fake to rustdoc-fake
+    if !fake_clippy.exists() {
+        #[cfg(unix)]
+        use std::os::unix::fs::symlink;
+        #[cfg(windows)]
+        use std::os::windows::fs::symlink_file as symlink;
 
-            symlink(&*FAKE_RUSTC, &fake_clippy).expect("failed to make symbolic link");
-        }
-        fake_clippy
-    };
-}
+        symlink(&*FAKE_RUSTC, &fake_clippy).expect("failed to make symbolic link");
+    }
+    fake_clippy
+});
 
 /// Used to indicate if we need to retry a run.
 pub enum Retry {

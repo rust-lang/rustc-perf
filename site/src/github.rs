@@ -3,6 +3,7 @@ pub mod comparison_summary;
 
 use crate::api::github::Commit;
 use crate::load::{MissingReason, SiteCtxt, TryCommit};
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -195,12 +196,10 @@ pub struct UnrolledCommit<'a> {
     pub sha: Option<String>,
 }
 
-lazy_static::lazy_static! {
-    static ref ROLLUP_PR_NUMBER: regex::Regex =
-        regex::Regex::new(r"^Auto merge of #(\d+)").unwrap();
-    static ref ROLLEDUP_PR_NUMBER: regex::Regex =
-        regex::Regex::new(r"^Rollup merge of #(\d+)").unwrap();
-}
+static ROLLUP_PR_NUMBER: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^Auto merge of #(\d+)").unwrap());
+static ROLLEDUP_PR_NUMBER: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^Rollup merge of #(\d+)").unwrap());
 
 // Gets the pr number for the associated rollup PR message. Returns None if this is not a rollup PR
 pub async fn rollup_pr_number(
