@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - master
-  pull_request: {}
+  pull_request: { }
   schedule:
     - cron: "0 12 * * 1" # Every Monday at 12:00 UTC
 
@@ -26,7 +26,7 @@ jobs:
           rustup default $RUST_TOOLCHAIN_VERSION
           rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
         env:
-          RUST_TOOLCHAIN_VERSION: 1.75.0
+          RUST_TOOLCHAIN_VERSION: 1.81.0
 
       - uses: Swatinem/rust-cache@v2
         with:
