@@ -136,27 +136,29 @@ pub struct CargoProcess<'a> {
 fn performance_cores() -> Option<&'static String> {
     use std::sync::LazyLock;
     static PERFORMANCE_CORES: LazyLock<Option<String>> = LazyLock::new(|| {
-        if std::fs::exists("/sys/devices/cpu").expect("Could not check the CPU architecture details: could not check if `/sys/devices/cpu` exists!"){
+        if std::fs::exists("/sys/devices/cpu").expect("Could not check the CPU architecture details: could not check if `/sys/devices/cpu` exists!") {
         	// If /sys/devices/cpu exists, then this is not a "Performance-hybrid" CPU.
-		None
-	}
-	else if std::fs::exists("/sys/devices/cpu_core").expect("Could not check the CPU architecture detali: could not check if `/sys/devices/cpu_core` exists!") {
-		// If /sys/devices/cpu_core exists, then this is a "Performance-hybrid" CPU.
-		eprintln!("WARNING: Performance-Hybrid CPU detected. `rustc-perf` can't run properly on Efficency cores: test suite will only use Performance cores!");
-		Some(std::fs::read_to_string("/sys/devices/cpu_core/cpus").unwrap().trim().to_string())
-	}else{
-		// If neither dir exists, then something is wrong - `/sys/devices/cpu` has been in Linux for over a decade.
-		eprintln!("WARNING: neither `/sys/devices/cpu` nor `/sys/devices/cpu_core` present, unable to determine if this CPU has a Performance-Hybrid architecture.");
-		None
-	}
+		    None
+	    }
+	    else if std::fs::exists("/sys/devices/cpu_core").expect("Could not check the CPU architecture detali: could not check if `/sys/devices/cpu_core` exists!") {
+		    // If /sys/devices/cpu_core exists, then this is a "Performance-hybrid" CPU.
+		    eprintln!("WARNING: Performance-Hybrid CPU detected. `rustc-perf` can't run properly on Efficency cores: test suite will only use Performance cores!");
+		    Some(std::fs::read_to_string("/sys/devices/cpu_core/cpus").unwrap().trim().to_string())
+	    } else {
+		    // If neither dir exists, then something is wrong - `/sys/devices/cpu` has been in Linux for over a decade.
+		    eprintln!("WARNING: neither `/sys/devices/cpu` nor `/sys/devices/cpu_core` present, unable to determine if this CPU has a Performance-Hybrid architecture.");
+		    None
+	    }
     });
     (*PERFORMANCE_CORES).as_ref()
 }
+
 #[cfg(not(target_os = "linux"))]
 // Modify this stub if you want to add support for P/E cores on more OSs
 fn performance_cores() -> Option<&'static String> {
     None
 }
+
 #[cfg(target_os = "linux")]
 /// Makes the benchmark run only on Performance cores.
 fn run_on_p_cores(path: &Path, cpu_list: &str) -> Command {
@@ -183,11 +185,13 @@ fn run_on_p_cores(path: &Path, cpu_list: &str) -> Command {
     cmd.arg(path);
     cmd
 }
+
 #[cfg(not(target_os = "linux"))]
 // Modify this stub if you want to add support for P/E cores on more OSs
 fn run_on_p_cores(_path: &Path, _cpu_list: &str) -> Command {
-    todo!("Can't run comamnds on the P cores on this platform")
+    todo!("Can't run commands on the P cores on this platform");
 }
+
 impl<'a> CargoProcess<'a> {
     pub fn incremental(mut self, incremental: bool) -> Self {
         self.incremental = incremental;
