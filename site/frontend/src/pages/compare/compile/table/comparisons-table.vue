@@ -48,7 +48,11 @@ const unit = computed(() => {
   <div class="bench-table" :id="id">
     <slot name="header"></slot>
     <div v-if="comparisons.length === 0" style="text-align: center">
-      {{ hasNonRelevant ? "No relevant results" : "No results" }}
+      {{
+        hasNonRelevant
+          ? "No relevant results (enable Filters -> Show non-relevant results to see all)"
+          : "No results"
+      }}
     </div>
     <table v-else class="benches compare">
       <thead>
