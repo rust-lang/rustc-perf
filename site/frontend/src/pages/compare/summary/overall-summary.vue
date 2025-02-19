@@ -11,7 +11,7 @@ const summary = computed(() => props.summary);
 </script>
 
 <template>
-  <div class="main-summary">
+  <div class="main-summary" v-if="summary.all.count > 0">
     <SummaryTable :summary="summary"></SummaryTable>
     <div style="position: absolute; right: 5px; top: 5px">
       <Tooltip style="margin-right: 1em">
