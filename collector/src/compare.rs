@@ -1,11 +1,10 @@
-use std::{str::FromStr, sync::Arc};
-
-use database::{
-    metric::Metric,
-    selector::{BenchmarkQuery, CompileBenchmarkQuery},
-    ArtifactId, Connection,
+use database::{metric::Metric, Commit, Connection, Index};
+use ratatui::widgets::{List, ListState};
+use ratatui::{
+    crossterm::event::{self, Event, KeyCode},
+    prelude::*,
+    widgets::Block,
 };
-use tabled::{Table, Tabled};
 
 static ALL_METRICS: &[Metric] = &[
     Metric::InstructionsUser,
@@ -46,160 +45,183 @@ pub async fn compare_artifacts(
 ) -> anyhow::Result<()> {
     let index = database::Index::load(&mut *conn).await;
 
-    let metric = match metric {
-        Some(v) => v,
-        None => {
-            let metric_str = inquire::Select::new(
-                "Choose metric:",
-                ALL_METRICS.iter().map(|m| m.as_str()).collect::<Vec<_>>(),
-            )
-            .prompt()?;
-            Metric::from_str(metric_str).map_err(|e| anyhow::anyhow!(e))?
-        }
-    };
+    let metric = metric.unwrap_or(Metric::InstructionsUser);
 
-    let mut aids = index.artifacts().map(str::to_string).collect::<Vec<_>>();
+    let mut aids = index.commits();
     if aids.len() < 2 {
         return Err(anyhow::anyhow!(
             "There are not enough artifacts to compare, at least two are needed"
         ));
     }
 
-    let select_artifact_id = |name: &str, aids: &Vec<String>| {
-        anyhow::Ok(
-            inquire::Select::new(
-                &format!("Choose {} artifact to compare:", name),
-                aids.clone(),
-            )
-            .prompt()?,
-        )
-    };
+    // Error if the selected base/modified commits were not found
+    fn check_commit(
+        aids: &[Commit],
+        commit: Option<String>,
+        label: &str,
+    ) -> anyhow::Result<Option<Commit>> {
+        Ok(commit
+            .map(|commit| {
+                aids.iter()
+                    .find(|c| c.sha == commit)
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("{label} commit {commit} not found"))
+            })
+            .transpose()?)
+    }
 
-    let base = match base {
-        Some(v) => v,
-        None => select_artifact_id("base", &aids)?.to_string(),
-    };
-    aids.retain(|id| id != &base);
-    let modified = if let [new_modified] = &aids[..] {
-        let new_modified = new_modified.clone();
-        println!(
-            "Only 1 artifact remains, automatically selecting: {}",
-            new_modified
-        );
+    let base: Option<Commit> = check_commit(&aids, base, "Base")?;
+    if let Some(ref base) = base {
+        aids.retain(|c| c.sha != base.sha);
+    }
+    let modified: Option<Commit> = check_commit(&aids, modified, "Modified")?;
 
-        new_modified
-    } else {
-        match modified {
-            Some(v) => v,
-            None => select_artifact_id("modified", &aids)?.to_string(),
+    let mut terminal = ratatui::init();
+
+    let mut screen: Box<dyn Screen> = match (base, modified) {
+        (Some(base), Some(modified)) => Box::new(CompareScreen { base, modified }),
+        (Some(base), None) => next_selection_screen(base, aids),
+        (None, None) => Box::new(SelectArtifactScreen::new(aids, SelectState::SelectingBase)),
+        (None, Some(_)) => {
+            return Err(anyhow::anyhow!(
+                "If modified commit is pre-selected, base commit must also be pre-selected"
+            ));
         }
     };
+    let mut state = State { metric, index };
 
-    let query = CompileBenchmarkQuery::default().metric(database::selector::Selector::One(metric));
-    let resp = query
-        .execute(
-            &mut *conn,
-            &index,
-            Arc::new(vec![ArtifactId::Tag(base), ArtifactId::Tag(modified)]),
-        )
-        .await
-        .unwrap();
-
-    let tuple_pstats = resp
-        .into_iter()
-        .map(|resp| {
-            let points = resp.series.points.collect::<Vec<_>>();
-            (points[0], points[1])
-        })
-        .collect::<Vec<_>>();
-
-    #[derive(Tabled)]
-    struct Regression {
-        count: usize,
-        #[tabled(display_with = "display_range")]
-        range: (Option<f64>, Option<f64>),
-        #[tabled(display_with = "display_mean")]
-        mean: Option<f64>,
-    }
-
-    fn format_value(value: Option<f64>) -> String {
-        match value {
-            Some(value) => format!("{:+.2}%", value),
-            None => "-".to_string(),
-        }
-    }
-
-    fn display_range(&(min, max): &(Option<f64>, Option<f64>)) -> String {
-        format!("[{}, {}]", &format_value(min), &format_value(max))
-    }
-
-    fn display_mean(value: &Option<f64>) -> String {
-        match value {
-            Some(value) => format!("{:+.2}%", value),
-            None => "-".to_string(),
-        }
-    }
-
-    impl From<&Vec<f64>> for Regression {
-        fn from(value: &Vec<f64>) -> Self {
-            let min = value.iter().copied().min_by(|a, b| a.total_cmp(b));
-            let max = value.iter().copied().max_by(|a, b| a.total_cmp(b));
-            let count = value.len();
-
-            Regression {
-                range: (min, max),
-                count,
-                mean: if count == 0 {
-                    None
-                } else {
-                    Some(value.iter().sum::<f64>() / count as f64)
-                },
-            }
-        }
-    }
-
-    let change = tuple_pstats
-        .iter()
-        .filter_map(|&(a, b)| match (a, b) {
-            (Some(a), Some(b)) => {
-                if a == 0.0 {
-                    None
-                } else {
-                    Some((b - a) / a * 100.0)
+    loop {
+        terminal.draw(|frame| {
+            screen.draw(frame, &state);
+        })?;
+        match event::read()? {
+            Event::Key(key_event) => match key_event.code {
+                KeyCode::Char('q') | KeyCode::Esc => break,
+                key => {
+                    if let Some(action) = screen.handle_key(key, &mut state) {
+                        match action {
+                            Action::ChangeScreen(next_screen) => {
+                                screen = next_screen;
+                            }
+                        }
+                    }
                 }
-            }
-            (_, _) => None,
-        })
-        .collect::<Vec<_>>();
-    let negative_change = change
-        .iter()
-        .copied()
-        .filter(|&c| c < 0.0)
-        .collect::<Vec<_>>();
-    let positive_change = change
-        .iter()
-        .copied()
-        .filter(|&c| c > 0.0)
-        .collect::<Vec<_>>();
-
-    #[derive(Tabled)]
-    struct NamedRegression {
-        name: String,
-        #[tabled(inline)]
-        regression: Regression,
+            },
+            _ => {}
+        }
     }
-
-    let regressions = [negative_change, positive_change, change]
-        .into_iter()
-        .map(|c| Regression::from(&c))
-        .zip(["❌", "✅", "✅, ❌"])
-        .map(|(c, label)| NamedRegression {
-            name: label.to_string(),
-            regression: c,
-        })
-        .collect::<Vec<_>>();
-
-    println!("{}", Table::new(regressions));
+    ratatui::restore();
 
     Ok(())
+}
+
+struct State {
+    metric: Metric,
+    index: Index,
+}
+
+enum Action {
+    ChangeScreen(Box<dyn Screen>),
+}
+
+trait Screen {
+    fn draw(&mut self, frame: &mut Frame, state: &State);
+    fn handle_key(&mut self, key: KeyCode, state: &mut State) -> Option<Action>;
+}
+
+enum SelectState {
+    SelectingBase,
+    SelectingModified { base: Commit },
+}
+
+struct SelectArtifactScreen {
+    aids: Vec<Commit>,
+    select_state: SelectState,
+    list_state: ListState,
+}
+
+impl SelectArtifactScreen {
+    fn new(aids: Vec<Commit>, select_state: SelectState) -> Self {
+        Self {
+            aids,
+            select_state,
+            list_state: ListState::default().with_selected(Some(0)),
+        }
+    }
+}
+
+impl Screen for SelectArtifactScreen {
+    fn draw(&mut self, frame: &mut Frame, _state: &State) {
+        let items = self
+            .aids
+            .iter()
+            .map(|commit| format!("{} ({})", commit.sha, commit.date))
+            .collect::<Vec<_>>();
+        let list = List::new(items)
+            .block(Block::bordered().title(format!(
+                "Select {} artifact",
+                if matches!(self.select_state, SelectState::SelectingBase) {
+                    "base"
+                } else {
+                    "modified"
+                }
+            )))
+            .style(Style::new().white())
+            .highlight_style(Style::new().bold())
+            .highlight_symbol("> ");
+        frame.render_stateful_widget(list, frame.area(), &mut self.list_state);
+    }
+
+    fn handle_key(&mut self, key: KeyCode, _state: &mut State) -> Option<Action> {
+        match key {
+            KeyCode::Down => self.list_state.select_next(),
+            KeyCode::Up => self.list_state.select_previous(),
+            KeyCode::Enter => {
+                let mut aids = self.aids.clone();
+                let index = self.list_state.selected().unwrap();
+                let selected = aids.remove(index);
+
+                let next_screen: Box<dyn Screen> = match &self.select_state {
+                    SelectState::SelectingBase => next_selection_screen(selected, aids),
+                    SelectState::SelectingModified { base } => Box::new(CompareScreen {
+                        base: base.clone(),
+                        modified: selected,
+                    }),
+                };
+                return Some(Action::ChangeScreen(next_screen));
+            }
+            _ => {}
+        };
+        None
+    }
+}
+
+/// Directly goes to comparison if there is only a single artifact ID left, otherwise
+/// opens the selection screen for the modified artifact.
+fn next_selection_screen(base: Commit, aids: Vec<Commit>) -> Box<dyn Screen> {
+    match aids.as_slice() {
+        [commit] => Box::new(CompareScreen {
+            base,
+            modified: commit.clone(),
+        }),
+        _ => Box::new(SelectArtifactScreen::new(
+            aids,
+            SelectState::SelectingModified { base },
+        )),
+    }
+}
+
+struct CompareScreen {
+    base: Commit,
+    modified: Commit,
+}
+
+impl Screen for CompareScreen {
+    fn draw(&mut self, frame: &mut Frame, state: &State) {
+        todo!()
+    }
+
+    fn handle_key(&mut self, key: KeyCode, state: &mut State) -> Option<Action> {
+        todo!()
+    }
 }
