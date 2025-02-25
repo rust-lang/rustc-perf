@@ -16,8 +16,8 @@ while : ; do
 
         # Make sure we have a recent build, so that we can successfully build
         # the collector.
-        rustup update
-        cargo +nightly build --release -p collector
+        rustup update 1.81.0
+        cargo +1.81.0 build --release -p collector
 
         target/release/collector bench_next $SITE_URL --self-profile --bench-rustc --db $DATABASE
         STATUS=$?
