@@ -117,7 +117,7 @@ async fn record(
             .env("BOOTSTRAP_SKIP_TARGET_SANITY", "1")
             .arg("build")
             .arg("--stage")
-            .arg("0")
+            .arg("1")
             // We want bootstrap and the Cargos it spawns to have no parallelism --
             // if multiple rustcs are competing for jobserver tokens, we introduce
             // quite a bit of variance.
@@ -142,6 +142,14 @@ async fn record(
                 .entry(crate_name)
                 .or_insert_with(|| Duration::new(0, 0)) += timing;
         }
+    }
+
+    // Sanity check
+    if timing_data.is_empty() {
+        return Err(anyhow::anyhow!(
+            "rustc benchmark failed to produce timing data\nSTDOUT:\n{}\n\nSTDERR:{timings}\n",
+            String::from_utf8_lossy(&output.stdout)
+        ));
     }
 
     let version = get_rustc_perf_commit();
