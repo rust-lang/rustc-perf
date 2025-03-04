@@ -967,7 +967,7 @@ impl Connection for SqliteConnection {
         let count = self
             .raw_ref()
             .execute(
-                "update pull_request_build SET complete = 1 where sha = ? and complete = 0",
+                "update pull_request_build SET complete = 1 where bors_sha = ? and complete = 0",
                 params![sha],
             )
             .unwrap();
@@ -977,8 +977,8 @@ impl Connection for SqliteConnection {
         assert_eq!(count, 1, "sha is unique column");
         self.raw_ref()
             .query_row(
-                "select pr, sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
-            where sha = ?",
+                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
+            where bors_sha = ?",
                 params![sha],
                 |row| {
                     Ok(QueuedCommit {
