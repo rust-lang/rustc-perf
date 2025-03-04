@@ -144,6 +144,14 @@ async fn record(
         }
     }
 
+    // Sanity check
+    if timing_data.is_empty() {
+        return Err(anyhow::anyhow!(
+            "rustc benchmark failed to produce timing data\nSTDOUT:\n{}\n\nSTDERR:{timings}\n",
+            String::from_utf8_lossy(&output.stdout)
+        ));
+    }
+
     let version = get_rustc_perf_commit();
     let collection = conn.collection_id(&version).await;
 
