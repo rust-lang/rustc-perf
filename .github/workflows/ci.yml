@@ -383,7 +383,7 @@ jobs:
 
       - name: Gather data
         run: |
-          cargo run --bin collector bench_local `which rustc` --include syn --id version1 \
+          cargo run --bin collector bench_local `rustup which rustc` --include syn --id version1 \
             --self-profile \
             --db postgresql://postgres:postgres@127.0.0.1:5432/postgres
           cargo run --bin collector bench_local `rustup +nightly which rustc` --include syn --id version2 \
