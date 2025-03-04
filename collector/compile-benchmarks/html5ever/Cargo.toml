@@ -2,7 +2,7 @@
 
 name = "html5ever"
 version = "0.5.4"
-authors = [ "The html5ever Project Developers" ]
+authors = ["The html5ever Project Developers"]
 license = "MIT / Apache-2.0"
 repository = "https://github.com/servo/html5ever"
 description = "High-performance browser-grade HTML5 parser"
@@ -35,7 +35,8 @@ rustc-test = "0.1.3"
 
 [build-dependencies]
 phf_codegen = "0.7.3"
-rustc-serialize = "0.3.15"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 html5ever_macros = { version = "0.2.6", path = "macros", optional = true }
 
 [profile.dev]
