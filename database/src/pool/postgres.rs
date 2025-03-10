@@ -278,7 +278,12 @@ static MIGRATIONS: &[&str] = &[
     alter table pstat_series drop constraint pstat_series_crate_profile_cache_statistic_key;
     alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, metric);
     "#,
-    r#"alter table pull_request_build add column backends text;"#,
+    // A pstat series shows 1 compiler_target
+    r#"
+    alter table pstat_series add compiler_target text not null default 'x86_64-unknown-linux-gnu';
+    alter table pstat_series drop constraint test_case;
+    alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, compiler_target, metric);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -466,8 +471,8 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 get_error: conn.prepare("select benchmark, error from error where aid = $1").await.unwrap(),
-                insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, metric) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
-                select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and metric = $5").await.unwrap(),
+                insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, metric, compiler_target) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and metric = $5 and compiler_target = $6").await.unwrap(),
                 collection_id: conn.prepare("insert into collection (perf_commit) VALUES ($1) returning id").await.unwrap(),
                 record_duration: conn.prepare("
                     insert into artifact_collection_duration (
@@ -617,7 +622,7 @@ where
             pstat_series: self
                 .conn()
                 .query(
-                    "select id, crate, profile, scenario, backend, metric from pstat_series;",
+                    "select id, crate, profile, scenario, backend, metric, compiler_target, from pstat_series;",
                     &[],
                 )
                 .await
@@ -632,6 +637,7 @@ where
                             row.get::<_, String>(3).as_str().parse().unwrap(),
                             CodegenBackend::from_str(row.get::<_, String>(4).as_str()).unwrap(),
                             row.get::<_, String>(5).as_str().into(),
+                            row.get::<_, String>(6).as_str().parse().unwrap(),
                         ),
                     )
                 })
@@ -831,15 +837,17 @@ where
         backend: CodegenBackend,
         metric: &str,
         stat: f64,
+        compiler_target: &str,
     ) {
         let profile = profile.to_string();
         let scenario = scenario.to_string();
         let backend = backend.to_string();
+        let compiler_target = compiler_target.to_string();
         let sid = self
             .conn()
             .query_opt(
                 &self.statements().select_pstat_series,
-                &[&benchmark, &profile, &scenario, &backend, &metric],
+                &[&benchmark, &profile, &scenario, &backend, &metric, &compiler_target],
             )
             .await
             .unwrap();
@@ -849,14 +857,14 @@ where
                 self.conn()
                     .query_opt(
                         &self.statements().insert_pstat_series,
-                        &[&benchmark, &profile, &scenario, &backend, &metric],
+                        &[&benchmark, &profile, &scenario, &backend, &metric, &compiler_target],
                     )
                     .await
                     .unwrap();
                 self.conn()
                     .query_one(
                         &self.statements().select_pstat_series,
-                        &[&benchmark, &profile, &scenario, &backend, &metric],
+                        &[&benchmark, &profile, &scenario, &backend, &metric, &compiler_target],
                     )
                     .await
                     .unwrap()

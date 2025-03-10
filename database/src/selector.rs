@@ -28,8 +28,7 @@ use std::{
 };
 
 use crate::{
-    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
-    CodegenBackend, Connection, Index, Lookup, Profile, Scenario,
+    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark, CodegenBackend, Connection, Index, Lookup, Profile, Scenario
 };
 
 #[derive(Debug)]
@@ -193,6 +192,7 @@ pub struct CompileBenchmarkQuery {
     profile: Selector<Profile>,
     backend: Selector<CodegenBackend>,
     metric: Selector<crate::Metric>,
+    compiler_target: Selector<String>,
 }
 
 impl CompileBenchmarkQuery {
@@ -223,6 +223,7 @@ impl CompileBenchmarkQuery {
             scenario: Selector::All,
             backend: Selector::All,
             metric: Selector::One(metric.as_str().into()),
+            compiler_target: Selector::All,
         }
     }
 }
@@ -235,6 +236,7 @@ impl Default for CompileBenchmarkQuery {
             profile: Selector::All,
             backend: Selector::All,
             metric: Selector::All,
+            compiler_target: Selector::All,
         }
     }
 }
@@ -250,20 +252,22 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
     ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
         let mut statistic_descriptions: Vec<_> = index
             .compile_statistic_descriptions()
-            .filter(|(&(b, p, s, backend, m), _)| {
+            .filter(|(&(b, p, s, backend, m, ref compiler_target), _)| {
                 self.benchmark.matches(b)
                     && self.profile.matches(p)
                     && self.scenario.matches(s)
                     && self.backend.matches(backend)
                     && self.metric.matches(m)
+                    && self.compiler_target.matches(compiler_target.to_string())
             })
-            .map(|(&(benchmark, profile, scenario, backend, metric), sid)| {
+            .map(|(&(benchmark, profile, scenario, backend, metric, ref compiler_target), sid)| {
                 (
                     CompileTestCase {
                         benchmark,
                         profile,
                         scenario,
                         backend,
+                        compiler_target: compiler_target.to_string(),
                     },
                     metric,
                     sid,
@@ -318,6 +322,7 @@ pub struct CompileTestCase {
     pub profile: Profile,
     pub scenario: Scenario,
     pub backend: CodegenBackend,
+    pub compiler_target: String,
 }
 
 impl TestCase for CompileTestCase {}

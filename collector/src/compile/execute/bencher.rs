@@ -1,6 +1,7 @@
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
+use crate::compile::benchmark::compiler_target::CompilerTarget;
 use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute;
 use crate::compile::execute::{
@@ -91,6 +92,7 @@ impl<'a> BenchProcessor<'a> {
         scenario: database::Scenario,
         profile: database::Profile,
         backend: CodegenBackend,
+        compiler_target: &CompilerTarget,
         stats: Stats,
     ) {
         let backend = match backend {
@@ -109,6 +111,7 @@ impl<'a> BenchProcessor<'a> {
                 backend,
                 stat,
                 value,
+                &compiler_target.0,
             ));
         }
 
@@ -199,7 +202,7 @@ impl Processor for BenchProcessor<'_> {
                         res.0.stats.retain(|key, _| key.starts_with("size:"));
                     }
 
-                    self.insert_stats(collection, scenario, profile, data.backend, res.0)
+                    self.insert_stats(collection, scenario, profile, data.backend, data.compiler_target, res.0)
                         .await;
 
                     Ok(Retry::No)

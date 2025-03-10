@@ -3,6 +3,7 @@ use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
+use crate::compile::benchmark::compiler_target::CompilerTarget;
 use crate::compile::execute::{CargoProcess, Processor};
 use crate::toolchain::Toolchain;
 use crate::utils::wait_for_future;
@@ -20,6 +21,7 @@ pub mod codegen_backend;
 pub(crate) mod patch;
 pub mod profile;
 pub mod scenario;
+pub mod compiler_target;
 
 fn default_runs() -> usize {
     3
@@ -180,6 +182,7 @@ impl Benchmark {
         cwd: &'a Path,
         profile: Profile,
         backend: CodegenBackend,
+        compiler_target: &'a CompilerTarget,
     ) -> CargoProcess<'a> {
         let mut cargo_args = self
             .config
@@ -220,6 +223,7 @@ impl Benchmark {
                 .collect(),
             touch_file: self.config.touch_file.clone(),
             jobserver: None,
+            compiler_target,
         }
     }
 
@@ -232,6 +236,7 @@ impl Benchmark {
         backends: &[CodegenBackend],
         toolchain: &Toolchain,
         iterations: Option<usize>,
+        compiler_targets: &[CompilerTarget]
     ) -> anyhow::Result<()> {
         if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
@@ -263,10 +268,12 @@ impl Benchmark {
         }
 
         eprintln!("Preparing {}", self.name);
-        let mut target_dirs: Vec<((CodegenBackend, Profile), TempDir)> = vec![];
+        let mut target_dirs: Vec<((CodegenBackend, Profile, &CompilerTarget), TempDir)> = vec![];
         for backend in backends {
             for profile in &profiles {
-                target_dirs.push(((*backend, *profile), self.make_temp_dir(&self.path)?));
+                for compiler_target in compiler_targets {
+                    target_dirs.push(((*backend, *profile, &compiler_target), self.make_temp_dir(&self.path)?));
+                }
             }
         }
 
@@ -304,12 +311,12 @@ impl Benchmark {
             )
             .context("jobserver::new")?;
             let mut threads = Vec::with_capacity(target_dirs.len());
-            for ((backend, profile), prep_dir) in &target_dirs {
+            for ((backend, profile, compiler_target), prep_dir) in &target_dirs {
                 let server = server.clone();
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
                     wait_for_future(async move {
                         let server = server.clone();
-                        self.mk_cargo_process(toolchain, prep_dir.path(), *profile, *backend)
+                        self.mk_cargo_process(toolchain, prep_dir.path(), *profile, *backend, compiler_target)
                             .jobserver(server)
                             .run_rustc(false)
                             .await?;
@@ -343,12 +350,13 @@ impl Benchmark {
         let mut timing_dirs: Vec<ManuallyDrop<TempDir>> = vec![];
 
         let benchmark_start = std::time::Instant::now();
-        for ((backend, profile), prep_dir) in &target_dirs {
+        for ((backend, profile, compiler_target), prep_dir) in &target_dirs {
             let backend = *backend;
             let profile = *profile;
+            let compiler_target = *compiler_target;
             eprintln!(
-                "Running {}: {:?} + {:?} + {:?}",
-                self.name, profile, scenarios, backend
+                "Running {}: {:?} + {:?} + {:?} + {:?}",
+                self.name, profile, scenarios, backend, compiler_target,
             );
 
             // We want at least two runs for all benchmarks (since we run
@@ -370,7 +378,7 @@ impl Benchmark {
 
                 // A full non-incremental build.
                 if scenarios.contains(&Scenario::Full) {
-                    self.mk_cargo_process(toolchain, cwd, profile, backend)
+                    self.mk_cargo_process(toolchain, cwd, profile, backend, &compiler_target)
                         .processor(processor, Scenario::Full, "Full", None)
                         .run_rustc(true)
                         .await?;
@@ -381,7 +389,7 @@ impl Benchmark {
                     // An incremental  from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
                     if scenarios.iter().any(|s| s.is_incr()) {
-                        self.mk_cargo_process(toolchain, cwd, profile, backend)
+                        self.mk_cargo_process(toolchain, cwd, profile, backend, &compiler_target)
                             .incremental(true)
                             .processor(processor, Scenario::IncrFull, "IncrFull", None)
                             .run_rustc(true)
@@ -390,7 +398,7 @@ impl Benchmark {
 
                     // An incremental build with no changes (fastest incremental case).
                     if scenarios.contains(&Scenario::IncrUnchanged) {
-                        self.mk_cargo_process(toolchain, cwd, profile, backend)
+                        self.mk_cargo_process(toolchain, cwd, profile, backend, &compiler_target)
                             .incremental(true)
                             .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
                             .run_rustc(true)
@@ -405,7 +413,7 @@ impl Benchmark {
                             // An incremental build with some changes (realistic
                             // incremental case).
                             let scenario_str = format!("IncrPatched{}", i);
-                            self.mk_cargo_process(toolchain, cwd, profile, backend)
+                            self.mk_cargo_process(toolchain, cwd, profile, backend, &compiler_target)
                                 .incremental(true)
                                 .processor(
                                     processor,

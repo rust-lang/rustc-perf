@@ -385,7 +385,23 @@ static MIGRATIONS: &[Migration] = &[
         alter table pstat_series_new rename to pstat_series;
     "#,
     ),
-    Migration::new("alter table pull_request_build add column backends text"),
+    // Add compiler_target as a unique constraint, defaulting to 'x86_64-unknown-linux-gnu'
+    Migration::without_foreign_key_constraints(
+    r#"
+        create table pstat_series_with_compiler_target(
+            id integer primary key not null,
+            crate text not null references benchmark(name) on delete cascade on update cascade,
+            profile text not null,
+            scenario text not null,
+            backend text not null,
+            metric text not null,
+            compiler_target text not null default 'x86_64-unknown-linux-gnu',
+            UNIQUE(crate, profile, scenario, backend, compiler_target, metric)
+        );
+        insert into pstat_series_with_compiler_target select id, crate, profile, scenario, backend, metric, 'x86_64-unknown-linux-gnu' from pstat_series;
+        drop table pstat_series;
+        alter table pstat_series_with_compiler_target rename to pstat_series;
+    "#),
 ];
 
 #[async_trait::async_trait]
@@ -501,7 +517,7 @@ impl Connection for SqliteConnection {
             .collect();
         let pstat_series = self
             .raw()
-            .prepare("select id, crate, profile, scenario, backend, metric from pstat_series;")
+            .prepare("select id, crate, profile, scenario, backend, metric, compiler_target from pstat_series;")
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
@@ -512,6 +528,7 @@ impl Connection for SqliteConnection {
                         row.get::<_, String>(3)?.as_str().parse().unwrap(),
                         CodegenBackend::from_str(row.get::<_, String>(4)?.as_str()).unwrap(),
                         row.get::<_, String>(5)?.as_str().into(),
+                        row.get::<_, String>(6)?.as_str().into(),
                     ),
                 ))
             })
@@ -656,23 +673,26 @@ impl Connection for SqliteConnection {
         backend: CodegenBackend,
         metric: &str,
         value: f64,
+        compiler_target: &str,
     ) {
         let profile = profile.to_string();
         let scenario = scenario.to_string();
         let backend = backend.to_string();
-        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, metric) VALUES (?, ?, ?, ?, ?)", params![
+        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, metric, compiler_target) VALUES (?, ?, ?, ?, ?, ?)", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
             &metric,
+            compiler_target,
         ]).unwrap();
-        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and metric = ?", params![
+        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and metric = ? and compiler_target = ?", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
             &metric,
+            compiler_target,
         ], |r| r.get(0)).unwrap();
         self.raw_ref()
             .execute(

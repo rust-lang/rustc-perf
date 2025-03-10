@@ -47,6 +47,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         metric: &str,
         value: f64,
+        compiler_target: &str,
     );
     async fn record_runtime_statistic(
         &self,

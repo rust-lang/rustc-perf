@@ -472,7 +472,7 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
-    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Metric)>,
+    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Metric, String)>,
     /// Id lookup of runtime stat description ids
     runtime_pstat_series: Indexed<(Benchmark, Metric)>,
 }
@@ -586,7 +586,7 @@ mod index_serde {
     }
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum DbLabel {
     StatisticDescription {
         benchmark: Benchmark,
@@ -594,6 +594,7 @@ pub enum DbLabel {
         scenario: Scenario,
         backend: CodegenBackend,
         metric: Metric,
+        compiler_target: String,
     },
 }
 
@@ -612,9 +613,10 @@ impl Lookup for DbLabel {
                 scenario,
                 backend,
                 metric,
+                compiler_target,
             } => index
                 .pstat_series
-                .get(&(*benchmark, *profile, *scenario, *backend, *metric)),
+                .get(&(*benchmark, *profile, *scenario, *backend, *metric, compiler_target.to_string())),
         }
     }
 }
@@ -664,7 +666,7 @@ impl Index {
         self.pstat_series
             .map
             .keys()
-            .map(|(_, _, _, _, metric)| metric)
+            .map(|(_, _, _, _, metric, _)| metric)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())
@@ -690,7 +692,7 @@ impl Index {
         &self,
     ) -> impl Iterator<
         Item = (
-            &(Benchmark, Profile, Scenario, CodegenBackend, Metric),
+            &(Benchmark, Profile, Scenario, CodegenBackend, Metric, String),
             StatisticalDescriptionId,
         ),
     > + '_ {
