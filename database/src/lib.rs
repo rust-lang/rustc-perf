@@ -339,6 +339,37 @@ impl PartialOrd for Scenario {
         Some(self.cmp(other))
     }
 }
+/// The codegen backend used for compilation.
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum Target {
+    X86_64UnknownLinuxGnu
+}
+
+impl Target {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
+        }
+    }
+}
+
+impl FromStr for Target {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
+            _ => return Err(format!("{} is not a valid target", s)),
+        })
+    }
+}
+
+impl fmt::Display for Target {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
 
 /// The codegen backend used for compilation.
 #[derive(
@@ -472,7 +503,7 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
-    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Metric, String)>,
+    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Metric, Target)>,
     /// Id lookup of runtime stat description ids
     runtime_pstat_series: Indexed<(Benchmark, Metric)>,
 }
@@ -594,7 +625,7 @@ pub enum DbLabel {
         scenario: Scenario,
         backend: CodegenBackend,
         metric: Metric,
-        compiler_target: String,
+        target: Target,
     },
 }
 
@@ -613,10 +644,10 @@ impl Lookup for DbLabel {
                 scenario,
                 backend,
                 metric,
-                compiler_target,
+                target,
             } => index
                 .pstat_series
-                .get(&(*benchmark, *profile, *scenario, *backend, *metric, compiler_target.to_string())),
+                .get(&(*benchmark, *profile, *scenario, *backend, *metric, *target)),
         }
     }
 }
@@ -692,7 +723,7 @@ impl Index {
         &self,
     ) -> impl Iterator<
         Item = (
-            &(Benchmark, Profile, Scenario, CodegenBackend, Metric, String),
+            &(Benchmark, Profile, Scenario, CodegenBackend, Metric, Target),
             StatisticalDescriptionId,
         ),
     > + '_ {

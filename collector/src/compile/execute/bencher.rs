@@ -1,7 +1,7 @@
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
-use crate::compile::benchmark::compiler_target::CompilerTarget;
+use crate::compile::benchmark::target::Target;
 use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute;
 use crate::compile::execute::{
@@ -92,12 +92,16 @@ impl<'a> BenchProcessor<'a> {
         scenario: database::Scenario,
         profile: database::Profile,
         backend: CodegenBackend,
-        compiler_target: &CompilerTarget,
+        target: Target,
         stats: Stats,
     ) {
         let backend = match backend {
             CodegenBackend::Llvm => database::CodegenBackend::Llvm,
             CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
+        };
+
+        let target = match target {
+            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu
         };
 
         let mut buf = FuturesUnordered::new();
@@ -111,7 +115,7 @@ impl<'a> BenchProcessor<'a> {
                 backend,
                 stat,
                 value,
-                &compiler_target.0,
+                target,
             ));
         }
 
@@ -202,7 +206,7 @@ impl Processor for BenchProcessor<'_> {
                         res.0.stats.retain(|key, _| key.starts_with("size:"));
                     }
 
-                    self.insert_stats(collection, scenario, profile, data.backend, data.compiler_target, res.0)
+                    self.insert_stats(collection, scenario, profile, data.backend, data.target, res.0)
                         .await;
 
                     Ok(Retry::No)

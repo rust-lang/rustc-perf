@@ -152,7 +152,7 @@ many times in the `pstat` table.
 
 ```
 sqlite> select * from pstat_series limit 1;
-id          crate       profile     scenario    backend  metric        compiler_target
+id          crate       profile     scenario    backend  metric        target
 ----------  ----------  ----------  ----------  -------  ------------  ------------
 1           helloworld  check       full        llvm     task-clock:u  x86_64-linux-unknown-gnu
 ```
