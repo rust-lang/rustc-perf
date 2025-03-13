@@ -228,6 +228,7 @@ impl Benchmark {
     }
 
     /// Run a specific benchmark under a processor + profiler combination.
+    #[allow(clippy::too_many_arguments)]
     pub async fn measure(
         &self,
         processor: &mut dyn Processor,
