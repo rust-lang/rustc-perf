@@ -45,9 +45,9 @@ pub trait Connection: Send + Sync {
         profile: Profile,
         scenario: Scenario,
         backend: CodegenBackend,
+        target: Target,
         metric: &str,
         value: f64,
-        target: Target,
     );
     async fn record_runtime_statistic(
         &self,

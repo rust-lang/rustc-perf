@@ -517,7 +517,7 @@ impl Connection for SqliteConnection {
             .collect();
         let pstat_series = self
             .raw()
-            .prepare("select id, crate, profile, scenario, backend, metric, target from pstat_series;")
+            .prepare("select id, crate, profile, scenario, backend, target, metric from pstat_series;")
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
@@ -527,8 +527,8 @@ impl Connection for SqliteConnection {
                         Profile::from_str(row.get::<_, String>(2)?.as_str()).unwrap(),
                         row.get::<_, String>(3)?.as_str().parse().unwrap(),
                         CodegenBackend::from_str(row.get::<_, String>(4)?.as_str()).unwrap(),
-                        row.get::<_, String>(5)?.as_str().into(),
-                        Target::from_str(row.get::<_, String>(6)?.as_str()).unwrap(),
+                        Target::from_str(row.get::<_, String>(5)?.as_str()).unwrap(),
+                        row.get::<_, String>(6)?.as_str().into(),
                     ),
                 ))
             })
@@ -671,29 +671,29 @@ impl Connection for SqliteConnection {
         profile: Profile,
         scenario: crate::Scenario,
         backend: CodegenBackend,
+        target: Target,
         metric: &str,
         value: f64,
-        target: Target,
     ) {
         let profile = profile.to_string();
         let scenario = scenario.to_string();
         let backend = backend.to_string();
         let target = target.to_string();
-        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, metric, target) VALUES (?, ?, ?, ?, ?, ?)", params![
+        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, target, metric) VALUES (?, ?, ?, ?, ?, ?)", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
-            &metric,
             &target,
+            &metric,
         ]).unwrap();
-        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and metric = ? and target = ?", params![
+        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and target = ? and metric = ?", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
-            &metric,
             &target,
+            &metric,
         ], |r| r.get(0)).unwrap();
         self.raw_ref()
             .execute(

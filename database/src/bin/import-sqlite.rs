@@ -45,7 +45,7 @@ async fn main() {
         let sqlite_aid = sqlite_conn.artifact_id(&aid).await;
         let postgres_aid = postgres_conn.artifact_id(&aid).await;
 
-        for (&(benchmark, profile, scenario, backend, metric, target), id) in
+        for (&(benchmark, profile, scenario, backend, target, metric), id) in
             sqlite_idx.compile_statistic_descriptions()
         {
             if benchmarks.insert(benchmark) {
@@ -74,9 +74,9 @@ async fn main() {
                         profile,
                         scenario,
                         backend,
+                        target,
                         metric.as_str(),
                         stat,
-                        target,
                     )
                     .await;
             }

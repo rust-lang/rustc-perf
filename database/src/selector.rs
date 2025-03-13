@@ -28,7 +28,7 @@ use std::{
 };
 
 use crate::{
-    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark, CodegenBackend, Connection, Index, Lookup, Profile, Scenario
+    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark, CodegenBackend, Connection, Index, Lookup, Profile, Scenario, Target
 };
 
 #[derive(Debug)]
@@ -192,7 +192,7 @@ pub struct CompileBenchmarkQuery {
     profile: Selector<Profile>,
     backend: Selector<CodegenBackend>,
     metric: Selector<crate::Metric>,
-    target: Selector<String>,
+    target: Selector<Target>,
 }
 
 impl CompileBenchmarkQuery {
@@ -252,22 +252,22 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
     ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
         let mut statistic_descriptions: Vec<_> = index
             .compile_statistic_descriptions()
-            .filter(|(&(b, p, s, backend, m, ref target), _)| {
+            .filter(|(&(b, p, s, backend, target, metric), _)| {
                 self.benchmark.matches(b)
                     && self.profile.matches(p)
                     && self.scenario.matches(s)
                     && self.backend.matches(backend)
-                    && self.metric.matches(m)
-                    && self.target.matches(target.to_string())
+                    && self.target.matches(target)
+                    && self.metric.matches(metric)
             })
-            .map(|(&(benchmark, profile, scenario, backend, metric, ref target), sid)| {
+            .map(|(&(benchmark, profile, scenario, backend, target, metric), sid)| {
                 (
                     CompileTestCase {
                         benchmark,
                         profile,
                         scenario,
                         backend,
-                        target: target.to_string(),
+                        target,
                     },
                     metric,
                     sid,
@@ -322,7 +322,7 @@ pub struct CompileTestCase {
     pub profile: Profile,
     pub scenario: Scenario,
     pub backend: CodegenBackend,
-    pub target: String,
+    pub target: Target,
 }
 
 impl TestCase for CompileTestCase {}

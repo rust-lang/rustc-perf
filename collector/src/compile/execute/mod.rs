@@ -23,7 +23,6 @@ use std::process::{self, Command};
 use std::str;
 use std::sync::LazyLock;
 
-
 pub mod bencher;
 mod etw_parser;
 pub mod profiler;

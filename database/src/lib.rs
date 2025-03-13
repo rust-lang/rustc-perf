@@ -339,11 +339,17 @@ impl PartialOrd for Scenario {
         Some(self.cmp(other))
     }
 }
-/// The codegen backend used for compilation.
+
+/// Target representing an Rust target tripple, for a full list of targets and 
+/// their support see;
+/// https://doc.rust-lang.org/nightly/rustc/platform-support.html
+///
+/// Presently we only support x86_64
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
 pub enum Target {
+    /// `x86_64-unknown-linux-gnu`
     X86_64UnknownLinuxGnu
 }
 
@@ -503,7 +509,7 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
-    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Metric, Target)>,
+    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Target, Metric)>,
     /// Id lookup of runtime stat description ids
     runtime_pstat_series: Indexed<(Benchmark, Metric)>,
 }
@@ -617,7 +623,7 @@ mod index_serde {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum DbLabel {
     StatisticDescription {
         benchmark: Benchmark,
@@ -647,7 +653,7 @@ impl Lookup for DbLabel {
                 target,
             } => index
                 .pstat_series
-                .get(&(*benchmark, *profile, *scenario, *backend, *metric, *target)),
+                .get(&(*benchmark, *profile, *scenario, *backend, *target, *metric)),
         }
     }
 }
@@ -723,7 +729,7 @@ impl Index {
         &self,
     ) -> impl Iterator<
         Item = (
-            &(Benchmark, Profile, Scenario, CodegenBackend, Metric, Target),
+            &(Benchmark, Profile, Scenario, CodegenBackend, Target, Metric),
             StatisticalDescriptionId,
         ),
     > + '_ {

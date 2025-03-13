@@ -35,7 +35,7 @@ Here is the diagram for compile-time benchmarks:
   │ scenario      │  │ cid      │   │
   │ backend       │  │ value    ├───┘
   │ metric        │  └──────────┘
-  │ compiler_tar..│
+  │ target        │
   └───────────────┘
 ```
 

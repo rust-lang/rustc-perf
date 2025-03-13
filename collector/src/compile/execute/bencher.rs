@@ -113,9 +113,9 @@ impl<'a> BenchProcessor<'a> {
                 profile,
                 scenario,
                 backend,
+                target,
                 stat,
                 value,
-                target,
             ));
         }
 
