@@ -340,7 +340,7 @@ impl PartialOrd for Scenario {
     }
 }
 
-/// Target representing an Rust target tripple, for a full list of targets and 
+/// Target representing an Rust target triple, for a full list of targets and
 /// their support see;
 /// https://doc.rust-lang.org/nightly/rustc/platform-support.html
 ///
@@ -350,7 +350,7 @@ impl PartialOrd for Scenario {
 )]
 pub enum Target {
     /// `x86_64-unknown-linux-gnu`
-    X86_64UnknownLinuxGnu
+    X86_64UnknownLinuxGnu,
 }
 
 impl Target {
@@ -630,8 +630,8 @@ pub enum DbLabel {
         profile: Profile,
         scenario: Scenario,
         backend: CodegenBackend,
-        metric: Metric,
         target: Target,
+        metric: Metric,
     },
 }
 
@@ -703,7 +703,7 @@ impl Index {
         self.pstat_series
             .map
             .keys()
-            .map(|(_, _, _, _, metric, _)| metric)
+            .map(|(_, _, _, _, _, metric)| metric)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())

@@ -637,8 +637,8 @@ where
                             Profile::from_str(row.get::<_, String>(2).as_str()).unwrap(),
                             row.get::<_, String>(3).as_str().parse().unwrap(),
                             CodegenBackend::from_str(row.get::<_, String>(4).as_str()).unwrap(),
-                            Target::from_str(row.get::<_, String>(6).as_str()).unwrap(),
-                            row.get::<_, String>(5).as_str().into(),
+                            Target::from_str(row.get::<_, String>(5).as_str()).unwrap(),
+                            row.get::<_, String>(6).as_str().into(),
                         ),
                     )
                 })

@@ -387,21 +387,22 @@ static MIGRATIONS: &[Migration] = &[
     ),
     // Add target as a unique constraint, defaulting to 'x86_64-unknown-linux-gnu'
     Migration::without_foreign_key_constraints(
-    r#"
+        r#"
         create table pstat_series_with_target(
             id integer primary key not null,
             crate text not null references benchmark(name) on delete cascade on update cascade,
             profile text not null,
             scenario text not null,
             backend text not null,
-            metric text not null,
             target text not null default 'x86_64-unknown-linux-gnu',
+            metric text not null,
             UNIQUE(crate, profile, scenario, backend, target, metric)
         );
-        insert into pstat_series_with_target select id, crate, profile, scenario, backend, metric, 'x86_64-unknown-linux-gnu' from pstat_series;
+        insert into pstat_series_with_target select id, crate, profile, scenario, backend, 'x86_64-unknown-linux-gnu', metric from pstat_series;
         drop table pstat_series;
         alter table pstat_series_with_target rename to pstat_series;
-    "#),
+    "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -517,7 +518,9 @@ impl Connection for SqliteConnection {
             .collect();
         let pstat_series = self
             .raw()
-            .prepare("select id, crate, profile, scenario, backend, target, metric from pstat_series;")
+            .prepare(
+                "select id, crate, profile, scenario, backend, target, metric from pstat_series;",
+            )
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
