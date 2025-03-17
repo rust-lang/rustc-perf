@@ -237,7 +237,7 @@ impl Benchmark {
         backends: &[CodegenBackend],
         toolchain: &Toolchain,
         iterations: Option<usize>,
-        targets: &[Target]
+        targets: &[Target],
     ) -> anyhow::Result<()> {
         if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
@@ -273,7 +273,10 @@ impl Benchmark {
         for backend in backends {
             for profile in &profiles {
                 for target in targets {
-                    target_dirs.push(((*backend, *profile, *target), self.make_temp_dir(&self.path)?));
+                    target_dirs.push((
+                        (*backend, *profile, *target),
+                        self.make_temp_dir(&self.path)?,
+                    ));
                 }
             }
         }
@@ -317,10 +320,16 @@ impl Benchmark {
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
                     wait_for_future(async move {
                         let server = server.clone();
-                        self.mk_cargo_process(toolchain, prep_dir.path(), *profile, *backend, *target)
-                            .jobserver(server)
-                            .run_rustc(false)
-                            .await?;
+                        self.mk_cargo_process(
+                            toolchain,
+                            prep_dir.path(),
+                            *profile,
+                            *backend,
+                            *target,
+                        )
+                        .jobserver(server)
+                        .run_rustc(false)
+                        .await?;
                         Ok::<(), anyhow::Error>(())
                     })?;
                     Ok(())

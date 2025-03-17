@@ -28,7 +28,8 @@ use std::{
 };
 
 use crate::{
-    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark, CodegenBackend, Connection, Index, Lookup, Profile, Scenario, Target
+    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
+    CodegenBackend, Connection, Index, Lookup, Profile, Scenario, Target,
 };
 
 #[derive(Debug)]
@@ -260,19 +261,21 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
                     && self.target.matches(target)
                     && self.metric.matches(metric)
             })
-            .map(|(&(benchmark, profile, scenario, backend, target, metric), sid)| {
-                (
-                    CompileTestCase {
-                        benchmark,
-                        profile,
-                        scenario,
-                        backend,
-                        target,
-                    },
-                    metric,
-                    sid,
-                )
-            })
+            .map(
+                |(&(benchmark, profile, scenario, backend, target, metric), sid)| {
+                    (
+                        CompileTestCase {
+                            benchmark,
+                            profile,
+                            scenario,
+                            backend,
+                            target,
+                        },
+                        metric,
+                        sid,
+                    )
+                },
+            )
             .collect();
 
         statistic_descriptions.sort_unstable();

@@ -101,7 +101,7 @@ impl<'a> BenchProcessor<'a> {
         };
 
         let target = match target {
-            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu
+            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
         };
 
         let mut buf = FuturesUnordered::new();
@@ -206,8 +206,15 @@ impl Processor for BenchProcessor<'_> {
                         res.0.stats.retain(|key, _| key.starts_with("size:"));
                     }
 
-                    self.insert_stats(collection, scenario, profile, data.backend, data.target, res.0)
-                        .await;
+                    self.insert_stats(
+                        collection,
+                        scenario,
+                        profile,
+                        data.backend,
+                        data.target,
+                        res.0,
+                    )
+                    .await;
 
                     Ok(Retry::No)
                 }

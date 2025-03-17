@@ -35,9 +35,9 @@ use collector::artifact_stats::{
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
-use collector::compile::benchmark::target::Target;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
+use collector::compile::benchmark::target::Target;
 use collector::compile::benchmark::{
     compile_benchmark_dir, get_compile_benchmarks, ArtifactType, Benchmark, BenchmarkName,
 };
@@ -202,7 +202,7 @@ fn profile_compile(
     scenarios: &[Scenario],
     backends: &[CodegenBackend],
     errors: &mut BenchmarkErrors,
-    targets: &[Target]
+    targets: &[Target],
 ) {
     eprintln!("Profiling {} with {:?}", toolchain.id, profiler);
     if let Profiler::SelfProfile = profiler {
