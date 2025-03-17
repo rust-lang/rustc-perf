@@ -385,6 +385,7 @@ static MIGRATIONS: &[Migration] = &[
         alter table pstat_series_new rename to pstat_series;
     "#,
     ),
+    Migration::new("alter table pull_request_build add column backends text"),
     // Add target as a unique constraint, defaulting to 'x86_64-unknown-linux-gnu'
     Migration::without_foreign_key_constraints(
         r#"
