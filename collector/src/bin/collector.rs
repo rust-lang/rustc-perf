@@ -37,6 +37,7 @@ use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
+use collector::compile::benchmark::target::Target;
 use collector::compile::benchmark::{
     compile_benchmark_dir, get_compile_benchmarks, ArtifactType, Benchmark, BenchmarkName,
 };
@@ -99,6 +100,7 @@ struct CompileBenchmarkConfig {
     iterations: Option<usize>,
     is_self_profile: bool,
     bench_rustc: bool,
+    targets: Vec<Target>,
 }
 
 struct RuntimeBenchmarkConfig {
@@ -200,6 +202,7 @@ fn profile_compile(
     scenarios: &[Scenario],
     backends: &[CodegenBackend],
     errors: &mut BenchmarkErrors,
+    targets: &[Target],
 ) {
     eprintln!("Profiling {} with {:?}", toolchain.id, profiler);
     if let Profiler::SelfProfile = profiler {
@@ -220,6 +223,7 @@ fn profile_compile(
                 backends,
                 toolchain,
                 Some(1),
+                targets,
             ));
             eprintln!("Finished benchmark {benchmark_id}");
 
@@ -910,6 +914,7 @@ fn main_result() -> anyhow::Result<i32> {
                 iterations: Some(iterations),
                 is_self_profile: self_profile.self_profile,
                 bench_rustc: bench_rustc.bench_rustc,
+                targets: vec![Target::default()],
             };
 
             run_benchmarks(&mut rt, conn, shared, Some(config), None)?;
@@ -1024,6 +1029,7 @@ fn main_result() -> anyhow::Result<i32> {
                             iterations: runs.map(|v| v as usize),
                             is_self_profile: self_profile.self_profile,
                             bench_rustc: bench_rustc.bench_rustc,
+                            targets: vec![Target::default()],
                         };
                         let runtime_suite = rt.block_on(load_runtime_benchmarks(
                             conn.as_mut(),
@@ -1136,6 +1142,7 @@ fn main_result() -> anyhow::Result<i32> {
                         scenarios,
                         backends,
                         &mut errors,
+                        &[Target::default()],
                     );
                     Ok(id)
                 };
@@ -1734,6 +1741,7 @@ fn bench_published_artifact(
             iterations: Some(3),
             is_self_profile: false,
             bench_rustc: false,
+            targets: vec![Target::default()],
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
@@ -1834,6 +1842,7 @@ fn bench_compile(
                     &config.backends,
                     &shared.toolchain,
                     config.iterations,
+                    &config.targets,
                 )))
                 .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
             },

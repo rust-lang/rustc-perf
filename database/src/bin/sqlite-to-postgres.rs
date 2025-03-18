@@ -322,6 +322,7 @@ struct PstatSeriesRow<'a> {
     profile: &'a str,
     scenario: &'a str,
     backend: &'a str,
+    target: &'a str,
     metric: &'a str,
 }
 
@@ -331,11 +332,11 @@ impl Table for PstatSeries {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "id, crate, profile, scenario, backend, metric"
+        "id, crate, profile, scenario, backend, target, metric"
     }
 
     fn postgres_attributes() -> &'static str {
-        "id, crate, profile, scenario, backend, metric"
+        "id, crate, profile, scenario, backend, target, metric"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -350,7 +351,8 @@ impl Table for PstatSeries {
                 profile: row.get_ref(2).unwrap().as_str().unwrap(),
                 scenario: row.get_ref(3).unwrap().as_str().unwrap(),
                 backend: row.get_ref(4).unwrap().as_str().unwrap(),
-                metric: row.get_ref(5).unwrap().as_str().unwrap(),
+                target: row.get_ref(5).unwrap().as_str().unwrap(),
+                metric: row.get_ref(6).unwrap().as_str().unwrap(),
             })
             .unwrap();
     }

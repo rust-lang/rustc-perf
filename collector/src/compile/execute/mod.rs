@@ -4,6 +4,7 @@ use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
+use crate::compile::benchmark::target::Target;
 use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Toolchain;
 use crate::utils::fs::EnsureImmutableFile;
@@ -129,6 +130,7 @@ pub struct CargoProcess<'a> {
     pub rustc_args: Vec<String>,
     pub touch_file: Option<String>,
     pub jobserver: Option<jobserver::Client>,
+    pub target: Target,
 }
 /// Returns an optional list of Performance CPU cores, if the system has P and E cores.
 /// This list *should* be in a format suitable for the `taskset` command.
@@ -273,12 +275,13 @@ impl<'a> CargoProcess<'a> {
     // really.
     pub async fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}, phase={}",
+            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}, target={:?}, phase={}",
             self.incremental,
             self.profile,
             self.processor_etc.as_ref().map(|v| v.1),
             self.processor_etc.as_ref().and_then(|v| v.3),
             self.backend,
+            self.target,
             if needs_final { "benchmark" } else { "dependencies" }
         );
 
@@ -420,6 +423,7 @@ impl<'a> CargoProcess<'a> {
                     scenario_str,
                     patch,
                     backend: self.backend,
+                    target: self.target,
                 };
                 match processor.process_output(&data, output).await {
                     Ok(Retry::No) => return Ok(()),
@@ -484,6 +488,7 @@ pub struct ProcessOutputData<'a> {
     scenario_str: &'a str,
     patch: Option<&'a Patch>,
     backend: CodegenBackend,
+    target: Target,
 }
 
 /// Trait used by `Benchmark::measure()` to provide different kinds of
