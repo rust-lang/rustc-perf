@@ -24,7 +24,7 @@ semver = "1.0"
 xz2 = "0.1.3"
 tar = "0.4"
 futures = "0.3.5"
-jobserver = "0.1.21"
+jobserver = "0.1.33"
 snap = "1"
 walkdir = "2"
 flate2 = { version = "1.0.22", features = ["rust_backend"] }
