@@ -111,6 +111,11 @@ SPDX-FileCopyrightText = "The html5ever Project Developers"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "html5ever-0.31.0/**"
+SPDX-FileCopyrightText = "The html5ever Project Developers"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "hyper-0.14.18/**"
 SPDX-FileCopyrightText = "hyper contributors"
 SPDX-License-Identifier = "MIT"

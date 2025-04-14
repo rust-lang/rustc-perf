@@ -86,3 +86,5 @@ version = "2.0.2"
 
 [features]
 trace_tokenizer = []
+
+[workspace]
