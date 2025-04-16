@@ -367,7 +367,7 @@ fn calculate_missing_from(
         .collect::<Vec<_>>();
     let master_commits = queue
         .iter()
-        .map(|(mc, _)| mc.sha.clone())
+        .map(|(commit, _)| commit.sha.clone())
         .collect::<HashSet<_>>();
     for database::QueuedCommit {
         sha,
@@ -381,14 +381,18 @@ fn calculate_missing_from(
     } in queued_pr_commits
         .into_iter()
         // filter out any queued PR master commits (leaving only try commits)
-        .filter(|c| !master_commits.contains(&c.sha))
+        .filter(|queued_commit| !master_commits.contains(&queued_commit.sha))
     {
         // Mark the parent commit as a try_parent.
-        if let Some((_, metadata)) = queue.iter_mut().find(|(m, _)| m.sha == parent_sha.as_str()) {
-            if let MissingReason::Master { is_try_parent, .. } = metadata {
+        if let Some((_, missing_reason)) = queue
+            .iter_mut()
+            .find(|(commit, _)| commit.sha == parent_sha.as_str())
+        {
+            /* Mutates the parent by scanning the list again... bad. */
+            if let MissingReason::Master { is_try_parent, .. } = missing_reason {
                 *is_try_parent = true;
             } else {
-                unreachable!("try commit has non-master parent {:?}", metadata);
+                unreachable!("try commit has non-master parent {:?}", missing_reason);
             };
         }
         queue.push((
@@ -409,13 +413,13 @@ fn calculate_missing_from(
     }
     for aid in in_progress_artifacts {
         match aid {
-            ArtifactId::Commit(c) => {
+            ArtifactId::Commit(aid_commit) => {
                 let previous = queue
                     .iter()
-                    .find(|(i, _)| i.sha == c.sha)
-                    .map(|v| Box::new(v.1.clone()));
-                all_commits.remove(&c.sha);
-                queue.insert(0, (c, MissingReason::InProgress(previous)));
+                    .find(|(commit, _)| commit.sha == aid_commit.sha)
+                    .map(|pair| Box::new(pair.1.clone()));
+                all_commits.remove(&aid_commit.sha);
+                queue.insert(0, (aid_commit, MissingReason::InProgress(previous)));
             }
             ArtifactId::Tag(_) => {
                 // do nothing, for now, though eventually we'll want an artifact queue
@@ -529,6 +533,96 @@ mod tests {
     use database::QueuedCommit;
 
     use super::*;
+
+    /// Create a master missing reason
+    fn create_missing_reason_master(
+        parent_sha: &str,
+        pr: u32,
+        is_try_parent: bool,
+    ) -> MissingReason {
+        MissingReason::Master {
+            pr,
+            parent_sha: parent_sha.into(),
+            is_try_parent,
+        }
+    }
+
+    /// Create a try misssing reason
+    fn create_missing_reason_try(parent_sha: &str, pr: u32) -> MissingReason {
+        MissingReason::Try {
+            pr,
+            parent_sha: parent_sha.into(),
+            include: None,
+            exclude: None,
+            runs: None,
+            backends: None,
+        }
+    }
+
+    /// Create a Commit
+    fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
+        Commit {
+            sha: commit_sha.into(),
+            date: database::Date(time),
+            r#type,
+        }
+    }
+
+    /// Create a (Commit, MissingReason::Master) pair
+    fn create_commit_master_pair(
+        commit_sha: &str,
+        parent_sha: &str,
+        pr: u32,
+        time: chrono::DateTime<Utc>,
+        is_try_parent: bool,
+    ) -> (Commit, MissingReason) {
+        (
+            create_commit(commit_sha, time, CommitType::Master),
+            create_missing_reason_master(parent_sha, pr, is_try_parent),
+        )
+    }
+
+    /// Create a (Commit, MissingReason::Try) pair
+    fn create_commit_try_pair(
+        commit_sha: &str,
+        parent_sha: &str,
+        pr: u32,
+        time: chrono::DateTime<Utc>,
+    ) -> (Commit, MissingReason) {
+        (
+            create_commit(commit_sha, time, CommitType::Try),
+            create_missing_reason_try(parent_sha, pr),
+        )
+    }
+
+    /// Create a master commit
+    fn create_master_commit(
+        sha: &str,
+        parent_sha: &str,
+        pr: Option<u32>,
+        time: chrono::DateTime<Utc>,
+    ) -> MasterCommit {
+        MasterCommit {
+            sha: sha.into(),
+            parent_sha: parent_sha.into(),
+            pr,
+            time,
+        }
+    }
+
+    /// Create a queued commit
+    fn create_queued_commit(sha: &str, parent_sha: &str, pr: u32) -> QueuedCommit {
+        QueuedCommit {
+            sha: sha.into(),
+            parent_sha: parent_sha.into(),
+            pr,
+            include: None,
+            exclude: None,
+            runs: None,
+            commit_date: None,
+            backends: None,
+        }
+    }
 
     // Checks that when we have a setup like the following, where a -> b means b
     // is the parent of a (i.e., must be tested before we can report comparison
@@ -658,111 +752,229 @@ mod tests {
     fn calculates_missing_correct() {
         let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
         let master_commits = vec![
-            // A not yet tested commit
-            MasterCommit {
-                sha: "123".into(),
-                parent_sha: "345".into(),
-                pr: Some(11),
-                time,
-            },
             // An already tested commit
-            MasterCommit {
-                sha: "abc".into(),
-                parent_sha: "def".into(),
-                pr: Some(90),
-                time,
-            },
+            create_master_commit("abc", "def", Some(90), time),
             // A queued PR commit
-            MasterCommit {
-                sha: "foo".into(),
-                parent_sha: "bar".into(),
-                pr: Some(77),
-                time,
-            },
+            create_master_commit("foo", "bar", Some(77), time),
+            // A not yet tested commit
+            create_master_commit("123", "345", Some(11), time),
         ];
         let queued_pr_commits = vec![
             // A master commit
-            QueuedCommit {
-                sha: "foo".into(),
-                parent_sha: "bar".into(),
-                pr: 77,
-                include: None,
-                exclude: None,
-                runs: None,
-                commit_date: None,
-                backends: None,
-            },
+            create_queued_commit("foo", "bar", 77),
             // A try run
-            QueuedCommit {
-                sha: "baz".into(),
-                parent_sha: "foo".into(),
-                pr: 101,
-                include: None,
-                exclude: None,
-                runs: None,
-                commit_date: None,
-                backends: None,
-            },
+            create_queued_commit("baz", "foo", 1),
+            // Another try run that will become the head of the queue
+            create_queued_commit("yee", "rrr", 4),
         ];
         let in_progress_artifacts = vec![];
         let mut all_commits = HashSet::new();
-        all_commits.insert(master_commits[1].sha.clone());
+        all_commits.insert("abc".to_string());
         // Parent trailers
         all_commits.insert(master_commits[0].parent_sha.clone());
         all_commits.insert(master_commits[1].parent_sha.clone());
         all_commits.insert(master_commits[2].parent_sha.clone());
+        all_commits.insert(queued_pr_commits[2].parent_sha.clone());
 
         let expected = vec![
-            (
-                Commit {
-                    sha: "123".into(),
-                    date: database::Date(time),
-                    r#type: CommitType::Master,
-                },
-                MissingReason::Master {
-                    pr: 11,
-                    parent_sha: "345".into(),
-                    is_try_parent: false,
-                },
-            ),
-            (
-                Commit {
-                    sha: "foo".into(),
-                    date: database::Date(time),
-                    r#type: CommitType::Master,
-                },
-                MissingReason::Master {
-                    pr: 77,
-                    parent_sha: "bar".into(),
-                    is_try_parent: true,
-                },
-            ),
-            (
-                Commit {
-                    sha: "baz".into(),
-                    date: database::Date(time),
-                    r#type: CommitType::Try,
-                },
-                MissingReason::Try {
-                    pr: 101,
-                    parent_sha: "foo".into(),
-                    include: None,
-                    exclude: None,
-                    runs: None,
-                    backends: None,
-                },
-            ),
+            create_commit_try_pair("yee", "rrr", 4, time),
+            create_commit_master_pair("123", "345", 11, time, false),
+            create_commit_master_pair("foo", "bar", 77, time, true),
+            create_commit_try_pair("baz", "foo", 1, time),
         ];
-        assert_eq!(
-            expected,
-            calculate_missing_from(
-                master_commits,
-                queued_pr_commits,
-                in_progress_artifacts,
-                all_commits,
-                time
-            )
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
         );
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn queue_empty() {
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        // Pathalogical case of an empty queue
+        let master_commits = vec![];
+        let queued_pr_commits = vec![];
+        let in_progress_artifacts = vec![];
+        let all_commits = HashSet::new();
+
+        let expected: Vec<(Commit, MissingReason)> = vec![];
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn only_master_commits_already_tested() {
+        // If all master commits are in the set then the queue is in effect empty
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        let master_commits = vec![
+            create_master_commit("m1", "p1", Some(10), time),
+            create_master_commit("m2", "m1", Some(11), time),
+            create_master_commit("m3", "m2", Some(12), time),
+        ];
+        let queued_pr_commits = vec![];
+        let in_progress_artifacts = vec![];
+        let mut all_commits = HashSet::new();
+
+        all_commits.insert("m1".to_string());
+        all_commits.insert("m2".to_string());
+        all_commits.insert("m3".to_string());
+        all_commits.insert("p1".to_string());
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+
+        let expected: Vec<(Commit, MissingReason)> = vec![];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn multiple_try_with_same_parent() {
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        let master_commits = vec![create_master_commit("abc", "def", Some(1), time)];
+        // scramble the order
+        let queued_pr_commits = vec![
+            create_queued_commit("try3", "abc", 203),
+            create_queued_commit("try1", "abc", 201),
+            create_queued_commit("try2", "abc", 202),
+        ];
+        let in_progress_artifacts = vec![];
+        let mut all_commits = HashSet::new();
+        all_commits.insert("abc".to_string());
+        all_commits.insert("def".to_string());
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+
+        let expected = vec![
+            create_commit_try_pair("try1", "abc", 201, time),
+            create_commit_try_pair("try2", "abc", 202, time),
+            create_commit_try_pair("try3", "abc", 203, time),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn in_progress_commit() {
+        // InProgress commits should get inserted into the queue
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        let master_commits = vec![create_master_commit("abc", "def", Some(50), time)];
+        let queued_pr_commits = vec![];
+        let in_progress_artifacts = vec![ArtifactId::from(create_commit(
+            "abc",
+            time,
+            CommitType::Master,
+        ))];
+        let mut all_commits = HashSet::new();
+        all_commits.insert("def".to_string());
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+
+        let expected = vec![(
+            create_commit("abc", time, CommitType::Master),
+            MissingReason::InProgress(Some(Box::new(create_missing_reason_master(
+                "def", 50, false,
+            )))),
+        )];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn orphan_commit() {
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        let master_commits = vec![create_master_commit("x123", "ORPHAN", Some(69), time)];
+        let queued_pr_commits = vec![];
+        let in_progress_artifacts = vec![];
+        let all_commits = HashSet::new();
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+
+        let expected = vec![create_commit_master_pair("x123", "ORPHAN", 69, time, false)];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn artifact_tags() {
+        // ArtifactId with a type of `Tag` should be ignored
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        let master_commits = vec![create_master_commit("abc", "def", Some(50), time)];
+        let queued_pr_commits = vec![];
+        let in_progress_artifacts = vec![ArtifactId::Tag("nightly-2025-04-10".to_string())];
+        let mut all_commits = HashSet::new();
+        all_commits.insert("def".to_string());
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+
+        let expected = vec![create_commit_master_pair("abc", "def", 50, time, false)];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn duplicate_commits() {
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        let master_commits = vec![
+            create_master_commit("dup1", "m1", Some(69), time),
+            create_master_commit("dup1", "m1", Some(69), time),
+        ];
+        let queued_pr_commits = vec![
+            create_queued_commit("trydup", "dup1", 100),
+            create_queued_commit("trydup", "dup1", 100),
+        ];
+        let in_progress_artifacts = vec![];
+        let all_commits = HashSet::new();
+
+        let result = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+
+        let expected = vec![
+            create_commit_master_pair("dup1", "m1", 69, time, true),
+            create_commit_try_pair("trydup", "dup1", 100, time),
+        ];
+        assert_eq!(expected, result);
     }
 
     #[test]
