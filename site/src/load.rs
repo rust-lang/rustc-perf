@@ -972,7 +972,7 @@ mod tests {
 
         let expected = vec![
             create_commit_master_pair("dup1", "m1", 69, time, true),
-            create_commit_try_pair("trydup", "dup1", 100, time)
+            create_commit_try_pair("trydup", "dup1", 100, time),
         ];
         assert_eq!(expected, result);
     }
