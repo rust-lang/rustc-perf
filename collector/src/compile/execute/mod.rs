@@ -290,9 +290,10 @@ impl<'a> CargoProcess<'a> {
             let _guard = EnsureImmutableFile::new(
                 &self.cwd.join("Cargo.lock"),
                 self.processor_name.0.clone(),
-            )?;
+            )
+            .context("cannot resolve Cargo.lock")?;
 
-            // Get the subcommand. If it's not `rustc` it must should be a
+            // Get the subcommand. If it's not `rustc` it should be a
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
             // machinery works).
             let cargo_subcommand =

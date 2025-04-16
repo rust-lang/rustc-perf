@@ -1,0 +1,12 @@
+diff --git a/src/cargo/sources/path.rs b/src/cargo/sources/path.rs
+index c1e81528..7ae91667 100644
+--- a/src/cargo/sources/path.rs
++++ b/src/cargo/sources/path.rs
+@@ -58,6 +58,7 @@ impl<'gctx> PathSource<'gctx> {
+     /// Preloads a package for this source. The source is assumed that it has
+     /// yet loaded any other packages.
+     pub fn preload_with(pkg: Package, gctx: &'gctx GlobalContext) -> Self {
++        println!("testing");
+         let source_id = pkg.package_id().source_id();
+         let path = pkg.root().to_owned();
+         Self {
