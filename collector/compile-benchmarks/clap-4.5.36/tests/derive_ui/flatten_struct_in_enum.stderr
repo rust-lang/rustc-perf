@@ -1,0 +1,9 @@
+error[E0277]: the trait bound `SubCmd: Subcommand` is not satisfied
+ --> tests/derive_ui/flatten_struct_in_enum.rs:4:9
+  |
+4 |     Sub(SubCmd),
+  |         ^^^^^^ the trait `Subcommand` is not implemented for `SubCmd`
+  |
+  = help: the following other types implement trait `Subcommand`:
+            Box<T>
+            Opt
