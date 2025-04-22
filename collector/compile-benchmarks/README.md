@@ -15,9 +15,6 @@ There are three categories of compile-time benchmarks, **Primary**, **Secondary*
 These are real programs that are important in some way, and worth tracking.
 They mostly consist of real-world crates.
 
-- **bitmaps-3.1.0**: A bitmaps implementation. Stresses the compiler's trait
-  handling by implementing a trait `Bits` for the type `BitsImpl<N>` for every
-  `N` value from 1 to 1024.
 - **bitmaps-3.2.1**: A bitmaps implementation. Stresses the compiler's trait
   handling by implementing a trait `Bits` for the type `BitsImpl<N>` for every
   `N` value from 1 to 1024.
