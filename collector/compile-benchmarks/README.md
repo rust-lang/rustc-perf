@@ -34,7 +34,6 @@ They mostly consist of real-world crates.
 - **exa-0.10.1**: An `ls` replacement. A widely-used utility, and a binary
   crate.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
-- **html5ever-0.26.0**: An HTML parser. Stresses macro parsing code.
 - **html5ever-0.31.0**: An HTML parser. Stresses macro parsing code.
 - **hyper-0.14.18**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs. The crate uses cargo features to enable large portions of its
