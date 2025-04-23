@@ -1,7 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, CodegenBackend, CollectionId,
-    Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
+    Commit, CommitJob, CommitJobStatus, CommitType, CompileBenchmark, Date, Index, Profile,
+    QueuedCommit, Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -12,6 +13,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio_postgres::types::{FromSql, ToSql};
 use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
@@ -1364,6 +1366,217 @@ where
             )
             .await
             .unwrap();
+    }
+
+    /* @Queue */
+    async fn enqueue_commit_job(&self, target: Target, jobs: &[CommitJob]) {
+        let row_count = jobs.len();
+        if row_count == 0 {
+            return;
+        }
+
+        let column_names = CommitJob::get_enqueue_column_names();
+        let column_string_names = column_names.join(", ");
+        let column_count: usize = column_names.len();
+        // Generate the placeholders like ($1, $2, ..., $7), ($8, $9, ..., $14), ...
+        let placeholders = (0..row_count)
+            .map(|i| {
+                let offset = i * column_count;
+                let group = (1..=column_count)
+                    .map(|j| format!("${}", offset + j))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({})", group)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let sql = format!(
+            "INSERT INTO commit_queue ({}) VALUES {}",
+            column_string_names, placeholders,
+        );
+
+        let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = jobs
+            .iter()
+            .flat_map(|job| {
+                vec![
+                    &job.sha as &(dyn tokio_postgres::types::ToSql + Sync),
+                    &job.parent_sha,
+                    &job.commit_type,
+                    &job.pr,
+                    &job.commit_time,
+                    &job.status,
+                    &target,
+                ]
+            })
+            .collect();
+
+        self.conn().execute(&sql, &params).await.unwrap();
+    }
+
+    /* @Queue */
+    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<String> {
+        /* Check to see if this machine possibly went offline while doing
+         * a previous job - if it did we'll take that job */
+        let maybe_previous_job = self
+            .conn()
+            .query_opt(
+                "
+                WITH job_to_update AS (
+                    SELECT sha
+                    FROM commit_queue
+                    WHERE machine_id = $1
+                        AND target = $2
+                        AND status = 'in_progress'
+                    ORDER BY started_at
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE commit_queue
+                SET started_at = NOW(),
+                    status = 'in_progress'
+                WHERE machine_id = $1
+                    AND target = $2
+                    AND sha = (SELECT sha FROM job_to_update)
+                RETURNING sha;
+            ",
+                &[&machine_id, &target],
+            )
+            .await
+            .unwrap();
+
+        /* If it was we will take that job */
+        if let Some(row) = maybe_previous_job {
+            return Some(row.get("sha"));
+        }
+
+        let maybe_drift_job = self
+            .conn()
+            .query_opt(
+                "
+                WITH job_to_update AS (
+                    SELECT *
+                    FROM commit_queue
+                    WHERE target != $1
+                        AND status IN ('finished', 'in_progress')
+                        AND sha NOT IN (
+                            SELECT sha
+                            FROM commit_queue
+                            WHERE target != $1
+                                AND status = 'finished'
+                        )
+                    ORDER BY started_at
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE commit_queue
+                SET started_at = NOW(),
+                    status = 'in_progress',
+                    machine_id = $2
+                WHERE
+                    target = $1
+                    AND sha = (SELECT sha FROM job_to_update)
+                RETURNING sha;
+                ",
+                &[&target, &machine_id],
+            )
+            .await
+            .unwrap();
+
+        /* If we are, we will take that job */
+        if let Some(row) = maybe_drift_job {
+            return Some(row.get("sha"));
+        }
+
+        /* See if there are any jobs that need taking care of */
+        let job = self
+            .conn()
+            .query_opt("
+                WITH job_to_update AS (
+                    SELECT sha
+                    FROM commit_queue
+                    WHERE target = $1
+                        AND status = 'queued'
+                    ORDER BY pr ASC, commit_type, sha
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE commit_queue
+                SET started_at = NOW(),
+                    status = 'in_progress',
+                    machine_id = $2
+                WHERE
+                    sha = (SELECT sha FROM job_to_update)
+                    AND target = $1
+                RETURNING sha;
+                ", &[&target, &machine_id])
+            .await
+            .unwrap();
+
+        /* If there is one, we will take that job */
+        if let Some(row) = job {
+            return Some(row.get("sha"));
+        }
+
+        /* There are no jobs in the queue */
+        return None;
+    }
+}
+
+#[macro_export]
+macro_rules! impl_to_postgresql_via_to_string {
+    ($t:ty) => {
+        impl tokio_postgres::types::ToSql for $t {
+            fn to_sql(
+                &self,
+                ty: &tokio_postgres::types::Type,
+                out: &mut bytes::BytesMut,
+            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            {
+                self.to_string().to_sql(ty, out)
+            }
+
+            fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+                <String as tokio_postgres::types::ToSql>::accepts(ty)
+            }
+
+            // Only compile if the type is acceptable
+            tokio_postgres::types::to_sql_checked!();
+        }
+    };
+}
+
+impl_to_postgresql_via_to_string!(Target);
+impl_to_postgresql_via_to_string!(CommitType);
+impl_to_postgresql_via_to_string!(CommitJobStatus);
+
+impl ToSql for Date {
+    fn to_sql(
+        &self,
+        ty: &tokio_postgres::types::Type,
+        out: &mut bytes::BytesMut,
+    ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        self.0.to_sql(ty, out)
+    }
+
+    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+        <DateTime<Utc> as ToSql>::accepts(ty)
+    }
+
+    tokio_postgres::types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for Date {
+    fn from_sql(
+        ty: &tokio_postgres::types::Type,
+        raw: &'a [u8],
+    ) -> Result<Date, Box<dyn std::error::Error + Sync + Send>> {
+        let dt = DateTime::<Utc>::from_sql(ty, raw)?;
+        Ok(Date(dt))
+    }
+
+    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+        <DateTime<Utc> as FromSql>::accepts(ty)
     }
 }
 

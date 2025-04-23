@@ -1,5 +1,5 @@
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, CodegenBackend, CommitJob, CompileBenchmark, Target
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -178,6 +178,14 @@ pub trait Connection: Send + Sync {
 
     /// Removes all data associated with the given artifact.
     async fn purge_artifact(&self, aid: &ArtifactId);
+
+    /* @Queue - Adds a job - we want to "double up" by adding one per `Target` */
+    /// Add a job to the queue
+    async fn enqueue_commit_job(&self, target: Target, jobs: &[CommitJob]);
+
+    /* @Queue - currently extracts everything out of the queue as a SELECT */
+    /// Dequeue jobs
+    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<String>;
 }
 
 #[async_trait::async_trait]

@@ -1,13 +1,13 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, CodegenBackend, CollectionId, Commit, CommitType,
-    CompileBenchmark, Date, Profile, Target,
+    ArtifactCollection, ArtifactId, Benchmark, CodegenBackend, CollectionId, Commit, CommitJob,
+    CommitJobStatus, CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
-use rusqlite::params;
-use rusqlite::OptionalExtension;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
+use rusqlite::{params, params_from_iter, OptionalExtension, Row, ToSql};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -1251,6 +1251,217 @@ impl Connection for SqliteConnection {
                 [info.name],
             )
             .unwrap();
+    }
+
+    /* @Queue */
+    async fn enqueue_commit_job(&self, target: Target, jobs: &[CommitJob]) {
+        let row_count = jobs.len();
+        if row_count == 0 {
+            return;
+        }
+
+        let column_names = CommitJob::get_enqueue_column_names();
+        let column_string_names = column_names.join(", ");
+        let query_params = std::iter::repeat("?")
+            .take(column_names.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let placeholders = (0..jobs.len())
+            .map(|_| format!("({})", query_params))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let sql = format!(
+            "INSERT INTO commit_queue ({}) VALUES {}",
+            column_string_names, placeholders
+        );
+
+        let params: Vec<&dyn ToSql> = jobs
+            .iter()
+            .flat_map(|job| {
+                vec![
+                    &job.sha as &dyn ToSql,
+                    &job.parent_sha,
+                    &job.commit_type,
+                    &job.pr,
+                    &job.commit_time,
+                    &job.status as &dyn ToSql,
+                    &target,
+                ]
+            })
+            .collect();
+
+        self.raw_ref()
+            .execute(&sql, params_from_iter(params))
+            .unwrap();
+    }
+
+    /* @Queue */
+    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<String> {
+        /* See if the machine was doing something and then failed */
+        let get_sha = |row: &Row| row.get::<_, String>(0).unwrap();
+
+        /* Check to see if this machine possibly went offline while doing
+         * a previous job - if it did we'll take that job */
+        let maybe_previous_job = self
+            .raw_ref()
+            .prepare(
+                "
+                WITH job_to_update AS (
+                    SELECT sha
+                    FROM commit_queue
+                    WHERE machine_id = ?
+                        AND target = ?
+                        AND status = 'in_progress'
+                    ORDER BY started_at
+                    LIMIT 1
+                )
+                UPDATE commit_queue
+                SET started_at = datetime('now'),
+                    status = 'in_progress'
+                WHERE machine_id = ? 
+                    AND target = ? 
+                    AND sha = (SELECT sha FROM job_to_update)
+                RETURNING sha;
+                ",
+            )
+            .unwrap()
+            .query_map(params![&machine_id, &target, &machine_id, &target], |row| {
+                Ok(get_sha(row))
+            })
+            .unwrap()
+            .map(|row| row.unwrap())
+            .collect::<Vec<String>>();
+
+        if let Some(previous_job) = maybe_previous_job.get(0) {
+            return Some(previous_job.clone());
+        }
+
+        /* Check to see if we are out of sync with other collectors of
+         * different architectures, if we are we will update the row and
+         * return this `sha` */
+        let maybe_drift_job = self
+            .raw_ref()
+            .prepare(
+                "
+                WITH job_to_update AS (
+                    SELECT *
+                    FROM commit_queue
+                    WHERE target != ?
+                        AND status IN ('finished', 'in_progress')
+                        AND sha NOT IN (
+                            SELECT sha
+                            FROM commit_queue
+                            WHERE target != ?
+                                AND status = 'finished'
+                        )
+                    ORDER BY started_at
+                    LIMIT 1
+                )
+                UPDATE commit_queue
+                SET started_at = DATETIME('now'),
+                    status = 'in_progress',
+                    machine_id = ?
+                WHERE
+                    target = ?
+                    AND sha = (SELECT sha FROM job_to_update)
+                RETURNING sha;
+                ",
+            )
+            .unwrap()
+            .query_map(params![&target, &target, &machine_id, &target], |row| {
+                Ok(get_sha(row))
+            })
+            .unwrap()
+            .map(|sha| sha.unwrap())
+            .collect::<Vec<String>>();
+
+        if let Some(drift_job) = maybe_drift_job.get(0) {
+            return Some(drift_job.clone());
+        }
+
+        /* See if there are any jobs that need taking care of */
+        let jobs = self
+            .raw_ref()
+            .prepare(
+                "
+                WITH job_to_update AS (
+                    SELECT sha
+                    FROM commit_queue
+                    WHERE target = ?
+                        AND status = 'queued'
+                    ORDER BY
+                        pr ASC,
+                        commit_type,
+                        sha
+                    LIMIT 1
+                )
+                UPDATE commit_queue
+                SET started_at = DATETIME('now'),
+                    status = 'in_progress',
+                    machine_id = ?
+                WHERE
+                    sha = (SELECT sha FROM job_to_update)
+                    AND target = ?
+                RETURNING sha;
+                ",
+            )
+            .unwrap()
+            .query_map(params![&target, &machine_id, &target], |row| {
+                Ok(row.get::<_, String>(0).unwrap())
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect::<Vec<String>>();
+
+        /* If there is one, we will take that job */
+        if let Some(sha) = jobs.get(0) {
+            return Some(sha.clone());
+        }
+
+        /* There are no jobs in the queue */
+        return None;
+    }
+}
+
+#[macro_export]
+macro_rules! impl_to_sqlite_via_to_string {
+    ($t:ty) => {
+        impl ToSql for $t {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+                Ok(self.to_string().into())
+            }
+        }
+    };
+}
+
+impl_to_sqlite_via_to_string!(Target);
+impl_to_sqlite_via_to_string!(CommitType);
+impl_to_sqlite_via_to_string!(CommitJobStatus);
+
+impl ToSql for Date {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.0.to_rfc3339().into())
+    }
+}
+
+impl FromSql for Date {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(text) => {
+                let s = std::str::from_utf8(text).map_err(|e| FromSqlError::Other(Box::new(e)))?;
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| Date(dt.with_timezone(&Utc)))
+                    .map_err(|e| FromSqlError::Other(Box::new(e)))
+            }
+            ValueRef::Integer(i) => Ok(Date(Utc.timestamp_opt(i, 0).unwrap())),
+            ValueRef::Real(f) => {
+                let secs = f.trunc() as i64;
+                let nanos = ((f - f.trunc()) * 1e9) as u32;
+                Ok(Date(Utc.timestamp_opt(secs, nanos).unwrap()))
+            }
+            _ => Err(FromSqlError::InvalidType),
+        }
     }
 }
 

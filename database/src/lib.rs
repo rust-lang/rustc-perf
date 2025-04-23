@@ -152,6 +152,16 @@ impl FromStr for CommitType {
     }
 }
 
+impl ToString for CommitType {
+    fn to_string(&self) -> String {
+        match self {
+            CommitType::Try => "try",
+            CommitType::Master => "master",
+        }
+        .to_string()
+    }
+}
+
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
     pub sha: String,
@@ -790,4 +800,111 @@ pub struct ArtifactCollection {
     pub artifact: ArtifactId,
     pub duration: Duration,
     pub end_time: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub enum CommitJobStatus {
+    Queued,
+    InProgress,
+    Finished,
+}
+
+impl FromStr for CommitJobStatus {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "queued" => CommitJobStatus::Queued,
+            "in_progress" => CommitJobStatus::InProgress,
+            "finished" => CommitJobStatus::Finished,
+            _ => return Err(format!("{} is not a valid `CommitJobStatus`", s)),
+        })
+    }
+}
+
+impl ToString for CommitJobStatus {
+    fn to_string(&self) -> String {
+        match self {
+            CommitJobStatus::Queued => "queued",
+            CommitJobStatus::InProgress => "in_progress",
+            CommitJobStatus::Finished => "finished",
+        }
+        .to_string()
+    }
+}
+
+/// Represents a job in the work queue for collectors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitJob {
+    pub sha: String,
+    pub parent_sha: Option<String>,
+    pub commit_type: CommitType,
+    pub pr: u32,
+    pub commit_time: Date,
+    pub target: Target,
+    pub machine_id: Option<String>,
+    pub started_at: Option<Date>,
+    pub finished_at: Option<Date>,
+    pub status: CommitJobStatus,
+}
+
+impl CommitJob {
+    /// Create a new commit job
+    pub fn new(
+        sha: String,
+        parent_sha: Option<String>,
+        pr: u32,
+        commit_type: CommitType,
+        commit_time: Date,
+    ) -> Self {
+        Self {
+            sha,
+            parent_sha,
+            commit_type,
+            pr,
+            commit_time,
+            status: CommitJobStatus::Queued,
+            target: Target::X86_64UnknownLinuxGnu,
+            machine_id: None,
+            started_at: None,
+            finished_at: None,
+        }
+    }
+
+    pub fn from_db(
+        sha: String,
+        parent_sha: Option<String>,
+        commit_type: CommitType,
+        pr: u32,
+        commit_time: Date,
+        target: Target,
+        machine_id: Option<String>,
+        started_at: Option<Date>,
+        finished_at: Option<Date>,
+        status: CommitJobStatus,
+    ) -> Self {
+        Self {
+            sha,
+            parent_sha,
+            commit_type,
+            pr,
+            commit_time,
+            target,
+            machine_id,
+            started_at,
+            finished_at,
+            status,
+        }
+    }
+
+    pub fn get_enqueue_column_names() -> Vec<String> {
+        vec![
+            String::from("sha"),
+            String::from("parent_sha"),
+            String::from("commit_type"),
+            String::from("pr"),
+            String::from("commit_time"),
+            String::from("status"),
+            String::from("target"),
+        ]
+    }
 }
