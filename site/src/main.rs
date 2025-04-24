@@ -8,6 +8,8 @@ use std::sync::Arc;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+static QUEUE_UPDATE_INTERVAL_SECONDS: u64 = 5;
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -50,7 +52,9 @@ async fn main() {
     .fuse();
     println!("Starting server with port={:?}", port);
 
-    let server = site::server::start(ctxt, port).fuse();
+    let server = site::server::start(ctxt.clone(), port).fuse();
+    site::queue_jobs::cron_enqueue_jobs(ctxt, QUEUE_UPDATE_INTERVAL_SECONDS).await;
+
     futures::pin_mut!(server);
     futures::pin_mut!(fut);
     loop {

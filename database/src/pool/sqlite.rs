@@ -404,6 +404,29 @@ static MIGRATIONS: &[Migration] = &[
         alter table pstat_series_with_target rename to pstat_series;
     "#,
     ),
+    Migration::without_foreign_key_constraints(
+        r#"
+        CREATE TABLE IF NOT EXISTS commit_queue (
+            sha          TEXT,
+            parent_sha   TEXT,
+            commit_type  TEXT CHECK (commit_type IN ('master', 'try')),
+            pr           INTEGER,
+            commit_time  TIMESTAMP,
+            target       TEXT,
+            -- The below are filled in by the collector that picks up the job
+            machine_id   TEXT,
+            started_at   TIMESTAMP,
+            finished_at  TIMESTAMP,
+            status       TEXT,
+            -- We have a primary key as the sha <-> target as there can only be one
+            -- pairing
+            PRIMARY KEY (sha, target)
+        );
+        CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
+        CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
+        CREATE INDEX IF NOT EXISTS sha_machine_id_idx ON commit_queue (sha, machine_id);
+        "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -1272,7 +1295,7 @@ impl Connection for SqliteConnection {
             .join(", ");
 
         let sql = format!(
-            "INSERT INTO commit_queue ({}) VALUES {}",
+            "INSERT OR IGNORE INTO commit_queue ({}) VALUES {};",
             column_string_names, placeholders
         );
 

@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit};
-use database::Pool;
 pub use database::{ArtifactId, Benchmark, Commit};
+use database::{CommitJob, Pool, Target};
 use database::{CommitType, Date};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -208,6 +208,38 @@ impl SiteCtxt {
             in_progress_artifacts,
             all_commits,
         )
+    }
+
+    /// Will enqueue jobs to the database ready for a collector to take
+    pub async fn enqueue_commit_jobs(&self) {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        loop {
+            let conn = self.conn().await;
+            let (queued_pr_commits, in_progress_artifacts) =
+                futures::join!(conn.queued_commits(), conn.in_progress_artifacts());
+            let master_commits = &self.get_master_commits().commits;
+
+            let index = self.index.load();
+            let all_commits = index
+                .commits()
+                .iter()
+                .map(|commit| commit.sha.clone())
+                .collect::<HashSet<_>>();
+
+            let jobs = enqueue_new_jobs(
+                master_commits.clone(),
+                queued_pr_commits,
+                in_progress_artifacts,
+                all_commits,
+                Utc::now(),
+            );
+
+            conn.enqueue_commit_job(Target::X86_64UnknownLinuxGnu, &jobs)
+                .await;
+            interval.tick().await;
+
+            println!("Cron job executed at: {:?}", std::time::SystemTime::now());
+        }
     }
 
     /// Returns the not yet tested published artifacts, sorted from newest to oldest.
@@ -519,6 +551,145 @@ where
         }
     }
     true_count
+}
+
+/// Conversion between our application layer and database object, also
+/// simplifies the `(Commit, MissingReason)` tuple by essentially flatteing it
+fn commit_job_from_queue_item(item: &(Commit, MissingReason)) -> CommitJob {
+    let parent_sha = if let Some(parent_sha) = item.1.parent_sha() {
+        Some(parent_sha.to_string())
+    } else {
+        None
+    };
+    CommitJob::new(
+        item.0.sha.clone(),
+        parent_sha,
+        item.1.pr().unwrap_or(0),
+        item.0.r#type.clone(),
+        item.0.date,
+    )
+}
+
+fn enqueue_new_jobs(
+    master_commits: Vec<collector::MasterCommit>,
+    queued_pr_commits: Vec<database::QueuedCommit>,
+    in_progress_artifacts: Vec<ArtifactId>,
+    mut all_commits: HashSet<String>,
+    time: chrono::DateTime<chrono::Utc>,
+) -> Vec<CommitJob> {
+    let mut queue = master_commits
+        .into_iter()
+        .filter(|c| time.signed_duration_since(c.time) < Duration::days(29))
+        .map(|c| {
+            (
+                Commit {
+                    sha: c.sha,
+                    date: Date(c.time),
+                    r#type: CommitType::Master,
+                },
+                // All recent master commits should have an associated PR
+                MissingReason::Master {
+                    pr: c.pr.unwrap_or(0),
+                    parent_sha: c.parent_sha,
+                    is_try_parent: false,
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let master_commits = queue
+        .iter()
+        .map(|(commit, _)| commit.sha.clone())
+        .collect::<HashSet<_>>();
+    for database::QueuedCommit {
+        sha,
+        parent_sha,
+        pr,
+        include,
+        exclude,
+        runs,
+        commit_date,
+        backends,
+    } in queued_pr_commits
+        .into_iter()
+        // filter out any queued PR master commits (leaving only try commits)
+        .filter(|queued_commit| !master_commits.contains(&queued_commit.sha))
+    {
+        // Mark the parent commit as a try_parent.
+        if let Some((_, missing_reason)) = queue
+            .iter_mut()
+            .find(|(commit, _)| commit.sha == parent_sha.as_str())
+        {
+            /* Mutates the parent by scanning the list again... bad. */
+            if let MissingReason::Master { is_try_parent, .. } = missing_reason {
+                *is_try_parent = true;
+            } else {
+                unreachable!("try commit has non-master parent {:?}", missing_reason);
+            };
+        }
+        queue.push((
+            Commit {
+                sha: sha.to_string(),
+                date: commit_date.unwrap_or(Date::empty()),
+                r#type: CommitType::Try,
+            },
+            MissingReason::Try {
+                pr,
+                parent_sha,
+                include,
+                exclude,
+                runs,
+                backends,
+            },
+        ));
+    }
+    for aid in in_progress_artifacts {
+        match aid {
+            ArtifactId::Commit(aid_commit) => {
+                let previous = queue
+                    .iter()
+                    .find(|(commit, _)| commit.sha == aid_commit.sha)
+                    .map(|pair| Box::new(pair.1.clone()));
+                all_commits.remove(&aid_commit.sha);
+                queue.insert(0, (aid_commit, MissingReason::InProgress(previous)));
+            }
+            ArtifactId::Tag(_) => {
+                // do nothing, for now, though eventually we'll want an artifact queue
+            }
+        }
+    }
+    let mut already_tested = all_commits.clone();
+    let mut i = 0;
+    while i != queue.len() {
+        if !already_tested.insert(queue[i].0.sha.clone()) {
+            queue.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+
+    let (jobs, job_sha_set) = queue.iter().fold(
+        (vec![], HashSet::<String>::new()),
+        |(mut vec, mut set), item| {
+            let job = commit_job_from_queue_item(item);
+            set.insert(job.sha.clone());
+            vec.push(job);
+            (vec, set)
+        },
+    );
+
+    /* Jobs that are viable to be inserted into the database, these are jobs
+     * which either have a parent that is in the set or do not have a parent.
+     * Some commits could reference a parent that is not in the set which means
+     * it is not ready to be queued */
+    jobs.into_iter()
+        .filter(|job| {
+            if let Some(parent_sha) = &job.parent_sha {
+                job_sha_set.contains(parent_sha)
+            } else {
+                false
+            }
+        })
+        .collect()
 }
 
 /// One decimal place rounded percent

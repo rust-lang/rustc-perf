@@ -287,6 +287,27 @@ static MIGRATIONS: &[&str] = &[
     alter table pstat_series drop constraint test_case;
     alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, target, metric);
     "#,
+    r#"
+    CREATE TABLE IF NOT EXISTS commit_queue (
+        sha          TEXT,
+        parent_sha   TEXT,
+        commit_type  TEXT CHECK (commit_type IN ('master', 'try')),
+        pr           INTEGER,
+        commit_time  TIMESTAMP,
+        target       TEXT,
+        -- The below are filled in by the collector that picks up the job
+        machine_id   TEXT,
+        started_at   TIMESTAMP,
+        finished_at  TIMESTAMP,
+        status       TEXT,
+        -- We have a primary key as the sha <-> target as there can only be one
+        -- pairing
+        PRIMARY KEY (sha, target)
+    );
+    CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
+    CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
+    CREATE INDEX IF NOT EXISTS sha_machine_id_idx ON commit_queue (sha, machine_id);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -1391,8 +1412,10 @@ where
             .collect::<Vec<_>>()
             .join(", ");
 
+        /* Add everything to the database if there already exists something 
+         * with a `sha <-> target` pairing it will simply be ignored */
         let sql = format!(
-            "INSERT INTO commit_queue ({}) VALUES {}",
+            "INSERT INTO commit_queue ({}) VALUES {} ON CONFLICT DO NOTHING",
             column_string_names, placeholders,
         );
 
@@ -1430,7 +1453,14 @@ where
                         AND status = 'in_progress'
                     ORDER BY started_at
                     LIMIT 1
+
+                     -- @Note; This prevents multiple 
+                               machines of the same 
+                               architecture taking the 
+                               same job. See here for more information;
+                               https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE
                     FOR UPDATE SKIP LOCKED
+
                 )
                 UPDATE commit_queue
                 SET started_at = NOW(),

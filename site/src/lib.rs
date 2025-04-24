@@ -5,6 +5,7 @@ pub mod api;
 pub mod github;
 pub mod load;
 pub mod server;
+pub mod queue_jobs;
 
 mod average;
 mod benchmark_metadata;
