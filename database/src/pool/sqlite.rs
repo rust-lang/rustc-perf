@@ -7,7 +7,7 @@ use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
-use rusqlite::{params, params_from_iter, OptionalExtension, Row, ToSql};
+use rusqlite::{params, params_from_iter, OptionalExtension, ToSql};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -409,18 +409,19 @@ static MIGRATIONS: &[Migration] = &[
         CREATE TABLE IF NOT EXISTS commit_queue (
             sha          TEXT,
             parent_sha   TEXT,
-            commit_type  TEXT CHECK (commit_type IN ('master', 'try')),
+            commit_type  TEXT,
             pr           INTEGER,
             commit_time  TIMESTAMP,
             target       TEXT,
-            -- The below are filled in by the collector that picks up the job
+            include      TEXT,
+            exclude      TEXT,
+            runs         INTEGER,
+            backends     TEXT,
             machine_id   TEXT,
             started_at   TIMESTAMP,
             finished_at  TIMESTAMP,
             status       TEXT,
-            -- We have a primary key as the sha <-> target as there can only be one
-            -- pairing
-            PRIMARY KEY (sha, target)
+            PRIMARY KEY  (sha, target)
         );
         CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
         CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
@@ -1276,7 +1277,6 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    /* @Queue */
     async fn enqueue_commit_job(&self, target: Target, jobs: &[CommitJob]) {
         let row_count = jobs.len();
         if row_count == 0 {
@@ -1310,6 +1310,10 @@ impl Connection for SqliteConnection {
                     &job.commit_time,
                     &job.status as &dyn ToSql,
                     &target,
+                    &job.include,
+                    &job.exclude,
+                    &job.runs,
+                    &job.backends,
                 ]
             })
             .collect();
@@ -1319,11 +1323,7 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    /* @Queue */
-    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<String> {
-        /* See if the machine was doing something and then failed */
-        let get_sha = |row: &Row| row.get::<_, String>(0).unwrap();
-
+    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<CommitJob> {
         /* Check to see if this machine possibly went offline while doing
          * a previous job - if it did we'll take that job */
         let maybe_previous_job = self
@@ -1331,7 +1331,7 @@ impl Connection for SqliteConnection {
             .prepare(
                 "
                 WITH job_to_update AS (
-                    SELECT sha
+                    SELECT *
                     FROM commit_queue
                     WHERE machine_id = ?
                         AND target = ?
@@ -1345,16 +1345,16 @@ impl Connection for SqliteConnection {
                 WHERE machine_id = ? 
                     AND target = ? 
                     AND sha = (SELECT sha FROM job_to_update)
-                RETURNING sha;
+                RETURNING *;
                 ",
             )
             .unwrap()
             .query_map(params![&machine_id, &target, &machine_id, &target], |row| {
-                Ok(get_sha(row))
+                Ok(commit_queue_row_to_commit_job(row))
             })
             .unwrap()
             .map(|row| row.unwrap())
-            .collect::<Vec<String>>();
+            .collect::<Vec<CommitJob>>();
 
         if let Some(previous_job) = maybe_previous_job.get(0) {
             return Some(previous_job.clone());
@@ -1388,16 +1388,16 @@ impl Connection for SqliteConnection {
                 WHERE
                     target = ?
                     AND sha = (SELECT sha FROM job_to_update)
-                RETURNING sha;
+                RETURNING *;
                 ",
             )
             .unwrap()
             .query_map(params![&target, &target, &machine_id, &target], |row| {
-                Ok(get_sha(row))
+                Ok(commit_queue_row_to_commit_job(row))
             })
             .unwrap()
             .map(|sha| sha.unwrap())
-            .collect::<Vec<String>>();
+            .collect::<Vec<CommitJob>>();
 
         if let Some(drift_job) = maybe_drift_job.get(0) {
             return Some(drift_job.clone());
@@ -1409,7 +1409,7 @@ impl Connection for SqliteConnection {
             .prepare(
                 "
                 WITH job_to_update AS (
-                    SELECT sha
+                    SELECT *
                     FROM commit_queue
                     WHERE target = ?
                         AND status = 'queued'
@@ -1426,24 +1426,44 @@ impl Connection for SqliteConnection {
                 WHERE
                     sha = (SELECT sha FROM job_to_update)
                     AND target = ?
-                RETURNING sha;
+                RETURNING *;
                 ",
             )
             .unwrap()
             .query_map(params![&target, &machine_id, &target], |row| {
-                Ok(row.get::<_, String>(0).unwrap())
+                Ok(commit_queue_row_to_commit_job(row))
             })
             .unwrap()
             .map(|r| r.unwrap())
-            .collect::<Vec<String>>();
+            .collect::<Vec<CommitJob>>();
 
         /* If there is one, we will take that job */
-        if let Some(sha) = jobs.get(0) {
-            return Some(sha.clone());
+        if let Some(commit_job) = jobs.get(0) {
+            return Some(commit_job.clone());
         }
 
         /* There are no jobs in the queue */
         return None;
+    }
+
+    /// Mark a job in the database as done
+    async fn finish_commit_job(&self, machine_id: String, target: Target, sha: String) -> bool {
+        let jobs = self
+            .raw_ref()
+            .execute(
+                "
+                UPDATE commit_queue
+                SET finished_at = DATETIME('now'),
+                    status = 'finished',
+                WHERE
+                    sha = ?
+                    AND machine_id = ?
+                    AND target = ?;
+                ",
+                params![&sha, &machine_id, &target],
+            )
+            .unwrap();
+        return jobs == 1;
     }
 }
 
@@ -1461,6 +1481,44 @@ macro_rules! impl_to_sqlite_via_to_string {
 impl_to_sqlite_via_to_string!(Target);
 impl_to_sqlite_via_to_string!(CommitType);
 impl_to_sqlite_via_to_string!(CommitJobStatus);
+
+/// Map a database row from the commit queue to a `CommitJob`
+fn commit_queue_row_to_commit_job(row: &rusqlite::Row) -> CommitJob {
+    CommitJob {
+        sha: row.get::<_, String>("sha").unwrap(),
+        parent_sha: row.get::<_, Option<String>>("parent_sha").unwrap(),
+        commit_type: CommitType::from_str(&row.get::<_, String>("commit_type").unwrap()).unwrap(),
+        pr: row.get::<_, u32>("pr").unwrap(),
+        commit_time: row
+            .get::<_, String>("commit_time")
+            .unwrap()
+            .parse::<Date>()
+            .unwrap(),
+        target: Target::from_str(&row.get::<_, String>("target").unwrap()).unwrap(),
+        machine_id: row.get::<_, Option<String>>("machine_id").unwrap(),
+        started_at: {
+            let started: Option<String> = row.get("started_at").unwrap();
+            if let Some(ts) = started {
+                Some(ts.parse::<Date>().unwrap())
+            } else {
+                None
+            }
+        },
+        finished_at: {
+            let finished: Option<String> = row.get("finished_at").unwrap();
+            if let Some(ts) = finished {
+                Some(ts.parse::<Date>().unwrap())
+            } else {
+                None
+            }
+        },
+        status: CommitJobStatus::from_str(&row.get::<_, String>("status").unwrap()).unwrap(),
+        include: row.get::<_, Option<String>>("include").unwrap(),
+        exclude: row.get::<_, Option<String>>("exclude").unwrap(),
+        runs: row.get::<_, Option<i32>>("runs").unwrap(),
+        backends: row.get::<_, Option<String>>("backends").unwrap(),
+    }
+}
 
 impl ToSql for Date {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {

@@ -15,7 +15,7 @@ use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit};
 pub use database::{ArtifactId, Benchmark, Commit};
-use database::{CommitJob, Pool, Target};
+use database::{CommitJob, CommitJobStatus, Pool, Target};
 use database::{CommitType, Date};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -38,7 +38,7 @@ pub enum MissingReason {
 }
 
 impl MissingReason {
-    fn pr(&self) -> Option<u32> {
+    pub fn pr(&self) -> Option<u32> {
         let mut this = self;
         loop {
             match this {
@@ -49,12 +49,60 @@ impl MissingReason {
             }
         }
     }
-    fn parent_sha(&self) -> Option<&str> {
+    pub fn parent_sha(&self) -> Option<&str> {
         let mut this = self;
         loop {
             match this {
                 MissingReason::Master { parent_sha, .. } => return Some(parent_sha.as_str()),
                 MissingReason::Try { parent_sha, .. } => return Some(parent_sha.as_str()),
+                MissingReason::InProgress(Some(s)) => this = s,
+                MissingReason::InProgress(None) => return None,
+            }
+        }
+    }
+    pub fn include(&self) -> Option<&str> {
+        let mut this = self;
+        loop {
+            match this {
+                // For Master variant there is no include field.
+                MissingReason::Master { .. } => return None,
+                MissingReason::Try { include, .. } => return include.as_deref(),
+                MissingReason::InProgress(Some(s)) => this = s,
+                MissingReason::InProgress(None) => return None,
+            }
+        }
+    }
+    pub fn exclude(&self) -> Option<&str> {
+        let mut this = self;
+        loop {
+            match this {
+                // For Master variant there is no exclude field.
+                MissingReason::Master { .. } => return None,
+                MissingReason::Try { exclude, .. } => return exclude.as_deref(),
+                MissingReason::InProgress(Some(s)) => this = s,
+                MissingReason::InProgress(None) => return None,
+            }
+        }
+    }
+    pub fn runs(&self) -> Option<i32> {
+        let mut this = self;
+        loop {
+            match this {
+                // For Master variant there is no runs field.
+                MissingReason::Master { .. } => return None,
+                MissingReason::Try { runs, .. } => return *runs,
+                MissingReason::InProgress(Some(s)) => this = s,
+                MissingReason::InProgress(None) => return None,
+            }
+        }
+    }
+    pub fn backends(&self) -> Option<&str> {
+        let mut this = self;
+        loop {
+            match this {
+                // For Master variant there is no backends field.
+                MissingReason::Master { .. } => return None,
+                MissingReason::Try { backends, .. } => return backends.as_deref(),
                 MissingReason::InProgress(Some(s)) => this = s,
                 MissingReason::InProgress(None) => return None,
             }
@@ -556,18 +604,22 @@ where
 /// Conversion between our application layer and database object, also
 /// simplifies the `(Commit, MissingReason)` tuple by essentially flatteing it
 fn commit_job_from_queue_item(item: &(Commit, MissingReason)) -> CommitJob {
-    let parent_sha = if let Some(parent_sha) = item.1.parent_sha() {
-        Some(parent_sha.to_string())
-    } else {
-        None
-    };
-    CommitJob::new(
-        item.0.sha.clone(),
-        parent_sha,
-        item.1.pr().unwrap_or(0),
-        item.0.r#type.clone(),
-        item.0.date,
-    )
+    CommitJob {
+        sha: item.0.sha.clone(),
+        parent_sha: item.1.parent_sha().map(|it| it.to_string()),
+        commit_type: item.0.r#type.clone(),
+        pr: item.1.pr().unwrap_or(0),
+        commit_time: item.0.date,
+        target: Target::X86_64UnknownLinuxGnu,
+        machine_id: None,
+        started_at: None,
+        finished_at: None,
+        status: CommitJobStatus::Queued,
+        include: item.1.include().map(|it| it.to_string()),
+        exclude: item.1.exclude().map(|it| it.to_string()),
+        runs: item.1.runs(),
+        backends: item.1.backends().map(|it| it.to_string()),
+    }
 }
 
 fn enqueue_new_jobs(

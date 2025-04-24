@@ -387,6 +387,11 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 .handle_get_async(&req, request_handlers::handle_next_artifact)
                 .await;
         }
+        "/perf/released_artifact" => {
+            return server
+                .handle_get_async(&req, request_handlers::handle_released_artifact)
+                .await;
+        }
         "/perf/triage" if *req.method() == http::Method::GET => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
             let input: triage::Request = check!(parse_query_string(req.uri()));

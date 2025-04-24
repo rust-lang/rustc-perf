@@ -13,7 +13,7 @@ pub use graph::{
     handle_compile_detail_graphs, handle_compile_detail_sections, handle_graphs,
     handle_runtime_detail_graphs,
 };
-pub use next_artifact::handle_next_artifact;
+pub use next_artifact::{handle_next_artifact, handle_released_artifact};
 pub use self_profile::{
     handle_self_profile, handle_self_profile_processed_download, handle_self_profile_raw,
     handle_self_profile_raw_download,

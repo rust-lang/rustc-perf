@@ -56,7 +56,7 @@ use collector::toolchain::{
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
 use collector::{utils, CollectorCtx, CollectorStepBuilder};
-use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Pool};
+use database::{ArtifactId, ArtifactIdNumber, Commit, CommitJob, CommitType, Connection, Pool};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -581,6 +581,21 @@ enum Commands {
         self_profile: SelfProfileOption,
     },
 
+    /// Benchmarks commits from the queue sequentially
+    BenchFromQueue {
+        /// Site URL
+        site_url: String,
+
+        #[command(flatten)]
+        db: DbOption,
+
+        #[command(flatten)]
+        bench_rustc: BenchRustcOption,
+
+        #[command(flatten)]
+        self_profile: SelfProfileOption,
+    },
+
     /// Benchmarks a published toolchain for perf.rust-lang.org's dashboard
     BenchPublished {
         /// Toolchain (e.g. stable, beta, 1.26.0)
@@ -947,129 +962,113 @@ fn main_result() -> anyhow::Result<i32> {
                 // no missing artifacts
                 return Ok(0);
             };
+            benchmark_next_artifact(
+                next,
+                &db,
+                &target_triple,
+                &runtime_benchmark_dir,
+                &benchmark_dirs,
+                client,
+                &site_url,
+                self_profile,
+                bench_rustc,
+                &compile_benchmark_dir,
+            )
+        }
 
-            let res = std::panic::catch_unwind(|| {
-                let pool = database::Pool::open(&db.db);
-                let mut rt = build_async_runtime();
+        Commands::BenchFromQueue {
+            site_url,
+            db,
+            bench_rustc,
+            self_profile,
+        } => {
+            log_db(&db);
+            println!("processing artifacts");
+            let client = reqwest::blocking::Client::new();
+            /* @Queue - How do we do this per architecture if it's not queued?
+             *          do this from the Cron job and create a "fake" queued job
+             *          with a PR of 0 and a random uuid for a sha? Then remove
+             *          this api call?
+             *
+             *          Or should we insert it into the database as the current
+             *          job?
+             * See if we have a release artifact before consulting the database
+             * queue */
+            let response: collector::api::next_artifact::Response = client
+                .get(format!("{}/perf/released_artifact", site_url))
+                .send()?
+                .json()?;
 
-                match next {
-                    NextArtifact::Release(tag) => {
-                        let toolchain =
-                            create_toolchain_from_published_version(&tag, &target_triple)?;
-                        bench_published_artifact(
-                            rt.block_on(pool.connection()),
-                            &mut rt,
-                            toolchain,
-                            &benchmark_dirs,
-                        )
-                    }
-                    NextArtifact::Commit {
-                        commit,
-                        include,
-                        exclude,
-                        runs,
-                        backends: requested_backends,
-                    } => {
-                        // Parse the requested backends, with LLVM as a fallback if none or no valid
-                        // ones were explicitly specified, which will be the case for the vast
-                        // majority of cases.
-                        let mut backends = vec![];
-                        if let Some(requested_backends) = requested_backends {
-                            let requested_backends = requested_backends.to_lowercase();
-                            if requested_backends.contains("llvm") {
-                                backends.push(CodegenBackend::Llvm);
-                            }
-                            if requested_backends.contains("cranelift") {
-                                backends.push(CodegenBackend::Cranelift);
-                            }
-                        }
+            let next = if let Some(c) = response.artifact {
+                c
+            } else {
+                let commit_job_future_result = std::panic::catch_unwind(async || {
+                    let pool = database::Pool::open(&db.db);
+                    let rt = build_async_runtime();
+                    let conn = rt.block_on(pool.connection());
+                    conn.dequeue_commit_job(
+                        "MACHINE_ID".into(),
+                        database::Target::X86_64UnknownLinuxGnu,
+                    )
+                    .await
+                });
 
-                        if backends.is_empty() {
-                            backends.push(CodegenBackend::Llvm);
-                        }
+                let Ok(commit_job_future) = commit_job_future_result else {
+                    return Ok(1);
+                };
 
-                        // FIXME: remove this when/if NextArtifact::Commit's include/exclude
-                        // changed from Option<String> to Vec<String>
-                        // to not to manually parse args
-                        let split_args = |l: Option<String>| -> Vec<String> {
-                            if let Some(l) = l {
-                                l.split(',').map(|arg| arg.trim().to_owned()).collect()
-                            } else {
-                                vec![]
-                            }
-                        };
-                        let sha = commit.sha.to_string();
-                        let sysroot = Sysroot::install(sha.clone(), &target_triple, &backends)
-                            .with_context(|| {
-                                format!("failed to install sysroot for {:?}", commit)
-                            })?;
+                let Some(commit_job) = futures::executor::block_on(commit_job_future) else {
+                    println!("no artifact to benchmark");
+                    // Sleep for a bit to avoid spamming the database too much
+                    // This sleep serves to remove a needless sleep in `collector/collect.sh` when
+                    // a benchmark was actually executed.
+                    std::thread::sleep(Duration::from_secs(60 * 2));
+                    return Ok(0);
+                };
 
-                        let mut benchmarks = get_compile_benchmarks(
-                            &compile_benchmark_dir,
-                            &split_args(include),
-                            &split_args(exclude),
-                            &[],
-                        )?;
-                        benchmarks.retain(|b| b.category().is_primary_or_secondary());
+                next_artifact_from_commit_job(&commit_job)
+            };
 
-                        let artifact_id = ArtifactId::Commit(commit);
-                        let mut conn = rt.block_on(pool.connection());
-                        let toolchain = Toolchain::from_sysroot(&sysroot, sha);
+            // get the sha so we can update the job in the database
+            let commit_sha = match &next {
+                NextArtifact::Release(_) => None,
+                NextArtifact::Commit {
+                    commit,
+                    include: _,
+                    exclude: _,
+                    runs: _,
+                    backends: _,
+                } => Some(commit.sha.clone()),
+            };
 
-                        let compile_config = CompileBenchmarkConfig {
-                            benchmarks,
-                            profiles: vec![
-                                Profile::Check,
-                                Profile::Debug,
-                                Profile::Doc,
-                                Profile::Opt,
-                            ],
-                            scenarios: Scenario::all(),
-                            backends,
-                            iterations: runs.map(|v| v as usize),
-                            is_self_profile: self_profile.self_profile,
-                            bench_rustc: bench_rustc.bench_rustc,
-                            targets: vec![Target::default()],
-                        };
-                        let runtime_suite = rt.block_on(load_runtime_benchmarks(
-                            conn.as_mut(),
-                            &runtime_benchmark_dir,
-                            CargoIsolationMode::Isolated,
-                            None,
-                            &toolchain,
-                            &artifact_id,
-                        ))?;
+            let benchmark_result = benchmark_next_artifact(
+                next,
+                &db,
+                &target_triple,
+                &runtime_benchmark_dir,
+                &benchmark_dirs,
+                client,
+                &site_url,
+                self_profile,
+                bench_rustc,
+                &compile_benchmark_dir,
+            );
 
-                        let runtime_config = RuntimeBenchmarkConfig {
-                            runtime_suite,
-                            filter: BenchmarkFilter::keep_all(),
-                            iterations: DEFAULT_RUNTIME_ITERATIONS,
-                        };
-                        let shared = SharedBenchmarkConfig {
-                            artifact_id,
-                            toolchain,
-                        };
-
-                        run_benchmarks(
-                            &mut rt,
-                            conn,
-                            shared,
-                            Some(compile_config),
-                            Some(runtime_config),
-                        )
-                    }
-                }
-            });
-            // We need to send a message to this endpoint even if the collector panics
-            client.post(format!("{}/perf/onpush", site_url)).send()?;
-
-            match res {
-                Ok(res) => res?,
-                Err(error) => {
-                    log::error!("The collector has crashed\n{error:?}");
-                }
+            if let Some(sha) = commit_sha {
+                let _ = std::panic::catch_unwind(async || {
+                    let pool = database::Pool::open(&db.db);
+                    let rt = build_async_runtime();
+                    let conn = rt.block_on(pool.connection());
+                    conn.finish_commit_job(
+                        "MACHINE_ID".into(),
+                        database::Target::X86_64UnknownLinuxGnu,
+                        sha,
+                    )
+                    .await
+                });
             }
-            Ok(0)
+
+            benchmark_result
         }
 
         Commands::BenchPublished { toolchain, db } => {
@@ -2048,4 +2047,150 @@ fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
                 r#type: CommitType::Master,
             }
         }))
+}
+
+/// Adaptor to map a `CommitJob` -> `NextArtifact`
+fn next_artifact_from_commit_job(commit_job: &CommitJob) -> NextArtifact {
+    let commit = Commit {
+        sha: commit_job.sha.clone(),
+        date: commit_job.commit_time,
+        r#type: commit_job.commit_type.clone(),
+    };
+    NextArtifact::Commit {
+        commit,
+        include: commit_job.include.clone(),
+        exclude: commit_job.exclude.clone(),
+        runs: commit_job.runs,
+        backends: commit_job.backends.clone(),
+    }
+}
+
+// This functions body can be pasted into `BenchFromQueue`
+/// Benchmark an artifact
+fn benchmark_next_artifact(
+    next: NextArtifact,
+    db: &DbOption,
+    target_triple: &str,
+    runtime_benchmark_dir: &PathBuf,
+    benchmark_dirs: &BenchmarkDirs,
+    client: reqwest::blocking::Client,
+    site_url: &str,
+    self_profile: SelfProfileOption,
+    bench_rustc: BenchRustcOption,
+    compile_benchmark_dir: &PathBuf,
+) -> anyhow::Result<i32> {
+    let res = std::panic::catch_unwind(|| {
+        let pool = database::Pool::open(&db.db);
+        let mut rt = build_async_runtime();
+
+        match next {
+            NextArtifact::Release(tag) => {
+                let toolchain = create_toolchain_from_published_version(&tag, &target_triple)?;
+                bench_published_artifact(
+                    rt.block_on(pool.connection()),
+                    &mut rt,
+                    toolchain,
+                    &benchmark_dirs,
+                )
+            }
+            NextArtifact::Commit {
+                commit,
+                include,
+                exclude,
+                runs,
+                backends: requested_backends,
+            } => {
+                // Parse the requested backends, with LLVM as a fallback if none or no valid
+                // ones were explicitly specified, which will be the case for the vast
+                // majority of cases.
+                let mut backends = vec![];
+                if let Some(requested_backends) = requested_backends {
+                    let requested_backends = requested_backends.to_lowercase();
+                    if requested_backends.contains("llvm") {
+                        backends.push(CodegenBackend::Llvm);
+                    }
+                    if requested_backends.contains("cranelift") {
+                        backends.push(CodegenBackend::Cranelift);
+                    }
+                }
+
+                if backends.is_empty() {
+                    backends.push(CodegenBackend::Llvm);
+                }
+
+                // FIXME: remove this when/if NextArtifact::Commit's include/exclude
+                // changed from Option<String> to Vec<String>
+                // to not to manually parse args
+                let split_args = |l: Option<String>| -> Vec<String> {
+                    if let Some(l) = l {
+                        l.split(',').map(|arg| arg.trim().to_owned()).collect()
+                    } else {
+                        vec![]
+                    }
+                };
+                let sha = commit.sha.to_string();
+                let sysroot = Sysroot::install(sha.clone(), &target_triple, &backends)
+                    .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
+
+                let mut benchmarks = get_compile_benchmarks(
+                    &compile_benchmark_dir,
+                    &split_args(include),
+                    &split_args(exclude),
+                    &[],
+                )?;
+                benchmarks.retain(|b| b.category().is_primary_or_secondary());
+
+                let artifact_id = ArtifactId::Commit(commit);
+                let mut conn = rt.block_on(pool.connection());
+                let toolchain = Toolchain::from_sysroot(&sysroot, sha);
+
+                let compile_config = CompileBenchmarkConfig {
+                    benchmarks,
+                    profiles: vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt],
+                    scenarios: Scenario::all(),
+                    backends,
+                    iterations: runs.map(|v| v as usize),
+                    is_self_profile: self_profile.self_profile,
+                    bench_rustc: bench_rustc.bench_rustc,
+                    targets: vec![Target::default()],
+                };
+                let runtime_suite = rt.block_on(load_runtime_benchmarks(
+                    conn.as_mut(),
+                    &runtime_benchmark_dir,
+                    CargoIsolationMode::Isolated,
+                    None,
+                    &toolchain,
+                    &artifact_id,
+                ))?;
+
+                let runtime_config = RuntimeBenchmarkConfig {
+                    runtime_suite,
+                    filter: BenchmarkFilter::keep_all(),
+                    iterations: DEFAULT_RUNTIME_ITERATIONS,
+                };
+                let shared = SharedBenchmarkConfig {
+                    artifact_id,
+                    toolchain,
+                };
+
+                run_benchmarks(
+                    &mut rt,
+                    conn,
+                    shared,
+                    Some(compile_config),
+                    Some(runtime_config),
+                )
+            }
+        }
+    });
+    // We need to send a message to this endpoint even if the collector panics
+    client.post(format!("{}/perf/onpush", site_url)).send()?;
+
+    match res {
+        Ok(res) => res?,
+        Err(error) => {
+            log::error!("The collector has crashed\n{error:?}");
+        }
+    }
+    Ok(0)
 }

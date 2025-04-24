@@ -845,31 +845,13 @@ pub struct CommitJob {
     pub started_at: Option<Date>,
     pub finished_at: Option<Date>,
     pub status: CommitJobStatus,
+    pub include: Option<String>,
+    pub exclude: Option<String>,
+    pub runs: Option<i32>,
+    pub backends: Option<String>,
 }
 
 impl CommitJob {
-    /// Create a new commit job
-    pub fn new(
-        sha: String,
-        parent_sha: Option<String>,
-        pr: u32,
-        commit_type: CommitType,
-        commit_time: Date,
-    ) -> Self {
-        Self {
-            sha,
-            parent_sha,
-            commit_type,
-            pr,
-            commit_time,
-            status: CommitJobStatus::Queued,
-            target: Target::X86_64UnknownLinuxGnu,
-            machine_id: None,
-            started_at: None,
-            finished_at: None,
-        }
-    }
-
     pub fn from_db(
         sha: String,
         parent_sha: Option<String>,
@@ -881,6 +863,10 @@ impl CommitJob {
         started_at: Option<Date>,
         finished_at: Option<Date>,
         status: CommitJobStatus,
+        include: Option<String>,
+        exclude: Option<String>,
+        runs: Option<i32>,
+        backends: Option<String>,
     ) -> Self {
         Self {
             sha,
@@ -893,6 +879,10 @@ impl CommitJob {
             started_at,
             finished_at,
             status,
+            include,
+            exclude,
+            runs,
+            backends,
         }
     }
 
@@ -905,6 +895,10 @@ impl CommitJob {
             String::from("commit_time"),
             String::from("status"),
             String::from("target"),
+            String::from("include"),
+            String::from("exclude"),
+            String::from("runs"),
+            String::from("backends"),
         ]
     }
 }

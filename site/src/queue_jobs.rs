@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::load::SiteCtxt;
 use parking_lot::RwLock;
 use tokio::time::{self, Duration};
-use crate::load::SiteCtxt;
 
 /// Inserts into the queue at `seconds` interval
 pub async fn cron_enqueue_jobs(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u64) {

@@ -291,18 +291,19 @@ static MIGRATIONS: &[&str] = &[
     CREATE TABLE IF NOT EXISTS commit_queue (
         sha          TEXT,
         parent_sha   TEXT,
-        commit_type  TEXT CHECK (commit_type IN ('master', 'try')),
+        commit_type  TEXT,
         pr           INTEGER,
         commit_time  TIMESTAMP,
         target       TEXT,
-        -- The below are filled in by the collector that picks up the job
+        include      TEXT,
+        exclude      TEXT,
+        runs         INTEGER,
+        backends     TEXT,
         machine_id   TEXT,
         started_at   TIMESTAMP,
         finished_at  TIMESTAMP,
         status       TEXT,
-        -- We have a primary key as the sha <-> target as there can only be one
-        -- pairing
-        PRIMARY KEY (sha, target)
+        PRIMARY KEY  (sha, target)
     );
     CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
     CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
@@ -1389,7 +1390,6 @@ where
             .unwrap();
     }
 
-    /* @Queue */
     async fn enqueue_commit_job(&self, target: Target, jobs: &[CommitJob]) {
         let row_count = jobs.len();
         if row_count == 0 {
@@ -1412,7 +1412,7 @@ where
             .collect::<Vec<_>>()
             .join(", ");
 
-        /* Add everything to the database if there already exists something 
+        /* Add everything to the database if there already exists something
          * with a `sha <-> target` pairing it will simply be ignored */
         let sql = format!(
             "INSERT INTO commit_queue ({}) VALUES {} ON CONFLICT DO NOTHING",
@@ -1430,6 +1430,10 @@ where
                     &job.commit_time,
                     &job.status,
                     &target,
+                    &job.include,
+                    &job.exclude,
+                    &job.runs,
+                    &job.backends,
                 ]
             })
             .collect();
@@ -1437,8 +1441,7 @@ where
         self.conn().execute(&sql, &params).await.unwrap();
     }
 
-    /* @Queue */
-    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<String> {
+    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<CommitJob> {
         /* Check to see if this machine possibly went offline while doing
          * a previous job - if it did we'll take that job */
         let maybe_previous_job = self
@@ -1446,7 +1449,7 @@ where
             .query_opt(
                 "
                 WITH job_to_update AS (
-                    SELECT sha
+                    SELECT *
                     FROM commit_queue
                     WHERE machine_id = $1
                         AND target = $2
@@ -1455,10 +1458,10 @@ where
                     LIMIT 1
 
                      -- @Note; This prevents multiple 
-                               machines of the same 
-                               architecture taking the 
-                               same job. See here for more information;
-                               https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE
+                     --        machines of the same 
+                     --        architecture taking the 
+                     --        same job. See here for more information;
+                     --        https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE
                     FOR UPDATE SKIP LOCKED
 
                 )
@@ -1468,7 +1471,7 @@ where
                 WHERE machine_id = $1
                     AND target = $2
                     AND sha = (SELECT sha FROM job_to_update)
-                RETURNING sha;
+                RETURNING *;
             ",
                 &[&machine_id, &target],
             )
@@ -1477,7 +1480,7 @@ where
 
         /* If it was we will take that job */
         if let Some(row) = maybe_previous_job {
-            return Some(row.get("sha"));
+            return Some(commit_queue_row_to_commit_job(&row));
         }
 
         let maybe_drift_job = self
@@ -1506,7 +1509,7 @@ where
                 WHERE
                     target = $1
                     AND sha = (SELECT sha FROM job_to_update)
-                RETURNING sha;
+                RETURNING *;
                 ",
                 &[&target, &machine_id],
             )
@@ -1515,15 +1518,16 @@ where
 
         /* If we are, we will take that job */
         if let Some(row) = maybe_drift_job {
-            return Some(row.get("sha"));
+            return Some(commit_queue_row_to_commit_job(&row));
         }
 
         /* See if there are any jobs that need taking care of */
         let job = self
             .conn()
-            .query_opt("
+            .query_opt(
+                "
                 WITH job_to_update AS (
-                    SELECT sha
+                    SELECT * 
                     FROM commit_queue
                     WHERE target = $1
                         AND status = 'queued'
@@ -1538,18 +1542,75 @@ where
                 WHERE
                     sha = (SELECT sha FROM job_to_update)
                     AND target = $1
-                RETURNING sha;
-                ", &[&target, &machine_id])
+                RETURNING *;
+                ",
+                &[&target, &machine_id],
+            )
             .await
             .unwrap();
 
         /* If there is one, we will take that job */
         if let Some(row) = job {
-            return Some(row.get("sha"));
+            return Some(commit_queue_row_to_commit_job(&row));
         }
 
         /* There are no jobs in the queue */
         return None;
+    }
+
+    /// Mark a job in the database as done
+    async fn finish_commit_job(&self, machine_id: String, target: Target, sha: String) -> bool {
+        let jobs = self
+            .conn()
+            .query_opt(
+                "
+                UPDATE commit_queue
+                SET finished_at = DATETIME('now'),
+                    status = 'finished',
+                WHERE
+                    sha = $1
+                    AND machine_id = $1
+                    AND target = $1;
+                ",
+                &[&sha, &machine_id, &target],
+            )
+            .await
+            .unwrap();
+        return jobs.is_some();
+    }
+}
+
+/// Map a database row from the commit queue to a `CommitJob`
+fn commit_queue_row_to_commit_job(row: &tokio_postgres::Row) -> CommitJob {
+    CommitJob {
+        sha: row.get::<_, String>("sha"),
+        parent_sha: row.get::<_, Option<String>>("parent_sha"),
+        commit_type: CommitType::from_str(&row.get::<_, String>("commit_type")).unwrap(),
+        pr: row.get::<_, u32>("pr"),
+        commit_time: row.get::<_, String>("commit_time").parse::<Date>().unwrap(),
+        target: Target::from_str(&row.get::<_, String>("target")).unwrap(),
+        machine_id: row.get::<_, Option<String>>("machine_id"),
+        started_at: {
+            let started: Option<String> = row.get("started_at");
+            if let Some(ts) = started {
+                Some(ts.parse::<Date>().unwrap())
+            } else {
+                None
+            }
+        },
+        finished_at: {
+            let finished: Option<String> = row.get("finished_at");
+            if let Some(ts) = finished {
+                Some(ts.parse::<Date>().unwrap())
+            } else {
+                None
+            }
+        },
+        status: CommitJobStatus::from_str(&row.get::<_, String>("status")).unwrap(),
+        include: row.get::<_, Option<String>>("include"),
+        exclude: row.get::<_, Option<String>>("exclude"),
+        runs: row.get::<_, Option<i32>>("runs"),
+        backends: row.get::<_, Option<String>>("backends"),
     }
 }
 

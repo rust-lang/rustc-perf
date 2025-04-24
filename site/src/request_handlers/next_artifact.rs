@@ -82,3 +82,23 @@ pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Respons
         artifact: next_commit,
     }
 }
+
+/// Retrieve the next release artifact or return NULL
+pub async fn handle_released_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Response {
+    match ctxt.missing_published_artifacts().await {
+        Ok(next_artifact) => {
+            if let Some(next_artifact) = next_artifact.into_iter().next() {
+                log::debug!("next_artifact: {next_artifact}");
+                next_artifact::Response {
+                    artifact: Some(next_artifact::NextArtifact::Release(next_artifact)),
+                }
+            } else {
+                next_artifact::Response { artifact: None }
+            }
+        }
+        Err(error) => {
+            log::error!("Failed to fetch missing artifacts: {error:?}");
+            next_artifact::Response { artifact: None }
+        }
+    }
+}
