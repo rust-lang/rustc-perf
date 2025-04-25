@@ -73,6 +73,11 @@ SPDX-FileCopyrightText = "diesel contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "diesel-2.2.10/**"
+SPDX-FileCopyrightText = "diesel contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "encoding/**"
 SPDX-FileCopyrightText = "encoding contributors"
 SPDX-License-Identifier = "MIT"
