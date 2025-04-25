@@ -78,6 +78,10 @@ pub struct BenchmarkConfig {
     excluded_scenarios: HashSet<Scenario>,
 
     artifact: ArtifactType,
+
+    /// Which package from a workspace should be compiled
+    #[serde(default)]
+    package: Option<String>,
 }
 
 impl BenchmarkConfig {
@@ -224,6 +228,7 @@ impl Benchmark {
             touch_file: self.config.touch_file.clone(),
             jobserver: None,
             target,
+            workspace_package: self.config.package.clone(),
         }
     }
 
