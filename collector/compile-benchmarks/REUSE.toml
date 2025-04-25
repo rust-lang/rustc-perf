@@ -23,11 +23,6 @@ SPDX-License-Identifier = "MPL-2.0"
 SPDX-FileCopyrightText = "Bodil Stokke"
 
 [[annotations]]
-path = "cargo-0.60.0/**"
-SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-[[annotations]]
 path = "cargo-0.87.1/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
