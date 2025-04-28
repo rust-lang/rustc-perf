@@ -101,9 +101,9 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
-[lib]
-name = "eza"
-path = "src/lib.rs"
+#[lib]
+#name = "eza"
+#path = "src/lib.rs"
 
 [[bin]]
 name = "eza"
@@ -237,3 +237,5 @@ features = [
 
 [target."cfg(unix)".dependencies.uzers]
 version = "0.12.1"
+
+[workspace]

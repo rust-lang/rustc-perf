@@ -93,6 +93,11 @@ SPDX-FileCopyrightText = "exa contributors"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
+path = "eza-0.21.2/**"
+SPDX-FileCopyrightText = "Christina Sørensen, eza contributors"
+SPDX-License-Identifier = "EUPL-1.2"
+
+[[annotations]]
 path = "externs/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
