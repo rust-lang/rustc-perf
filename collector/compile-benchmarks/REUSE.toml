@@ -295,11 +295,6 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "webrender-2022/**"
-SPDX-FileCopyrightText = "The Mozilla Project Developers"
-SPDX-License-Identifier = "MPL-2.0"
-
-[[annotations]]
 path = "wf-projection-stress-65510/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
