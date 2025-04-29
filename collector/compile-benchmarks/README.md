@@ -59,10 +59,6 @@ They mostly consist of real-world crates.
 - **unicode-normalization-0.1.19**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
-- **webrender-2022**: A web renderer. A large, complex crate used by Firefox
-  and Servo. Webrender isn't released regularly so this is a development
-  version (revision da1df33). The `-2022` suffix distinguishes it from earlier
-  Webrender versions that used to be used in this benchmark suite.
 
 ## Secondary
 
