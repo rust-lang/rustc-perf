@@ -1,0 +1,76 @@
+# shellcheck shell=bash
+_eza() {
+    cur=${COMP_WORDS[COMP_CWORD]}
+    prev=${COMP_WORDS[COMP_CWORD-1]}
+
+    case "$prev" in
+        --help|-v|--version|--smart-group)
+            return
+            ;;
+
+        --colour)
+            mapfile -t COMPREPLY < <(compgen -W 'always automatic auto never' -- "$cur")
+            return
+            ;;
+
+        --icons)
+            mapfile -t COMPREPLY < <(compgen -W 'always automatic auto never' -- "$cur")
+            return
+            ;;
+
+        -L|--level)
+            mapfile -t COMPREPLY < <(compgen -W '{0..9}' -- "$cur")
+            return
+            ;;
+
+        -s|--sort)
+            mapfile -t COMPREPLY < <(compgen -W 'name filename Name Filename size filesize extension Extension date time modified changed accessed created type inode oldest newest age none --' -- "$cur")
+            return
+            ;;
+
+        -t|--time)
+            mapfile -t COMPREPLY < <(compgen -W 'modified changed accessed created --' -- "$cur")
+            return
+            ;;
+
+        --time-style)
+            mapfile -t COMPREPLY < <(compgen -W 'default iso long-iso full-iso relative +FORMAT --' -- "$cur")
+            return
+            ;;
+
+        --color-scale)
+            mapfile -t COMPREPLY < <(compgen -W 'all age size --' -- "$cur")
+            return
+            ;;
+
+        --color-scale-mode)
+            mapfile -t COMPREPLY < <(compgen -W 'fixed gradient --' -- "$cur")
+            return
+            ;;
+
+        --absolute)
+            mapfile -t COMPREPLY < <(compgen -W 'on follow off --' -- "$cur")
+            return
+            ;;
+    esac
+
+    case "$cur" in
+        # _parse_help doesn’t pick up short options when they are on the same line than long options
+        --*)
+            # colo[u]r isn’t parsed correctly so we filter these options out and add them by hand
+            parse_help=$(eza --help | grep -oE ' (--[[:alnum:]@-]+)' | tr -d ' ' | grep -v '\--colo')
+            completions=$(echo '--color --colour --color-scale --colour-scale --color-scale-mode --colour-scale-mode' "$parse_help")
+            mapfile -t COMPREPLY < <(compgen -W "$completions" -- "$cur")
+            ;;
+
+        -*)
+            completions=$(eza --help | grep -oE ' (-[[:alnum:]@])' | tr -d ' ')
+            mapfile -t COMPREPLY < <(compgen -W "$completions" -- "$cur")
+            ;;
+
+        *)
+            _filedir
+            ;;
+    esac
+} &&
+complete -o filenames -o bashdefault -F _eza eza

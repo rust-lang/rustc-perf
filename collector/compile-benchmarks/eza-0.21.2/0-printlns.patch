@@ -1,0 +1,36 @@
+diff --git a/src/fs/file.rs b/src/fs/file.rs
+index 864ea074..87cccbcb 100644
+--- a/src/fs/file.rs
++++ b/src/fs/file.rs
+@@ -131,6 +131,7 @@ impl<'dir> File<'dir> {
+         PD: Into<Option<&'dir Dir>>,
+         FN: Into<Option<String>>,
+     {
++        println!("testing 3");
+         let parent_dir = parent_dir.into();
+         let name = filename.into().unwrap_or_else(|| File::filename(&path));
+         let ext = File::ext(&path);
+diff --git a/src/logger.rs b/src/logger.rs
+index 351890ef..517eee09 100644
+--- a/src/logger.rs
++++ b/src/logger.rs
+@@ -39,6 +39,7 @@ const GLOBAL_LOGGER: &Logger = &Logger;
+ 
+ impl log::Log for Logger {
+     fn enabled(&self, _: &log::Metadata<'_>) -> bool {
++        println!("testing 1");
+         true // no need to filter after using ‘set_max_level’.
+     }
+ 
+diff --git a/src/theme/ui_styles.rs b/src/theme/ui_styles.rs
+index 5f2b047a..33f1c422 100644
+--- a/src/theme/ui_styles.rs
++++ b/src/theme/ui_styles.rs
+@@ -508,6 +508,7 @@ impl UiStyles {
+     /// by the `LS_COLORS` environment variable. Invalid keys set nothing, but
+     /// return false.
+     pub fn set_ls(&mut self, pair: &Pair<'_>) -> bool {
++        println!("testing 2");
+         #[rustfmt::skip]
+         match pair.key {
+             "di" => self.filekinds().directory    = Some(pair.to_style()),  // DIR
