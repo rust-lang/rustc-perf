@@ -1323,7 +1323,7 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<CommitJob> {
+    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
         /* Check to see if this machine possibly went offline while doing
          * a previous job - if it did we'll take that job */
         let maybe_previous_job = self
@@ -1349,7 +1349,7 @@ impl Connection for SqliteConnection {
                 ",
             )
             .unwrap()
-            .query_map(params![&machine_id, &target, &machine_id, &target], |row| {
+            .query_map(params![machine_id, &target, machine_id, &target], |row| {
                 Ok(commit_queue_row_to_commit_job(row))
             })
             .unwrap()
@@ -1392,7 +1392,7 @@ impl Connection for SqliteConnection {
                 ",
             )
             .unwrap()
-            .query_map(params![&target, &target, &machine_id, &target], |row| {
+            .query_map(params![&target, &target, machine_id, &target], |row| {
                 Ok(commit_queue_row_to_commit_job(row))
             })
             .unwrap()
@@ -1430,7 +1430,7 @@ impl Connection for SqliteConnection {
                 ",
             )
             .unwrap()
-            .query_map(params![&target, &machine_id, &target], |row| {
+            .query_map(params![&target, machine_id, &target], |row| {
                 Ok(commit_queue_row_to_commit_job(row))
             })
             .unwrap()
@@ -1447,7 +1447,7 @@ impl Connection for SqliteConnection {
     }
 
     /// Mark a job in the database as done
-    async fn finish_commit_job(&self, machine_id: String, target: Target, sha: String) -> bool {
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool {
         let jobs = self
             .raw_ref()
             .execute(
@@ -1460,7 +1460,7 @@ impl Connection for SqliteConnection {
                     AND machine_id = ?
                     AND target = ?;
                 ",
-                params![&sha, &machine_id, &target],
+                params![&sha, machine_id, &target],
             )
             .unwrap();
         return jobs == 1;

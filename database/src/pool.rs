@@ -184,10 +184,10 @@ pub trait Connection: Send + Sync {
     async fn enqueue_commit_job(&self, target: Target, jobs: &[CommitJob]);
 
     /// Dequeue jobs
-    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<CommitJob>;
+    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob>;
 
     /// Mark the job as finished
-    async fn finish_commit_job(&self, machine_id: String, target: Target, sha: String) -> bool;
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool;
 }
 
 #[async_trait::async_trait]

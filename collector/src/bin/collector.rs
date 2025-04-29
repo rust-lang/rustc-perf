@@ -982,6 +982,11 @@ fn main_result() -> anyhow::Result<i32> {
             bench_rustc,
             self_profile,
         } => {
+            /* Both of these functions will panic if they are not used on a
+             * linux machine */
+            let machine_id = get_machine_uuid();
+            let target = get_machine_target();
+
             log_db(&db);
             println!("processing artifacts");
             let client = reqwest::blocking::Client::new();
@@ -1006,11 +1011,7 @@ fn main_result() -> anyhow::Result<i32> {
                     let pool = database::Pool::open(&db.db);
                     let rt = build_async_runtime();
                     let conn = rt.block_on(pool.connection());
-                    conn.dequeue_commit_job(
-                        "MACHINE_ID".into(),
-                        database::Target::X86_64UnknownLinuxGnu,
-                    )
-                    .await
+                    conn.dequeue_commit_job(&machine_id, target).await
                 });
 
                 let Ok(commit_job_future) = commit_job_future_result else {
@@ -1059,12 +1060,7 @@ fn main_result() -> anyhow::Result<i32> {
                     let pool = database::Pool::open(&db.db);
                     let rt = build_async_runtime();
                     let conn = rt.block_on(pool.connection());
-                    conn.finish_commit_job(
-                        "MACHINE_ID".into(),
-                        database::Target::X86_64UnknownLinuxGnu,
-                        sha,
-                    )
-                    .await
+                    conn.finish_commit_job(&machine_id, target, sha).await
                 });
             }
 
@@ -2193,4 +2189,28 @@ fn benchmark_next_artifact(
         }
     }
     Ok(0)
+}
+
+fn get_machine_uuid() -> String {
+    if let Ok(raw) = fs::read_to_string("/etc/machine-id") {
+        return raw;
+    }
+    panic!("Not running on a linux machine");
+}
+
+/// Get the machines target triple
+fn get_machine_target() -> database::Target {
+    // The implementation of this is sub-par
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+    // This is slightly extreme, however the context of which this function is
+    // used means that we _cannot_ proceeed - namely we are benchmarking, at
+    // the present time, on linux.
+    if os != "linux" {
+        panic!("Machine can only run on linux");
+    }
+    match arch {
+        "x86_64" => database::Target::X86_64UnknownLinuxGnu,
+        _ => panic!("Arch: `{}` not supported", arch),
+    }
 }

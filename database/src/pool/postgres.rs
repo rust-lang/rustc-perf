@@ -1441,7 +1441,7 @@ where
         self.conn().execute(&sql, &params).await.unwrap();
     }
 
-    async fn dequeue_commit_job(&self, machine_id: String, target: Target) -> Option<CommitJob> {
+    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
         /* Check to see if this machine possibly went offline while doing
          * a previous job - if it did we'll take that job */
         let maybe_previous_job = self
@@ -1559,7 +1559,7 @@ where
     }
 
     /// Mark a job in the database as done
-    async fn finish_commit_job(&self, machine_id: String, target: Target, sha: String) -> bool {
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool {
         let jobs = self
             .conn()
             .query_opt(
