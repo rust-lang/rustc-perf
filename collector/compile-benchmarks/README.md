@@ -59,6 +59,9 @@ They mostly consist of real-world crates.
 - **unicode-normalization-0.1.19**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
+- **unicode-normalization-0.1.24**: Unicode character composition and decomposition
+  utilities. Uses huge `match` statements that stress the compiler in unusual
+  ways.
 
 ## Secondary
 
