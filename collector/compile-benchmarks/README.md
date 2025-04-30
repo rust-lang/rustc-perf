@@ -25,7 +25,6 @@ They mostly consist of real-world crates.
 - **cranelift-codegen-0.82.1**: The largest crate from a code generator. Used by
   wasmtime. Stresses obligation processing.
 - **cranelift-codegen-0.119.0**: The largest crate from a code generator. Used by wasmtime. Stresses obligation processing.
-- **diesel-1.4.8**: A type-safe SQL query builder. Utilizes the type system to ensure a lot of invariants. Stresses anything related to resolving trait bounds, by having a lot of trait impls for a large number of different types.
 - **diesel-2.2:10**: A type-safe SQL query builder. Utilizes the type system to ensure a lot of invariants. Stresses anything related to resolving trait bounds, by having a lot of trait impls for a large number of different types.
 - **exa-0.10.1**: An `ls` replacement. A widely-used utility, and a binary crate.
 - **eza-0.21.2**: An `ls` replacement. A widely-used utility, and a binary crate. Fork of `exa`.
