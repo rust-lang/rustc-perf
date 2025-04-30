@@ -22,8 +22,6 @@ They mostly consist of real-world crates.
   part of the Rust ecosystem.
 - **clap-3.1.6**: A command line argument parser library. A crate used by many Rust programs.
 - **clap_derive-4.5.32**: The proc macro sub-crate of a command line argument parser library that is used by many Rust programs.
-- **cranelift-codegen-0.82.1**: The largest crate from a code generator. Used by
-  wasmtime. Stresses obligation processing.
 - **cranelift-codegen-0.119.0**: The largest crate from a code generator. Used by wasmtime. Stresses obligation processing.
 - **diesel-1.4.8**: A type-safe SQL query builder. Utilizes the type system to ensure a lot of invariants. Stresses anything related to resolving trait bounds, by having a lot of trait impls for a large number of different types.
 - **diesel-2.2:10**: A type-safe SQL query builder. Utilizes the type system to ensure a lot of invariants. Stresses anything related to resolving trait bounds, by having a lot of trait impls for a large number of different types.
