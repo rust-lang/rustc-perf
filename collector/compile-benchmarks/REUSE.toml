@@ -43,11 +43,6 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "cranelift-codegen-0.82.1/**"
-SPDX-FileCopyrightText = "The Cranelift Project Developers"
-SPDX-License-Identifier = "Apache-2.0 WITH LLVM-exception"
-
-[[annotations]]
 path = "cranelift-codegen-0.119.0/**"
 SPDX-FileCopyrightText = "The Cranelift Project Developers"
 SPDX-License-Identifier = "Apache-2.0 WITH LLVM-exception"
