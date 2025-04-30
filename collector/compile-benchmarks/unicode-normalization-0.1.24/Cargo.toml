@@ -64,3 +64,5 @@ features = ["alloc"]
 [features]
 default = ["std"]
 std = []
+
+[workspace]

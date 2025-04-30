@@ -290,6 +290,11 @@ SPDX-FileCopyrightText = "unicode-normalization contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "unicode-normalization-0.1.24/**"
+SPDX-FileCopyrightText = "unicode-normalization contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "unify-linearly/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
