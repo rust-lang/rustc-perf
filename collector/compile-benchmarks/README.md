@@ -177,7 +177,7 @@ Rust code being written today.
     benchmark.
   - Look at [crates.io](https://crates.io) to find the latest (non-prerelease) version.
   - Download it with `collector download -c $CATEGORY -a $ARTIFACT crate $NAME $VERSION`.
-    The `$CATEGORY` is probably `primary`. `$ARTIFACT` is either `library` or `binary`, depending
+    The `$CATEGORY` is probably `Primary`. `$ARTIFACT` is either `library` or `binary`, depending
     on what kind of artifact does the benchmark build.
 - It makes it easier for reviewers if you split things into two commits.
 - In the first commit, just add the code for the entire benchmark.
