@@ -1,0 +1,5 @@
+{
+  "cargo_opts": "--features=full",
+  "artifact": "library",
+  "category": "primary"
+}

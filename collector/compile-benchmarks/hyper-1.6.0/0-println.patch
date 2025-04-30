@@ -1,0 +1,12 @@
+diff --git a/src/body/incoming.rs b/src/body/incoming.rs
+index dcfb71d5..7980cf6f 100644
+--- a/src/body/incoming.rs
++++ b/src/body/incoming.rs
+@@ -111,6 +111,7 @@ impl Incoming {
+ 
+     #[cfg(all(feature = "http1", any(feature = "client", feature = "server")))]
+     pub(crate) fn new_channel(content_length: DecodedLength, wanter: bool) -> (Sender, Incoming) {
++        println!("testing");
+         let (data_tx, data_rx) = mpsc::channel(0);
+         let (trailers_tx, trailers_rx) = oneshot::channel();
+ 
