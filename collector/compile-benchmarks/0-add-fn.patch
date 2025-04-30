@@ -1,0 +1,9 @@
+diff --git a/typenum-1.18.0/src/lib.rs b/typenum-1.18.0/src/lib.rs
+index f7a1241a..13582037 100644
+--- a/typenum-1.18.0/src/lib.rs
++++ b/typenum-1.18.0/src/lib.rs
+@@ -173,3 +173,4 @@ mod sealed {
+     impl Sealed for ATerm {}
+     impl<V, A> Sealed for TArr<V, A> {}
+ }
++fn foo() { let a = 5; }
