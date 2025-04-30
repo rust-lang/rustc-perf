@@ -73,11 +73,6 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "diesel-1.4.8/**"
-SPDX-FileCopyrightText = "diesel contributors"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-[[annotations]]
 path = "diesel-2.2.10/**"
 SPDX-FileCopyrightText = "diesel contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
