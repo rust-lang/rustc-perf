@@ -56,6 +56,8 @@ They mostly consist of real-world crates.
   ecosystem.
 - **typenum-1.17.0**: A library that encodes integer computation within the trait system. Serves as
   a stress test for the trait solver, but at the same time it is also a very popular crate.
+- **typenum-1.18.0**: A library that encodes integer computation within the trait system. Serves as
+  a stress test for the trait solver, but at the same time it is also a very popular crate.
 - **unicode-normalization-0.1.19**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.

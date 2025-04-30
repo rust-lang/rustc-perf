@@ -71,3 +71,5 @@ i128 = []
 no_std = []
 scale_info = ["scale-info/derive"]
 strict = []
+
+[workspace]

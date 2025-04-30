@@ -280,6 +280,11 @@ SPDX-FileCopyrightText = "typenum contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "typenum-1.18.0/**"
+SPDX-FileCopyrightText = "typenum contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "ucd/**"
 SPDX-FileCopyrightText = "ucd contributors"
 SPDX-License-Identifier = "MIT OR Unicode-DFS-2016"
