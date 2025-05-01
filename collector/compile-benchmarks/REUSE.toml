@@ -136,6 +136,11 @@ SPDX-FileCopyrightText = "The image-rs Developers"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
+path = "image-0.25.6/**"
+SPDX-FileCopyrightText = "The image-rs Developers"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
 path = "inflate/**"
 SPDX-FileCopyrightText = "inflate contributors"
 SPDX-License-Identifier = "MIT"
