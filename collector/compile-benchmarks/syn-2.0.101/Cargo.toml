@@ -269,3 +269,5 @@ version = "0.4.16"
 
 [target."cfg(not(miri))".dev-dependencies.walkdir]
 version = "2.3.2"
+
+[workspace]
