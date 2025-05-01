@@ -1,5 +1,6 @@
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, CodegenBackend, CommitJob, CompileBenchmark,
+    Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -178,6 +179,16 @@ pub trait Connection: Send + Sync {
 
     /// Removes all data associated with the given artifact.
     async fn purge_artifact(&self, aid: &ArtifactId);
+
+    /// Add a jobs to the queue
+    async fn enqueue_commit_jobs(&self, jobs: &[CommitJob]);
+
+    /// Dequeue jobs, we pass `machine_id` and `target` in case there are jobs
+    /// the machine was previously doing and can pick up again
+    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob>;
+
+    /// Mark the job as finished
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool;
 }
 
 #[async_trait::async_trait]
