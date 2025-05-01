@@ -1,13 +1,15 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, CodegenBackend, CollectionId, Commit, CommitType,
-    CompileBenchmark, Date, Profile, Target,
+    commit_job_create, split_queued_commit_jobs, ArtifactCollection, ArtifactId, Benchmark,
+    CodegenBackend, CollectionId, Commit, CommitJob, CommitType, CompileBenchmark, Date, Profile,
+    Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
-use rusqlite::params;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ValueRef};
 use rusqlite::OptionalExtension;
+use rusqlite::{params, params_from_iter};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -402,6 +404,32 @@ static MIGRATIONS: &[Migration] = &[
         insert into pstat_series_with_target select id, crate, profile, scenario, backend, 'x86_64-unknown-linux-gnu', metric from pstat_series;
         drop table pstat_series;
         alter table pstat_series_with_target rename to pstat_series;
+    "#,
+    ),
+    Migration::without_foreign_key_constraints(
+        r#"
+        CREATE TABLE IF NOT EXISTS commit_queue (
+            sha          TEXT,
+            parent_sha   TEXT,
+            commit_type  TEXT,
+            pr           INTEGER,
+            release_tag  TEXT,
+            commit_time  TIMESTAMP,
+            target       TEXT,
+            include      TEXT,
+            exclude      TEXT,
+            runs         INTEGER DEFAULT 0,
+            backends     TEXT,
+            machine_id   TEXT,
+            started_at   TIMESTAMP,
+            finished_at  TIMESTAMP,
+            status       TEXT,
+            retries      INTEGER DEFAULT 0,
+            PRIMARY KEY  (sha, target)
+        );
+        CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
+        CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
+        CREATE INDEX IF NOT EXISTS sha_machine_id_idx ON commit_queue (sha, machine_id);
     "#,
     ),
 ];
@@ -1252,6 +1280,356 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
     }
+
+    /// For this to work we need a central database
+    async fn enqueue_commit_jobs(&self, jobs: &[CommitJob]) {
+        if jobs.is_empty() {
+            return;
+        }
+
+        let commits_by_type = split_queued_commit_jobs(jobs);
+        // Create a bulk insert statment for a specific commit job type i.e;
+        // ```
+        // INSERT OR IGNORE INTO
+        //     commit_queue(sha, parent_sha... )
+        // VALUES
+        //     (?, ?, ...),
+        //     (?, ?, ...),
+        //     (?, ?, ...);
+        // ```
+        fn make_insert_sql(commit: &CommitJob, rows: usize) -> String {
+            let column_names = commit.get_enqueue_column_names();
+            let column_string_names = column_names.join(", ");
+            let query_params = std::iter::repeat("?")
+                .take(column_names.len())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let placeholders = (0..rows)
+                .map(|_| format!("({})", query_params))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            format!(
+                "INSERT OR IGNORE INTO commit_queue ({}) VALUES {};",
+                column_string_names, placeholders
+            )
+        }
+
+        /* Add the commits to the database in their serialised format */
+        fn add_to_database<T>(
+            client: &SqliteConnection,
+            kind: &str,
+            commit_jobs: Vec<(&CommitJob, T)>,
+        ) where
+            T: rusqlite::ToSql,
+        {
+            if let Some(head) = commit_jobs.first() {
+                let sql = make_insert_sql(head.0, commit_jobs.len());
+                let params = commit_jobs
+                    .iter()
+                    .flat_map(|(commit_job, pr_or_release)| {
+                        [
+                            &commit_job.sha as &dyn ToSql,
+                            &commit_job.parent_sha,
+                            &kind,
+                            &commit_job.commit_time,
+                            &"queued", /* status is always queued */
+                            &commit_job.target,
+                            &commit_job.include,
+                            &commit_job.exclude,
+                            &commit_job.runs,
+                            &commit_job.backends,
+                            pr_or_release, /* This will either be a `pr` or `relase_tag`*/
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                client
+                    .raw_ref()
+                    .execute(&sql, params_from_iter(params))
+                    .unwrap();
+            }
+        }
+
+        add_to_database(self, "try", commits_by_type.r#try);
+        add_to_database(self, "master", commits_by_type.master);
+        add_to_database(self, "release", commits_by_type.release);
+    }
+
+    /// For this to work we need a central database
+    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
+        /* Check to see if this machine possibly went offline while doing
+         * a previous job - if it did we'll take that job */
+        let maybe_previous_job = self
+            .raw_ref()
+            .prepare(
+                "
+                WITH job_to_update AS (
+                    SELECT
+                        sha,
+                        parent_sha,
+                        commit_type,
+                        pr,
+                        release_tag, 
+                        commit_time,
+                        target,
+                        include,
+                        exclude, 
+                        runs,
+                        backends,
+                        machine_id,
+                        started_at,
+                        finished_at,
+                        status,
+                        retries      
+                    FROM commit_queue
+                    WHERE machine_id = ?
+                        AND target = ?
+                        AND status = 'in_progress'
+                        AND retries < 3
+                    ORDER BY started_at
+                    LIMIT 1
+                )
+                UPDATE commit_queue AS cq
+                SET started_at = DATETIME('now'),
+                    status = 'in_progress',
+                    retries = cq.retries + 1
+                WHERE cq.sha = (SELECT sha FROM job_to_update)
+                RETURNING *;
+                ",
+            )
+            .unwrap()
+            .query_map(params![machine_id, &target], |row| {
+                Ok(commit_queue_row_to_commit_job(row))
+            })
+            .unwrap()
+            .map(|row| row.unwrap())
+            .collect::<Vec<CommitJob>>();
+
+        if let Some(previous_job) = maybe_previous_job.first() {
+            return Some(previous_job.clone());
+        }
+
+        /* Check to see if we are out of sync with other collectors of
+         * different architectures, if we are we will update the row and
+         * return this `sha` */
+        let maybe_drift_job = self
+            .raw_ref()
+            .prepare(
+                "
+                WITH job_to_update AS (
+                    SELECT
+                        sha,
+                        parent_sha,
+                        commit_type,
+                        pr,
+                        release_tag, 
+                        commit_time,
+                        target,
+                        include,
+                        exclude, 
+                        runs,
+                        backends,
+                        machine_id,
+                        started_at,
+                        finished_at,
+                        status,
+                        retries
+                    FROM commit_queue
+                    WHERE target != ?
+                        AND status IN ('finished', 'in_progress')
+                        AND sha NOT IN (
+                            SELECT sha
+                            FROM commit_queue
+                            WHERE target != ?
+                                AND status = 'finished'
+                        )
+                    ORDER BY started_at
+                    LIMIT 1
+                )
+                UPDATE commit_queue
+                SET started_at = DATETIME('now'),
+                    status = 'in_progress',
+                    machine_id = ?
+                WHERE
+                    target = ?
+                    AND sha = (SELECT sha FROM job_to_update)
+                RETURNING *;
+                ",
+            )
+            .unwrap()
+            .query_map(params![&target, &target, machine_id, &target], |row| {
+                Ok(commit_queue_row_to_commit_job(row))
+            })
+            .unwrap()
+            .map(|sha| sha.unwrap())
+            .collect::<Vec<CommitJob>>();
+
+        if let Some(drift_job) = maybe_drift_job.first() {
+            return Some(drift_job.clone());
+        }
+
+        /* See if there are any jobs that need taking care of */
+        let jobs = self
+            .raw_ref()
+            .prepare(
+                "
+                WITH job_to_update AS (
+                    SELECT
+                        sha,
+                        parent_sha,
+                        commit_type,
+                        pr,
+                        release_tag, 
+                        commit_time,
+                        target,
+                        include,
+                        exclude, 
+                        runs,
+                        backends,
+                        machine_id,
+                        started_at,
+                        finished_at,
+                        status,
+                        retries
+                    FROM commit_queue
+                    WHERE target = ?
+                        AND status = 'queued'
+                    ORDER BY
+                        pr ASC,
+                        commit_type,
+                        sha
+                    LIMIT 1
+                )
+                UPDATE commit_queue
+                SET started_at = DATETIME('now'),
+                    status = 'in_progress',
+                    machine_id = ?
+                WHERE
+                    sha = (SELECT sha FROM job_to_update)
+                    AND target = ?
+                RETURNING *;
+                ",
+            )
+            .unwrap()
+            .query_map(params![&target, machine_id, &target], |row| {
+                Ok(commit_queue_row_to_commit_job(row))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect::<Vec<CommitJob>>();
+
+        /* If there is one, we will take that job */
+        if let Some(commit_job) = jobs.first() {
+            return Some(commit_job.clone());
+        }
+
+        /* There are no jobs in the queue */
+        return None;
+    }
+
+    /// For this to work we need a central database
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool {
+        let jobs = self
+            .raw_ref()
+            .execute(
+                "
+                UPDATE commit_queue
+                SET finished_at = DATETIME('now'),
+                    status = 'finished',
+                WHERE
+                    sha = ?
+                    AND machine_id = ?
+                    AND target = ?;
+                ",
+                params![&sha, machine_id, &target],
+            )
+            .unwrap();
+        return jobs == 1;
+    }
+}
+
+#[macro_export]
+macro_rules! impl_to_sqlite_via_to_string {
+    ($t:ty) => {
+        impl ToSql for $t {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+                Ok(self.to_string().into())
+            }
+        }
+    };
+}
+
+impl_to_sqlite_via_to_string!(Target);
+
+impl ToSql for Date {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.0.to_rfc3339().into())
+    }
+}
+
+impl FromSql for Date {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(text) => {
+                let s = std::str::from_utf8(text).map_err(|e| FromSqlError::Other(Box::new(e)))?;
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| Date(dt.with_timezone(&Utc)))
+                    .map_err(|e| FromSqlError::Other(Box::new(e)))
+            }
+            ValueRef::Integer(i) => Ok(Date(Utc.timestamp_opt(i, 0).unwrap())),
+            ValueRef::Real(f) => {
+                let secs = f.trunc() as i64;
+                let nanos = ((f - f.trunc()) * 1e9) as u32;
+                Ok(Date(Utc.timestamp_opt(secs, nanos).unwrap()))
+            }
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
+/* This is the same order as the `SELECT ...` for above, which is also the
+ * table creation order */
+fn commit_queue_row_to_commit_job(row: &rusqlite::Row) -> CommitJob {
+    let sha = row.get::<_, String>(0).unwrap();
+    let parent_sha = row.get::<_, String>(1).unwrap();
+    let commit_type = row.get::<_, String>(2).unwrap();
+    let pr = row.get::<_, Option<u32>>(3).unwrap();
+    let release_tag = row.get::<_, Option<String>>(4).unwrap();
+    let commit_time = row.get::<_, String>(5).unwrap().parse::<Date>().unwrap();
+    let target = Target::from_str(&row.get::<_, String>(6).unwrap()).unwrap();
+    let include = row.get::<_, Option<String>>(7).unwrap();
+    let exclude = row.get::<_, Option<String>>(8).unwrap();
+    let runs = row.get::<_, Option<i32>>(9).unwrap();
+    let backends = row.get::<_, Option<String>>(10).unwrap();
+    let machine_id = row.get::<_, Option<String>>(11).unwrap();
+    let started_at = row
+        .get::<_, Option<String>>(12)
+        .unwrap()
+        .map(|ts| ts.parse::<Date>().unwrap());
+
+    let finished_at = row
+        .get::<_, Option<String>>(13)
+        .unwrap()
+        .map(|ts| ts.parse::<Date>().unwrap());
+    let status = row.get::<_, String>(14).unwrap();
+
+    commit_job_create(
+        sha,
+        parent_sha,
+        &commit_type,
+        pr,
+        release_tag,
+        commit_time,
+        target,
+        machine_id,
+        started_at,
+        finished_at,
+        &status,
+        include,
+        exclude,
+        runs,
+        backends,
+    )
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {
