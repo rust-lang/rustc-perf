@@ -1,0 +1,13 @@
+diff --git a/src/generic.rs b/src/generic.rs
+index d46b44a3..a2233c8c 100644
+--- a/src/generic.rs
++++ b/src/generic.rs
+@@ -316,7 +316,7 @@ impl<FI> BitReader<FI> {
+     /// Returns `true` if the bit is set (1).
+     #[inline(always)]
+     pub fn bit_is_set(&self) -> bool {
+-        self.bit()
++        !self.bit()
+     }
+ }
+ 
