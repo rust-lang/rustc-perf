@@ -221,6 +221,11 @@ SPDX-FileCopyrightText = "serde contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "serde_derive-1.0.219/**"
+SPDX-FileCopyrightText = "serde contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "stm32f4-0.14.0/**"
 SPDX-FileCopyrightText = "stm32-rs contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"

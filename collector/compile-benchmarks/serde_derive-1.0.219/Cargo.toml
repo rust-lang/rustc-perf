@@ -84,3 +84,5 @@ default-features = false
 
 [dev-dependencies.serde]
 version = "1"
+
+[workspace]
