@@ -28,11 +28,6 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = "clap-3.1.6/**"
-SPDX-FileCopyrightText = "clap contributors"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-[[annotations]]
 path = "clap_derive-4.5.32/**"
 SPDX-FileCopyrightText = "clap contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
