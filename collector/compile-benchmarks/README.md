@@ -40,8 +40,9 @@ They mostly consist of real-world crates.
   converting to and from various image formats. Used often in graphics
   programming.
 - **libc-0.2.124**: An interface to `libc`. Contains many declarations of
-  types, constants, and functions, but relatively little normal code. Stresses
-  the parser. A very widely-used crate.
+  types, constants, and functions, but relatively little normal code. Stresses the parser. A very widely-used crate.
+- **libc-0.2.172**: An interface to `libc`. Contains many declarations of
+  types, constants, and functions, but relatively little normal code. Stresses the parser. A very widely-used crate.
 - **nalgebra-0.33.0**: A linear algebra library. It exercises the new trait solver
   in different ways than the old solver.
 - **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
