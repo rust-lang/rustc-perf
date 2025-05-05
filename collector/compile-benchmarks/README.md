@@ -24,7 +24,6 @@ They mostly consist of real-world crates.
 - **clap_derive-4.5.32**: The proc macro sub-crate of a command line argument parser library that is used by many Rust programs.
 - **cranelift-codegen-0.119.0**: The largest crate from a code generator. Used by wasmtime. Stresses obligation processing.
 - **diesel-2.2:10**: A type-safe SQL query builder. Utilizes the type system to ensure a lot of invariants. Stresses anything related to resolving trait bounds, by having a lot of trait impls for a large number of different types.
-- **exa-0.10.1**: An `ls` replacement. A widely-used utility, and a binary crate.
 - **eza-0.21.2**: An `ls` replacement. A widely-used utility, and a binary crate. Fork of `exa`.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever-0.31.0**: An HTML parser. Stresses macro parsing code.
