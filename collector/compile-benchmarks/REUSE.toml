@@ -73,11 +73,6 @@ SPDX-FileCopyrightText = "encoding contributors"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "exa-0.10.1/**"
-SPDX-FileCopyrightText = "exa contributors"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
 path = "eza-0.21.2/**"
 SPDX-FileCopyrightText = "Christina Sørensen, eza contributors"
 SPDX-License-Identifier = "EUPL-1.2"
