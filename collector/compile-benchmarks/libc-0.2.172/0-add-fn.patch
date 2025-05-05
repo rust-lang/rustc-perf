@@ -1,0 +1,12 @@
+diff --git a/src/primitives.rs b/src/primitives.rs
+index 668d3340..380e1e06 100644
+--- a/src/primitives.rs
++++ b/src/primitives.rs
+@@ -164,3 +164,7 @@ cfg_if! {
+         // static_assert_eq!(core::mem::align_of::<__uint128_t>(), _ALIGN_128);
+     }
+ }
++
++fn foo() {
++    let a = 5;
++}

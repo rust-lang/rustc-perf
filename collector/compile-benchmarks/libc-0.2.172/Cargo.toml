@@ -184,3 +184,5 @@ path = "tests/const_fn.rs"
 [dependencies.rustc-std-workspace-core]
 version = "1.0.0"
 optional = true
+
+[workspace]
