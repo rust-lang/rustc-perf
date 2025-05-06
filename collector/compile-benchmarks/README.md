@@ -46,6 +46,8 @@ They mostly consist of real-world crates.
 - **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
 - **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility, and a
   binary crate.
+- **ripgrep-14.1.1**: A line-oriented search tool. A widely-used utility, and a
+  binary crate.
 - **serde-1.0.136**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **serde-1.0.219**: A serialization/deserialization crate. Used by many other
