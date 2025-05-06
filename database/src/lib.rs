@@ -5,7 +5,7 @@ use intern::intern;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use std::hash;
-use std::ops::{Add, Deref, Sub};
+use std::ops::{Add, Sub};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -806,13 +806,24 @@ pub struct ArtifactCollection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CommitJobType {
-    Try(u32),
-    Master(u32),
-    Release(String),
+    Try { pr: u32 },
+    Master { pr: u32 },
+    Release { tag: String },
+}
+
+impl CommitJobType {
+    /// Get the name of the type as a `str`
+    pub fn name(&self) -> &'static str {
+        match self {
+            CommitJobType::Try { pr: _ } => "try",
+            CommitJobType::Master { pr: _ } => "master",
+            CommitJobType::Release { tag: _ } => "release",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommitJobEntity {
+pub struct CommitJob {
     pub sha: String,
     pub parent_sha: String,
     pub commit_time: Date,
@@ -822,18 +833,25 @@ pub struct CommitJobEntity {
     pub runs: Option<i32>,
     pub backends: Option<String>,
     pub job_type: CommitJobType,
+    pub state: CommitJobState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CommitJobState {
+    Queued,
+    Finished(CommitJobFinished),
+    Failed(CommitJobFailed),
+    InProgress(CommitJobInProgress),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitJobInProgress {
-    pub commit_job: CommitJobEntity,
     pub machine_id: String,
     pub started_at: Date,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitJobFinished {
-    pub commit_job: CommitJobEntity,
     pub machine_id: String,
     pub started_at: Date,
     pub finished_at: Date,
@@ -841,94 +859,19 @@ pub struct CommitJobFinished {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitJobFailed {
-    pub commit_job: CommitJobEntity,
     pub machine_id: String,
     pub started_at: Date,
     pub finished_at: Date,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CommitJob {
-    Queued(CommitJobEntity),
-    InProgress(CommitJobInProgress),
-    Finished(CommitJobFinished),
-    Failed(CommitJobFailed),
-}
-
 impl CommitJob {
-    /// Returns `Some(&CommitJobEntity)` only if the job is still queued.
-    pub fn as_queued(&self) -> Option<&CommitJobEntity> {
-        match self {
-            CommitJob::Queued(e) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// Returns `Some(&CommitJobInProgress)` while the job is running.
-    pub fn as_in_progress(&self) -> Option<&CommitJobInProgress> {
-        match self {
-            CommitJob::InProgress(ip) => Some(ip),
-            _ => None,
-        }
-    }
-
-    /// Returns `Some(&CommitJobFinished)` once the job is done.
-    pub fn as_finished(&self) -> Option<&CommitJobFinished> {
-        match self {
-            CommitJob::Finished(fin) => Some(fin),
-            _ => None,
-        }
-    }
-
     /// Get the status as a string
     pub fn status(&self) -> &'static str {
-        match self {
-            CommitJob::Queued(_) => "queued",
-            CommitJob::InProgress(_) => "in_progress",
-            CommitJob::Finished(_) => "finished",
-            CommitJob::Failed(_) => "failed",
-        }
-    }
-
-    /// True when `status == "finished"`.
-    pub fn is_finished(&self) -> bool {
-        matches!(self, CommitJob::Finished(_))
-    }
-
-    /// Will compose the column names for the job type
-    pub fn get_enqueue_column_names(&self) -> Vec<String> {
-        let mut base_columns = vec![
-            String::from("sha"),
-            String::from("parent_sha"),
-            String::from("commit_type"),
-            String::from("commit_time"),
-            String::from("status"),
-            String::from("target"),
-            String::from("include"),
-            String::from("exclude"),
-            String::from("runs"),
-            String::from("backends"),
-        ];
-
-        /* This is the last column */
-        match self.job_type {
-            CommitJobType::Try(_) => base_columns.push("pr".into()),
-            CommitJobType::Master(_) => base_columns.push("pr".into()),
-            CommitJobType::Release(_) => base_columns.push("release_tag".into()),
-        };
-
-        base_columns
-    }
-}
-
-impl Deref for CommitJob {
-    type Target = CommitJobEntity;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            CommitJob::Queued(e) => e,
-            CommitJob::InProgress(ip) => &ip.commit_job,
-            CommitJob::Finished(fin) => &fin.commit_job,
-            CommitJob::Failed(fail) => &fail.commit_job,
+        match self.state {
+            CommitJobState::Queued => "queued",
+            CommitJobState::InProgress(_) => "in_progress",
+            CommitJobState::Finished(_) => "finished",
+            CommitJobState::Failed(_) => "failed",
         }
     }
 }
@@ -953,30 +896,21 @@ fn commit_job_create(
     backends: Option<String>,
 ) -> CommitJob {
     let job_type = match commit_type {
-        "try" => CommitJobType::Try(pr.expect("`pr` cannot be `None` for a Commit of type `try`")),
-        "master" => {
-            CommitJobType::Master(pr.expect("`pr` cannot be `None` for a Commit of type `master`"))
-        }
-        "release" => CommitJobType::Release(
-            release_tag.expect("`release_tag` cannot be `None` for a Commit of type `release`"),
-        ),
+        "try" => CommitJobType::Try {
+            pr: pr.expect("`pr` cannot be `None` for a Commit of type `try`"),
+        },
+        "master" => CommitJobType::Master {
+            pr: pr.expect("`pr` cannot be `None` for a Commit of type `master`"),
+        },
+        "release" => CommitJobType::Release {
+            tag: release_tag
+                .expect("`release_tag` cannot be `None` for a Commit of type `release`"),
+        },
         _ => panic!("Unhandled commit_type {}", commit_type),
     };
 
-    let commit_job = CommitJobEntity {
-        sha,
-        parent_sha,
-        commit_time,
-        target,
-        include,
-        exclude,
-        runs,
-        backends,
-        job_type,
-    };
-
-    match status {
-        "queued" => CommitJob::Queued(commit_job),
+    let state = match status {
+        "queued" => CommitJobState::Queued,
 
         "in_progress" => {
             let started_at =
@@ -984,8 +918,7 @@ fn commit_job_create(
             let machine_id =
                 machine_id.expect("`machine_id` must be Some for an `in_progress` job");
 
-            CommitJob::InProgress(CommitJobInProgress {
-                commit_job,
+            CommitJobState::InProgress(CommitJobInProgress {
                 started_at,
                 machine_id,
             })
@@ -1000,15 +933,13 @@ fn commit_job_create(
                 machine_id.expect("`machine_id` must be Some for finished or failed a job");
 
             if status == "finished" {
-                CommitJob::Finished(CommitJobFinished {
-                    commit_job,
+                CommitJobState::Finished(CommitJobFinished {
                     started_at,
                     finished_at,
                     machine_id,
                 })
             } else {
-                CommitJob::Failed(CommitJobFailed {
-                    commit_job,
+                CommitJobState::Failed(CommitJobFailed {
                     started_at,
                     finished_at,
                     machine_id,
@@ -1019,43 +950,18 @@ fn commit_job_create(
         other => {
             panic!("unknown status `{other}` (expected `queued`, `in_progress`, `finished` or `failed`)")
         }
-    }
-}
+    };
 
-pub struct CommitsByType<'a> {
-    pub r#try: Vec<(&'a CommitJob, u32)>,
-    pub master: Vec<(&'a CommitJob, u32)>,
-    pub release: Vec<(&'a CommitJob, String)>,
-}
-
-/// Given a vector of `CommitJobs` bucket them out into;
-/// `try`, `master` and `release` (in that order)
-pub fn split_queued_commit_jobs(commit_jobs: &[CommitJob]) -> CommitsByType<'_> {
-    // Split jobs by type as that determines what we enter into the database,
-    // `ToSql` is quite finiky about lifetimes. Moreover the column names
-    // change depending on the commit job type. `master` and `try` have
-    // a `pr` column whereas `release` has a `release_rag` column
-    let (try_commits, master_commits, release_commits) = commit_jobs.iter().fold(
-        (vec![], vec![], vec![]),
-        |(mut try_commits, mut master_commits, mut release_commits), job| {
-            let entity = job
-                .as_queued()
-                .expect("Can only enqueue jobs with a status of `queued`");
-
-            match &entity.job_type {
-                crate::CommitJobType::Try(pr) => try_commits.push((job, *pr)),
-                crate::CommitJobType::Master(pr) => master_commits.push((job, *pr)),
-                crate::CommitJobType::Release(release_tag) => {
-                    release_commits.push((job, release_tag.clone()))
-                }
-            }
-            (try_commits, master_commits, release_commits)
-        },
-    );
-
-    CommitsByType {
-        r#try: try_commits,
-        master: master_commits,
-        release: release_commits,
+    CommitJob {
+        sha,
+        parent_sha,
+        commit_time,
+        target,
+        include,
+        exclude,
+        runs,
+        backends,
+        job_type,
+        state,
     }
 }

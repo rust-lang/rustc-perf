@@ -1,15 +1,14 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    commit_job_create, split_queued_commit_jobs, ArtifactCollection, ArtifactId, Benchmark,
-    CodegenBackend, CollectionId, Commit, CommitJob, CommitType, CompileBenchmark, Date, Profile,
-    Target,
+    commit_job_create, ArtifactCollection, ArtifactId, Benchmark, CodegenBackend, CollectionId,
+    Commit, CommitJob, CommitJobType, CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
+use rusqlite::params;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ValueRef};
 use rusqlite::OptionalExtension;
-use rusqlite::{params, params_from_iter};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -427,9 +426,6 @@ static MIGRATIONS: &[Migration] = &[
             retries      INTEGER DEFAULT 0,
             PRIMARY KEY  (sha, target)
         );
-        CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
-        CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
-        CREATE INDEX IF NOT EXISTS sha_machine_id_idx ON commit_queue (sha, machine_id);
     "#,
     ),
 ];
@@ -1281,82 +1277,125 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    /// For this to work we need a central database
-    async fn enqueue_commit_jobs(&self, jobs: &[CommitJob]) {
-        if jobs.is_empty() {
-            return;
-        }
-
-        let commits_by_type = split_queued_commit_jobs(jobs);
-        // Create a bulk insert statment for a specific commit job type i.e;
-        // ```
-        // INSERT OR IGNORE INTO
-        //     commit_queue(sha, parent_sha... )
-        // VALUES
-        //     (?, ?, ...),
-        //     (?, ?, ...),
-        //     (?, ?, ...);
-        // ```
-        fn make_insert_sql(commit: &CommitJob, rows: usize) -> String {
-            let column_names = commit.get_enqueue_column_names();
-            let column_string_names = column_names.join(", ");
-            let query_params = std::iter::repeat("?")
-                .take(column_names.len())
-                .collect::<Vec<_>>()
-                .join(", ");
-            let placeholders = (0..rows)
-                .map(|_| format!("({})", query_params))
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            format!(
-                "INSERT OR IGNORE INTO commit_queue ({}) VALUES {};",
-                column_string_names, placeholders
-            )
-        }
-
-        /* Add the commits to the database in their serialised format */
-        fn add_to_database<T>(
-            client: &SqliteConnection,
-            kind: &str,
-            commit_jobs: Vec<(&CommitJob, T)>,
-        ) where
-            T: rusqlite::ToSql,
-        {
-            if let Some(head) = commit_jobs.first() {
-                let sql = make_insert_sql(head.0, commit_jobs.len());
-                let params = commit_jobs
-                    .iter()
-                    .flat_map(|(commit_job, pr_or_release)| {
-                        [
-                            &commit_job.sha as &dyn ToSql,
-                            &commit_job.parent_sha,
-                            &kind,
-                            &commit_job.commit_time,
-                            &"queued", /* status is always queued */
-                            &commit_job.target,
-                            &commit_job.include,
-                            &commit_job.exclude,
-                            &commit_job.runs,
-                            &commit_job.backends,
-                            pr_or_release, /* This will either be a `pr` or `relase_tag`*/
-                        ]
-                    })
-                    .collect::<Vec<_>>();
-                client
-                    .raw_ref()
-                    .execute(&sql, params_from_iter(params))
-                    .unwrap();
-            }
-        }
-
-        add_to_database(self, "try", commits_by_type.r#try);
-        add_to_database(self, "master", commits_by_type.master);
-        add_to_database(self, "release", commits_by_type.release);
+    /// Add a job to the queue
+    async fn enqueue_commit_job(&self, job: &CommitJob) {
+        match &job.job_type {
+            CommitJobType::Try { pr } | CommitJobType::Master { pr } => self
+                .raw_ref()
+                .execute(
+                    "INSERT OR IGNORE commit_queue (
+                        sha,
+                        parent_sha,
+                        commit_type,
+                        commit_time,
+                        status,
+                        target,
+                        include,
+                        exclude,
+                        runs,
+                        backends,
+                        pr
+                     )
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ON CONFLICT DO NOTHING",
+                    params![
+                        &job.sha,
+                        &job.parent_sha,
+                        job.job_type.name(),
+                        &job.commit_time,
+                        &"queued",
+                        &job.target,
+                        &job.include,
+                        &job.exclude,
+                        &job.runs,
+                        &job.backends,
+                        &pr,
+                    ],
+                )
+                .unwrap(),
+            CommitJobType::Release { tag } => self
+                .raw_ref()
+                .execute(
+                    "INSERT OR IGNORE INTO commit_queue (
+                        sha,
+                        parent_sha,
+                        commit_type,
+                        commit_time,
+                        status,
+                        target,
+                        include,
+                        exclude,
+                        runs,
+                        backends,
+                        release_tag
+                     )
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ON CONFLICT DO NOTHING",
+                    params![
+                        &job.sha,
+                        &job.parent_sha,
+                        &job.job_type.name(),
+                        &job.commit_time,
+                        &"queued",
+                        &job.target,
+                        &job.include,
+                        &job.exclude,
+                        &job.runs,
+                        &job.backends,
+                        &tag,
+                    ],
+                )
+                .unwrap(),
+        };
     }
 
     /// For this to work we need a central database
-    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
+    async fn take_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
+        /* This is the same order as the `SELECT ...` below, which is also the
+         * table creation order */
+        fn commit_queue_row_to_commit_job(row: &rusqlite::Row) -> CommitJob {
+            let sha = row.get::<_, String>(0).unwrap();
+            let parent_sha = row.get::<_, String>(1).unwrap();
+            let commit_type = row.get::<_, String>(2).unwrap();
+            let pr = row.get::<_, Option<u32>>(3).unwrap();
+            let release_tag = row.get::<_, Option<String>>(4).unwrap();
+            let commit_time = row.get::<_, String>(5).unwrap().parse::<Date>().unwrap();
+            let target = Target::from_str(&row.get::<_, String>(6).unwrap()).unwrap();
+            let include = row.get::<_, Option<String>>(7).unwrap();
+            let exclude = row.get::<_, Option<String>>(8).unwrap();
+            let runs = row.get::<_, Option<i32>>(9).unwrap();
+            let backends = row.get::<_, Option<String>>(10).unwrap();
+            let machine_id = row.get::<_, Option<String>>(11).unwrap();
+            let started_at = row
+                .get::<_, Option<String>>(12)
+                .unwrap()
+                .map(|ts| ts.parse::<Date>().unwrap());
+
+            let finished_at = row
+                .get::<_, Option<String>>(13)
+                .unwrap()
+                .map(|ts| ts.parse::<Date>().unwrap());
+            let status = row.get::<_, String>(14).unwrap();
+
+            commit_job_create(
+                sha,
+                parent_sha,
+                &commit_type,
+                pr,
+                release_tag,
+                commit_time,
+                target,
+                machine_id,
+                started_at,
+                finished_at,
+                &status,
+                include,
+                exclude,
+                runs,
+                backends,
+            )
+        }
+
         /* Check to see if this machine possibly went offline while doing
          * a previous job - if it did we'll take that job */
         let maybe_previous_job = self
@@ -1435,14 +1474,7 @@ impl Connection for SqliteConnection {
                         status,
                         retries
                     FROM commit_queue
-                    WHERE target != ?
-                        AND status IN ('finished', 'in_progress')
-                        AND sha NOT IN (
-                            SELECT sha
-                            FROM commit_queue
-                            WHERE target != ?
-                                AND status = 'finished'
-                        )
+                    WHERE target != ? AND status IN ('finished', 'in_progress')
                     ORDER BY started_at
                     LIMIT 1
                 )
@@ -1490,13 +1522,19 @@ impl Connection for SqliteConnection {
                         started_at,
                         finished_at,
                         status,
-                        retries
+                        retries,
+                        CASE
+                            WHEN commit_type = 'release' THEN 0
+                            WHEN commit_type = 'master' THEN 1
+                            WHEN commit_type = 'try' THEN 2
+                            ELSE -1
+                        END AS type_rank
                     FROM commit_queue
                     WHERE target = ?
                         AND status = 'queued'
                     ORDER BY
+                        type_rank,
                         pr ASC,
-                        commit_type,
                         sha
                     LIMIT 1
                 )
@@ -1528,9 +1566,8 @@ impl Connection for SqliteConnection {
     }
 
     /// For this to work we need a central database
-    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool {
-        let jobs = self
-            .raw_ref()
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) {
+        self.raw_ref()
             .execute(
                 "
                 UPDATE commit_queue
@@ -1544,7 +1581,6 @@ impl Connection for SqliteConnection {
                 params![&sha, machine_id, &target],
             )
             .unwrap();
-        return jobs == 1;
     }
 }
 
@@ -1585,51 +1621,6 @@ impl FromSql for Date {
             _ => Err(FromSqlError::InvalidType),
         }
     }
-}
-
-/* This is the same order as the `SELECT ...` for above, which is also the
- * table creation order */
-fn commit_queue_row_to_commit_job(row: &rusqlite::Row) -> CommitJob {
-    let sha = row.get::<_, String>(0).unwrap();
-    let parent_sha = row.get::<_, String>(1).unwrap();
-    let commit_type = row.get::<_, String>(2).unwrap();
-    let pr = row.get::<_, Option<u32>>(3).unwrap();
-    let release_tag = row.get::<_, Option<String>>(4).unwrap();
-    let commit_time = row.get::<_, String>(5).unwrap().parse::<Date>().unwrap();
-    let target = Target::from_str(&row.get::<_, String>(6).unwrap()).unwrap();
-    let include = row.get::<_, Option<String>>(7).unwrap();
-    let exclude = row.get::<_, Option<String>>(8).unwrap();
-    let runs = row.get::<_, Option<i32>>(9).unwrap();
-    let backends = row.get::<_, Option<String>>(10).unwrap();
-    let machine_id = row.get::<_, Option<String>>(11).unwrap();
-    let started_at = row
-        .get::<_, Option<String>>(12)
-        .unwrap()
-        .map(|ts| ts.parse::<Date>().unwrap());
-
-    let finished_at = row
-        .get::<_, Option<String>>(13)
-        .unwrap()
-        .map(|ts| ts.parse::<Date>().unwrap());
-    let status = row.get::<_, String>(14).unwrap();
-
-    commit_job_create(
-        sha,
-        parent_sha,
-        &commit_type,
-        pr,
-        release_tag,
-        commit_time,
-        target,
-        machine_id,
-        started_at,
-        finished_at,
-        &status,
-        include,
-        exclude,
-        runs,
-        backends,
-    )
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {

@@ -1,8 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    commit_job_create, split_queued_commit_jobs, ArtifactCollection, ArtifactId, ArtifactIdNumber,
-    Benchmark, CodegenBackend, CollectionId, Commit, CommitJob, CommitType, CompileBenchmark, Date,
-    Index, Profile, QueuedCommit, Scenario, Target,
+    commit_job_create, ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, CodegenBackend,
+    CollectionId, Commit, CommitJob, CommitJobType, CommitType, CompileBenchmark, Date, Index,
+    Profile, QueuedCommit, Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -18,8 +18,6 @@ use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
 pub struct Postgres(String, std::sync::Once);
-
-type PgParam<'a> = &'a (dyn tokio_postgres::types::ToSql + Sync);
 
 impl Postgres {
     pub fn new(url: String) -> Self {
@@ -309,9 +307,6 @@ static MIGRATIONS: &[&str] = &[
          retries      INTEGER DEFAULT 0,
          PRIMARY KEY  (sha, target)
      );
-     CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
-     CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
-     CREATE INDEX IF NOT EXISTS sha_machine_id_idx ON commit_queue (sha, machine_id);
      "#,
 ];
 
@@ -1394,87 +1389,123 @@ where
             .unwrap();
     }
 
-    async fn enqueue_commit_jobs(&self, jobs: &[CommitJob]) {
-        if jobs.is_empty() {
-            return;
-        }
+    /// Add a job to the queue
+    async fn enqueue_commit_job(&self, job: &CommitJob) {
+        match &job.job_type {
+            CommitJobType::Try { pr } | CommitJobType::Master { pr } => self
+                .conn()
+                .execute(
+                    "INSERT INTO commit_queue (
+                        sha,
+                        parent_sha,
+                        commit_type,
+                        commit_time,
+                        status,
+                        target,
+                        include,
+                        exclude,
+                        runs,
+                        backends,
+                        pr
+                     )
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                     ON CONFLICT DO NOTHING",
+                    &[
+                        &job.sha,
+                        &job.parent_sha,
+                        &job.job_type.name(),
+                        &job.commit_time,
+                        &"queued",
+                        &job.target,
+                        &job.include,
+                        &job.exclude,
+                        &job.runs,
+                        &job.backends,
+                        &pr,
+                    ],
+                )
+                .await
+                .unwrap(),
+            CommitJobType::Release { tag } => self
+                .conn()
+                .execute(
+                    "INSERT INTO commit_queue (
+                        sha,
+                        parent_sha,
+                        commit_type,
+                        commit_time,
+                        status,
+                        target,
+                        include,
+                        exclude,
+                        runs,
+                        backends,
+                        release_tag
+                     )
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                     ON CONFLICT DO NOTHING",
+                    &[
+                        &job.sha,
+                        &job.parent_sha,
+                        &job.job_type.name(),
+                        &job.commit_time,
+                        &"queued",
+                        &job.target,
+                        &job.include,
+                        &job.exclude,
+                        &job.runs,
+                        &job.backends,
+                        &tag,
+                    ],
+                )
+                .await
+                .unwrap(),
+        };
+    }
 
-        let commits_by_type = split_queued_commit_jobs(jobs);
+    async fn take_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
+        /// Map a database row from the commit queue to a `CommitJob`
+        fn commit_queue_row_to_commit_job(row: &tokio_postgres::Row) -> CommitJob {
+            let sha = row.get::<_, String>(0);
+            let parent_sha = row.get::<_, String>(1);
+            let commit_type = row.get::<_, String>(2);
+            let pr = row.get::<_, Option<u32>>(3);
+            let release_tag = row.get::<_, Option<String>>(4);
+            let commit_time = row.get::<_, String>(5).parse::<Date>().unwrap();
+            let target = Target::from_str(&row.get::<_, String>(6)).unwrap();
+            let include = row.get::<_, Option<String>>(7);
+            let exclude = row.get::<_, Option<String>>(8);
+            let runs = row.get::<_, Option<i32>>(9);
+            let backends = row.get::<_, Option<String>>(10);
+            let machine_id = row.get::<_, Option<String>>(11);
+            let started_at = row
+                .get::<_, Option<String>>(12)
+                .map(|ts| ts.parse::<Date>().unwrap());
 
-        // Create a bulk insert statment for a specific commit job type i.e;
-        // ```
-        // INSERT INTO
-        //     commit_queue(sha, parent_sha... )
-        // VALUES
-        //     ($1, $2, ...),
-        //     ($3, $4, ...),
-        //     ($5, $6, ...)
-        // ON CONFLICT DO NOTHING;
-        // ```
-        fn make_insert_sql(commit: &CommitJob, rows: usize) -> String {
-            /* Get the column names we are interested in inserting */
-            let cols = commit.get_enqueue_column_names();
-            let col_cnt = cols.len();
-            let col_sql = cols.join(", ");
+            let finished_at = row
+                .get::<_, Option<String>>(13)
+                .map(|ts| ts.parse::<Date>().unwrap());
+            let status = row.get::<_, String>(14);
 
-            /* ($1,$2,...), ($k,$k+1, etc...) */
-            let values = (0..rows)
-                .map(|r| {
-                    let base = r * col_cnt;
-                    let group = (1..=col_cnt)
-                        .map(|i| format!("${}", base + i))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    format!("({})", group)
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            format!(
-                "INSERT INTO commit_queue ({}) VALUES {} ON CONFLICT DO NOTHING",
-                col_sql, values
+            commit_job_create(
+                sha,
+                parent_sha,
+                &commit_type,
+                pr,
+                release_tag,
+                commit_time,
+                target,
+                machine_id,
+                started_at,
+                finished_at,
+                &status,
+                include,
+                exclude,
+                runs,
+                backends,
             )
         }
 
-        /* Add the commits to the database in their serialised format */
-        async fn add_to_database<P, T>(client: &P, kind: &str, commit_jobs: Vec<(&CommitJob, T)>)
-        where
-            P: Send + Sync + PClient,
-            T: tokio_postgres::types::ToSql + Sync,
-        {
-            if let Some(head) = commit_jobs.first() {
-                let sql = make_insert_sql(head.0, commit_jobs.len());
-                let params = commit_jobs
-                    .iter()
-                    .flat_map(|(commit_job, pr_or_release)| {
-                        [
-                            &commit_job.sha as PgParam,
-                            &commit_job.parent_sha,
-                            &kind,
-                            &commit_job.commit_time,
-                            &"queued", /* status is always queued */
-                            &commit_job.target,
-                            &commit_job.include,
-                            &commit_job.exclude,
-                            &commit_job.runs,
-                            &commit_job.backends,
-                            pr_or_release, /* This will either be a `pr` or `relase_tag`*/
-                        ]
-                    })
-                    .collect::<Vec<_>>();
-                client.conn().execute(&sql, &params).await.unwrap();
-            }
-        }
-
-        /* Fire out in parallel */
-        tokio::join!(
-            add_to_database(self, "try", commits_by_type.r#try),
-            add_to_database(self, "master", commits_by_type.master),
-            add_to_database(self, "release", commits_by_type.release)
-        );
-    }
-
-    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
         /* Check to see if this machine possibly went offline while doing
          * a previous job - if it did we'll take that job
          *
@@ -1554,14 +1585,7 @@ where
                         status,
                         retries
                     FROM commit_queue
-                    WHERE target != $1
-                        AND status IN ('finished', 'in_progress')
-                        AND sha NOT IN (
-                            SELECT sha
-                            FROM commit_queue
-                            WHERE target != $1
-                                AND status = 'finished'
-                        )
+                    WHERE target != $1 AND status IN ('finished', 'in_progress')
                     ORDER BY started_at
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
@@ -1607,11 +1631,17 @@ where
                         started_at,
                         finished_at,
                         status,
-                        retries
+                        retries,
+                        CASE
+                            WHEN commit_type = 'release' THEN 0
+                            WHEN commit_type = 'master' THEN 1
+                            WHEN commit_type = 'try' THEN 2
+                            ELSE -1
+                        END AS type_rank
                     FROM commit_queue
                     WHERE target = $1
                         AND status = 'queued'
-                    ORDER BY pr ASC, commit_type, sha
+                    ORDER BY type_rank, pr ASC, sha
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 )
@@ -1639,9 +1669,8 @@ where
     }
 
     /// Mark a job in the database as done
-    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool {
-        let jobs = self
-            .conn()
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) {
+        self.conn()
             .query_opt(
                 "
                 UPDATE commit_queue
@@ -1649,57 +1678,14 @@ where
                     status = 'finished',
                 WHERE
                     sha = $1
-                    AND machine_id = $1
-                    AND target = $1;
+                    AND machine_id = $2
+                    AND target = $3;
                 ",
                 &[&sha, &machine_id, &target],
             )
             .await
             .unwrap();
-        return jobs.is_some();
     }
-}
-
-/// Map a database row from the commit queue to a `CommitJob`
-fn commit_queue_row_to_commit_job(row: &tokio_postgres::Row) -> CommitJob {
-    let sha = row.get::<_, String>(0);
-    let parent_sha = row.get::<_, String>(1);
-    let commit_type = row.get::<_, String>(2);
-    let pr = row.get::<_, Option<u32>>(3);
-    let release_tag = row.get::<_, Option<String>>(4);
-    let commit_time = row.get::<_, String>(5).parse::<Date>().unwrap();
-    let target = Target::from_str(&row.get::<_, String>(6)).unwrap();
-    let include = row.get::<_, Option<String>>(7);
-    let exclude = row.get::<_, Option<String>>(8);
-    let runs = row.get::<_, Option<i32>>(9);
-    let backends = row.get::<_, Option<String>>(10);
-    let machine_id = row.get::<_, Option<String>>(11);
-    let started_at = row
-        .get::<_, Option<String>>(12)
-        .map(|ts| ts.parse::<Date>().unwrap());
-
-    let finished_at = row
-        .get::<_, Option<String>>(13)
-        .map(|ts| ts.parse::<Date>().unwrap());
-    let status = row.get::<_, String>(14);
-
-    commit_job_create(
-        sha,
-        parent_sha,
-        &commit_type,
-        pr,
-        release_tag,
-        commit_time,
-        target,
-        machine_id,
-        started_at,
-        finished_at,
-        &status,
-        include,
-        exclude,
-        runs,
-        backends,
-    )
 }
 
 #[macro_export]
