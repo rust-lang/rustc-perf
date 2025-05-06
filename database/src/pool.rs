@@ -180,15 +180,15 @@ pub trait Connection: Send + Sync {
     /// Removes all data associated with the given artifact.
     async fn purge_artifact(&self, aid: &ArtifactId);
 
-    /// Add a jobs to the queue
-    async fn enqueue_commit_jobs(&self, jobs: &[CommitJob]);
+    /// Add a job to the queue
+    async fn enqueue_commit_job(&self, jobs: &CommitJob);
 
     /// Dequeue jobs, we pass `machine_id` and `target` in case there are jobs
     /// the machine was previously doing and can pick up again
-    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob>;
+    async fn take_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob>;
 
     /// Mark the job as finished
-    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool;
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String);
 }
 
 #[async_trait::async_trait]
