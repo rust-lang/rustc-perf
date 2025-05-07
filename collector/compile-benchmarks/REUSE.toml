@@ -295,11 +295,6 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "typenum-1.17.0/**"
-SPDX-FileCopyrightText = "typenum contributors"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-[[annotations]]
 path = "typenum-1.18.0/**"
 SPDX-FileCopyrightText = "typenum contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
