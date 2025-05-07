@@ -1,0 +1,17 @@
+diff --git a/src/nfa/thompson/builder.rs b/src/nfa/thompson/builder.rs
+index 6b69e878..24564db9 100644
+--- a/src/nfa/thompson/builder.rs
++++ b/src/nfa/thompson/builder.rs
+@@ -55,10 +55,10 @@ enum State {
+     /// that `Sparse` is used for via `Union`. But this creates a more bloated
+     /// NFA with more epsilon transitions than is necessary in the special case
+     /// of character classes.
+-    Sparse { transitions: Vec<Transition> },
++    Look { look: Look, next: StateID },
+     /// A conditional epsilon transition satisfied via some sort of
+     /// look-around.
+-    Look { look: Look, next: StateID },
++    Sparse { transitions: Vec<Transition> },
+     /// An empty state that records the start of a capture location. This is an
+     /// unconditional epsilon transition like `Empty`, except it can be used to
+     /// record position information for a capture group when using the NFA for

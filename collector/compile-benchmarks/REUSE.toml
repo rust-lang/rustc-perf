@@ -196,6 +196,11 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "regex-automata-0.4.8/**"
+SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "regression-31157/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
