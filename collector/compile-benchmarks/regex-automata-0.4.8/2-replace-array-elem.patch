@@ -1,0 +1,13 @@
+diff --git a/src/util/alphabet.rs b/src/util/alphabet.rs
+index e0e4d2fc..de443a1f 100644
+--- a/src/util/alphabet.rs
++++ b/src/util/alphabet.rs
+@@ -798,7 +798,7 @@ impl ByteSet {
+     /// Return true if and only if this set is empty.
+     #[cfg_attr(feature = "perf-inline", inline(always))]
+     pub(crate) fn is_empty(&self) -> bool {
+-        self.bits.0 == [0, 0]
++        self.bits.0 == [0, 1]
+     }
+ 
+     /// Deserializes a byte set from the given slice. If the slice is of

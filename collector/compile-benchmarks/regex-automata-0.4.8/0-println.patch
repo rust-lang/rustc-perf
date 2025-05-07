@@ -1,0 +1,12 @@
+diff --git a/src/dfa/accel.rs b/src/dfa/accel.rs
+index c0ba18ea..009d534b 100644
+--- a/src/dfa/accel.rs
++++ b/src/dfa/accel.rs
+@@ -186,6 +186,7 @@ impl<'a> Accels<&'a [AccelTy]> {
+     pub fn from_bytes_unchecked(
+         mut slice: &'a [u8],
+     ) -> Result<(Accels<&'a [AccelTy]>, usize), DeserializeError> {
++        std::println!("testing");
+         let slice_start = slice.as_ptr().as_usize();
+ 
+         let (accel_len, _) =
