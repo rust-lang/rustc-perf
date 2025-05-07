@@ -310,11 +310,6 @@ SPDX-FileCopyrightText = "ucd contributors"
 SPDX-License-Identifier = "MIT OR Unicode-DFS-2016"
 
 [[annotations]]
-path = "unicode-normalization-0.1.19/**"
-SPDX-FileCopyrightText = "unicode-normalization contributors"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-[[annotations]]
 path = "unicode-normalization-0.1.24/**"
 SPDX-FileCopyrightText = "unicode-normalization contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
