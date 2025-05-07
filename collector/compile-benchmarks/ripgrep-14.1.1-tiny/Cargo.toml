@@ -121,7 +121,11 @@ debug = 0
 inherits = "release"
 
 [profile.release]
-debug = 1
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
 
 [profile.release-lto]
 opt-level = 3
@@ -186,3 +190,5 @@ pcre2 = ["grep/pcre2"]
 
 [target.'cfg(all(target_env = "musl", target_pointer_width = "64"))'.dependencies.jemallocator]
 version = "0.5.0"
+
+[workspace]

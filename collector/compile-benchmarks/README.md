@@ -122,6 +122,8 @@ compiler in interesting ways.
   regression](https://github.com/rust-lang/rust/issues/31157) from the past.
 - **ripgrep-13.0.0-tiny**: A line-oriented search tool, optimized with flags that should reduce
   binary size.
+- **ripgrep-14.1.1-tiny**: A line-oriented search tool, optimized with flags
+  that should reduce binary size.
 - **token-stream-stress**: A proc-macro crate. Constructs a long token stream
   much like the `quote` crate does, which caused [quadratic
   behavior](https://github.com/rust-lang/rust/issues/65080) in the past.
