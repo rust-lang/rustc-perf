@@ -1,5 +1,0 @@
-{
-    "cargo_opts": "--features=client,http1,http2,server,stream",
-    "category": "primary",
-    "artifact": "library"
-}
