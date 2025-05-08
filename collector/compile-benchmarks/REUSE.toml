@@ -116,11 +116,6 @@ SPDX-FileCopyrightText = "hyper contributors"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "image-0.24.1/**"
-SPDX-FileCopyrightText = "The image-rs Developers"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
 path = "image-0.25.6/**"
 SPDX-FileCopyrightText = "The image-rs Developers"
 SPDX-License-Identifier = "MIT"

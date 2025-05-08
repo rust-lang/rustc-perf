@@ -28,9 +28,6 @@ They mostly consist of real-world crates.
 - **html5ever-0.31.0**: An HTML parser. Stresses macro parsing code.
 - **hyper-1.6.0**: Utilizes async/await, and is used by
   many Rust programs. The crate uses cargo features to enable large portions of its structure and is built with `--features=full`.
-- **image-0.24.1**: Basic image processing functions and methods for 
-  converting to and from various image formats. Used often in graphics 
-  programming.
 - **image-0.25.6**: Basic image processing functions and methods for
   converting to and from various image formats. Used often in graphics
   programming.
