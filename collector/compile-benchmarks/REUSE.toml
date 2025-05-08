@@ -266,11 +266,6 @@ SPDX-FileCopyrightText = "syn contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = "syn-1.0.89/**"
-SPDX-FileCopyrightText = "syn contributors"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-[[annotations]]
 path = "syn-2.0.101/**"
 SPDX-FileCopyrightText = "syn contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
