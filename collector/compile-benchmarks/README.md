@@ -26,9 +26,6 @@ They mostly consist of real-world crates.
 - **eza-0.21.2**: An `ls` replacement. A widely-used utility, and a binary crate. Fork of `exa`.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever-0.31.0**: An HTML parser. Stresses macro parsing code.
-- **hyper-0.14.18**: A fairly large crate. Utilizes async/await, and used by
-  many Rust programs. The crate uses cargo features to enable large portions of its
-  structure and is built with `--features=client,http1,http2,server,stream`.
 - **hyper-1.6.0**: Utilizes async/await, and is used by
   many Rust programs. The crate uses cargo features to enable large portions of its structure and is built with `--features=full`.
 - **image-0.24.1**: Basic image processing functions and methods for 
