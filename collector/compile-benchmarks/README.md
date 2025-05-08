@@ -61,8 +61,6 @@ They mostly consist of real-world crates.
 - **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
   It uses cargo features to enable large portions of its structure and is
   built with `--features=stm32f410` to have faster benchmarking times.
-- **syn-1.0.89**: A library for parsing Rust code. An important part of the Rust
-  ecosystem.
 - **syn-2.0.101**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
 - **typenum-1.18.0**: A library that encodes integer computation within the trait system. Serves as
