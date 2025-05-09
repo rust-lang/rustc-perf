@@ -1,5 +1,0 @@
-{
-    "cargo_opts": "--features=stm32f410",
-    "category": "primary",
-    "artifact": "library"
-}
