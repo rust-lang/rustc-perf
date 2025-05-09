@@ -114,8 +114,8 @@ jobs:
         #
         # We want the four parts to have similar runtimes.
         BENCH_INCLUDE_EXCLUDE_OPTS: [
-          "--include cargo-0.87.1,stm32f4-0.14.0",
-          "--exclude cargo-0.87.1,stm32f4-0.14.0",
+          "--include cargo-0.87.1,stm32f4-0.15.1",
+          "--exclude cargo-0.87.1,stm32f4-0.15.1",
         ]
         PROFILES: [
           "Check,Debug,Doc",
