@@ -48,8 +48,6 @@ They mostly consist of real-world crates.
   Rust programs.
 - **serde-1.0.219**: A serialization/deserialization crate. Used by many other
   Rust programs.
-- **serde_derive-1.0.136**: A proc-macro sub-crate used by `serde`. Used by
-  many other Rust programs. Stresses declarative macro expansion somewhat.
 - **serde_derive-1.0.219**: A proc-macro sub-crate used by `serde`. Used by
   many other Rust programs. Stresses declarative macro expansion somewhat.
 - **stm32f4-0.15.1**: A crate that has many thousands of blanket impl blocks.
