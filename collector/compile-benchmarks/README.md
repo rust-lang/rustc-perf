@@ -251,6 +251,7 @@ Rust code being written today.
   - Do this with `git rm -r` on the directory.
 - In the second commit do everything else.
   - Remove the entry from `collector/compile-benchmarks/README.md`.
+  - Remove the entry from `collector/compile-benchmarks/REUSE.toml`.
   - `git grep` for occurrences of the old benchmark name (e.g. in
     `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything needs
     changing... usually not.
