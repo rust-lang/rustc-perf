@@ -216,11 +216,6 @@ SPDX-FileCopyrightText = "ripgrep contributors"
 SPDX-License-Identifier = "MIT OR Unlicense"
 
 [[annotations]]
-path = "serde-1.0.136/**"
-SPDX-FileCopyrightText = "serde contributors"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-[[annotations]]
 path = "serde-1.0.219/**"
 SPDX-FileCopyrightText = "serde contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
