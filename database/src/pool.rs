@@ -294,3 +294,92 @@ impl Pool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use std::str::FromStr;
+
+    use super::*;
+    use crate::{tests::run_db_test, Commit, CommitType, Date};
+
+    /// Create a Commit
+    fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
+        Commit {
+            sha: commit_sha.into(),
+            date: Date(time),
+            r#type,
+        }
+    }
+
+    #[tokio::test]
+    async fn pstat_returns_empty_vector_when_empty() {
+        run_db_test(|ctx| async {
+            // This is essentially testing the database testing framework is
+            // wired up correctly. Though makes sense that there should be
+            // an empty vector returned if there are no pstats.
+            let db = ctx.db_client();
+            let result = db.connection().await.get_pstats(&vec![], &vec![]).await;
+            let expected: Vec<Vec<Option<f64>>> = vec![];
+
+            assert_eq!(result, expected);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn artifact_storage() {
+        run_db_test(|ctx| async {
+            let db = ctx.db_client();
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+
+            let artifact_one = ArtifactId::from(create_commit("abc", time, CommitType::Master));
+            let artifact_two = ArtifactId::Tag("nightly-2025-05-14".to_string());
+
+            let artifact_one_id_number = db.connection().await.artifact_id(&artifact_one).await;
+            let artifact_two_id_number = db.connection().await.artifact_id(&artifact_two).await;
+
+            // We cannot arbitrarily add random sizes to the artifact size
+            // table, as their is a constraint that the artifact must actually
+            // exist before attaching something to it.
+
+            // Artifact one inserts
+            db.connection()
+                .await
+                .record_artifact_size(artifact_one_id_number, "llvm.so", 32)
+                .await;
+            db.connection()
+                .await
+                .record_artifact_size(artifact_one_id_number, "llvm.a", 64)
+                .await;
+
+            // Artifact two inserts
+            db.connection()
+                .await
+                .record_artifact_size(artifact_two_id_number, "another-llvm.a", 128)
+                .await;
+
+            let result_one = db
+                .connection()
+                .await
+                .get_artifact_size(artifact_one_id_number)
+                .await;
+            let result_two = db
+                .connection()
+                .await
+                .get_artifact_size(artifact_two_id_number)
+                .await;
+
+            // artifact one
+            assert_eq!(Some(32 as u64), result_one.get("llvm.so").copied());
+            assert_eq!(Some(64 as u64), result_one.get("llvm.a").copied());
+            assert_eq!(None, result_one.get("another-llvm.a").copied());
+
+            // artifact two
+            assert_eq!(Some(128), result_two.get("another-llvm.a").copied());
+            Ok(ctx)
+        })
+        .await;
+    }
+}
