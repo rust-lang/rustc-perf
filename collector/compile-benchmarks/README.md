@@ -44,8 +44,6 @@ They mostly consist of real-world crates.
   binary crate.
 - **ripgrep-14.1.1**: A line-oriented search tool. A widely-used utility, and a
   binary crate.
-- **serde-1.0.136**: A serialization/deserialization crate. Used by many other
-  Rust programs.
 - **serde-1.0.219**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **serde_derive-1.0.219**: A proc-macro sub-crate used by `serde`. Used by
