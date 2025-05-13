@@ -388,10 +388,8 @@ fn main() {
             }
 
             "MonoItems" => {
-                // Lazy item collection is the default (i.e., without this
-                // option)
                 let mut cmd = Command::new(tool);
-                cmd.arg("-Zprint-mono-items=lazy")
+                cmd.arg("-Zprint-mono-items")
                     .args(args)
                     .stdout(std::process::Stdio::from(
                         std::fs::File::create("mono-items").unwrap(),
