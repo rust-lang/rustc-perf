@@ -30,6 +30,23 @@ impl TestContext {
             .expect("Cannot create database");
         drop(client);
 
+        let host = match &config
+            .get_hosts()
+            .first()
+            .expect("connection string must contain at least one host")
+        {
+            Host::Tcp(host) => host,
+
+            // This variant only exists on Unix targets, so the arm itself is
+            // cfg-gated to keep non-unix builds happy.
+            #[cfg(unix)]
+            Host::Unix(_) => panic!("Unix sockets in Postgres connection string are not supported"),
+
+            // On non-unix targets the enum has no other variants.
+            #[cfg(not(unix))]
+            _ => unreachable!("non-TCP hosts cannot appear on this platform"),
+        };
+
         // We need to connect to the database against, because Postgres doesn't allow
         // changing the active database mid-connection.
         // There does not seem to be a way to turn the config back into a connection
@@ -38,11 +55,7 @@ impl TestContext {
             "postgresql://{}:{}@{}:{}/{}",
             config.get_user().unwrap(),
             String::from_utf8(config.get_password().unwrap().to_vec()).unwrap(),
-            match &config.get_hosts()[0] {
-                Host::Tcp(host) => host,
-                Host::Unix(_) =>
-                    panic!("Unix sockets in Postgres connection string are not supported"),
-            },
+            host,
             &config.get_ports()[0],
             db_name
         );
