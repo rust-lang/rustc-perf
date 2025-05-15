@@ -137,7 +137,7 @@ test   -f results/eprintln-Test-helloworld-Check-Full
 test ! -s results/eprintln-Test-helloworld-Check-Full
 
 # llvm-lines. `Debug` not `Check` because it doesn't support `Check` profiles.
-# Including both `helloworld` and `regex-1.5.5` benchmarks, as they exercise the
+# Including both `helloworld` and `regex-automata-0.4.8` benchmarks, as they exercise the
 # zero dependency and the greater than zero dependency cases, respectively, the
 # latter of which has broken before.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
@@ -146,12 +146,12 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --id Test \
         --profiles Debug \
         --cargo $bindir/cargo \
-        --include helloworld,regex-1.5.5 \
+        --include helloworld,regex-automata-0.4.8 \
         --scenarios Full
 test -f results/ll-Test-helloworld-Debug-Full
 grep -q "Lines.*Copies.*Function name" results/ll-Test-helloworld-Debug-Full
-test -f results/ll-Test-regex-1.5.5-Debug-Full
-grep -q "Lines.*Copies.*Function name" results/ll-Test-regex-1.5.5-Debug-Full
+test -f results/ll-Test-regex-automata-0.4.8-Debug-Full
+grep -q "Lines.*Copies.*Function name" results/ll-Test-regex-automata-0.4.8-Debug-Full
 
 # llvm-ir. `Debug` not `Check` because it works better that way.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
