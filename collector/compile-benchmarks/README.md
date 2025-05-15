@@ -37,7 +37,6 @@ They mostly consist of real-world crates.
   types, constants, and functions, but relatively little normal code. Stresses the parser. A very widely-used crate.
 - **nalgebra-0.33.0**: A linear algebra library. It exercises the new trait solver
   in different ways than the old solver.
-- **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
 - **regex-automata-0.4.8**: A regular expression matching engine. Used by `regex`, which is used by
   many Rust programs.
 - **ripgrep-14.1.1**: A line-oriented search tool. A widely-used utility, and a
