@@ -26,3 +26,4 @@ csv = "1"
 x509-cert = { version = "0.2.5", features = ["pem"] }
 
 intern = { path = "../intern" }
+uuid = "1.16.0"

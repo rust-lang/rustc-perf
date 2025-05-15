@@ -25,7 +25,7 @@ impl Postgres {
 
 const CERT_URL: &str = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
 
-async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
+pub async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
     if db_url.contains("rds.amazonaws.com") {
         let mut builder = TlsConnector::builder();
         for cert in make_certificates().await {
