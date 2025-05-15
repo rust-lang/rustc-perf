@@ -40,8 +40,6 @@ They mostly consist of real-world crates.
 - **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
 - **regex-automata-0.4.8**: A regular expression matching engine. Used by `regex`, which is used by
   many Rust programs.
-- **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility, and a
-  binary crate.
 - **ripgrep-14.1.1**: A line-oriented search tool. A widely-used utility, and a
   binary crate.
 - **serde-1.0.219**: A serialization/deserialization crate. Used by many other
