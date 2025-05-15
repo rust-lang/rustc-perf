@@ -1,5 +1,0 @@
-{
-    "touch_file": "crates/core/main.rs",
-    "category": "primary",
-    "artifact": "binary"
-}
