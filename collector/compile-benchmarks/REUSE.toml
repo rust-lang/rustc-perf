@@ -186,11 +186,6 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "ripgrep-13.0.0-tiny/**"
-SPDX-FileCopyrightText = "ripgrep contributors"
-SPDX-License-Identifier = "MIT OR Unlicense"
-
-[[annotations]]
 path = "ripgrep-14.1.1/**"
 SPDX-FileCopyrightText = "ripgrep contributors"
 SPDX-License-Identifier = "MIT OR Unlicense"
