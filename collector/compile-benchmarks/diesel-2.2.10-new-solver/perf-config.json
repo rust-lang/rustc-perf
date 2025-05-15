@@ -1,0 +1,5 @@
+{
+  "artifact": "library",
+  "category": "primary",
+  "cargo_rustc_opts": "-Znext-solver=globally"
+}
