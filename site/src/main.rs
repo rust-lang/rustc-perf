@@ -28,6 +28,11 @@ async fn main() {
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(2346);
+    let queue_update_interval_seconds: u64 = env::var("QUEUE_UPDATE_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(5);
+
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
             let res = Arc::new(load::SiteCtxt::from_db_url(&db_url).await.unwrap());
@@ -50,7 +55,9 @@ async fn main() {
     .fuse();
     println!("Starting server with port={:?}", port);
 
-    let server = site::server::start(ctxt, port).fuse();
+    let server = site::server::start(ctxt.clone(), port).fuse();
+    site::queue_jobs::cron_enqueue_jobs(ctxt, queue_update_interval_seconds).await;
+
     futures::pin_mut!(server);
     futures::pin_mut!(fut);
     loop {
