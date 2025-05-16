@@ -1,0 +1,13 @@
+{
+  "artifact": "library",
+  "category": "secondary",
+  "cargo_rustc_opts": "-Znext-solver=globally",
+  "excluded_profiles": [
+    "Doc"
+  ],
+  "excluded_scenarios": [
+    "IncrFull",
+    "IncrPatched",
+    "IncrUnchanged"
+  ]
+}
