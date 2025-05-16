@@ -161,6 +161,11 @@ SPDX-FileCopyrightText = "Sébastien Crozet"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "nalgebra-0.33.0-new-solver/**"
+SPDX-FileCopyrightText = "Sébastien Crozet"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
 path = "piston-image/**"
 SPDX-FileCopyrightText = "piston contributors"
 SPDX-License-Identifier = "MIT"
