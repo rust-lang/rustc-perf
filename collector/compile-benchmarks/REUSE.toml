@@ -231,6 +231,11 @@ SPDX-FileCopyrightText = "syn contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "syn-2.0.101-new-solver/**"
+SPDX-FileCopyrightText = "syn contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "token-stream-stress/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
