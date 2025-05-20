@@ -98,6 +98,15 @@ where
         let ctx = f(ctx).await.expect("Test failed");
         ctx.finish().await;
     } else {
-        panic!("Aborting; `TEST_DB_URL` was not passed");
+        // The github CI does not yet support running containers on Windows,
+        // meaning that the test suite would fail.
+        if cfg!(unix) {
+            panic!("Aborting; `TEST_DB_URL` was not passed");
+        } else {
+            eprintln!(
+                "Skipping database test on platform {} `TEST_DB_URL` was not passed",
+                std::env::consts::OS
+            );
+        }
     }
 }
