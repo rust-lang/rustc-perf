@@ -423,7 +423,6 @@ static MIGRATIONS: &[Migration] = &[
             started_at   TIMESTAMP,
             finished_at  TIMESTAMP,
             status       TEXT,
-            retries      INTEGER DEFAULT 0,
             PRIMARY KEY  (sha, target)
         );
     "#,
@@ -1396,58 +1395,6 @@ impl Connection for SqliteConnection {
             )
         }
 
-        /* Check to see if this machine possibly went offline while doing
-         * a previous job - if it did we'll take that job */
-        let maybe_previous_job = self
-            .raw_ref()
-            .prepare(
-                "
-                WITH job_to_update AS (
-                    SELECT
-                        sha,
-                        parent_sha,
-                        commit_type,
-                        pr,
-                        release_tag, 
-                        commit_time,
-                        target,
-                        include,
-                        exclude, 
-                        runs,
-                        backends,
-                        machine_id,
-                        started_at,
-                        finished_at,
-                        status,
-                        retries      
-                    FROM commit_queue
-                    WHERE machine_id = ?
-                        AND target = ?
-                        AND status = 'in_progress'
-                        AND retries < 3
-                    ORDER BY started_at
-                    LIMIT 1
-                )
-                UPDATE commit_queue AS cq
-                SET started_at = DATETIME('now'),
-                    status = 'in_progress',
-                    retries = cq.retries + 1
-                WHERE cq.sha = (SELECT sha FROM job_to_update)
-                RETURNING *;
-                ",
-            )
-            .unwrap()
-            .query_map(params![machine_id, &target], |row| {
-                Ok(commit_queue_row_to_commit_job(row))
-            })
-            .unwrap()
-            .map(|row| row.unwrap())
-            .collect::<Vec<CommitJob>>();
-
-        if let Some(previous_job) = maybe_previous_job.first() {
-            return Some(previous_job.clone());
-        }
-
         /* Check to see if we are out of sync with other collectors of
          * different architectures, if we are we will update the row and
          * return this `sha` */
@@ -1471,8 +1418,7 @@ impl Connection for SqliteConnection {
                         machine_id,
                         started_at,
                         finished_at,
-                        status,
-                        retries
+                        status
                     FROM commit_queue
                     WHERE target != ? AND status IN ('finished', 'in_progress')
                     ORDER BY started_at
@@ -1522,7 +1468,6 @@ impl Connection for SqliteConnection {
                         started_at,
                         finished_at,
                         status,
-                        retries,
                         CASE
                             WHEN commit_type = 'release' THEN 0
                             WHEN commit_type = 'master' THEN 1

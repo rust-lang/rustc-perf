@@ -1648,36 +1648,6 @@ macro_rules! impl_to_postgresql_via_to_string {
 
 impl_to_postgresql_via_to_string!(Target);
 
-//impl ToSql for Date {
-//    fn to_sql(
-//        &self,
-//        ty: &tokio_postgres::types::Type,
-//        out: &mut bytes::BytesMut,
-//    ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-//        self.0.to_sql(ty, out)
-//    }
-//
-//    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
-//        <DateTime<Utc> as tokio_postgres::types::ToSql>::accepts(ty)
-//    }
-//
-//    tokio_postgres::types::to_sql_checked!();
-//}
-//
-//impl<'a> FromSql<'a> for Date {
-//    fn from_sql(
-//        ty: &tokio_postgres::types::Type,
-//        raw: &'a [u8],
-//    ) -> Result<Date, Box<dyn std::error::Error + Sync + Send>> {
-//        let dt = DateTime::<Utc>::from_sql(ty, raw)?;
-//        Ok(Date(dt))
-//    }
-//
-//    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
-//        <DateTime<Utc> as FromSql>::accepts(ty)
-//    }
-//}
-
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
     match ty {
         "master" => ArtifactId::Commit(Commit {
