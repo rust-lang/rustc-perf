@@ -341,39 +341,27 @@ mod tests {
             let artifact_two_id_number = db.connection().await.artifact_id(&artifact_two).await;
 
             // We cannot arbitrarily add random sizes to the artifact size
-            // table, as their is a constraint that the artifact must actually
+            // table, as there is a constraint that the artifact must actually
             // exist before attaching something to it.
 
+            let db = db.connection().await;
+
             // Artifact one inserts
-            db.connection()
-                .await
-                .record_artifact_size(artifact_one_id_number, "llvm.so", 32)
+            db.record_artifact_size(artifact_one_id_number, "llvm.so", 32)
                 .await;
-            db.connection()
-                .await
-                .record_artifact_size(artifact_one_id_number, "llvm.a", 64)
+            db.record_artifact_size(artifact_one_id_number, "llvm.a", 64)
                 .await;
 
             // Artifact two inserts
-            db.connection()
-                .await
-                .record_artifact_size(artifact_two_id_number, "another-llvm.a", 128)
+            db.record_artifact_size(artifact_two_id_number, "another-llvm.a", 128)
                 .await;
 
-            let result_one = db
-                .connection()
-                .await
-                .get_artifact_size(artifact_one_id_number)
-                .await;
-            let result_two = db
-                .connection()
-                .await
-                .get_artifact_size(artifact_two_id_number)
-                .await;
+            let result_one = db.get_artifact_size(artifact_one_id_number).await;
+            let result_two = db.get_artifact_size(artifact_two_id_number).await;
 
             // artifact one
-            assert_eq!(Some(32 as u64), result_one.get("llvm.so").copied());
-            assert_eq!(Some(64 as u64), result_one.get("llvm.a").copied());
+            assert_eq!(Some(32u64), result_one.get("llvm.so").copied());
+            assert_eq!(Some(64u64), result_one.get("llvm.a").copied());
             assert_eq!(None, result_one.get("another-llvm.a").copied());
 
             // artifact two

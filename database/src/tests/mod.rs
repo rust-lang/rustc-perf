@@ -98,6 +98,6 @@ where
         let ctx = f(ctx).await.expect("Test failed");
         ctx.finish().await;
     } else {
-        eprintln!("Skipping test because TEST_DB_URL was not passed");
+        panic!("Skipping test because TEST_DB_URL was not passed");
     }
 }
