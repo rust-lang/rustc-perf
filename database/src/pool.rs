@@ -312,7 +312,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::{tests::run_db_test, Commit, CommitType, Date};
+    use crate::{tests::run_db_test, Commit, CommitJobState, CommitJobType, CommitType, Date};
 
     /// Create a Commit
     fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
@@ -320,6 +320,29 @@ mod tests {
             sha: commit_sha.into(),
             date: Date(time),
             r#type,
+        }
+    }
+
+    /// Create a CommitJob
+    fn create_commit_job(
+        sha: &str,
+        parent_sha: &str,
+        commit_time: chrono::DateTime<Utc>,
+        target: Target,
+        job_type: CommitJobType,
+        state: CommitJobState,
+    ) -> CommitJob {
+        CommitJob {
+            sha: sha.to_string(),
+            parent_sha: parent_sha.to_string(),
+            commit_time: Date(commit_time),
+            target,
+            include: None,
+            exclude: None,
+            runs: None,
+            backends: None,
+            job_type,
+            state,
         }
     }
 
@@ -377,6 +400,124 @@ mod tests {
 
             // artifact two
             assert_eq!(Some(128), result_two.get("another-llvm.a").copied());
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn take_commit_job() {
+        run_db_test(|ctx| async {
+            // ORDER:
+            // Releases first
+            // Master commits second, order by oldest PR ascending
+            // Try commits last, order by oldest PR ascending
+
+            let db = ctx.db_client().connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+
+            // Try commits
+            let try_job_1 = create_commit_job(
+                "sha1",
+                "p1",
+                time,
+                Target::X86_64UnknownLinuxGnu,
+                CommitJobType::Try { pr: 1 },
+                CommitJobState::Queued,
+            );
+            let try_job_2 = create_commit_job(
+                "sha2",
+                "p2",
+                time,
+                Target::X86_64UnknownLinuxGnu,
+                CommitJobType::Try { pr: 2 },
+                CommitJobState::Queued,
+            );
+
+            // Master commits
+            let master_job_1 = create_commit_job(
+                "sha3",
+                "p3",
+                time,
+                Target::X86_64UnknownLinuxGnu,
+                CommitJobType::Master { pr: 3 },
+                CommitJobState::Queued,
+            );
+            let master_job_2 = create_commit_job(
+                "sha4",
+                "p4",
+                time,
+                Target::X86_64UnknownLinuxGnu,
+                CommitJobType::Master { pr: 4 },
+                CommitJobState::Queued,
+            );
+
+            // Release commits
+            let release_job_1 = create_commit_job(
+                "sha5",
+                "p5",
+                time,
+                Target::X86_64UnknownLinuxGnu,
+                CommitJobType::Release { tag: "tag1".into() },
+                CommitJobState::Queued,
+            );
+            let release_job_2 = create_commit_job(
+                "sha6",
+                "p6",
+                time,
+                Target::X86_64UnknownLinuxGnu,
+                CommitJobType::Release { tag: "tag2".into() },
+                CommitJobState::Queued,
+            );
+
+            // Shuffle the insert order a bit
+            let all_commits = vec![
+                release_job_1,
+                master_job_2,
+                try_job_1,
+                release_job_2,
+                master_job_1,
+                try_job_2,
+            ];
+
+            // queue all the jobs
+            for commit in all_commits {
+                db.enqueue_commit_job(&commit).await;
+            }
+
+            // Now we test the ordering: after each dequeue we immediately mark
+            // the job as finished for the sake of testing so it can't be
+            // returned again in the test.
+            //
+            // The priority should be;
+            //
+            //   1. Release commits           (oldest tag first)
+            //   2. Master  commits           (oldest PR first)
+            //   3. Try     commits           (oldest PR first)
+            //
+            // Given the data we inserted above the expected SHA order is:
+            // sha5, sha6, sha3, sha4, sha1, sha2.
+
+            let machine = "machine-1";
+            let target = Target::X86_64UnknownLinuxGnu;
+            let expected = ["sha5", "sha6", "sha3", "sha4", "sha1", "sha2"];
+
+            for &sha in &expected {
+                let job = db.take_commit_job(machine, target).await;
+                assert!(job.is_some(), "expected a job for sha {sha}");
+                let job = job.unwrap();
+                assert_eq!(job.sha, sha, "jobs dequeued out of priority order");
+
+                // Mark the job finished so it is not returned again.
+                db.finish_commit_job(machine, target, sha.to_string()).await;
+            }
+
+            // After all six jobs have been taken, the queue should be empty.
+            assert!(
+                db.take_commit_job(machine, target).await.is_none(),
+                "queue should be empty after draining all jobs"
+            );
+
             Ok(ctx)
         })
         .await;

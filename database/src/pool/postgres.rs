@@ -13,7 +13,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tokio_postgres::types::{FromSql, ToSql};
 use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
@@ -294,17 +293,16 @@ static MIGRATIONS: &[&str] = &[
          commit_type  TEXT,
          pr           INTEGER,
          release_tag  TEXT,
-         commit_time  TIMESTAMP,
+         commit_time  TIMESTAMPTZ,
          target       TEXT,
          include      TEXT,
          exclude      TEXT,
          runs         INTEGER DEFAULT 0,
          backends     TEXT,
          machine_id   TEXT,
-         started_at   TIMESTAMP,
-         finished_at  TIMESTAMP,
+         started_at   TIMESTAMPTZ,
+         finished_at  TIMESTAMPTZ,
          status       TEXT,
-         retries      INTEGER DEFAULT 0,
          PRIMARY KEY  (sha, target)
      );
      "#,
@@ -1414,14 +1412,14 @@ where
                         &job.sha,
                         &job.parent_sha,
                         &job.job_type.name(),
-                        &job.commit_time,
+                        &job.commit_time.0,
                         &"queued",
                         &job.target,
                         &job.include,
                         &job.exclude,
                         &job.runs,
                         &job.backends,
-                        &pr,
+                        &(*pr as i32),
                     ],
                 )
                 .await
@@ -1448,7 +1446,7 @@ where
                         &job.sha,
                         &job.parent_sha,
                         &job.job_type.name(),
-                        &job.commit_time,
+                        &job.commit_time.0,
                         &"queued",
                         &job.target,
                         &job.include,
@@ -1469,22 +1467,17 @@ where
             let sha = row.get::<_, String>(0);
             let parent_sha = row.get::<_, String>(1);
             let commit_type = row.get::<_, String>(2);
-            let pr = row.get::<_, Option<u32>>(3);
+            let pr = row.get::<_, Option<i32>>(3).map(|it| it as u32);
             let release_tag = row.get::<_, Option<String>>(4);
-            let commit_time = row.get::<_, String>(5).parse::<Date>().unwrap();
+            let commit_time = row.get::<_, DateTime<Utc>>(5);
             let target = Target::from_str(&row.get::<_, String>(6)).unwrap();
             let include = row.get::<_, Option<String>>(7);
             let exclude = row.get::<_, Option<String>>(8);
             let runs = row.get::<_, Option<i32>>(9);
             let backends = row.get::<_, Option<String>>(10);
             let machine_id = row.get::<_, Option<String>>(11);
-            let started_at = row
-                .get::<_, Option<String>>(12)
-                .map(|ts| ts.parse::<Date>().unwrap());
-
-            let finished_at = row
-                .get::<_, Option<String>>(13)
-                .map(|ts| ts.parse::<Date>().unwrap());
+            let started_at = row.get::<_, Option<DateTime<Utc>>>(12).map(Date);
+            let finished_at = row.get::<_, Option<DateTime<Utc>>>(13).map(Date);
             let status = row.get::<_, String>(14);
 
             commit_job_create(
@@ -1493,7 +1486,7 @@ where
                 &commit_type,
                 pr,
                 release_tag,
-                commit_time,
+                Date(commit_time),
                 target,
                 machine_id,
                 started_at,
@@ -1504,62 +1497,6 @@ where
                 runs,
                 backends,
             )
-        }
-
-        /* Check to see if this machine possibly went offline while doing
-         * a previous job - if it did we'll take that job
-         *
-         * `FOR UPDATE SKIP LOCKED`prevents multiple machines of the same
-         *  architecture taking the same job. See here for more information;
-         *  https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE */
-        let maybe_previous_job = self
-            .conn()
-            .query_opt(
-                "
-                WITH job_to_update AS (
-                    SELECT
-                        sha,
-                        parent_sha,
-                        commit_type,
-                        pr,
-                        release_tag, 
-                        commit_time,
-                        target,
-                        include,
-                        exclude, 
-                        runs,
-                        backends,
-                        machine_id,
-                        started_at,
-                        finished_at,
-                        status,
-                        retries
-                    FROM commit_queue
-                    WHERE machine_id = $1
-                        AND target = $2
-                        AND status = 'in_progress'
-                        AND retries < 3
-                    ORDER BY started_at
-                    LIMIT 1
-
-                    FOR UPDATE SKIP LOCKED
-
-                )
-                UPDATE commit_queue AS cq
-                SET started_at = NOW(),
-                    status = 'in_progress',
-                    retries = cq.retries + 1
-                WHERE cq.sha = (SELECT sha FROM job_to_update)
-                RETURNING cq.*;
-            ",
-                &[&machine_id, &target],
-            )
-            .await
-            .unwrap();
-
-        /* If it was we will take that job */
-        if let Some(row) = maybe_previous_job {
-            return Some(commit_queue_row_to_commit_job(&row));
         }
 
         let maybe_drift_job = self
@@ -1582,8 +1519,7 @@ where
                         machine_id,
                         started_at,
                         finished_at,
-                        status,
-                        retries
+                        status
                     FROM commit_queue
                     WHERE target != $1 AND status IN ('finished', 'in_progress')
                     ORDER BY started_at
@@ -1631,7 +1567,6 @@ where
                         started_at,
                         finished_at,
                         status,
-                        retries,
                         CASE
                             WHEN commit_type = 'release' THEN 0
                             WHEN commit_type = 'master' THEN 1
@@ -1674,8 +1609,8 @@ where
             .query_opt(
                 "
                 UPDATE commit_queue
-                SET finished_at = DATETIME('now'),
-                    status = 'finished',
+                SET finished_at = NOW(),
+                    status = 'finished'
                 WHERE
                     sha = $1
                     AND machine_id = $2
@@ -1713,35 +1648,35 @@ macro_rules! impl_to_postgresql_via_to_string {
 
 impl_to_postgresql_via_to_string!(Target);
 
-impl ToSql for Date {
-    fn to_sql(
-        &self,
-        ty: &tokio_postgres::types::Type,
-        out: &mut bytes::BytesMut,
-    ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        self.0.to_sql(ty, out)
-    }
-
-    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
-        <DateTime<Utc> as ToSql>::accepts(ty)
-    }
-
-    tokio_postgres::types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for Date {
-    fn from_sql(
-        ty: &tokio_postgres::types::Type,
-        raw: &'a [u8],
-    ) -> Result<Date, Box<dyn std::error::Error + Sync + Send>> {
-        let dt = DateTime::<Utc>::from_sql(ty, raw)?;
-        Ok(Date(dt))
-    }
-
-    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
-        <DateTime<Utc> as FromSql>::accepts(ty)
-    }
-}
+//impl ToSql for Date {
+//    fn to_sql(
+//        &self,
+//        ty: &tokio_postgres::types::Type,
+//        out: &mut bytes::BytesMut,
+//    ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+//        self.0.to_sql(ty, out)
+//    }
+//
+//    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+//        <DateTime<Utc> as tokio_postgres::types::ToSql>::accepts(ty)
+//    }
+//
+//    tokio_postgres::types::to_sql_checked!();
+//}
+//
+//impl<'a> FromSql<'a> for Date {
+//    fn from_sql(
+//        ty: &tokio_postgres::types::Type,
+//        raw: &'a [u8],
+//    ) -> Result<Date, Box<dyn std::error::Error + Sync + Send>> {
+//        let dt = DateTime::<Utc>::from_sql(ty, raw)?;
+//        Ok(Date(dt))
+//    }
+//
+//    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+//        <DateTime<Utc> as FromSql>::accepts(ty)
+//    }
+//}
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
     match ty {
