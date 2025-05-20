@@ -556,3 +556,22 @@ compilation of the final/leaf crate. Cargo only passes arguments after `--` to t
 therefore this does not affect the compilation of dependencies.
 2) Profiling/benchmarking - `cargo` is invoked with `--wrap-rustc-with <TOOL>`, which executes the
 specified profiling tool by `rustc-fake`.
+
+## How to test
+Run `make test`; in the root of the project there is a `Makefile` which
+presently exists to spin up/down a Postgres database, from a
+`docker-compose.yml`, then run `cargo test` with a `TEST_DB_URL` set. In
+concrete terms `make test` is a convenience for running;
+
+```bash
+docker compose up -d pg_test && \
+    TEST_DB_URL="postgres://postgres:testpass@localhost/postgres" cargo test
+```
+
+The above becomes cumbersome to type and easy to forget both how to setup the
+database and set the `TEST_DB_URL` environment variable.
+
+**Note: Windows**
+The tests for the database are disabled and will skip. This is due, at the time
+of writing (May 2025), to limitations with the GitHub Ci runner not supporting
+docker, hence unable to start the database for the tests.
