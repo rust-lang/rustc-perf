@@ -83,6 +83,17 @@ jobs:
   test_on_windows:
     name: Test on Windows
     runs-on: windows-latest
+    env:
+      TEST_DB_URL: postgres://postgres:testpass@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
     steps:
       - name: Checkout the source code
         uses: actions/checkout@v4
