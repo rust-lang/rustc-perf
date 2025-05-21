@@ -301,3 +301,5 @@ Costs of this approach:
 History:
 - The first mass update of third-party crates occurred in [March/April
   2022](https://hackmd.io/d9uE7qgtTWKDLivy0uoVQw).
+- The second mass update of third-party crates occurred in [April/May
+  2025](https://github.com/rust-lang/rustc-perf/issues/2024).
