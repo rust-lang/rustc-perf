@@ -1,7 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, CodegenBackend, CollectionId,
-    Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
+    Commit, CommitJob, CommitJobStatus, CommitType, CompileBenchmark, Date, Index, Profile,
+    QueuedCommit, Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -12,6 +13,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio_postgres::types::{FromSql, ToSql};
 use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
@@ -284,6 +286,28 @@ static MIGRATIONS: &[&str] = &[
     alter table pstat_series add target text not null default 'x86_64-unknown-linux-gnu';
     alter table pstat_series drop constraint test_case;
     alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, target, metric);
+    "#,
+    r#"
+    CREATE TABLE IF NOT EXISTS commit_queue (
+        sha          TEXT,
+        parent_sha   TEXT,
+        commit_type  TEXT,
+        pr           INTEGER,
+        commit_time  TIMESTAMP,
+        target       TEXT,
+        include      TEXT,
+        exclude      TEXT,
+        runs         INTEGER,
+        backends     TEXT,
+        machine_id   TEXT,
+        started_at   TIMESTAMP,
+        finished_at  TIMESTAMP,
+        status       TEXT,
+        PRIMARY KEY  (sha, target)
+    );
+    CREATE INDEX IF NOT EXISTS sha_idx            ON commit_queue (sha);
+    CREATE INDEX IF NOT EXISTS machine_id_idx     ON commit_queue (machine_id);
+    CREATE INDEX IF NOT EXISTS sha_machine_id_idx ON commit_queue (sha, machine_id);
     "#,
 ];
 
@@ -1364,6 +1388,286 @@ where
             )
             .await
             .unwrap();
+    }
+
+    async fn enqueue_commit_job(&self, target: Target, jobs: &[CommitJob]) {
+        let row_count = jobs.len();
+        if row_count == 0 {
+            return;
+        }
+
+        let column_names = CommitJob::get_enqueue_column_names();
+        let column_string_names = column_names.join(", ");
+        let column_count: usize = column_names.len();
+        // Generate the placeholders like ($1, $2, ..., $7), ($8, $9, ..., $14), ...
+        let placeholders = (0..row_count)
+            .map(|i| {
+                let offset = i * column_count;
+                let group = (1..=column_count)
+                    .map(|j| format!("${}", offset + j))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({})", group)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        /* Add everything to the database if there already exists something
+         * with a `sha <-> target` pairing it will simply be ignored */
+        let sql = format!(
+            "INSERT INTO commit_queue ({}) VALUES {} ON CONFLICT DO NOTHING",
+            column_string_names, placeholders,
+        );
+
+        let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = jobs
+            .iter()
+            .flat_map(|job| {
+                vec![
+                    &job.sha as &(dyn tokio_postgres::types::ToSql + Sync),
+                    &job.parent_sha,
+                    &job.commit_type,
+                    &job.pr,
+                    &job.commit_time,
+                    &job.status,
+                    &target,
+                    &job.include,
+                    &job.exclude,
+                    &job.runs,
+                    &job.backends,
+                ]
+            })
+            .collect();
+
+        self.conn().execute(&sql, &params).await.unwrap();
+    }
+
+    async fn dequeue_commit_job(&self, machine_id: &str, target: Target) -> Option<CommitJob> {
+        /* Check to see if this machine possibly went offline while doing
+         * a previous job - if it did we'll take that job */
+        let maybe_previous_job = self
+            .conn()
+            .query_opt(
+                "
+                WITH job_to_update AS (
+                    SELECT *
+                    FROM commit_queue
+                    WHERE machine_id = $1
+                        AND target = $2
+                        AND status = 'in_progress'
+                    ORDER BY started_at
+                    LIMIT 1
+
+                     -- @Note; This prevents multiple 
+                     --        machines of the same 
+                     --        architecture taking the 
+                     --        same job. See here for more information;
+                     --        https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE
+                    FOR UPDATE SKIP LOCKED
+
+                )
+                UPDATE commit_queue
+                SET started_at = NOW(),
+                    status = 'in_progress'
+                WHERE machine_id = $1
+                    AND target = $2
+                    AND sha = (SELECT sha FROM job_to_update)
+                RETURNING *;
+            ",
+                &[&machine_id, &target],
+            )
+            .await
+            .unwrap();
+
+        /* If it was we will take that job */
+        if let Some(row) = maybe_previous_job {
+            return Some(commit_queue_row_to_commit_job(&row));
+        }
+
+        let maybe_drift_job = self
+            .conn()
+            .query_opt(
+                "
+                WITH job_to_update AS (
+                    SELECT *
+                    FROM commit_queue
+                    WHERE target != $1
+                        AND status IN ('finished', 'in_progress')
+                        AND sha NOT IN (
+                            SELECT sha
+                            FROM commit_queue
+                            WHERE target != $1
+                                AND status = 'finished'
+                        )
+                    ORDER BY started_at
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE commit_queue
+                SET started_at = NOW(),
+                    status = 'in_progress',
+                    machine_id = $2
+                WHERE
+                    target = $1
+                    AND sha = (SELECT sha FROM job_to_update)
+                RETURNING *;
+                ",
+                &[&target, &machine_id],
+            )
+            .await
+            .unwrap();
+
+        /* If we are, we will take that job */
+        if let Some(row) = maybe_drift_job {
+            return Some(commit_queue_row_to_commit_job(&row));
+        }
+
+        /* See if there are any jobs that need taking care of */
+        let job = self
+            .conn()
+            .query_opt(
+                "
+                WITH job_to_update AS (
+                    SELECT * 
+                    FROM commit_queue
+                    WHERE target = $1
+                        AND status = 'queued'
+                    ORDER BY pr ASC, commit_type, sha
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE commit_queue
+                SET started_at = NOW(),
+                    status = 'in_progress',
+                    machine_id = $2
+                WHERE
+                    sha = (SELECT sha FROM job_to_update)
+                    AND target = $1
+                RETURNING *;
+                ",
+                &[&target, &machine_id],
+            )
+            .await
+            .unwrap();
+
+        /* If there is one, we will take that job */
+        if let Some(row) = job {
+            return Some(commit_queue_row_to_commit_job(&row));
+        }
+
+        /* There are no jobs in the queue */
+        return None;
+    }
+
+    /// Mark a job in the database as done
+    async fn finish_commit_job(&self, machine_id: &str, target: Target, sha: String) -> bool {
+        let jobs = self
+            .conn()
+            .query_opt(
+                "
+                UPDATE commit_queue
+                SET finished_at = DATETIME('now'),
+                    status = 'finished',
+                WHERE
+                    sha = $1
+                    AND machine_id = $1
+                    AND target = $1;
+                ",
+                &[&sha, &machine_id, &target],
+            )
+            .await
+            .unwrap();
+        return jobs.is_some();
+    }
+}
+
+/// Map a database row from the commit queue to a `CommitJob`
+fn commit_queue_row_to_commit_job(row: &tokio_postgres::Row) -> CommitJob {
+    CommitJob {
+        sha: row.get::<_, String>("sha"),
+        parent_sha: row.get::<_, Option<String>>("parent_sha"),
+        commit_type: CommitType::from_str(&row.get::<_, String>("commit_type")).unwrap(),
+        pr: row.get::<_, u32>("pr"),
+        commit_time: row.get::<_, String>("commit_time").parse::<Date>().unwrap(),
+        target: Target::from_str(&row.get::<_, String>("target")).unwrap(),
+        machine_id: row.get::<_, Option<String>>("machine_id"),
+        started_at: {
+            let started: Option<String> = row.get("started_at");
+            if let Some(ts) = started {
+                Some(ts.parse::<Date>().unwrap())
+            } else {
+                None
+            }
+        },
+        finished_at: {
+            let finished: Option<String> = row.get("finished_at");
+            if let Some(ts) = finished {
+                Some(ts.parse::<Date>().unwrap())
+            } else {
+                None
+            }
+        },
+        status: CommitJobStatus::from_str(&row.get::<_, String>("status")).unwrap(),
+        include: row.get::<_, Option<String>>("include"),
+        exclude: row.get::<_, Option<String>>("exclude"),
+        runs: row.get::<_, Option<i32>>("runs"),
+        backends: row.get::<_, Option<String>>("backends"),
+    }
+}
+
+#[macro_export]
+macro_rules! impl_to_postgresql_via_to_string {
+    ($t:ty) => {
+        impl tokio_postgres::types::ToSql for $t {
+            fn to_sql(
+                &self,
+                ty: &tokio_postgres::types::Type,
+                out: &mut bytes::BytesMut,
+            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            {
+                self.to_string().to_sql(ty, out)
+            }
+
+            fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+                <String as tokio_postgres::types::ToSql>::accepts(ty)
+            }
+
+            // Only compile if the type is acceptable
+            tokio_postgres::types::to_sql_checked!();
+        }
+    };
+}
+
+impl_to_postgresql_via_to_string!(Target);
+impl_to_postgresql_via_to_string!(CommitType);
+impl_to_postgresql_via_to_string!(CommitJobStatus);
+
+impl ToSql for Date {
+    fn to_sql(
+        &self,
+        ty: &tokio_postgres::types::Type,
+        out: &mut bytes::BytesMut,
+    ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        self.0.to_sql(ty, out)
+    }
+
+    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+        <DateTime<Utc> as ToSql>::accepts(ty)
+    }
+
+    tokio_postgres::types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for Date {
+    fn from_sql(
+        ty: &tokio_postgres::types::Type,
+        raw: &'a [u8],
+    ) -> Result<Date, Box<dyn std::error::Error + Sync + Send>> {
+        let dt = DateTime::<Utc>::from_sql(ty, raw)?;
+        Ok(Date(dt))
+    }
+
+    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+        <DateTime<Utc> as FromSql>::accepts(ty)
     }
 }
 
