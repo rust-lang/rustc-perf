@@ -38,9 +38,10 @@ pub fn cachegrind_annotate(
         let line = line?;
         if line.starts_with("fl=") {
             // All jemalloc filenames have `/jemalloc/` or
-            // something like `/jemalloc-sys-1e20251078fe5355/` in
+            // something like `/jemalloc-sys-1e20251078fe5355/` or
+            // `/tikv-jemalloc-sys-ce50ae873ce2796b` in
             // them.
-            in_jemalloc_file = line.contains("/jemalloc");
+            in_jemalloc_file = line.contains("jemalloc");
             if in_jemalloc_file {
                 writeln!(writer, "fl=<all-jemalloc-files>")?;
                 continue;
