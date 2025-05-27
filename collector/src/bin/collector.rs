@@ -40,6 +40,7 @@ use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::target::Target;
 use collector::compile::benchmark::{
     compile_benchmark_dir, get_compile_benchmarks, ArtifactType, Benchmark, BenchmarkName,
+    CompileBenchmarkFilter,
 };
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
@@ -336,6 +337,16 @@ struct LocalOptions {
     /// Include only benchmarks matching a prefix in this comma-separated list
     #[arg(long, value_delimiter = ',')]
     include: Vec<String>,
+
+    /// Include only benchmarks in this comma-separated list
+    #[arg(
+        long,
+        value_delimiter = ',',
+        conflicts_with("include"),
+        conflicts_with("exclude"),
+        conflicts_with("exclude_suffix")
+    )]
+    exact_match: Vec<String>,
 
     /// Include only benchmarks belonging to the given categories.
     #[arg(long, value_parser = EnumArgParser::<Category>::default(), default_value = "Primary,Secondary")]
@@ -688,6 +699,25 @@ enum DownloadSubcommand {
     },
 }
 
+impl<'a> From<&'a LocalOptions> for CompileBenchmarkFilter<'a> {
+    fn from(value: &'a LocalOptions) -> Self {
+        if !value.exact_match.is_empty() {
+            Self::Exact(&value.exact_match)
+        } else if !value.include.is_empty()
+            || !value.exclude.is_empty()
+            || !value.exclude_suffix.is_empty()
+        {
+            Self::Fuzzy {
+                include: &value.include,
+                exclude: &value.exclude,
+                exclude_suffix: &value.exclude_suffix,
+            }
+        } else {
+            Self::All
+        }
+    }
+}
+
 fn main_result() -> anyhow::Result<i32> {
     env_logger::init();
 
@@ -884,12 +914,7 @@ fn main_result() -> anyhow::Result<i32> {
                 target_triple,
             )?;
 
-            let mut benchmarks = get_compile_benchmarks(
-                &compile_benchmark_dir,
-                &local.include,
-                &local.exclude,
-                &local.exclude_suffix,
-            )?;
+            let mut benchmarks = get_compile_benchmarks(&compile_benchmark_dir, (&local).into())?;
             benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
             let artifact_id = ArtifactId::Commit(Commit {
@@ -1006,9 +1031,11 @@ fn main_result() -> anyhow::Result<i32> {
 
                         let mut benchmarks = get_compile_benchmarks(
                             &compile_benchmark_dir,
-                            &split_args(include),
-                            &split_args(exclude),
-                            &[],
+                            CompileBenchmarkFilter::Fuzzy {
+                                include: &split_args(include),
+                                exclude: &split_args(exclude),
+                                exclude_suffix: &[],
+                            },
                         )?;
                         benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
@@ -1102,12 +1129,7 @@ fn main_result() -> anyhow::Result<i32> {
             let scenarios = &opts.scenarios.0;
             let backends = &opts.codegen_backends.0;
 
-            let mut benchmarks = get_compile_benchmarks(
-                &compile_benchmark_dir,
-                &local.include,
-                &local.exclude,
-                &local.exclude_suffix,
-            )?;
+            let mut benchmarks = get_compile_benchmarks(&compile_benchmark_dir, (&local).into())?;
             benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
             let mut errors = BenchmarkErrors::new();
@@ -1315,12 +1337,7 @@ fn binary_stats_compile(
         Profile::Opt => CargoProfile::Release,
         _ => return Err(anyhow::anyhow!("Only Debug and Opt profiles are supported")),
     };
-    let benchmarks = get_compile_benchmarks(
-        &compile_benchmark_dir(),
-        &local.include,
-        &local.exclude,
-        &local.exclude_suffix,
-    )?;
+    let benchmarks = get_compile_benchmarks(&compile_benchmark_dir(), (&local).into())?;
     for benchmark in benchmarks {
         println!("Stats for benchmark `{}`", benchmark.name);
         println!("{}", "-".repeat(20));
@@ -1713,7 +1730,7 @@ fn bench_published_artifact(
     };
 
     // Exclude benchmarks that don't work with a stable compiler.
-    let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, &[], &[], &[])?;
+    let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, CompileBenchmarkFilter::All)?;
     compile_benchmarks.retain(|b| b.category().is_stable());
 
     let runtime_suite = rt.block_on(load_runtime_benchmarks(
