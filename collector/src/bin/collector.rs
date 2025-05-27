@@ -45,8 +45,8 @@ use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
 use collector::runtime::{
     bench_runtime, get_runtime_benchmark_groups, prepare_runtime_benchmark_suite,
-    runtime_benchmark_dir, BenchmarkFilter, BenchmarkSuite, BenchmarkSuiteCompilation,
-    CargoIsolationMode, RuntimeProfiler, DEFAULT_RUNTIME_ITERATIONS,
+    runtime_benchmark_dir, BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode,
+    RuntimeBenchmarkFilter, RuntimeProfiler, DEFAULT_RUNTIME_ITERATIONS,
 };
 use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
@@ -105,12 +105,12 @@ struct CompileBenchmarkConfig {
 
 struct RuntimeBenchmarkConfig {
     runtime_suite: BenchmarkSuite,
-    filter: BenchmarkFilter,
+    filter: RuntimeBenchmarkFilter,
     iterations: u32,
 }
 
 impl RuntimeBenchmarkConfig {
-    fn new(suite: BenchmarkSuite, filter: BenchmarkFilter, iterations: u32) -> Self {
+    fn new(suite: BenchmarkSuite, filter: RuntimeBenchmarkFilter, iterations: u32) -> Self {
         Self {
             runtime_suite: suite.filter(&filter),
             filter,
@@ -761,7 +761,7 @@ fn main_result() -> anyhow::Result<i32> {
             };
             let config = RuntimeBenchmarkConfig::new(
                 runtime_suite,
-                BenchmarkFilter::new(local.exclude, local.include),
+                RuntimeBenchmarkFilter::new(local.exclude, local.include),
                 iterations,
             );
             run_benchmarks(&mut rt, conn, shared, None, Some(config))?;
@@ -1042,7 +1042,7 @@ fn main_result() -> anyhow::Result<i32> {
 
                         let runtime_config = RuntimeBenchmarkConfig {
                             runtime_suite,
-                            filter: BenchmarkFilter::keep_all(),
+                            filter: RuntimeBenchmarkFilter::keep_all(),
                             iterations: DEFAULT_RUNTIME_ITERATIONS,
                         };
                         let shared = SharedBenchmarkConfig {
@@ -1745,7 +1745,7 @@ fn bench_published_artifact(
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
-            BenchmarkFilter::keep_all(),
+            RuntimeBenchmarkFilter::keep_all(),
             DEFAULT_RUNTIME_ITERATIONS,
         )),
     )
