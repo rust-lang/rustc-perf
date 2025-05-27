@@ -135,6 +135,9 @@ The following options alter the behaviour of the `bench_local` subcommand.
   dedicated to artifact sizes (ending with `-tiny`).
 - `--id <ID>` the identifier that will be used to identify the results in the
   database.
+- `--exact-match <BENCHMARKS>`: comma-separated list of benchmark names that should be
+  executed. The names have to match exactly. Cannot be combined with
+  `--include`/`--exclude`/`--exclude-suffix`.
 - `--include <INCLUDE>`: the inverse of `--exclude`. The argument is a
   comma-separated list of benchmark prefixes. When this option is specified, a
   benchmark is included in the run only if its name matches one of the given

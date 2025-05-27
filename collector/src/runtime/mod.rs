@@ -9,8 +9,8 @@ use thousands::Separable;
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 pub use benchmark::{
     get_runtime_benchmark_groups, prepare_runtime_benchmark_suite, runtime_benchmark_dir,
-    BenchmarkFilter, BenchmarkGroup, BenchmarkGroupCrate, BenchmarkSuite,
-    BenchmarkSuiteCompilation, CargoIsolationMode,
+    BenchmarkGroup, BenchmarkGroupCrate, BenchmarkSuite, BenchmarkSuiteCompilation,
+    CargoIsolationMode, RuntimeBenchmarkFilter,
 };
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
@@ -33,7 +33,7 @@ pub async fn bench_runtime(
     conn: &mut dyn Connection,
     suite: BenchmarkSuite,
     collector: &CollectorCtx,
-    filter: BenchmarkFilter,
+    filter: RuntimeBenchmarkFilter,
     iterations: u32,
 ) -> anyhow::Result<()> {
     let filtered = suite.filtered_benchmark_count(&filter);
@@ -203,7 +203,7 @@ async fn record_stats(
 /// a set of runtime benchmarks and print `BenchmarkMessage`s encoded as JSON, one per line.
 fn execute_runtime_benchmark_binary(
     binary: &Path,
-    filter: &BenchmarkFilter,
+    filter: &RuntimeBenchmarkFilter,
     iterations: u32,
 ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>>> {
     let mut command = prepare_command(binary);
