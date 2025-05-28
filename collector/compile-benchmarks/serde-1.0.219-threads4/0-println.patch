@@ -1,0 +1,12 @@
+diff --git a/src/de/value.rs b/src/de/value.rs
+index 8f9c0b48..2402c9ec 100644
+--- a/src/de/value.rs
++++ b/src/de/value.rs
+@@ -37,6 +37,7 @@ macro_rules! impl_copy_clone {
+ 
+         impl<$($lifetime,)* E> Clone for $ty<$($lifetime,)* E> {
+             fn clone(&self) -> Self {
++                println!();
+                 *self
+             }
+         }
