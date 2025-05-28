@@ -46,7 +46,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // Load perf-config.json
         let config_path = compile_benchmark.path().join("perf-config.json");
-        let config_contents = std::fs::read_to_string(config_path)?;
+        let config_contents = std::fs::read_to_string(&config_path).map_err(|e| {
+            format!(
+                "Cannot read perf-config.json file at {}: {e:?}",
+                config_path.display()
+            )
+        })?;
         let config = serde_json::from_str::<serde_json::Value>(&config_contents)?;
 
         // Load Cargo manifest to find profile information
