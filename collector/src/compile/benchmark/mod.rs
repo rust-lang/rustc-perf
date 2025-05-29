@@ -620,13 +620,22 @@ mod tests {
     #[test]
     fn check_compile_benchmarks() {
         // Check that we can deserialize all perf-config.json files in the compile benchmark
-        // directory.
+        // directory and that they have [workspace] in their Cargo.toml.
         let root = env!("CARGO_MANIFEST_DIR");
-        let benchmarks = get_compile_benchmarks(
-            &Path::new(root).join("compile-benchmarks"),
-            CompileBenchmarkFilter::All,
-        )
-        .unwrap();
+        let benchmark_dir = Path::new(root).join("compile-benchmarks");
+        let benchmarks =
+            get_compile_benchmarks(&benchmark_dir, CompileBenchmarkFilter::All).unwrap();
         assert!(!benchmarks.is_empty());
+
+        for benchmark in benchmarks {
+            let dir = benchmark_dir.join(&benchmark.name.0);
+            let cargo_toml = std::fs::read_to_string(&dir.join("Cargo.toml"))
+                .expect(&format!("Cannot read Cargo.toml of {}", benchmark.name));
+            assert!(
+                cargo_toml.contains("[workspace]"),
+                "{} does not contain [workspace] in its Cargo.toml",
+                benchmark.name
+            );
+        }
     }
 }
