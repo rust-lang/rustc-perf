@@ -1,0 +1,24 @@
+pub fn code() {
+    println!("Hello from dep_205");
+}
+
+#[inline(always)]
+pub fn code_inlined() {
+    println!("Hello from dep_205");
+}
+
+pub fn code_generic<T>(t: T) where T: std::fmt::Display {
+    println!("Hello from dep_205: {t}");
+}
+
+pub fn foo() {
+    dep_147::code();
+    dep_147::code_inlined();
+    dep_147::code_generic(1u32);
+    dep_100::code();
+    dep_100::code_inlined();
+    dep_100::code_generic(1u32);
+    dep_88::code();
+    dep_88::code_inlined();
+    dep_88::code_generic(1u32);
+}

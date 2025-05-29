@@ -1,0 +1,13 @@
+diff --git a/src/main.rs b/src/main.rs
+index a0961df3..aee8286c 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -397,7 +397,7 @@ fn main() {
+     dep_541::code_generic(1u32);
+     dep_542::code();
+     dep_542::code_inlined();
+-    dep_542::code_generic(1u32);
++    dep_542::code_generic(2u32);
+     dep_543::code();
+     dep_543::code_inlined();
+     dep_543::code_generic(1u32);
