@@ -1,0 +1,18 @@
+{% macro render(issue, with_age="", backport_branch="") %}"{{issue.title}}" [{{issue.repo_name}}#{{issue.number}}]({{issue.html_url}}){% if issue.mcp_details.zulip_link %} ([Zulip]({{issue.mcp_details.zulip_link}})){% endif %}{% if with_age %} (last review activity: {{issue.updated_at_hts}}){%- endif -%}
+{%- if backport_branch != "" %}
+  - Authored by {{ issue.author }}
+{%- endif -%}
+{% if issue.mcp_details.concerns %}{%- for concern in issue.mcp_details.concerns %}
+    - concern: [{{- concern.0 -}}]({{- concern.1 -}})
+{%- endfor -%}{%- endif -%}
+{%- if backport_branch  %}
+<!--
+/poll Approve {{ backport_branch | trim_start_matches(pat=":") | trim_end_matches(pat=":") }} backport of #{{issue.number}}?
+approve
+{%- if backport_branch is containing("stable") %}
+approve but does not justify new dot release
+{%- endif %}
+decline
+don't know
+-->
+{%- endif %}{% endmacro %}

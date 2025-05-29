@@ -1,0 +1,17 @@
+{% import "_issue.tt" as issue %}
+
+{% macro render(issues, heading="###", empty="No issues this time.", split_url=true) %}
+{%- for issue in issues %}
+{% if split_url %}
+{{heading}} "{{issue.title}}" {{issue.repo_name}}#{{issue.number}}
+
+**Link:** {{issue.html_url}}
+{% else %}
+{{heading}} [{{issue.title}}]({{issue.html_url}})
+{% endif %}
+{%else%}
+
+None.
+
+{%endfor%}
+{% endmacro %}

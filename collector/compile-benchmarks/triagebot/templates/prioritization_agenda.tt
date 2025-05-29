@@ -1,0 +1,107 @@
+{% import "_issues.tt" as issues %}
+{% import "_meetings.tt" as meetings %}
+{% import "_issues_rfcbot.tt" as issues_rfcbot %}
+
+---
+tags: weekly, rustc
+type: docs
+note_id: xxx
+---
+
+# T-compiler Meeting Agenda YYYY-MM-DD
+
+## Announcements
+
+- (TIP) add here non-recurrent scheduled meetings, [check the schedule calendar](https://github.com/rust-lang/calendar)
+- (TIP) mention upcoming Rust stable releases, [check the release calendar](https://calendar.google.com/calendar/htmlembed?src=l1b1gkqvfbgunjs18nemq4c580%40group.calendar.google.com)
+- Reminder: if you see a PR/issue that seems like there might be legal implications due to copyright/IP/etc, please let us know (or at least message @_**davidtwco** or @_**Wesley Wiser** so we can pass it along).
+
+### Other WG meetings
+
+- (TIP) get them from https://github.com/rust-lang/calendar
+
+## MCPs/FCPs
+
+- New MCPs (take a look, see if you like them!)
+{{-issues::render(issues=mcp_new_not_seconded, indent="  ", empty="No new proposals this time.")}}
+- Old MCPs (stale MCP might be closed as per [MCP procedure](https://forge.rust-lang.org/compiler/mcp.html#when-should-major-change-proposals-be-closed))
+  - None at this time
+- Old MCPs (not seconded, take a look)
+{{-issues::render(issues=mcp_old_not_seconded, indent="  ", with_age=true, empty="No old proposals this time.")}}
+- Pending FCP requests (check your boxes!)
+{{-issues_rfcbot::render(issues=in_pre_fcp, indent="  ", empty="No pending FCP requests this time.")}}
+- Things in FCP (make sure you're good with it)
+{{-issues_rfcbot::render(issues=in_fcp, indent="  ", empty="No FCP requests this time.")}}
+- Accepted MCPs
+{{-issues::render(issues=mcp_accepted, indent="  ", empty="No new accepted proposals this time.")}}
+- MCPs blocked on unresolved concerns
+  - <Here group MCPs blocked on unresolved concerns>
+- Finalized FCPs (disposition merge)
+{{-issues::render(issues=fcp_finished_tcompiler, indent="  ", empty="No new finished FCP (disposition merge) this time.")}}
+- Other teams finalized FCPs
+{{-issues::render(issues=fcp_finished_not_tcompiler, indent="  ", empty="No new finished FCP (disposition merge) this time.")}}
+
+## Backport nominations
+
+[T-compiler beta](https://github.com/rust-lang/rust/issues?q=is%3Aall+label%3Abeta-nominated+-label%3Abeta-accepted+label%3AT-compiler) / [T-compiler stable](https://github.com/rust-lang/rust/issues?q=is%3Aall+label%3Astable-nominated+-label%3Astable-accepted+label%3AT-compiler)
+{{-issues::render(issues=beta_nominated_t_compiler, backport_branch=":beta: ", empty="No beta nominations for `T-compiler` this time.")}}
+{{-issues::render(issues=stable_nominated_t_compiler, backport_branch=":stable: ", empty="No stable nominations for `T-compiler` this time.")}}
+
+[T-types beta](https://github.com/rust-lang/rust/issues?q=is%3Aall+label%3Abeta-nominated+-label%3Abeta-accepted+label%3AT-types) / [T-types stable](https://github.com/rust-lang/rust/issues?q=is%3Aall+label%3Astable-nominated+-label%3Astable-accepted+label%3AT-types)
+{{-issues::render(issues=beta_nominated_t_types, backport_branch=":beta:", empty="No beta nominations for `T-types` this time.")}}
+{{-issues::render(issues=stable_nominated_t_types, backport_branch=":stable:", empty="No stable nominations for `T-types` this time.")}}
+
+## PRs S-waiting-on-team
+
+[T-compiler](https://github.com/rust-lang/rust/pulls?q=is%3Aopen+label%3AS-waiting-on-team+label%3AT-compiler)
+{{-issues::render(issues=prs_waiting_on_team_t_compiler, empty="No PRs waiting on `T-compiler` this time.")}}
+- [Issues in progress or waiting on other teams](https://hackmd.io/XYr1BrOWSiqCrl8RCWXRaQ)
+
+## Issues of Note
+
+### Short Summary
+
+- [{{issues_of_note_p_critical}} T-compiler P-critical issues](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3AT-compiler+label%3AP-critical)
+  - [{{issues_of_note_unassigned_p_critical}} of those are unassigned](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3AT-compiler+label%3AP-critical+no%3Aassignee)
+- [{{issues_of_note_p_high}} T-compiler P-high issues](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3AT-compiler+label%3AP-high)
+  - [{{issues_of_note_unassigned_p_high}} of those are unassigned](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3AT-compiler+label%3AP-high+no%3Aassignee)
+- [{{issues_of_note_regression_from_stable_to_beta_p_critical}} P-critical, {{issues_of_note_regression_from_stable_to_beta_p_high}} P-high, {{issues_of_note_regression_from_stable_to_beta_p_medium}} P-medium, {{issues_of_note_regression_from_stable_to_beta_p_low}} P-low regression-from-stable-to-beta](https://github.com/rust-lang/rust/labels/regression-from-stable-to-beta)
+- [{{issues_of_note_regression_from_stable_to_nightly_p_critical}} P-critical, {{issues_of_note_regression_from_stable_to_nightly_p_high}} P-high, {{issues_of_note_regression_from_stable_to_nightly_p_medium}} P-medium, {{issues_of_note_regression_from_stable_to_nightly_p_low}} P-low regression-from-stable-to-nightly](https://github.com/rust-lang/rust/labels/regression-from-stable-to-nightly)
+- [{{issues_of_note_regression_from_stable_to_stable_p_critical}} P-critical, {{issues_of_note_regression_from_stable_to_stable_p_high}} P-high, {{issues_of_note_regression_from_stable_to_stable_p_medium}} P-medium, {{issues_of_note_regression_from_stable_to_stable_p_low}} P-low regression-from-stable-to-stable](https://github.com/rust-lang/rust/labels/regression-from-stable-to-stable)
+
+### P-critical
+
+[T-compiler](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3AP-critical+label%3AT-compiler)
+{{-issues::render(issues=p_critical_t_compiler, empty="No `P-critical` issues for `T-compiler` this time.")}}
+
+[T-types](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3AP-critical+label%3AT-types)
+{{-issues::render(issues=p_critical_t_types, empty="No `P-critical` issues for `T-types` this time.")}}
+
+### P-high regressions
+
+[P-high beta regressions](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3Aregression-from-stable-to-beta+label%3AP-high+-label%3AT-infra+-label%3AT-libs+-label%3AT-libs-api+-label%3AT-release+-label%3AT-rustdoc+-label%3AT-core)
+{{-issues::render(issues=beta_regressions_p_high, empty="No `P-high` beta regressions this time.")}}
+
+[Unassigned P-high nightly regressions](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3Aregression-from-stable-to-nightly+label%3AP-high+no%3Aassignee+-label%3AT-infra+-label%3AT-libs+-label%3AT-libs-api+-label%3AT-release+-label%3AT-rustdoc+-label%3AT-core+)
+{{-issues::render(issues=nightly_regressions_unassigned_p_high, empty="No unassigned `P-high` nightly regressions this time.")}}
+
+## Performance logs
+
+> [triage logs](https://github.com/rust-lang/rustc-perf/tree/master/triage#triage-logs)
+
+## Nominated Issues
+
+[T-compiler](https://github.com/rust-lang/rust/issues?q=is%3Aopen+label%3AI-compiler-nominated)
+{{-issues::render(issues=nominated_t_compiler, empty="No I-compiler-nominated issues this time.")}}
+
+[RFC](https://github.com/rust-lang/rfcs/issues?q=is%3Aopen+label%3AI-compiler-nominated)
+{{-issues::render(issues=nominated_rfcs_t_compiler, empty="No I-compiler-nominated RFCs this time.")}}
+
+### Oldest PRs waiting for review
+
+(TIP) Curate this list before the meeting
+
+[T-compiler](https://github.com/rust-lang/rust/pulls?q=is%3Apr+is%3Aopen+sort%3Aupdated-asc+label%3AS-waiting-on-review+draft%3Afalse+label%3AT-compiler)
+{{-issues::render(issues=top_unreviewed_prs, with_age=true, empty="No unreviewed PRs on `T-compiler` this time.")}}
+
+Next meetings' agenda draft: [hackmd link](#)

@@ -1,0 +1,14 @@
+{% import "_issue.tt" as issue %}
+
+{% macro render(issues, indent="", empty="None.") %}
+{%- for issue in issues %}
+{%- if issue.fcp_details is object %}
+{{indent}}- {{issue.fcp_details.disposition}}: [{{issue.title}} ({{issue.repo_name}}#{{issue.number}})]({{issue.fcp_details.bot_tracking_comment_html_url}})
+{{indent}}{{indent}}-{% for reviewer in issue.fcp_details.pending_reviewers %} @{% if issue.fcp_details.should_mention %}{% else %}_{% endif %}**|{{reviewer.zulip_id}}**{%else%} no pending checkboxes{% endfor %}
+{{indent}}{{indent}}-{% if issue.fcp_details.concerns|length > 0 %} concerns:{% endif %}{% for concern in issue.fcp_details.concerns %} [{{concern.name}} (by {{concern.reviewer_login}})]({{concern.concern_url}}){%else%} no pending concerns{% endfor -%}
+{% else %}
+{{indent}}- {{issue::render(issue=issue)}}
+{%- endif -%}
+{% else %}
+{{indent}}- {{empty}}{%endfor-%}
+{% endmacro %}
