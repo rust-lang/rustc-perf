@@ -1,0 +1,21 @@
+---
+source: src/tests/routes/crates/downloads.rs
+expression: json
+---
+{
+  "meta": {
+    "extra_downloads": []
+  },
+  "version_downloads": [
+    {
+      "date": "[date]",
+      "downloads": 1,
+      "version": 2
+    },
+    {
+      "date": "[date]",
+      "downloads": 3,
+      "version": 1
+    }
+  ]
+}

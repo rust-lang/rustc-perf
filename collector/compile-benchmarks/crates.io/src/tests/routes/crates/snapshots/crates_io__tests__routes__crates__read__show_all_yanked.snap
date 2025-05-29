@@ -1,0 +1,129 @@
+---
+source: src/tests/routes/crates/read.rs
+expression: response.json()
+---
+{
+  "categories": [],
+  "crate": {
+    "badges": [],
+    "categories": [],
+    "created_at": "[datetime]",
+    "default_version": "1.0.0",
+    "description": "description",
+    "documentation": "https://example.com",
+    "downloads": 20,
+    "exact_match": false,
+    "homepage": "http://example.com",
+    "id": "foo_show",
+    "keywords": [
+      "kw1"
+    ],
+    "links": {
+      "owner_team": "/api/v1/crates/foo_show/owner_team",
+      "owner_user": "/api/v1/crates/foo_show/owner_user",
+      "owners": "/api/v1/crates/foo_show/owners",
+      "reverse_dependencies": "/api/v1/crates/foo_show/reverse_dependencies",
+      "version_downloads": "/api/v1/crates/foo_show/downloads",
+      "versions": null
+    },
+    "max_stable_version": null,
+    "max_version": "0.0.0",
+    "name": "foo_show",
+    "newest_version": "0.0.0",
+    "num_versions": 2,
+    "recent_downloads": 10,
+    "repository": null,
+    "updated_at": "[datetime]",
+    "versions": [
+      2,
+      1
+    ],
+    "yanked": true
+  },
+  "keywords": [
+    {
+      "crates_cnt": 1,
+      "created_at": "[datetime]",
+      "id": "kw1",
+      "keyword": "kw1"
+    }
+  ],
+  "versions": [
+    {
+      "audit_actions": [],
+      "bin_names": null,
+      "checksum": "                                                                ",
+      "crate": "foo_show",
+      "crate_size": 0,
+      "created_at": "[datetime]",
+      "description": null,
+      "dl_path": "/api/v1/crates/foo_show/0.5.0/download",
+      "documentation": null,
+      "downloads": 0,
+      "edition": null,
+      "features": {},
+      "has_lib": null,
+      "homepage": null,
+      "id": 2,
+      "lib_links": null,
+      "license": null,
+      "links": {
+        "authors": "/api/v1/crates/foo_show/0.5.0/authors",
+        "dependencies": "/api/v1/crates/foo_show/0.5.0/dependencies",
+        "version_downloads": "/api/v1/crates/foo_show/0.5.0/downloads"
+      },
+      "num": "0.5.0",
+      "published_by": {
+        "avatar": null,
+        "id": 1,
+        "login": "foo",
+        "name": null,
+        "url": "https://github.com/foo"
+      },
+      "readme_path": "/api/v1/crates/foo_show/0.5.0/readme",
+      "repository": null,
+      "rust_version": null,
+      "updated_at": "[datetime]",
+      "yank_message": null,
+      "yanked": true
+    },
+    {
+      "audit_actions": [],
+      "bin_names": null,
+      "checksum": "                                                                ",
+      "crate": "foo_show",
+      "crate_size": 0,
+      "created_at": "[datetime]",
+      "description": null,
+      "dl_path": "/api/v1/crates/foo_show/1.0.0/download",
+      "documentation": null,
+      "downloads": 0,
+      "edition": null,
+      "features": {},
+      "has_lib": null,
+      "homepage": null,
+      "id": 1,
+      "lib_links": null,
+      "license": null,
+      "links": {
+        "authors": "/api/v1/crates/foo_show/1.0.0/authors",
+        "dependencies": "/api/v1/crates/foo_show/1.0.0/dependencies",
+        "version_downloads": "/api/v1/crates/foo_show/1.0.0/downloads"
+      },
+      "num": "1.0.0",
+      "published_by": {
+        "avatar": null,
+        "id": 1,
+        "login": "foo",
+        "name": null,
+        "url": "https://github.com/foo"
+      },
+      "readme_path": "/api/v1/crates/foo_show/1.0.0/readme",
+      "repository": null,
+      "rust_version": null,
+      "updated_at": "[datetime]",
+      "yank_message": null,
+      "yanked": true
+    }
+  ]
+}

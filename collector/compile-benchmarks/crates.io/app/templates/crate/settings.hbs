@@ -1,0 +1,60 @@
+{{page-title 'Manage Crate Settings'}}
+
+<CrateHeader @crate={{this.crate}} />
+
+<div local-class="me-email">
+  <h2>Add Owner</h2>
+
+  <form local-class="email-form" {{on "submit" (prevent-default (perform this.addOwnerTask))}}>
+    <label local-class="email-input-label" for='new-owner-username'>
+      Username
+    </label>
+    <Input @type="text" id="new-owner-username" @value={{this.username}} placeholder="Username" local-class="email-input" name="username" />
+    <button type="submit" disabled={{not this.username}} class="button button--small" data-test-save-button>Save</button>
+  </form>
+</div>
+
+<h2>Owners</h2>
+
+<div local-class='list' data-test-owners>
+  {{#each this.crate.owner_team as |team|}}
+    <div local-class='row' data-test-owner-team={{team.login}}>
+      <LinkTo @route={{team.kind}} @model={{team.login}}>
+        <UserAvatar @user={{team}} @size="medium-small" />
+      </LinkTo>
+      <LinkTo @route={{team.kind}} @model={{team.login}}>
+        {{team.display_name}}
+      </LinkTo>
+      <div local-class="email-column">
+        {{team.email}}
+      </div>
+      <button type="button" class="button button--small" data-test-remove-owner-button {{on "click" (perform this.removeOwnerTask team)}}>Remove</button>
+    </div>
+  {{/each}}
+  {{#each this.crate.owner_user as |user|}}
+    <div local-class='row' data-test-owner-user={{user.login}}>
+      <LinkTo @route={{user.kind}} @model={{user.login}}>
+        <UserAvatar @user={{user}} @size="medium-small" />
+      </LinkTo>
+      <LinkTo @route={{user.kind}} @model={{user.login}}>
+        {{#if user.name}}
+          {{user.name}}
+        {{else}}
+          {{user.login}}
+        {{/if}}
+      </LinkTo>
+      <div local-class="email-column">
+        {{user.email}}
+      </div>
+      <button type="button" class="button button--small" data-test-remove-owner-button {{on "click" (perform this.removeOwnerTask user)}}>Remove</button>
+    </div>
+  {{/each}}
+</div>
+
+<h2>Danger Zone</h2>
+
+<div>
+  <LinkTo @route="crate.delete" class="button button--red" data-test-delete-button>
+    Delete this crate
+  </LinkTo>
+</div>

@@ -1,0 +1,80 @@
+.sidebar {
+    display: flex;
+    flex-direction: column;
+
+    > * + * {
+        margin-top: var(--space-m);
+    }
+}
+
+.heading {
+    font-size: 1.17em;
+    margin: 0 0 var(--space-s);
+}
+
+.metadata {
+    > * + * {
+        margin-top: var(--space-2xs);
+    }
+}
+
+.date,
+.msrv,
+.edition,
+.license,
+.bytes {
+    display: flex;
+    align-items: center;
+
+    svg {
+        flex-shrink: 0;
+        margin-right: var(--space-2xs);
+        height: 1em;
+        width: auto;
+    }
+}
+
+.date,
+.msrv,
+.edition {
+    > span {
+        cursor: help;
+    }
+}
+
+.license {
+    a {
+        color: var(--main-color);
+    }
+}
+
+.bytes {
+    font-variant-numeric: tabular-nums;
+}
+
+.links {
+    > * + * {
+        margin-top: var(--space-m);
+    }
+}
+
+.categories {
+    margin: 0;
+    padding-left: 20px;
+    line-height: 1.5;
+}
+
+.report-button, .playground-button {
+    justify-content: center;
+    width: 220px;
+}
+
+.playground-button {
+    margin-bottom: var(--space-2xs);
+}
+
+.playground-help {
+    max-width: 220px;
+    text-align: justify;
+    line-height: 1.3em;
+}

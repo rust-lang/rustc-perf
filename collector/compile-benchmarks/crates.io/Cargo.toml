@@ -1,0 +1,155 @@
+[package]
+name = "crates_io"
+authors = ["Alex Crichton <alex@alexcrichton.com>"]
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rust-lang/crates.io"
+description = "Backend of crates.io"
+edition = "2024"
+default-run = "server"
+
+[workspace]
+members = ["crates/*"]
+
+[workspace.lints.rust]
+future_incompatible = "warn"
+nonstandard_style = "warn"
+rust_2018_idioms = "warn"
+rust_2018_compatibility = "warn"
+rust_2021_compatibility = "warn"
+unused = "warn"
+
+[workspace.lints.rustdoc]
+unescaped_backticks = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[package.metadata.cargo-machete]
+ignored = ["astral-tokio-tar"]
+
+[workspace.metadata.cargo-machete]
+ignored = ["astral-tokio-tar"]
+
+[lints]
+workspace = true
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3
+
+[profile.release]
+opt-level = 2
+
+[lib]
+name = "crates_io"
+doctest = true
+
+[dependencies]
+anyhow = "=1.0.98"
+astral-tokio-tar = "=0.5.2"
+async-compression = { version = "=0.4.23", default-features = false, features = ["gzip", "tokio"] }
+async-trait = "=0.1.88"
+aws-credential-types = { version = "=1.2.3", features = ["hardcoded-credentials"] }
+aws-ip-ranges = "=0.1201.0"
+aws-sdk-cloudfront = "=1.78.0"
+aws-sdk-sqs = "=1.71.0"
+axum = { version = "=0.8.4", features = ["macros", "matched-path"] }
+axum-extra = { version = "=0.11.0", features = ["erased-json", "query", "typed-header"] }
+base64 = "=0.22.1"
+bigdecimal = { version = "=0.4.8", features = ["serde"] }
+bon = "=3.6.3"
+cargo-manifest = "=0.19.1"
+colored = "=3.0.0"
+crates_io_cdn_logs = { path = "crates/crates_io_cdn_logs" }
+crates_io_database = { path = "crates/crates_io_database" }
+crates_io_database_dump = { path = "crates/crates_io_database_dump" }
+crates_io_diesel_helpers = { path = "crates/crates_io_diesel_helpers" }
+crates_io_docs_rs = { path = "crates/crates_io_docs_rs" }
+crates_io_env_vars = { path = "crates/crates_io_env_vars" }
+crates_io_github = { path = "crates/crates_io_github" }
+crates_io_index = { path = "crates/crates_io_index" }
+crates_io_markdown = { path = "crates/crates_io_markdown" }
+crates_io_pagerduty = { path = "crates/crates_io_pagerduty" }
+crates_io_session = { path = "crates/crates_io_session" }
+crates_io_tarball = { path = "crates/crates_io_tarball" }
+crates_io_team_repo = { path = "crates/crates_io_team_repo" }
+crates_io_trustpub = { path = "crates/crates_io_trustpub" }
+crates_io_worker = { path = "crates/crates_io_worker" }
+csv = "=1.3.1"
+chrono = { version = "=0.4.41", default-features = false, features = ["serde"] }
+clap = { version = "=4.5.39", features = ["derive", "env", "unicode", "wrap_help"] }
+cookie = { version = "=0.18.1", features = ["secure"] }
+deadpool-diesel = { version = "=0.6.1", features = ["postgres", "tracing"] }
+derive_more = { version = "=2.0.1", features = ["deref", "deref_mut", "display"] }
+dialoguer = "=0.11.0"
+diesel = { version = "=2.2.10", features = ["postgres", "serde_json", "chrono", "numeric"] }
+diesel-async = { version = "=0.5.2", features = ["async-connection-wrapper", "deadpool", "postgres"] }
+diesel_full_text_search = "=2.2.0"
+diesel_migrations = { version = "=2.2.0", features = ["postgres"] }
+dotenvy = "=0.15.7"
+flate2 = "=1.1.1"
+futures-util = "=0.3.31"
+hex = "=0.4.3"
+http = "=1.3.1"
+hyper = { version = "=1.6.0", features = ["client", "http1"] }
+indexmap = { version = "=2.9.0", features = ["serde"] }
+indicatif = "=0.17.11"
+ipnetwork = "=0.21.1"
+json-subscriber = "=0.2.4"
+lettre = { version = "=0.11.16", default-features = false, features = ["file-transport", "smtp-transport", "hostname", "builder", "tokio1", "tokio1-native-tls"] }
+minijinja = { version = "=2.10.2", features = ["loader"] }
+mockall = "=0.13.1"
+moka = { version = "=0.12.10", default-features = false, features = ["future"] }
+native-tls = "=0.2.14"
+oauth2 = "=5.0.0"
+object_store = { version = "=0.12.1", features = ["aws"] }
+p256 = "=0.13.2"
+parking_lot = "=0.12.3"
+paste = "=1.0.15"
+postgres-native-tls = "=0.5.1"
+prometheus = { version = "=0.14.0", default-features = false }
+rand = "=0.9.1"
+reqwest = { version = "=0.12.15", features = ["gzip", "json"] }
+rss = { version = "=2.0.12", default-features = false, features = ["atom"] }
+secrecy = "=0.10.3"
+semver = { version = "=1.0.26", features = ["serde"] }
+sentry = { version = "=0.38.1", features = ["tracing", "tower", "tower-axum-matched-path", "tower-http"] }
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "=1.0.140"
+sha2 = "=0.10.9"
+spdx = "=0.10.8"
+tar = "=0.4.44"
+tempfile = "=3.20.0"
+thiserror = "=2.0.12"
+tikv-jemallocator = { version = "=0.6.0", features = ['unprefixed_malloc_on_supported_platforms', 'profiling'] }
+tokio = { version = "=1.45.1", features = ["net", "signal", "io-std", "io-util", "rt-multi-thread", "macros", "process"]}
+tokio-postgres = "=0.7.13"
+tokio-util = "=0.7.15"
+toml = "=0.8.22"
+tower = "=0.5.2"
+tower-http = { version = "=0.6.4", features = ["add-extension", "fs", "catch-panic", "timeout", "compression-full"] }
+tracing = "=0.1.41"
+tracing-subscriber = { version = "=0.3.19", features = ["env-filter", "json"] }
+typomania = { version = "=0.1.2", default-features = false }
+url = "=2.5.4"
+utoipa = { version = "=5.3.1", features = ["chrono"] }
+utoipa-axum = "=0.2.0"
+
+[dev-dependencies]
+bytes = "=1.10.1"
+crates_io_docs_rs = { path = "crates/crates_io_docs_rs", features = ["mock"] }
+crates_io_github = { path = "crates/crates_io_github", features = ["mock"] }
+crates_io_index = { path = "crates/crates_io_index", features = ["testing"] }
+crates_io_tarball = { path = "crates/crates_io_tarball", features = ["builder"] }
+crates_io_team_repo = { path = "crates/crates_io_team_repo", features = ["mock"] }
+crates_io_test_db = { path = "crates/crates_io_test_db" }
+claims = "=0.8.0"
+diesel = { version = "=2.2.10", features = ["r2d2"] }
+googletest = "=0.14.1"
+insta = { version = "=1.43.1", features = ["glob", "json", "redactions"] }
+regex = "=1.11.1"
+sentry = { version = "=0.38.1", features = ["test"] }
+tokio = "=1.45.1"
+zip = { version = "=4.0.0", default-features = false, features = ["deflate"] }

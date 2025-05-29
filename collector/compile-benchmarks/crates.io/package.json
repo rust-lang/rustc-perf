@@ -1,0 +1,182 @@
+{
+  "name": "crates-io",
+  "version": "0.0.0",
+  "private": true,
+  "homepage": "https://github.com/rust-lang/crates.io#readme",
+  "bugs": {
+    "url": "https://github.com/rust-lang/crates.io/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rust-lang/crates.io.git"
+  },
+  "license": "(MIT OR Apache-2.0)",
+  "author": "",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "ember build --environment=production && node ./script/precompress-assets.mjs",
+    "lint:deps": "ember dependency-lint",
+    "lint:hbs": "ember-template-lint app",
+    "lint:js": "eslint . --cache",
+    "precompress": "node ./script/precompress-assets.mjs",
+    "prettier:check": "prettier --check package.json '**/*.js' '**/*.mjs' '**/*.ts' '**/*.md'",
+    "prettier:write": "prettier --write package.json '**/*.js' '**/*.mjs' '**/*.ts' '**/*.md'",
+    "start": "ember serve",
+    "start:docker": "ember serve --proxy http://backend:8888",
+    "start:live": "ember serve --proxy https://crates.io",
+    "start:local": "ember serve --proxy http://127.0.0.1:8888",
+    "start:staging": "ember serve --proxy https://staging-crates-io.herokuapp.com",
+    "test": "ember exam --split=2 --parallel",
+    "test-coverage": "COVERAGE=true npm run test && ember coverage-merge && rm -rf coverage_* coverage/coverage-summary.json && nyc report",
+    "e2e": "playwright test"
+  },
+  "prettier": {
+    "arrowParens": "avoid",
+    "printWidth": 120,
+    "singleQuote": true,
+    "tabWidth": 2,
+    "trailingComma": "all"
+  },
+  "dependencies": {
+    "@floating-ui/dom": "1.7.0",
+    "@juggle/resize-observer": "3.4.0",
+    "@sentry/ember": "9.23.0",
+    "chart.js": "4.4.9",
+    "date-fns": "4.1.0",
+    "highlight.js": "11.11.1",
+    "macro-decorators": "0.1.2",
+    "mermaid": "11.6.0",
+    "pretty-bytes": "7.0.0",
+    "semver": "7.7.2"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "@babel/core": "7.27.3",
+    "@babel/eslint-parser": "7.27.1",
+    "@babel/plugin-proposal-decorators": "7.27.1",
+    "@crates-io/msw": "workspace:*",
+    "@ember/optional-features": "2.2.0",
+    "@ember/render-modifiers": "3.0.0",
+    "@ember/string": "4.0.1",
+    "@ember/test-helpers": "5.2.2",
+    "@ember/test-waiters": "4.1.0",
+    "@embroider/compat": "3.9.0",
+    "@embroider/core": "3.5.6",
+    "@embroider/webpack": "4.1.0",
+    "@eslint/eslintrc": "3.3.1",
+    "@eslint/js": "9.27.0",
+    "@glimmer/component": "2.0.0",
+    "@glimmer/tracking": "1.1.2",
+    "@mainmatter/ember-api-actions": "0.6.0",
+    "@percy/cli": "1.30.11",
+    "@percy/ember": "4.2.0",
+    "@percy/playwright": "1.0.8",
+    "@playwright/test": "1.52.0",
+    "@sinonjs/fake-timers": "14.0.0",
+    "@types/node": "22.15.23",
+    "@types/sinonjs__fake-timers": "8.1.5",
+    "@zestia/ember-auto-focus": "5.1.0",
+    "broccoli-asset-rev": "3.0.0",
+    "broccoli-funnel": "3.0.8",
+    "ember-a11y-testing": "7.1.2",
+    "ember-auto-import": "2.10.0",
+    "ember-cli": "6.4.0",
+    "ember-cli-babel": "8.2.0",
+    "ember-cli-bundle-analyzer": "1.0.0",
+    "ember-cli-code-coverage": "3.1.0",
+    "ember-cli-dependency-checker": "3.3.3",
+    "ember-cli-dependency-lint": "2.0.1",
+    "ember-cli-head": "2.0.0",
+    "ember-cli-htmlbars": "6.3.0",
+    "ember-cli-inject-live-reload": "2.1.0",
+    "ember-cli-notifications": "9.1.0",
+    "ember-click-outside": "6.1.1",
+    "ember-concurrency": "4.0.4",
+    "ember-css-modules": "2.1.1",
+    "ember-data": "5.5.0",
+    "ember-disable-prototype-extensions": "1.1.3",
+    "ember-error-route": "0.2.0",
+    "ember-event-helpers": "0.1.1",
+    "ember-exam": "9.1.0",
+    "ember-inflector": "6.0.0",
+    "ember-keyboard": "9.0.1",
+    "ember-link": "3.3.0",
+    "ember-load-initializers": "3.0.1",
+    "ember-modifier": "4.2.2",
+    "ember-page-title": "9.0.2",
+    "ember-qunit": "9.0.3",
+    "ember-resolver": "13.1.1",
+    "ember-source": "6.4.0",
+    "ember-svg-jar": "2.6.3",
+    "ember-template-lint": "7.7.0",
+    "ember-test-selectors": "7.1.0",
+    "ember-truth-helpers": "4.0.3",
+    "ember-web-app": "5.0.1",
+    "ember-window-mock": "1.0.2",
+    "eslint": "9.27.0",
+    "eslint-config-prettier": "10.1.5",
+    "eslint-plugin-ember": "12.5.0",
+    "eslint-plugin-ember-concurrency": "0.5.1",
+    "eslint-plugin-import-helpers": "2.0.1",
+    "eslint-plugin-prettier": "5.4.0",
+    "eslint-plugin-qunit": "8.1.2",
+    "eslint-plugin-qunit-dom": "0.2.0",
+    "eslint-plugin-unicorn": "59.0.1",
+    "globals": "16.2.0",
+    "globby": "14.1.0",
+    "loader.js": "4.7.0",
+    "match-json": "1.3.7",
+    "memory-scroll": "2.0.1",
+    "msw": "2.8.5",
+    "normalize.css": "8.0.1",
+    "nyc": "17.1.0",
+    "playwright-msw": "3.0.1",
+    "postcss-preset-env": "10.2.0",
+    "prettier": "3.5.3",
+    "qunit": "2.24.1",
+    "qunit-console-grouper": "0.3.0",
+    "qunit-dom": "3.4.0",
+    "tracked-built-ins": "4.0.0",
+    "typescript": "5.8.3",
+    "webpack": "5.99.9"
+  },
+  "resolutions": {
+    "ember-auto-import": "2.10.0",
+    "ember-get-config": "2.1.1",
+    "ember-inflector": "6.0.0",
+    "ember-modifier": "4.2.2",
+    "ember-svg-jar>cheerio": "1.0.0-rc.12"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowAny": [
+        "eslint"
+      ],
+      "ignoreMissing": [
+        "@babel/core",
+        "postcss"
+      ]
+    },
+    "onlyBuiltDependencies": [
+      "@percy/core",
+      "esbuild",
+      "msw"
+    ],
+    "ignoredBuiltDependencies": [
+      "core-js"
+    ]
+  },
+  "engines": {
+    "node": "22.16.0",
+    "pnpm": "10.11.0"
+  },
+  "ember": {
+    "edition": "octane"
+  },
+  "volta": {
+    "node": "22.16.0"
+  }
+}

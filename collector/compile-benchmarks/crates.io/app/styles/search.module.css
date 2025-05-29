@@ -1,0 +1,24 @@
+.results-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-s);
+}
+
+.warning {
+    margin: 0 0 var(--space-s);
+    padding: var(--space-2xs);
+    color: var(--orange-700);
+    background: var(--orange-100);
+    border-left: solid var(--orange-400) var(--space-3xs);
+    border-radius: var(--space-4xs);
+}
+
+.list {
+    margin-bottom: var(--space-s);
+}
+
+.try-again-button {
+    align-self: center;
+    margin-top: var(--space-m);
+}

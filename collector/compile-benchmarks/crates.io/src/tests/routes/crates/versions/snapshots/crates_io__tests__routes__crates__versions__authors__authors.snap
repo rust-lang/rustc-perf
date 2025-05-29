@@ -1,0 +1,10 @@
+---
+source: src/tests/routes/crates/versions/authors.rs
+expression: json
+---
+{
+  "meta": {
+    "names": []
+  },
+  "users": []
+}

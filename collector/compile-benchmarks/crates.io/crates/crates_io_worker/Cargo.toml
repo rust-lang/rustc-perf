@@ -1,0 +1,26 @@
+[package]
+name = "crates_io_worker"
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "=1.0.98"
+diesel = { version = "=2.2.10", features = ["postgres", "serde_json"] }
+diesel-async = { version = "=0.5.2", features = ["async-connection-wrapper", "deadpool", "postgres"] }
+futures-util = "=0.3.31"
+sentry-core = { version = "=0.38.1", features = ["client"] }
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "=1.0.140"
+thiserror = "=2.0.12"
+tokio = { version = "=1.45.1", features = ["rt", "time"]}
+tracing = "=0.1.41"
+
+[dev-dependencies]
+claims = "=0.8.0"
+crates_io_test_db = { path = "../crates_io_test_db" }
+insta = { version = "=1.43.1", features = ["json"] }
+tokio = { version = "=1.45.1", features = ["macros", "sync"]}

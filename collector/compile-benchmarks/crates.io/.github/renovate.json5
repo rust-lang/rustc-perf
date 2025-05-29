@@ -1,0 +1,79 @@
+{
+    extends: [
+        "config:best-practices",
+        ":pinAllExceptPeerDependencies",
+        ":maintainLockFilesWeekly",
+        ":prConcurrentLimitNone",
+        ":prHourlyLimitNone",
+        ":semanticCommitsDisabled",
+        ":automergeLinters",
+        ":automergeTesters",
+        "customManagers:dockerfileVersions",
+        "customManagers:githubActionsVersions",
+        "github>Turbo87/renovate-config//rust/updateToolchain",
+    ],
+    packageRules: [
+        {
+            matchCategories: ["rust"],
+            labels: ["A-backend ⚙️"],
+        },
+        {
+            matchCategories: ["js"],
+            labels: ["A-frontend 🐹"],
+        },
+        {
+            matchDepNames: ["ember-cli", "ember-data", "ember-source"],
+            separateMinorPatch: true,
+        },
+        {
+            matchDepNames: [
+                "@percy/cli",
+                "tj-actions/changed-files",
+                "webpack",
+            ],
+            extends: ["schedule:weekly"],
+        },
+        {
+            // Avoid "Artifact update problem" for pnpm updates when the renovatebot
+            // setup does not support the new version yet.
+            matchDepNames: ["pnpm"],
+            minimumReleaseAge: "24 hours",
+        },
+        {
+            matchCategories: ["js"],
+            matchUpdateTypes: ["lockFileMaintenance"],
+            additionalBranchPrefix: "js-",
+            commitMessageSuffix: "(JS)",
+        },
+        {
+            matchCategories: ["rust"],
+            matchUpdateTypes: ["lockFileMaintenance"],
+            additionalBranchPrefix: "rust-",
+            commitMessageSuffix: "(Rust)",
+        },
+        {
+            matchManagers: ["custom.regex"],
+            matchDepNames: ["rust"],
+            commitMessageTopic: "Rust",
+            labels: ["A-backend ⚙️"],
+        },
+        {
+            matchDepNames: ["/^diesel$/", "/^diesel_/"],
+            groupName: "diesel packages",
+        },
+        {
+            matchDepNames: ["aws-ip-ranges"],
+            automerge: true,
+        },
+        {
+            matchUpdateTypes: ["digest"],
+            enabled: false,
+        },
+        {
+            // This is causing various issues, so we disable it for now.
+            matchDatasources: ["docker"],
+            matchUpdateTypes: ["pinDigest"],
+            enabled: false
+        },
+    ],
+}

@@ -1,0 +1,33 @@
+---
+source: src/tests/krate/publish/dependencies.rs
+expression: crates
+---
+[
+  {
+    "name": "two-deps",
+    "vers": "1.0.0",
+    "deps": [
+      {
+        "name": "dep-a",
+        "req": ">0",
+        "features": [],
+        "optional": false,
+        "default_features": true,
+        "target": null,
+        "kind": "normal"
+      },
+      {
+        "name": "dep-b",
+        "req": ">0",
+        "features": [],
+        "optional": false,
+        "default_features": true,
+        "target": null,
+        "kind": "normal"
+      }
+    ],
+    "cksum": "8d88a5d9d97c440d32d2f8542395975effc3605b98e076a15f4023a004536ed8",
+    "features": {},
+    "yanked": false
+  }
+]
