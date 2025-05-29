@@ -272,3 +272,5 @@ version = "1.0.3"
 
 [dev-dependencies.tempfile]
 version = "3.10.1"
+
+[workspace]
