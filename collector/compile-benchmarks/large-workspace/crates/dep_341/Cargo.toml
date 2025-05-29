@@ -1,0 +1,12 @@
+[package]
+name = "dep_341"
+version = "0.1.0"
+authors = ["rustc-perf developers"]
+edition = "2024"
+
+[dependencies]
+dep_159 = { path = "../dep_159" }
+dep_122 = { path = "../dep_122" }
+dep_150 = { path = "../dep_150" }
+dep_88 = { path = "../dep_88" }
+dep_119 = { path = "../dep_119" }
