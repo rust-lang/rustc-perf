@@ -1,0 +1,11 @@
+---
+source: src/tests/read_only_mode.rs
+expression: response.json()
+---
+{
+  "errors": [
+    {
+      "detail": "crates.io is currently in read-only mode. Please check https://status.crates.io/ for details and try again later."
+    }
+  ]
+}

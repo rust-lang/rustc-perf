@@ -48,6 +48,11 @@ SPDX-FileCopyrightText = "The Cranelift Project Developers"
 SPDX-License-Identifier = "Apache-2.0 WITH LLVM-exception"
 
 [[annotations]]
+path = "crates.io/**"
+SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "ctfe-stress-5/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"

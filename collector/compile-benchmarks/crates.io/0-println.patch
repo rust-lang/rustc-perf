@@ -1,0 +1,47 @@
+diff --git a/src/bin/server.rs b/src/bin/server.rs
+index 3303158c..b7589cf4 100644
+--- a/src/bin/server.rs
++++ b/src/bin/server.rs
+@@ -2,7 +2,7 @@
+ extern crate tracing;
+ 
+ use crates_io::middleware::normalize_path::normalize_path;
+-use crates_io::{App, Emails, metrics::LogEncoder};
++use crates_io::{metrics::LogEncoder, App, Emails};
+ use std::{sync::Arc, time::Duration};
+ 
+ use axum::ServiceExt;
+@@ -12,13 +12,14 @@ use reqwest::Client;
+ use std::io::Write;
+ use std::net::SocketAddr;
+ use tokio::net::TcpListener;
+-use tokio::signal::unix::{SignalKind, signal};
++use tokio::signal::unix::{signal, SignalKind};
+ use tower::Layer;
+ 
+ const CORE_THREADS: usize = 4;
+ 
+ fn main() -> anyhow::Result<()> {
+     let _sentry = crates_io::sentry::init();
++    println!("hello from crates.io!");
+ 
+     // Initialize logging
+     crates_io::util::tracing::init();
+@@ -116,13 +117,11 @@ fn log_instance_metrics_thread(app: Arc<App>) {
+         None => return,
+     };
+ 
+-    std::thread::spawn(move || {
+-        loop {
+-            if let Err(err) = log_instance_metrics_inner(&app) {
+-                error!(?err, "log_instance_metrics error");
+-            }
+-            std::thread::sleep(interval);
++    std::thread::spawn(move || loop {
++        if let Err(err) = log_instance_metrics_inner(&app) {
++            error!(?err, "log_instance_metrics error");
+         }
++        std::thread::sleep(interval);
+     });
+ }
+ 
