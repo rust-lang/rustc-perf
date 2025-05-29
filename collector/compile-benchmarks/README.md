@@ -86,6 +86,9 @@ compiler in interesting ways.
 - **issue-88862**: A MCVE of a program that had a
   [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
   when trying to normalize large opaque types with late-bound regions.
+- **large-workspace**: A stress test for searching for and loading metadata of a
+  large number (hundreds) of (both directly and indirectly) dependent crates,
+  and instantiating generic/inlined code from them.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
