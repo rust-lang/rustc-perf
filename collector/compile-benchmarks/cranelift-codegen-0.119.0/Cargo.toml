@@ -250,3 +250,5 @@ check-cfg = [
     "cfg(pulley_tail_calls)",
     "cfg(pulley_assume_llvm_makes_tail_calls)",
 ]
+
+[workspace]

@@ -233,3 +233,5 @@ serde = ["dep:serde"]
 tga = []
 tiff = ["dep:tiff"]
 webp = ["dep:image-webp"]
+
+[workspace]
