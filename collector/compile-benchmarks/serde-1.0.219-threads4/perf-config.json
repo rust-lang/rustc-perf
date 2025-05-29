@@ -1,0 +1,5 @@
+{
+  "artifact": "library",
+  "category": "secondary",
+  "cargo_rustc_opts": "-Zthreads=4"
+}
