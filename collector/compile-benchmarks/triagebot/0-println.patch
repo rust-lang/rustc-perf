@@ -1,0 +1,12 @@
+diff --git a/src/main.rs b/src/main.rs
+index 1b7dd24f..afc747c7 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -20,6 +20,7 @@ use triagebot::jobs::{
+ use triagebot::{db, github, handlers::Context, notification_listing, payload, EventName};
+ 
+ async fn handle_agenda_request(req: String) -> anyhow::Result<String> {
++    println!("request");
+     if req == "/agenda/lang/triage" {
+         return triagebot::agenda::lang().call().await;
+     }

@@ -264,6 +264,11 @@ SPDX-FileCopyrightText = [
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "triagebot/**"
+SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "tt-muncher/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
