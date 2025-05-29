@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            * { font-family: sans-serif; }
+            h1 { font-size: 20px; }
+            h2 { font-size: 16px; }
+            p { font-size: 15px; }
+            li { font-size: 13px; }
+
+            table { border-collapse: collapse; }
+            td, th { border-bottom: 1px solid #ddd; padding: 5px 6px; font-size: 13px; text-align: left; vertical-align: baseline; }
+            tr:nth-child(even) { background: #eee; }
+
+            .dot:before {
+                content: "";
+                display: inline-block;
+                width: 0.4em;
+                height: 0.4em;
+                border-radius: 50% 50%;
+                margin-right: 0.3em;
+                border: 1px solid transparent;
+            }
+            .need-triage-red:before {
+                background: #FF0000;
+                border-color: black;
+                border-radius:2;
+            }
+            .need-triage-yellow:before {
+                background: #FFFF00;
+                border-color: black;
+                border-radius:2;
+            }
+            .need-triage-green:before {
+                background: #90EE90;
+                border-color: black;
+                border-radius:2;
+            }
+        </style>
+        <script>
+            function filter() {
+                var input, filter, table, tr, i, txtValue;
+                input = document.getElementById("filter-input");
+                filter = input.value;
+                table = document.getElementById("pr-table");
+                tr = table.getElementsByTagName("tr");
+
+                filters = filter.split(' ').map(function(x) {
+                    return x.split(':');
+                });
+
+
+                for (i = 0; i < tr.length; i++) {
+                    filters.forEach(function(flt) {
+                        if (flt.length == 2) {
+                            var td;
+                            switch (flt[0]) {
+                                case 'label':
+                                case '-label':
+                                    td = tr[i].getElementsByTagName("td")[6];
+                                    break;
+                                case 'assignee':
+                                case '-assignee':
+                                    td = tr[i].getElementsByTagName("td")[5];
+                                    break;
+                                case 'author':
+                                case '-author':
+                                    td = tr[i].getElementsByTagName("td")[4];
+                                    break;
+                            }
+                            if (td) {
+                                txtValue = td.textContent || td.innerText;
+                                console.log(flt[0].charAt(0));
+                                if ((flt[0].charAt(0) != '-' && txtValue.indexOf(flt[1]) > -1)
+                                    || (flt[0].charAt(0) == '-' && txtValue.indexOf(flt[1]) <= -1)) {
+                                    tr[i].style.display = "";
+                                } else {
+                                    tr[i].style.display = "none";
+                                }
+                            }
+                        } else {
+                            tr[i].style.display = "";
+                        }
+                    });
+                }
+            }
+        </script>
+    </head>
+
+    <body>
+        <h1>Triage dashboard - <a href="https://github.com/{{ owner }}/{{ repo }}">{{ owner }}/{{ repo }}</a></h1>
+        <input id="filter-input" type="search" style="width: 400px;">
+        <input type="submit" value="filter" onclick="filter()">
+        <table id="pr-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Need triage</th>
+                    <th>Wait for</th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Assignee</th>
+                    <th>Labels</th>
+                    <th>Updated at</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pull in pulls %}
+                    <tr>
+                        <td><a href="{{ pull.html_url }}">{{ pull.number }}</a></td>
+                        <td class='dot need-triage-{{ pull.need_triage }}'>{{ pull.days_from_last_updated_at }} {% if pull.days_from_last_updated_at > 1 %}days{% else %}day{% endif %}</td>
+                        <td>{% if pull.wait_for_author %}<b>{{ pull.author }}</b>{% elif pull.wait_for_review %}<b>{{ pull.assignee }}</b>{% endif %}</td>
+                        <td>{{ pull.title }}</td>
+                        <!-- Author or reviewer name become bold because we can faster spot whether `Wait for` is author or reviewer. -->
+                        <td {% if pull.wait_for_author %} style='font-weight: bold;'{% endif %}>{{ pull.author }}</td>
+                        <td {% if pull.wait_for_review %} style='font-weight: bold;'{% endif %}>{{ pull.assignee }}</td>
+                        <td>{{ pull.labels }}</td>
+                        <td>{{ pull.updated_at }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div>
+            <p>From the last updated at</p>
+            <ul>
+                <li class='dot need-triage-red'>14 days or more</li>
+                <li class='dot need-triage-yellow'>7 days or more</li>
+                <li class='dot need-triage-green'>less than 7days</li>
+            </ul>
+        </div>
+        <footer>
+            <nav>
+                {% if prev %}
+                    <a href="{{ prev }}">Prev</a>
+                {% endif %}
+                {% if next %}
+                    <a href="{{ next }}">Next</a>
+                {% endif %}
+            </nav>
+        </footer>
+    </body>
+</html>

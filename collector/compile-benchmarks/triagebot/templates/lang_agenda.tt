@@ -1,0 +1,75 @@
+{% import "_issues_heading.tt" as issues_heading %}
+{% import "_issues_fcps.tt" as issues_fcps %}
+{% import "_issues.tt" as issues %}
+---
+title: Triage meeting {{CURRENT_DATE}}
+tags: triage-meeting
+---
+
+# T-lang meeting agenda
+
+* Meeting date: {{CURRENT_DATE}}
+
+## Attendance
+
+* Team members:
+* Others:
+
+## Meeting roles
+
+* Action item scribe:
+* Note-taker:
+
+## Scheduled meetings
+
+{{-issues::render(issues=scheduled_meetings, indent="", empty="No pending proposals this time.")}}
+
+Edit the schedule here: https://github.com/orgs/rust-lang/projects/31/views/7.
+
+## Announcements or custom items
+
+(Meeting attendees, feel free to add items here!)
+
+## Action item review
+
+* [Action items list](https://hackmd.io/gstfhtXYTHa3Jv-P_2RK7A)
+
+## Pending lang team project proposals
+
+{{-issues_heading::render(issues=pending_project_proposals)}}
+
+## PRs on the lang-team repo
+
+{{-issues_heading::render(issues=pending_lang_team_prs)}}
+
+## RFCs waiting to be merged
+
+{{-issues_heading::render(issues=rfcs_waiting_to_be_merged)}}
+
+## `S-waiting-on-team`
+
+{{-issues_heading::render(issues=waiting_on_lang_team)}}
+
+## Proposed FCPs
+
+**Check your boxes!**
+
+{{-issues_fcps::render(issues=proposed_fcp)}}
+
+## Active FCPs
+
+{{-issues_heading::render(issues=in_fcp)}}
+
+## P-critical issues
+
+{{-issues_heading::render(issues=p_critical)}}
+
+## Nominated RFCs, PRs and issues discussed this meeting
+
+(none yet, move things from the section below as they are discussed)
+
+## Nominated RFCs, PRs and issues NOT discussed this meeting
+
+
+
+{{-issues_heading::render(issues=nominated)}}
