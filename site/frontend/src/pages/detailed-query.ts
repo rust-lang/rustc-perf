@@ -198,7 +198,7 @@ function populate_data(data, state: Selector) {
     txt +=
       "<br>Local profile (base): <code>" +
       `./target/release/collector profile_local cachegrind
-                    +${state.base_commit} --include ${bench_name(
+                    +${state.base_commit} --exact-match ${bench_name(
         state.benchmark
       )} --profiles
                 ${profile(state.benchmark)} --scenarios ${scenario_filter(
@@ -208,7 +208,7 @@ function populate_data(data, state: Selector) {
   txt +=
     "<br>Local profile (new): <code>" +
     `./target/release/collector profile_local cachegrind
-                +${state.commit} --include ${bench_name(
+                +${state.commit} --exact-match ${bench_name(
       state.benchmark
     )} --profiles
                 ${profile(state.benchmark)} --scenarios ${scenario_filter(
@@ -220,7 +220,7 @@ function populate_data(data, state: Selector) {
       `./target/release/collector profile_local cachegrind
                 +${state.base_commit} --rustc2 +${
         state.commit
-      } --include ${bench_name(state.benchmark)} --profiles
+      } --exact-match ${bench_name(state.benchmark)} --profiles
                 ${profile(state.benchmark)} --scenarios ${scenario_filter(
         state.scenario
       )}</code>`;
