@@ -1,0 +1,33 @@
+---
+source: src/tests/krate/publish/features.rs
+expression: crates
+---
+[
+  {
+    "name": "foo",
+    "vers": "1.0.0",
+    "deps": [
+      {
+        "name": "bar",
+        "req": ">0",
+        "features": [],
+        "optional": false,
+        "default_features": true,
+        "target": null,
+        "kind": "normal"
+      }
+    ],
+    "cksum": "2afc013f11f59e88e299edb2e6e1c173435b91a164e19e74842a096bca9f68f8",
+    "features": {
+      "old_feat": []
+    },
+    "features2": {
+      "new_feat": [
+        "dep:bar",
+        "bar?/feat"
+      ]
+    },
+    "yanked": false,
+    "v": 2
+  }
+]

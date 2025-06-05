@@ -1,0 +1,36 @@
+[package]
+name = "crates_io_database"
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+bon = "=3.6.3"
+chrono = { version = "=0.4.41", default-features = false, features = ["serde"] }
+crates_io_diesel_helpers = { path = "../crates_io_diesel_helpers" }
+crates_io_index = { path = "../crates_io_index" }
+diesel = { version = "=2.2.10", features = ["serde_json", "chrono", "numeric"] }
+diesel-async = "=0.5.2"
+diesel_full_text_search = "=2.2.0"
+futures-util = "=0.3.31"
+rand = "=0.9.1"
+secrecy = "=0.10.3"
+semver = { version = "=1.0.26", features = ["serde"] }
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "=1.0.140"
+sha2 = "=0.10.9"
+thiserror = "=2.0.12"
+tracing = "=0.1.41"
+unicode-xid = "=0.2.6"
+utoipa = { version = "=5.3.1", features = ["chrono"] }
+
+[dev-dependencies]
+claims = "=0.8.0"
+crates_io_test_db = { path = "../crates_io_test_db" }
+diesel-async = { version = "=0.5.2", features = ["postgres"] }
+googletest = "=0.14.1"
+insta = "=1.43.1"
+tokio = { version = "=1.45.1", features = ["macros", "rt"] }

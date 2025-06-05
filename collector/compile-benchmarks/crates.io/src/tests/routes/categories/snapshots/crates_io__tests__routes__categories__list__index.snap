@@ -1,0 +1,10 @@
+---
+source: src/tests/routes/categories/list.rs
+expression: json
+---
+{
+  "categories": [],
+  "meta": {
+    "total": 0
+  }
+}

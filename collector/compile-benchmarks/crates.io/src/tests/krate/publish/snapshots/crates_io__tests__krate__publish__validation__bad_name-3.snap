@@ -1,0 +1,11 @@
+---
+source: src/tests/krate/publish/validation.rs
+expression: response.json()
+---
+{
+  "errors": [
+    {
+      "detail": "the crate name `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` is too long (max 64 characters)"
+    }
+  ]
+}

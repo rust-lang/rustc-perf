@@ -1,0 +1,14 @@
+---
+source: src/index.rs
+expression: metadata
+---
+[
+  {
+    "name": "foo",
+    "vers": "0.1.0",
+    "deps": [],
+    "cksum": "                                                                ",
+    "features": {},
+    "yanked": false
+  }
+]
