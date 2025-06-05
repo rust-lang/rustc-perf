@@ -452,7 +452,7 @@ fn sort_queue(
         // are ready to be benchmarked (i.e., those with parent in done or no
         // parent).
         let level_len = partition_in_place(unordered_queue[finished..].iter_mut(), |(_, mr)| {
-            mr.parent_sha().map_or(true, |parent| done.contains(parent))
+            mr.parent_sha().is_none_or(|parent| done.contains(parent))
         });
 
         // No commit is ready for benchmarking. This can happen e.g. when a try parent commit
