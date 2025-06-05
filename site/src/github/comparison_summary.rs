@@ -404,11 +404,10 @@ fn try_run_body(is_regression: bool) -> String {
     let sign = if is_regression { "+" } else { "-" };
     format!(
         "
-Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. While you can manually mark this PR as fit \
-for rollup, we strongly recommend not doing so since this PR may lead to changes in \
-compiler perf.{next_steps}
+Benchmarking this pull request means it may be perf-sensitive – \
+we'll automatically label it not fit for rolling up. \
+You can override this, but we strongly advise not to, \
+due to possible changes in compiler perf.{next_steps}
 
 @bors rollup=never
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
