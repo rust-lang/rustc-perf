@@ -1681,7 +1681,12 @@ fn run_benchmarks(
 
     // Compile benchmarks
     let compile_result = if let Some(compile) = compile {
-        let errors = bench_compile(rt, connection.as_mut(), &shared, compile, &collector);
+        let errors = rt.block_on(bench_compile(
+            connection.as_mut(),
+            &shared,
+            compile,
+            &collector,
+        ));
         errors
             .fail_if_nonzero()
             .context("Compile benchmarks failed")
@@ -1781,8 +1786,7 @@ async fn with_timeout<F: Future<Output = anyhow::Result<()>>>(fut: F) -> anyhow:
 }
 
 /// Perform compile benchmarks.
-fn bench_compile(
-    rt: &mut Runtime,
+async fn bench_compile(
     conn: &mut dyn Connection,
     shared: &SharedBenchmarkConfig,
     config: CompileBenchmarkConfig,
@@ -1798,51 +1802,62 @@ fn bench_compile(
 
     let start = Instant::now();
 
-    let mut measure_and_record =
-        |benchmark_name: &BenchmarkName,
-         category: Category,
-         print_intro: &dyn Fn(),
-         measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
-            let is_fresh = rt.block_on(collector.start_compile_step(conn, benchmark_name));
-            if !is_fresh {
-                eprintln!("skipping {} -- already benchmarked", benchmark_name);
-                return;
-            }
-            let mut tx = rt.block_on(conn.transaction());
-            let (supports_stable, category) = category.db_representation();
-            rt.block_on(tx.conn().record_compile_benchmark(
-                &benchmark_name.0,
-                Some(supports_stable),
-                category,
-            ));
-            print_intro();
-            let mut processor = BenchProcessor::new(
-                tx.conn(),
-                benchmark_name,
-                &shared.artifact_id,
-                collector.artifact_row_id,
-                config.is_self_profile,
+    async fn measure_and_record<F: AsyncFn(&mut BenchProcessor) -> anyhow::Result<()>>(
+        collector: &CollectorCtx,
+        shared: &SharedBenchmarkConfig,
+        config: &CompileBenchmarkConfig,
+        errors: &mut BenchmarkErrors,
+        conn: &mut dyn Connection,
+        benchmark_name: &BenchmarkName,
+        category: Category,
+        print_intro: &dyn Fn(),
+        measure: F,
+    ) {
+        let is_fresh = collector.start_compile_step(conn, benchmark_name).await;
+        if !is_fresh {
+            eprintln!("skipping {} -- already benchmarked", benchmark_name);
+            return;
+        }
+        let mut tx = conn.transaction().await;
+        let (supports_stable, category) = category.db_representation();
+        tx.conn()
+            .record_compile_benchmark(&benchmark_name.0, Some(supports_stable), category)
+            .await;
+        print_intro();
+        let mut processor = BenchProcessor::new(
+            tx.conn(),
+            benchmark_name,
+            &shared.artifact_id,
+            collector.artifact_row_id,
+            config.is_self_profile,
+        );
+        let result = measure(&mut processor).await;
+        if let Err(s) = result {
+            eprintln!(
+                "collector error: Failed to benchmark '{}', recorded: {:#}",
+                benchmark_name, s
             );
-            let result = measure(&mut processor);
-            if let Err(s) = result {
-                eprintln!(
-                    "collector error: Failed to benchmark '{}', recorded: {:#}",
-                    benchmark_name, s
-                );
-                errors.incr();
-                rt.block_on(tx.conn().record_error(
+            errors.incr();
+            tx.conn()
+                .record_error(
                     collector.artifact_row_id,
                     &benchmark_name.0,
                     &format!("{:?}", s),
-                ));
-            };
-            rt.block_on(collector.end_compile_step(tx.conn(), benchmark_name));
-            rt.block_on(tx.commit()).expect("committed");
+                )
+                .await;
         };
+        collector.end_compile_step(tx.conn(), benchmark_name).await;
+        tx.commit().await.expect("committed");
+    }
 
     // Normal benchmarks.
     for (nth_benchmark, benchmark) in config.benchmarks.iter().enumerate() {
         measure_and_record(
+            collector,
+            shared,
+            &config,
+            &mut errors,
+            conn,
             &benchmark.name,
             benchmark.category(),
             &|| {
@@ -1851,8 +1866,8 @@ fn bench_compile(
                     n_normal_benchmarks_remaining(config.benchmarks.len() - nth_benchmark)
                 )
             },
-            &|processor| {
-                rt.block_on(with_timeout(benchmark.measure(
+            async |processor| {
+                with_timeout(benchmark.measure(
                     processor,
                     &config.profiles,
                     &config.scenarios,
@@ -1860,23 +1875,32 @@ fn bench_compile(
                     &shared.toolchain,
                     config.iterations,
                     &config.targets,
-                )))
+                ))
+                .await
                 .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
             },
         )
+        .await;
     }
 
     // The special rustc benchmark, if requested.
     if bench_rustc {
         measure_and_record(
+            collector,
+            shared,
+            &config,
+            &mut errors,
+            conn,
             &BenchmarkName("rustc".to_string()),
             Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
-            &|processor| {
-                rt.block_on(with_timeout(processor.measure_rustc(&shared.toolchain)))
+            async |processor| {
+                with_timeout(processor.measure_rustc(&shared.toolchain))
+                    .await
                     .context("measure rustc")
             },
-        );
+        )
+        .await;
     }
 
     let end = start.elapsed();
@@ -1886,10 +1910,8 @@ fn bench_compile(
         end, errors.0
     );
 
-    rt.block_on(async move {
-        // This ensures that we're good to go with the just updated data.
-        conn.maybe_create_indices().await;
-    });
+    // This ensures that we're good to go with the just updated data.
+    conn.maybe_create_indices().await;
     errors
 }
 
