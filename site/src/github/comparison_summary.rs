@@ -395,7 +395,7 @@ fn try_run_body(is_regression: bool) -> String {
             this try perf run, please do so in sufficient writing \
             along with `@rustbot label: +perf-regression-triaged`. If not, \
             please fix the regressions and do another perf run. If its results \
-            are neutral or positive, we'll automatically remove the label."
+            are neutral or positive, the label will be automatically removed."
     } else {
         ""
     };
