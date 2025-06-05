@@ -5,18 +5,25 @@ use tokio_postgres::Config;
 use crate::pool::postgres::make_client;
 use crate::Pool;
 
+enum TestDb {
+    Postgres {
+        original_db_url: String,
+        db_name: String,
+    },
+    SQLite,
+}
+
 /// Represents a connection to a Postgres database that can be
 /// used in integration tests to test logic that interacts with
 /// a database.
 pub(crate) struct TestContext {
-    db_name: String,
-    original_db_url: String,
+    test_db: TestDb,
     // Pre-cached client to avoid creating unnecessary connections in tests
     client: Pool,
 }
 
 impl TestContext {
-    async fn new(db_url: &str) -> Self {
+    async fn new_postgres(db_url: &str) -> Self {
         let config: Config = db_url.parse().expect("Cannot parse connection string");
 
         // Create a new database that will be used for this specific test
@@ -62,8 +69,18 @@ impl TestContext {
         let pool = Pool::open(test_db_url.as_str());
 
         Self {
-            db_name,
-            original_db_url: db_url.to_string(),
+            test_db: TestDb::Postgres {
+                original_db_url: db_url.to_string(),
+                db_name,
+            },
+            client: pool,
+        }
+    }
+
+    async fn new_sqlite() -> Self {
+        let pool = Pool::open(":memory:");
+        Self {
+            test_db: TestDb::SQLite,
             client: pool,
         }
     }
@@ -77,25 +94,37 @@ impl TestContext {
         // First, we need to stop using the database
         drop(self.client);
 
-        // Then we need to connect to the default database and drop our test DB
-        let client = make_client(&self.original_db_url)
-            .await
-            .expect("Cannot connect to database");
-        client
-            .execute(&format!("DROP DATABASE {}", self.db_name), &[])
-            .await
-            .unwrap();
+        match self.test_db {
+            TestDb::Postgres {
+                original_db_url,
+                db_name,
+            } => {
+                // Then we need to connect to the default database and drop our test DB
+                let client = make_client(&original_db_url)
+                    .await
+                    .expect("Cannot connect to database");
+                client
+                    .execute(&format!("DROP DATABASE {db_name}"), &[])
+                    .await
+                    .unwrap();
+            }
+            TestDb::SQLite => {}
+        }
     }
 }
 
+/// Runs a test against an actual database.
+/// Checks both Postgres and SQLite.
 pub(crate) async fn run_db_test<F, Fut>(f: F)
 where
-    F: FnOnce(TestContext) -> Fut,
+    F: Fn(TestContext) -> Fut,
     Fut: Future<Output = anyhow::Result<TestContext>>,
 {
+    // Postgres
     if let Ok(db_url) = std::env::var("TEST_DB_URL") {
-        let ctx = TestContext::new(&db_url).await;
-        let ctx = f(ctx).await.expect("Test failed");
+        eprintln!("Running test with Postgres");
+        let ctx = TestContext::new_postgres(&db_url).await;
+        let ctx = f(ctx).await.expect("Postgres test failed");
         ctx.finish().await;
     } else {
         // The github CI does not yet support running containers on Windows,
@@ -109,4 +138,10 @@ where
             );
         }
     }
+
+    // SQLite
+    eprintln!("Running test with SQLite");
+    let ctx = TestContext::new_sqlite().await;
+    let ctx = f(ctx).await.expect("SQLite test failed");
+    ctx.finish().await;
 }
