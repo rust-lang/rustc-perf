@@ -392,11 +392,10 @@ cc @rust-lang/wg-compiler-performance
 fn try_run_body(is_regression: bool) -> String {
     let next_steps = if is_regression {
         "\n\n**Next Steps**: If you can justify the regressions found in \
-            this try perf run, please indicate this with \
-            `@rustbot label: +perf-regression-triaged` along with \
-            sufficient written justification. If you cannot justify the regressions \
-            please fix the regressions and do another perf run. If the next run \
-            shows neutral or positive results, the label will be automatically removed."
+            this try perf run, please do so in sufficient writing \
+            along with `@rustbot label: +perf-regression-triaged`. If not, \
+            please fix the regressions and do another perf run. If its results \
+            are neutral or positive, we'll automatically remove the label."
     } else {
         ""
     };
