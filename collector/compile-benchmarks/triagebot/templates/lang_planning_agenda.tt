@@ -1,0 +1,38 @@
+{% import "_issues_heading.tt" as issues_heading %}
+{% import "_issues.tt" as issues %}
+---
+title: Planning meeting {{CURRENT_DATE}}
+tags: planning-meeting
+---
+
+# T-lang planning meeting agenda
+
+* Meeting date: {{CURRENT_DATE}}
+
+## Attendance
+
+* Team members:
+* Others:
+
+## Meeting roles
+
+* Action item scribe:
+* Note-taker:
+
+## Proposed meetings
+
+{{-issues::render(issues=proposed_meetings, indent="", empty="None.")}}
+
+Please update these in https://github.com/orgs/rust-lang/projects/31/views/7.
+
+## Active initiatives
+
+{{-issues_heading::render(issues=active_initiatives)}}
+
+## Pending proposals on the lang-team repo
+
+{{-issues_heading::render(issues=pending_project_proposals)}}
+
+## Pending PRs on the lang-team repo
+
+{{-issues_heading::render(issues=pending_lang_team_prs)}}

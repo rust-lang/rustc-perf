@@ -1,0 +1,5 @@
+{% macro render(meetings, empty="No other meetings scheduled.") %}
+{%- for mtg in meetings %}
+- [{{ mtg.summary }}]({{ mtg.html_link }}) at <time:{{ mtg.start.date_time }}>{% else %}
+- {{empty}}{% endfor -%}
+{% endmacro %}

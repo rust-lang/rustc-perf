@@ -1,0 +1,29 @@
+{% import "_issues_heading.tt" as issues_heading %}
+{% import "_issues.tt" as issues %}
+---
+title: {{CURRENT_DATE}} Planning meeting
+tags: weekly-meeting, T-types
+date: {{CURRENT_DATE}}
+---
+
+# T-types planning meeting agenda
+
+## Updates
+
+{{-issues_heading::render(issues=roadmap_tracking_issues,split_url=false)}}
+
+## Nominated issues
+
+{{-issues_heading::render(issues=nominated_issues,split_url=false)}}
+
+## Types FCPs
+
+{{-issues_heading::render(issues=types_fcps,split_url=false)}}
+
+## Major change proposals
+
+{{-issues_heading::render(issues=major_changes,split_url=false)}}
+
+## Deep dive planning
+
+{{-issues_heading::render(issues=deep_dive_proposals,split_url=false)}}
