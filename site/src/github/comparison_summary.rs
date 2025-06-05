@@ -325,8 +325,8 @@ fn write_metric_summary(
         match visibility {
             DefaultMetricVisibility::Shown => {
                 message.push_str(
-                    "This is the most reliable metric that we have; it was used to determine the \
-                overall result at the top of this comment. However, even this metric can sometimes exhibit noise.\n\n",
+                    "Our most reliable metric. Used to determine the overall result above. \
+                However, even this metric can be noisy.\n\n",
                 );
                 write_summary_table(&primary, &secondary, false, message);
             }
@@ -351,8 +351,8 @@ fn write_metric_summary(
                 // `<details>` means it is hidden, requiring a click to reveal.
                 message.push_str(&format!("<details>\n<summary>{summary}</summary>\n\n"));
                 message.push_str(
-                    "This is a less reliable metric that may be of interest but was not \
-                used to determine the overall result at the top of this comment.\n\n",
+                    "A less reliable metric. May be of interest, but not \
+                used to determine the overall result above.\n\n",
                 );
                 write_summary_table(&primary, &secondary, false, message);
                 message.push_str("</details>\n");
