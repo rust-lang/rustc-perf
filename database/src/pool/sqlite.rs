@@ -1,4 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, BenchmarkRequestIndex,
     BenchmarkRequestStatus, CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark,
@@ -6,7 +7,7 @@ use crate::{
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::path::PathBuf;
@@ -1306,6 +1307,33 @@ impl Connection for SqliteConnection {
         _benchmark_set: u32,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
+    }
+
+    async fn get_compile_test_cases_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<CompileTestCase>> {
+        Ok(self
+            .raw_ref()
+            .prepare_cached(
+                "SELECT DISTINCT crate, profile, scenario, backend, target
+                FROM pstat_series
+                WHERE id IN (
+                    SELECT DISTINCT series
+                    FROM pstat
+                    WHERE aid = ?
+                );",
+            )?
+            .query_map(params![artifact_row_id.0], |row| {
+                Ok(CompileTestCase {
+                    benchmark: Benchmark::from(row.get::<_, String>(0)?.as_str()),
+                    profile: row.get::<_, String>(1)?.parse().unwrap(),
+                    scenario: row.get::<_, String>(2)?.parse().unwrap(),
+                    backend: row.get::<_, String>(3)?.parse().unwrap(),
+                    target: row.get::<_, String>(4)?.parse().unwrap(),
+                })
+            })?
+            .collect::<Result<_, _>>()?)
     }
 }
 

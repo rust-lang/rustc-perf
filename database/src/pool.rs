@@ -1,10 +1,11 @@
+use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestIndex,
     BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -220,6 +221,17 @@ pub trait Connection: Send + Sync {
         profile: &Profile,
         benchmark_set: u32,
     ) -> anyhow::Result<()>;
+
+    /// Returns a set of compile-time benchmark test cases that were already computed for the
+    /// given artifact.
+    /// Note that for efficiency reasons, the function only checks if we have at least a single
+    /// result for a given test case. It does not check if *all* test results from all test
+    /// iterations were finished.
+    /// Therefore, the result is an over-approximation.
+    async fn get_compile_test_cases_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<CompileTestCase>>;
 }
 
 #[async_trait::async_trait]
@@ -339,6 +351,9 @@ impl Pool {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::metric::Metric;
+    use crate::{tests::run_db_test, Commit, CommitType, Date};
     use chrono::Utc;
     use std::str::FromStr;
 
@@ -620,6 +635,66 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_compile_test_cases_with_data() {
+        run_db_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+
+            let collection = db.collection_id("test").await;
+            let artifact = db
+                .artifact_id(&ArtifactId::Commit(create_commit(
+                    "abcdef",
+                    Utc::now(),
+                    CommitType::Try,
+                )))
+                .await;
+            db.record_compile_benchmark("benchmark", None, "primary".to_string())
+                .await;
+
+            db.record_statistic(
+                collection,
+                artifact,
+                "benchmark",
+                Profile::Check,
+                Scenario::IncrementalFresh,
+                CodegenBackend::Llvm,
+                Target::X86_64UnknownLinuxGnu,
+                Metric::CacheMisses.as_str(),
+                1.0,
+            )
+            .await;
+
+            assert_eq!(
+                db.get_compile_test_cases_with_measurements(&artifact)
+                    .await
+                    .unwrap(),
+                HashSet::from([CompileTestCase {
+                    benchmark: "benchmark".into(),
+                    profile: Profile::Check,
+                    scenario: Scenario::IncrementalFresh,
+                    backend: CodegenBackend::Llvm,
+                    target: Target::X86_64UnknownLinuxGnu,
+                }])
+            );
+
+            let artifact2 = db
+                .artifact_id(&ArtifactId::Commit(create_commit(
+                    "abcdef2",
+                    Utc::now(),
+                    CommitType::Try,
+                )))
+                .await;
+            assert!(db
+                .get_compile_test_cases_with_measurements(&artifact2)
+                .await
+                .unwrap()
+                .is_empty());
 
             Ok(ctx)
         })
