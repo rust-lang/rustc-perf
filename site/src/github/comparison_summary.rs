@@ -325,8 +325,8 @@ fn write_metric_summary(
         match visibility {
             DefaultMetricVisibility::Shown => {
                 message.push_str(
-                    "This is the most reliable metric that we have; it was used to determine the \
-                overall result at the top of this comment. However, even this metric can sometimes exhibit noise.\n\n",
+                    "Our most reliable metric. Used to determine the overall result above. \
+                However, even this metric can be noisy.\n\n",
                 );
                 write_summary_table(&primary, &secondary, false, message);
             }
@@ -351,8 +351,8 @@ fn write_metric_summary(
                 // `<details>` means it is hidden, requiring a click to reveal.
                 message.push_str(&format!("<details>\n<summary>{summary}</summary>\n\n"));
                 message.push_str(
-                    "This is a less reliable metric that may be of interest but was not \
-                used to determine the overall result at the top of this comment.\n\n",
+                    "A less reliable metric. May be of interest, but not \
+                used to determine the overall result above.\n\n",
                 );
                 write_summary_table(&primary, &secondary, false, message);
                 message.push_str("</details>\n");
@@ -392,11 +392,10 @@ cc @rust-lang/wg-compiler-performance
 fn try_run_body(is_regression: bool) -> String {
     let next_steps = if is_regression {
         "\n\n**Next Steps**: If you can justify the regressions found in \
-            this try perf run, please indicate this with \
-            `@rustbot label: +perf-regression-triaged` along with \
-            sufficient written justification. If you cannot justify the regressions \
-            please fix the regressions and do another perf run. If the next run \
-            shows neutral or positive results, the label will be automatically removed."
+            this try perf run, please do so in sufficient writing \
+            along with `@rustbot label: +perf-regression-triaged`. If not, \
+            please fix the regressions and do another perf run. If its results \
+            are neutral or positive, the label will be automatically removed."
     } else {
         ""
     };
@@ -404,11 +403,10 @@ fn try_run_body(is_regression: bool) -> String {
     let sign = if is_regression { "+" } else { "-" };
     format!(
         "
-Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. While you can manually mark this PR as fit \
-for rollup, we strongly recommend not doing so since this PR may lead to changes in \
-compiler perf.{next_steps}
+Benchmarking this pull request means it may be perf-sensitive – \
+we'll automatically label it not fit for rolling up. \
+You can override this, but we strongly advise not to, \
+due to possible changes in compiler perf.{next_steps}
 
 @bors rollup=never
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
