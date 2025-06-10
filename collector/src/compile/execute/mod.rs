@@ -330,17 +330,11 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.profile {
-                Profile::Check => {
+                Profile::Check | Profile::Clippy => {
                     cmd.arg("--profile").arg("check");
                 }
                 Profile::Debug => {}
                 Profile::Doc => {}
-                Profile::Clippy => {
-                    cmd.arg("--profile").arg("check");
-                    // For Clippy, we still invoke `cargo rustc`, but we need to override the
-                    // executed rustc to be clippy-fake.
-                    cmd.env("RUSTC", &*FAKE_CLIPPY);
-                }
                 Profile::Opt => {
                     cmd.arg("--release");
                 }
@@ -366,6 +360,15 @@ impl<'a> CargoProcess<'a> {
             // onto rustc for the final crate, which is exactly the crate for which
             // we want to wrap rustc.
             if needs_final {
+                if let Profile::Clippy = self.profile {
+                    // For Clippy, we still invoke `cargo rustc`, but we need to override the
+                    // executed rustc to be clippy-fake.
+                    // We only do this for the final crate, otherwise clippy would be invoked by
+                    // cargo also for building host code (build scripts/proc macros), which doesn't
+                    // really work.
+                    cmd.env("RUSTC", &*FAKE_CLIPPY);
+                }
+
                 let processor = self
                     .processor_etc
                     .as_mut()
