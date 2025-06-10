@@ -128,7 +128,7 @@ impl SysrootDownload {
         let components = ToolchainComponents::from_binaries_and_libdir(
             sysroot_bin("rustc")?,
             Some(sysroot_bin("rustdoc")?),
-            sysroot_bin("cargo-clippy").ok(),
+            sysroot_bin("clippy-driver").ok(),
             sysroot_bin("cargo")?,
             &self.directory.join(&self.rust_sha).join("lib"),
         )?;
@@ -484,12 +484,12 @@ pub fn get_local_toolchain(
         )
     } else if profiles.contains(&Profile::Clippy) {
         // We need a `clippy`. Look for one next to `rustc`.
-        if let Ok(clippy) = rustc.with_file_name("cargo-clippy").canonicalize() {
+        if let Ok(clippy) = rustc.with_file_name("clippy-driver").canonicalize() {
             debug!("found clippy: {:?}", &clippy);
             Some(clippy)
         } else {
             anyhow::bail!(
-                    "'Clippy' build specified but '--cargo-clippy' not specified and no 'cargo-clippy' found \
+                    "'Clippy' build specified but '--clippy' not specified and no 'clippy-driver' found \
                     next to 'rustc'"
                 );
         }
