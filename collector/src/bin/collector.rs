@@ -382,7 +382,8 @@ struct CompileTimeOptions {
     #[arg(long)]
     rustdoc: Option<PathBuf>,
 
-    /// The path to the local clippy to measure
+    /// The path to the local clippy to measure.
+    /// It should be a path to the `clippy-driver` binary.
     #[arg(long)]
     clippy: Option<PathBuf>,
 }
