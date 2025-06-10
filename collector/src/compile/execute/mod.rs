@@ -248,7 +248,7 @@ impl<'a> CargoProcess<'a> {
         };
 
         if let Some(c) = &self.toolchain.components.clippy {
-            cmd.env("CLIPPY", &*FAKE_CLIPPY).env("CLIPPY_REAL", c);
+            cmd.env("CLIPPY_REAL", c);
         }
 
         for config in &self.toolchain.components.cargo_configs {
@@ -330,11 +330,17 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.profile {
-                Profile::Check | Profile::Clippy => {
+                Profile::Check => {
                     cmd.arg("--profile").arg("check");
                 }
                 Profile::Debug => {}
                 Profile::Doc => {}
+                Profile::Clippy => {
+                    cmd.arg("--profile").arg("check");
+                    // For Clippy, we still invoke `cargo rustc`, but we need to override the
+                    // executed rustc to be clippy-fake.
+                    cmd.env("RUSTC", &*FAKE_CLIPPY);
+                }
                 Profile::Opt => {
                     cmd.arg("--release");
                 }
