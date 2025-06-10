@@ -330,12 +330,11 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.profile {
-                Profile::Check => {
+                Profile::Check | Profile::Clippy => {
                     cmd.arg("--profile").arg("check");
                 }
                 Profile::Debug => {}
                 Profile::Doc => {}
-                Profile::Clippy => {}
                 Profile::Opt => {
                     cmd.arg("--release");
                 }
