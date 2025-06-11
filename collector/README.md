@@ -146,11 +146,11 @@ The following options alter the behaviour of the `bench_local` subcommand.
   possible choices are one or more (comma-separated) of `Primary`, `Secondary`,
   `Stable`, and `All`. The default is `Primary,Secondary`.
 - `--profiles <PROFILES>`: the profiles to be benchmarked. The possible choices
-  are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
-  `All`. The default is `Check,Debug,Opt`.
+  are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `DocJson`, `Opt`,
+  `Clippy` and `All`. The default is `Check,Debug,Opt`.
 - `--rustdoc <RUSTDOC>`: a path (relative or absolute) to a rustdoc
-  executable that will be benchmarked (but only if a `Doc` profile is requested
-  with `--profiles`). If a `Doc` profile is requested, by default the tool will
+  executable that will be benchmarked (but only if a `Doc`/`DocJson` profile is requested
+  with `--profiles`). If a `Doc`/`DocJson` profile is requested, by default the tool will
   look for a rustdoc executable next to the rustc specified via the `<RUSTC>`
   argument.
 - `--scenarios <SCENARIOS>`: the scenarios to be benchmarked. The possible

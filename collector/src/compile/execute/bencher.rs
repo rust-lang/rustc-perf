@@ -184,6 +184,7 @@ impl Processor for BenchProcessor<'_> {
                         Profile::Check => database::Profile::Check,
                         Profile::Debug => database::Profile::Debug,
                         Profile::Doc => database::Profile::Doc,
+                        Profile::DocJson => database::Profile::DocJson,
                         Profile::Opt => database::Profile::Opt,
                         Profile::Clippy => database::Profile::Clippy,
                     };

@@ -15,7 +15,9 @@ The following is a glossary of domain specific terminology. Although benchmarks 
   - `check` corresponds to running `cargo check`.
   - `debug` corresponds to running `cargo build`.
   - `opt` corresponds to running `cargo build --release`.
-  - `doc` corresponds to running rustdoc. 
+  - `doc` corresponds to running rustdoc with the JSON output format.
+  - `doc-json` corresponds to running rustdoc.
+  - `clippy` corresponds to running `cargo clippy`.
 * **scenario**: describes the incremental cache state and an optional change in the source since last compilation.
   - `full`: incremental compilation is not used.
   - `incr-full`: incremental compilation is used, with an empty incremental cache.

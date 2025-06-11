@@ -210,6 +210,8 @@ pub enum Profile {
     Debug,
     /// A doc build
     Doc,
+    /// A doc build with `--output-format=json` option.
+    DocJson,
     /// An optimized "release" build
     Opt,
     /// A Clippy run
@@ -223,6 +225,7 @@ impl Profile {
             Profile::Opt => "opt",
             Profile::Debug => "debug",
             Profile::Doc => "doc",
+            Profile::DocJson => "doc-json",
             Profile::Clippy => "clippy",
         }
     }
@@ -235,6 +238,7 @@ impl std::str::FromStr for Profile {
             "check" => Profile::Check,
             "debug" => Profile::Debug,
             "doc" => Profile::Doc,
+            "doc-json" => Profile::DocJson,
             "opt" => Profile::Opt,
             "clippy" => Profile::Clippy,
             _ => return Err(format!("{} is not a profile", s)),
