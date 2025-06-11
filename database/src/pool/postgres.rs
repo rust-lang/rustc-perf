@@ -309,6 +309,17 @@ static MIGRATIONS: &[&str] = &[
     // Prevent multiple try commits without a `sha` and the same `pr` number
     // being added to the table
     r#"CREATE UNIQUE INDEX benchmark_request_pr_commit_type_idx ON benchmark_request (pr, commit_type) WHERE status != 'completed';"#,
+    r#"CREATE EXTENSION IF NOT EXISTS "uuid-ossp";"#,
+    r#"
+    CREATE TABLE IF NOT EXISTS collector_config (
+        id                UUID PRIMARY KEY,
+        target            TEXT NOT NULL,
+        date_added        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        last_heartbeat_at TIMESTAMPTZ,
+        benchmark_set     UUID NOT NULL,
+        is_active         BOOLEAN DEFAULT FALSE NOT NULL
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]

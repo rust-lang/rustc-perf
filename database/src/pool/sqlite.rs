@@ -405,6 +405,18 @@ static MIGRATIONS: &[Migration] = &[
         alter table pstat_series_with_target rename to pstat_series;
     "#,
     ),
+    Migration::without_foreign_key_constraints(
+        r#"
+        CREATE TABLE IF NOT EXISTS collector_config (
+            id                TEXT PRIMARY KEY,
+            target            TEXT NOT NULL,
+            date_added        TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            last_heartbeat_at TIMESTAMP,
+            benchmark_set     TEXT NOT NULL,
+            is_active         BOOLEAN DEFAULT FALSE NOT NULL
+        );
+        "#,
+    ),
 ];
 
 #[async_trait::async_trait]

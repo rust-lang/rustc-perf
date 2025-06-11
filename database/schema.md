@@ -259,7 +259,6 @@ aid         benchmark   error
 1           syn-1.0.89  Failed to compile...
 ```
 
-
 ## New benchmarking design
 We are currently implementing a new design for dispatching benchmarks to collector(s) and storing
 them in the database. It will support new use-cases, like backfilling of new benchmarks into a parent
@@ -296,3 +295,15 @@ Columns:
   * `completed`: Completed request.
 * **backends** (`text NOT NULL`): Comma-separated list of codegen backends to benchmark. If empty, the default set of codegen backends will be benchmarked.
 * **profiles** (`text NOT NULL`): Comma-separated list of profiles to benchmark. If empty, the default set of profiles will be benchmarked.
+
+### collector_config
+
+Information about the collector; it's target architecture, when it was added, whether it is active and when it last had activity denoted by `last_heartbeat_at`.
+
+```
+sqlite> SELECT * FROM collector_config;
+
+id         target                     date_added     last_heartbeat_at  benchmark_set  is_active
+---------  -------------------------  -------------  ----------------   ---------      -------
+ea1f4e...  aarch64-unknown-linux-gnu  2025-06-11...  2025-06-12 17...   cea1bc...      0
+```
