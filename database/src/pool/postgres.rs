@@ -285,14 +285,14 @@ static MIGRATIONS: &[&str] = &[
     alter table pstat_series drop constraint test_case;
     alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, target, metric);
     "#,
-    r#"CREATE EXTENSION IF NOT EXISTS "uuid-ossp";"#,
     r#"
     CREATE TABLE IF NOT EXISTS collector_config (
-        id                UUID PRIMARY KEY,
+        id                SERIAL PRIMARY KEY,
         target            TEXT NOT NULL,
+        name              TEXT NOT NULL,
         date_added        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         last_heartbeat_at TIMESTAMPTZ,
-        benchmark_set     UUID NOT NULL,
+        benchmark_set     INTEGER NOT NULL,
         is_active         BOOLEAN DEFAULT FALSE NOT NULL
     );
     "#,
