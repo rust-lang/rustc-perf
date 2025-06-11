@@ -67,7 +67,7 @@ impl PerfTool {
             | ProfileTool(DepGraph)
             | ProfileTool(MonoItems)
             | ProfileTool(LlvmIr) => {
-                if profile == Profile::Doc {
+                if profile.is_doc() {
                     Some("rustdoc")
                 } else {
                     Some("rustc")
@@ -75,7 +75,7 @@ impl PerfTool {
             }
             ProfileTool(LlvmLines) => match profile {
                 Profile::Debug | Profile::Opt => Some("llvm-lines"),
-                Profile::Check | Profile::Doc | Profile::Clippy => None,
+                Profile::Check | Profile::Doc | Profile::DocJson | Profile::Clippy => None,
             },
         }
     }
@@ -320,11 +320,10 @@ impl<'a> CargoProcess<'a> {
                         }
                         Some(sub) => sub,
                     }
+                } else if self.profile.is_doc() {
+                    "rustdoc"
                 } else {
-                    match self.profile {
-                        Profile::Doc => "rustdoc",
-                        _ => "rustc",
-                    }
+                    "rustc"
                 };
 
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
@@ -335,6 +334,11 @@ impl<'a> CargoProcess<'a> {
                 }
                 Profile::Debug => {}
                 Profile::Doc => {}
+                Profile::DocJson => {
+                    // Enable JSON output
+                    cmd.arg("-Zunstable-options");
+                    cmd.arg("--output-format=json");
+                }
                 Profile::Opt => {
                     cmd.arg("--release");
                 }
@@ -367,6 +371,13 @@ impl<'a> CargoProcess<'a> {
                     // cargo also for building host code (build scripts/proc macros), which doesn't
                     // really work.
                     cmd.env("RUSTC", &*FAKE_CLIPPY);
+                }
+
+                if let Profile::DocJson = self.profile {
+                    // Document more things to stress the doc JSON machinery.
+                    // And this is what `cargo-semver-checks` does.
+                    cmd.arg("--document-private-items");
+                    cmd.arg("--document-hidden-items");
                 }
 
                 let processor = self

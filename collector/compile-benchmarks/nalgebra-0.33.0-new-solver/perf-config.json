@@ -3,7 +3,8 @@
   "category": "secondary",
   "cargo_rustc_opts": "-Znext-solver=globally",
   "excluded_profiles": [
-    "Doc"
+    "Doc",
+    "DocJson"
   ],
   "excluded_scenarios": [
     "IncrFull",

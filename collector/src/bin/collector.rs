@@ -151,7 +151,7 @@ fn generate_diffs(
     for benchmark in benchmarks {
         for &profile in profiles {
             for scenario in scenarios.iter().flat_map(|scenario| {
-                if profile == Profile::Doc && scenario.is_incr() {
+                if profile.is_doc() && scenario.is_incr() {
                     return vec![];
                 }
                 match scenario {
