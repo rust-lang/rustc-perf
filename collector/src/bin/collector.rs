@@ -767,7 +767,7 @@ fn main_result() -> anyhow::Result<i32> {
                 CargoIsolationMode::Isolated
             };
 
-            let mut rt = build_async_runtime();
+            let rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
             let artifact_id = ArtifactId::Commit(Commit {
                 sha: toolchain.id.clone(),
@@ -795,7 +795,7 @@ fn main_result() -> anyhow::Result<i32> {
                 RuntimeBenchmarkFilter::new(local.exclude, local.include),
                 iterations,
             );
-            run_benchmarks(&mut rt, conn, shared, None, Some(config))?;
+            rt.block_on(run_benchmarks(conn, shared, None, Some(config)))?;
             Ok(0)
         }
         Commands::ProfileRuntime {
@@ -924,7 +924,7 @@ fn main_result() -> anyhow::Result<i32> {
                 r#type: CommitType::Master,
             });
 
-            let mut rt = build_async_runtime();
+            let rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
             rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
 
@@ -943,7 +943,7 @@ fn main_result() -> anyhow::Result<i32> {
                 targets: vec![Target::default()],
             };
 
-            run_benchmarks(&mut rt, conn, shared, Some(config), None)?;
+            rt.block_on(run_benchmarks(conn, shared, Some(config), None))?;
             Ok(0)
         }
 
@@ -976,18 +976,14 @@ fn main_result() -> anyhow::Result<i32> {
 
             let res = std::panic::catch_unwind(|| {
                 let pool = database::Pool::open(&db.db);
-                let mut rt = build_async_runtime();
+                let rt = build_async_runtime();
 
                 match next {
                     NextArtifact::Release(tag) => {
                         let toolchain =
                             create_toolchain_from_published_version(&tag, &target_triple)?;
-                        bench_published_artifact(
-                            rt.block_on(pool.connection()),
-                            &mut rt,
-                            toolchain,
-                            &benchmark_dirs,
-                        )
+                        let conn = rt.block_on(pool.connection());
+                        rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))
                     }
                     NextArtifact::Commit {
                         commit,
@@ -1078,13 +1074,12 @@ fn main_result() -> anyhow::Result<i32> {
                             toolchain,
                         };
 
-                        run_benchmarks(
-                            &mut rt,
+                        rt.block_on(run_benchmarks(
                             conn,
                             shared,
                             Some(compile_config),
                             Some(runtime_config),
-                        )
+                        ))
                     }
                 }
             });
@@ -1103,10 +1098,10 @@ fn main_result() -> anyhow::Result<i32> {
         Commands::BenchPublished { toolchain, db } => {
             log_db(&db);
             let pool = database::Pool::open(&db.db);
-            let mut rt = build_async_runtime();
+            let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
             let toolchain = create_toolchain_from_published_version(&toolchain, &target_triple)?;
-            bench_published_artifact(conn, &mut rt, toolchain, &benchmark_dirs)?;
+            rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))?;
             Ok(0)
         }
 
@@ -1658,31 +1653,27 @@ async fn init_collection(
 }
 
 /// Execute all benchmarks specified by the given configurations.
-fn run_benchmarks(
-    rt: &mut Runtime,
+async fn run_benchmarks(
     mut connection: Box<dyn Connection>,
     shared: SharedBenchmarkConfig,
     compile: Option<CompileBenchmarkConfig>,
     runtime: Option<RuntimeBenchmarkConfig>,
 ) -> anyhow::Result<()> {
-    rt.block_on(record_toolchain_sizes(
-        connection.as_mut(),
-        &shared.artifact_id,
-        &shared.toolchain,
-    ));
+    record_toolchain_sizes(connection.as_mut(), &shared.artifact_id, &shared.toolchain).await;
 
-    let collector = rt.block_on(init_collection(
+    let collector = init_collection(
         connection.as_mut(),
         &shared,
         compile.as_ref(),
         runtime.as_ref(),
-    ));
+    )
+    .await;
 
     let start = Instant::now();
 
     // Compile benchmarks
     let compile_result = if let Some(compile) = compile {
-        let errors = bench_compile(rt, connection.as_mut(), &shared, compile, &collector);
+        let errors = bench_compile(connection.as_mut(), &shared, compile, &collector).await;
         errors
             .fail_if_nonzero()
             .context("Compile benchmarks failed")
@@ -1692,30 +1683,32 @@ fn run_benchmarks(
 
     // Runtime benchmarks
     let runtime_result = if let Some(runtime) = runtime {
-        rt.block_on(bench_runtime(
+        bench_runtime(
             connection.as_mut(),
             runtime.runtime_suite,
             &collector,
             runtime.filter,
             runtime.iterations,
-        ))
+        )
+        .await
         .context("Runtime benchmarks failed")
     } else {
         Ok(())
     };
 
     let end = start.elapsed();
-    rt.block_on(connection.record_duration(collector.artifact_row_id, end));
+    connection
+        .record_duration(collector.artifact_row_id, end)
+        .await;
 
     compile_result.and(runtime_result)
 }
 
 /// Perform benchmarks on a published artifact.
-fn bench_published_artifact(
+async fn bench_published_artifact(
     mut connection: Box<dyn Connection>,
-    rt: &mut Runtime,
     toolchain: Toolchain,
-    dirs: &BenchmarkDirs,
+    dirs: &BenchmarkDirs<'_>,
 ) -> anyhow::Result<()> {
     let artifact_id = ArtifactId::Tag(toolchain.id.clone());
 
@@ -1734,21 +1727,21 @@ fn bench_published_artifact(
     let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, CompileBenchmarkFilter::All)?;
     compile_benchmarks.retain(|b| b.category().is_stable());
 
-    let runtime_suite = rt.block_on(load_runtime_benchmarks(
+    let runtime_suite = load_runtime_benchmarks(
         connection.as_mut(),
         dirs.runtime,
         CargoIsolationMode::Isolated,
         None,
         &toolchain,
         &artifact_id,
-    ))?;
+    )
+    .await?;
 
     let shared = SharedBenchmarkConfig {
         artifact_id,
         toolchain,
     };
     run_benchmarks(
-        rt,
         connection,
         shared,
         Some(CompileBenchmarkConfig {
@@ -1767,6 +1760,7 @@ fn bench_published_artifact(
             DEFAULT_RUNTIME_ITERATIONS,
         )),
     )
+    .await
 }
 
 const COMPILE_BENCHMARK_TIMEOUT: Duration = Duration::from_secs(60 * 30);
@@ -1782,8 +1776,7 @@ async fn with_timeout<F: Future<Output = anyhow::Result<()>>>(fut: F) -> anyhow:
 }
 
 /// Perform compile benchmarks.
-fn bench_compile(
-    rt: &mut Runtime,
+async fn bench_compile(
     conn: &mut dyn Connection,
     shared: &SharedBenchmarkConfig,
     config: CompileBenchmarkConfig,
@@ -1799,51 +1792,63 @@ fn bench_compile(
 
     let start = Instant::now();
 
-    let mut measure_and_record =
-        |benchmark_name: &BenchmarkName,
-         category: Category,
-         print_intro: &dyn Fn(),
-         measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
-            let is_fresh = rt.block_on(collector.start_compile_step(conn, benchmark_name));
-            if !is_fresh {
-                eprintln!("skipping {} -- already benchmarked", benchmark_name);
-                return;
-            }
-            let mut tx = rt.block_on(conn.transaction());
-            let (supports_stable, category) = category.db_representation();
-            rt.block_on(tx.conn().record_compile_benchmark(
-                &benchmark_name.0,
-                Some(supports_stable),
-                category,
-            ));
-            print_intro();
-            let mut processor = BenchProcessor::new(
-                tx.conn(),
-                benchmark_name,
-                &shared.artifact_id,
-                collector.artifact_row_id,
-                config.is_self_profile,
+    #[allow(clippy::too_many_arguments)]
+    async fn measure_and_record<F: AsyncFn(&mut BenchProcessor) -> anyhow::Result<()>>(
+        collector: &CollectorCtx,
+        shared: &SharedBenchmarkConfig,
+        config: &CompileBenchmarkConfig,
+        errors: &mut BenchmarkErrors,
+        conn: &mut dyn Connection,
+        benchmark_name: &BenchmarkName,
+        category: Category,
+        print_intro: &dyn Fn(),
+        measure: F,
+    ) {
+        let is_fresh = collector.start_compile_step(conn, benchmark_name).await;
+        if !is_fresh {
+            eprintln!("skipping {} -- already benchmarked", benchmark_name);
+            return;
+        }
+        let mut tx = conn.transaction().await;
+        let (supports_stable, category) = category.db_representation();
+        tx.conn()
+            .record_compile_benchmark(&benchmark_name.0, Some(supports_stable), category)
+            .await;
+        print_intro();
+        let mut processor = BenchProcessor::new(
+            tx.conn(),
+            benchmark_name,
+            &shared.artifact_id,
+            collector.artifact_row_id,
+            config.is_self_profile,
+        );
+        let result = measure(&mut processor).await;
+        if let Err(s) = result {
+            eprintln!(
+                "collector error: Failed to benchmark '{}', recorded: {:#}",
+                benchmark_name, s
             );
-            let result = measure(&mut processor);
-            if let Err(s) = result {
-                eprintln!(
-                    "collector error: Failed to benchmark '{}', recorded: {:#}",
-                    benchmark_name, s
-                );
-                errors.incr();
-                rt.block_on(tx.conn().record_error(
+            errors.incr();
+            tx.conn()
+                .record_error(
                     collector.artifact_row_id,
                     &benchmark_name.0,
                     &format!("{:?}", s),
-                ));
-            };
-            rt.block_on(collector.end_compile_step(tx.conn(), benchmark_name));
-            rt.block_on(tx.commit()).expect("committed");
+                )
+                .await;
         };
+        collector.end_compile_step(tx.conn(), benchmark_name).await;
+        tx.commit().await.expect("committed");
+    }
 
     // Normal benchmarks.
     for (nth_benchmark, benchmark) in config.benchmarks.iter().enumerate() {
         measure_and_record(
+            collector,
+            shared,
+            &config,
+            &mut errors,
+            conn,
             &benchmark.name,
             benchmark.category(),
             &|| {
@@ -1852,8 +1857,8 @@ fn bench_compile(
                     n_normal_benchmarks_remaining(config.benchmarks.len() - nth_benchmark)
                 )
             },
-            &|processor| {
-                rt.block_on(with_timeout(benchmark.measure(
+            async |processor| {
+                with_timeout(benchmark.measure(
                     processor,
                     &config.profiles,
                     &config.scenarios,
@@ -1861,23 +1866,32 @@ fn bench_compile(
                     &shared.toolchain,
                     config.iterations,
                     &config.targets,
-                )))
+                ))
+                .await
                 .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
             },
         )
+        .await;
     }
 
     // The special rustc benchmark, if requested.
     if bench_rustc {
         measure_and_record(
+            collector,
+            shared,
+            &config,
+            &mut errors,
+            conn,
             &BenchmarkName("rustc".to_string()),
             Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
-            &|processor| {
-                rt.block_on(with_timeout(processor.measure_rustc(&shared.toolchain)))
+            async |processor| {
+                with_timeout(processor.measure_rustc(&shared.toolchain))
+                    .await
                     .context("measure rustc")
             },
-        );
+        )
+        .await;
     }
 
     let end = start.elapsed();
@@ -1887,10 +1901,8 @@ fn bench_compile(
         end, errors.0
     );
 
-    rt.block_on(async move {
-        // This ensures that we're good to go with the just updated data.
-        conn.maybe_create_indices().await;
-    });
+    // This ensures that we're good to go with the just updated data.
+    conn.maybe_create_indices().await;
     errors
 }
 
@@ -1968,7 +1980,7 @@ fn get_downloaded_crate_target(benchmark_dir: &Path, cmd: &DownloadCommand) -> P
             .trim_end_matches('/')
             .trim_end_matches(".git")
             .split('/')
-            .last()
+            .next_back()
             .expect("Crate name could not be determined from git URL")
             .to_string(),
         DownloadSubcommand::Crate { krate, version } => format!("{krate}-{version}"),
