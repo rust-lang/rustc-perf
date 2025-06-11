@@ -408,11 +408,12 @@ static MIGRATIONS: &[Migration] = &[
     Migration::without_foreign_key_constraints(
         r#"
         CREATE TABLE IF NOT EXISTS collector_config (
-            id                TEXT PRIMARY KEY,
+            id                INTEGER AUTO INCREMENT PRIMARY KEY,
             target            TEXT NOT NULL,
+            name              TEXT NOT NULL,
             date_added        TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
             last_heartbeat_at TIMESTAMP,
-            benchmark_set     TEXT NOT NULL,
+            benchmark_set     INTEGER NOT NULL,
             is_active         BOOLEAN DEFAULT FALSE NOT NULL
         );
         "#,
