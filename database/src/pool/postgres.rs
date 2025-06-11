@@ -301,14 +301,14 @@ static MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX IF NOT EXISTS benchmark_request_status_idx on benchmark_request (status) WHERE status != 'completed';
     "#,
-    r#"CREATE EXTENSION IF NOT EXISTS "uuid-ossp";"#,
     r#"
     CREATE TABLE IF NOT EXISTS collector_config (
-        id                UUID PRIMARY KEY,
+        id                SERIAL PRIMARY KEY,
         target            TEXT NOT NULL,
+        name              TEXT NOT NULL,
         date_added        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         last_heartbeat_at TIMESTAMPTZ,
-        benchmark_set     UUID NOT NULL,
+        benchmark_set     INTEGER NOT NULL,
         is_active         BOOLEAN DEFAULT FALSE NOT NULL
     );
     "#,
