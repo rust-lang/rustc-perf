@@ -98,6 +98,9 @@ async fn record(
         "build.cargo={}",
         toolchain.components.cargo.to_str().unwrap()
     ))
+    // Do not compile all default tools
+    .arg("--set")
+    .arg("build.extended=false")
     .status()
     .context("configuring")?;
     assert!(status.success(), "configure successful");
