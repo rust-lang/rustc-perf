@@ -1,0 +1,15 @@
+[relabel]
+allow-unauthenticated = ["bug", "invalid", "question", "enhancement"]
+
+[assign]
+
+[note]
+
+[concern]
+labels = ["has-concerns"]
+
+[ping.wg-meta]
+message = """\
+This is just testing some functionality, please ignore this ping.
+"""
+label = "help wanted"
