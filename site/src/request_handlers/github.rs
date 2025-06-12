@@ -161,7 +161,7 @@ async fn handle_rust_timer(
 
 /// Parses the first occurrence of a `@rust-timer queue <shared-args>` command
 /// in the input string.
-fn parse_queue_command(body: &str) -> Option<Result<QueueCommand, String>> {
+fn parse_queue_command(body: &str) -> Option<Result<QueueCommand<'_>, String>> {
     let args = get_command_lines(body, "queue").next()?;
     let args = match parse_command_arguments(args) {
         Ok(args) => args,
@@ -176,7 +176,7 @@ fn parse_queue_command(body: &str) -> Option<Result<QueueCommand, String>> {
 }
 
 /// Parses all occurrences of a `@rust-timer build <shared-args>` command in the input string.
-fn parse_build_commands(body: &str) -> impl Iterator<Item = Result<BuildCommand, String>> {
+fn parse_build_commands(body: &str) -> impl Iterator<Item = Result<BuildCommand<'_>, String>> {
     get_command_lines(body, "build").map(|line| {
         let mut iter = line.splitn(2, ' ');
         let Some(sha) = iter.next().filter(|s| !s.is_empty() && !s.contains('=')) else {

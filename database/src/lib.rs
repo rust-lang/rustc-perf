@@ -452,7 +452,7 @@ struct ArtifactInfo<'a> {
 }
 
 impl ArtifactId {
-    fn info(&self) -> ArtifactInfo {
+    fn info(&self) -> ArtifactInfo<'_> {
         let (name, date, ty) = match self {
             Self::Commit(commit) => (
                 commit.sha.as_str(),
