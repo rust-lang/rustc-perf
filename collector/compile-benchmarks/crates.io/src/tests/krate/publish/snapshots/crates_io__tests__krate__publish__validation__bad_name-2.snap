@@ -1,0 +1,11 @@
+---
+source: src/tests/krate/publish/validation.rs
+expression: response.json()
+---
+{
+  "errors": [
+    {
+      "detail": "invalid character ` ` in crate name: `foo bar`, characters must be an ASCII alphanumeric characters, `-`, or `_`"
+    }
+  ]
+}

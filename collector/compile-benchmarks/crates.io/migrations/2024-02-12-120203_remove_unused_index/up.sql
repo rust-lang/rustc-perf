@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS index_follows_user_id;

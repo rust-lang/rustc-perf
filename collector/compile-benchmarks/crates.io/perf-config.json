@@ -1,0 +1,6 @@
+{
+  "artifact": "binary",
+  "category": "primary",
+  "cargo_opts": "--bin server",
+  "touch_file": "src/bin/server.rs"
+}

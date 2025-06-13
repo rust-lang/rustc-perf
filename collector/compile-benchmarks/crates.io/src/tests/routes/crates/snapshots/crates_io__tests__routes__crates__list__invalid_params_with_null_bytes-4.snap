@@ -1,0 +1,11 @@
+---
+source: src/tests/routes/crates/list.rs
+expression: response.json()
+---
+{
+  "errors": [
+    {
+      "detail": "Failed to deserialize query string: keyword: string contains null byte"
+    }
+  ]
+}
