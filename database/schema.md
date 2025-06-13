@@ -258,3 +258,15 @@ aid         benchmark   error
 ----------  ---         -----
 1           syn-1.0.89  Failed to compile...
 ```
+
+### collector_config
+
+Information about the collector; it's target architecture, when it was added, whether it is active and when it last had activity denoted by `last_heartbeat_at`.
+
+```
+sqlite> SELECT * FROM collector_config;
+
+id         target                     name  date_added     last_heartbeat_at  benchmark_set  is_active
+---------  -------------------------  ----  -------------  ----------------   ---------      -------
+1          aarch64-unknown-linux-gnu  foo   2025-06-11...  2025-06-12 17...   2              0
+```
