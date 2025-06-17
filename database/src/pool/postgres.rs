@@ -1176,19 +1176,14 @@ where
             == 1
     }
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        let did_modify = self
-            .conn()
+        self.conn()
             .execute(
                 "update collector_progress set end_time = statement_timestamp() \
-                where aid = $1 and step = $2 and start_time is not null and end_time is null;",
+                where aid = $1 and step = $2 and start_time is not null;",
                 &[&(aid.0 as i32), &step],
             )
             .await
-            .unwrap()
-            == 1;
-        if !did_modify {
-            log::error!("did not end {} for {:?}", step, aid);
-        }
+            .unwrap();
     }
     async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.conn()
