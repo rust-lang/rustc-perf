@@ -225,6 +225,8 @@ fn profile_compile(
                 toolchain,
                 Some(1),
                 targets,
+                // We always want to profile everything
+                &hashbrown::HashSet::new(),
             ));
             eprintln!("Finished benchmark {benchmark_id}");
 
@@ -1804,11 +1806,8 @@ async fn bench_compile(
         print_intro: &dyn Fn(),
         measure: F,
     ) {
-        let is_fresh = collector.start_compile_step(conn, benchmark_name).await;
-        if !is_fresh {
-            eprintln!("skipping {} -- already benchmarked", benchmark_name);
-            return;
-        }
+        collector.start_compile_step(conn, benchmark_name).await;
+
         let mut tx = conn.transaction().await;
         let (supports_stable, category) = category.db_representation();
         tx.conn()
@@ -1866,6 +1865,7 @@ async fn bench_compile(
                     &shared.toolchain,
                     config.iterations,
                     &config.targets,
+                    &collector.measured_compile_test_cases,
                 ))
                 .await
                 .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
