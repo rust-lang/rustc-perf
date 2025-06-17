@@ -1819,7 +1819,7 @@ async fn bench_compile(
             tx.conn(),
             benchmark_name,
             &shared.artifact_id,
-            collector.artifact_row_id,
+            collector,
             config.is_self_profile,
         );
         let result = measure(&mut processor).await;
