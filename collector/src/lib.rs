@@ -353,13 +353,9 @@ pub struct CollectorCtx {
 }
 
 impl CollectorCtx {
-    pub async fn start_compile_step(
-        &self,
-        conn: &dyn Connection,
-        benchmark_name: &BenchmarkName,
-    ) -> bool {
+    pub async fn start_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {
         conn.collector_start_step(self.artifact_row_id, &benchmark_name.0)
-            .await
+            .await;
     }
 
     pub async fn end_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {

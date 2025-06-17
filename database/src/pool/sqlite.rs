@@ -1050,18 +1050,13 @@ impl Connection for SqliteConnection {
     }
 
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        let did_modify = self
-            .raw_ref()
+        self.raw_ref()
             .execute(
                 "update collector_progress set end = strftime('%s','now') \
-                where aid = ? and step = ? and start is not null and end is null;",
+                where aid = ? and step = ? and start is not null;",
                 params![&aid.0, &step],
             )
-            .unwrap()
-            == 1;
-        if !did_modify {
-            log::error!("did not end {} for {:?}", step, aid);
-        }
+            .unwrap();
     }
 
     async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
