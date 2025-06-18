@@ -329,8 +329,20 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.profile {
-                Profile::Check | Profile::Clippy => {
+                Profile::Check => {
                     cmd.arg("--profile").arg("check");
+                }
+                Profile::Clippy => {
+                    cmd.arg("--profile").arg("check");
+                    // Make sure that we run all lints, or else would
+                    // be pointless for allow-by-default lint benchmarks
+                    // and would cause errors with deny-by-default lints.
+                    //
+                    // Note that this takes priority over inherited `-Aclippy::*`s
+                    // and similar.
+                    let mut rustflags = env::var("RUSTFLAGS").unwrap_or_default();
+                    rustflags.push_str(" -Wclippy::all");
+                    cmd.env("RUSTFLAGS", rustflags);
                 }
                 Profile::Debug => {}
                 Profile::Doc => {}
