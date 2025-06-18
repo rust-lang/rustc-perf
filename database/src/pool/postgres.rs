@@ -1,7 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, CodegenBackend, CollectionId,
-    Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
+    BenchmarkRequestType, CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date,
+    Index, Profile, QueuedCommit, Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -284,6 +285,22 @@ static MIGRATIONS: &[&str] = &[
     alter table pstat_series add target text not null default 'x86_64-unknown-linux-gnu';
     alter table pstat_series drop constraint test_case;
     alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, target, metric);
+    "#,
+    r#"
+    CREATE TABLE IF NOT EXISTS benchmark_requests (
+        id           SERIAL PRIMARY KEY,
+        tag          TEXT NOT NULL UNIQUE,
+        parent_sha   TEXT,
+        commit_type  TEXT,
+        pr           INTEGER,
+        created_at   TIMESTAMPTZ NOT NULL,
+        completed_at TIMESTAMPTZ,
+        status       TEXT NOT NULL,
+        backends     TEXT,
+        profiles     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS benchmark_requests_status_idx on benchmark_requests (status);
+    CREATE INDEX IF NOT EXISTS benchmark_requests_commit_type on benchmark_requests (commit_type);
     "#,
 ];
 
@@ -1364,6 +1381,66 @@ where
             )
             .await
             .unwrap();
+    }
+
+    async fn insert_benchmark_request(&self, benchmark_request: &BenchmarkRequest) {
+        match &benchmark_request.commit_type {
+            BenchmarkRequestType::Try {
+                sha,
+                parent_sha,
+                pr,
+            }
+            | BenchmarkRequestType::Master {
+                sha,
+                parent_sha,
+                pr,
+            } => {
+                self.conn()
+                    .execute(
+                        r#"
+                        INSERT INTO
+                           benchmark_requests(parent_sha, pr, tag, created_at,
+                                              commit_type, status, backends, profiles)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        ON CONFLICT DO NOTHING;
+                        "#,
+                        &[
+                            &parent_sha,
+                            pr,
+                            sha,
+                            &benchmark_request.created_at,
+                            &benchmark_request.commit_type.to_string(),
+                            &benchmark_request.status.to_string(),
+                            &benchmark_request.backends,
+                            &benchmark_request.profiles,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+            }
+            BenchmarkRequestType::Release { tag } => {
+                self.conn()
+                    .execute(
+                        r#"
+                        INSERT INTO
+                            benchmark_requests(tag, created_at, commit_type,
+                                               status, backends, profiles)
+                        VALUES ($1, $2, $3, $4, $5, $6);
+                        ON CONFLICT DO NOTHING;
+                        "#,
+                        &[
+                            tag,
+                            &benchmark_request.created_at,
+                            &benchmark_request.commit_type.to_string(),
+                            &benchmark_request.status.to_string(),
+                            &benchmark_request.backends,
+                            &benchmark_request.profiles,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
     }
 }
 

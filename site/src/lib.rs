@@ -9,6 +9,7 @@ pub mod server;
 mod average;
 mod benchmark_metadata;
 mod comparison;
+mod queue_jobs;
 mod request_handlers;
 mod resources;
 mod selector;

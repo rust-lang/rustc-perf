@@ -1,5 +1,6 @@
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, CodegenBackend,
+    CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -178,6 +179,10 @@ pub trait Connection: Send + Sync {
 
     /// Removes all data associated with the given artifact.
     async fn purge_artifact(&self, aid: &ArtifactId);
+
+    /// Add an item to the `benchmark_requests`, if the `benchmark_request`
+    /// extists it will be ignored
+    async fn insert_benchmark_request(&self, benchmark_request: &BenchmarkRequest);
 }
 
 #[async_trait::async_trait]

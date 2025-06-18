@@ -798,3 +798,154 @@ pub struct ArtifactCollection {
     pub duration: Duration,
     pub end_time: DateTime<Utc>,
 }
+
+#[derive(Debug)]
+pub enum BenchmarkRequestCommitType {
+    Try { pr: u32 },
+    Master { pr: u32 },
+    Release { tag: String },
+}
+
+impl fmt::Display for BenchmarkRequestCommitType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BenchmarkRequestCommitType::Try { pr: _ } => write!(f, "try"),
+            BenchmarkRequestCommitType::Master { pr: _ } => write!(f, "master"),
+            BenchmarkRequestCommitType::Release { tag: _ } => write!(f, "release"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BenchmarkRequestStatus {
+    WaitingForArtifacts,
+    WaitingForParent,
+    Queued,
+    InProgress,
+    Completed,
+}
+
+impl fmt::Display for BenchmarkRequestStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BenchmarkRequestStatus::WaitingForArtifacts => write!(f, "waiting_for_artifacts"),
+            BenchmarkRequestStatus::WaitingForParent => write!(f, "waiting_for_parent"),
+            BenchmarkRequestStatus::Queued => write!(f, "queued"),
+            BenchmarkRequestStatus::InProgress => write!(f, "in_progress"),
+            BenchmarkRequestStatus::Completed => write!(f, "completed"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BenchmarkRequestType {
+    /// A Try commit
+    Try {
+        sha: String,
+        parent_sha: Option<String>,
+        pr: u32,
+    },
+    /// A Master commit
+    Master {
+        sha: String,
+        parent_sha: Option<String>,
+        pr: u32,
+    },
+    /// A release only has a tag
+    Release { tag: String },
+}
+
+impl fmt::Display for BenchmarkRequestType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BenchmarkRequestType::Try {
+                sha: _,
+                parent_sha: _,
+                pr: _,
+            } => write!(f, "try"),
+            BenchmarkRequestType::Master {
+                sha: _,
+                parent_sha: _,
+                pr: _,
+            } => write!(f, "master"),
+            BenchmarkRequestType::Release { tag: _ } => write!(f, "release"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct BenchmarkRequest {
+    pub commit_type: BenchmarkRequestType,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub status: BenchmarkRequestStatus,
+    pub backends: String,
+    pub profiles: String,
+}
+
+impl BenchmarkRequest {
+    pub fn create_release(
+        tag: &str,
+        created_at: DateTime<Utc>,
+        status: BenchmarkRequestStatus,
+        backends: &str,
+        profiles: &str,
+    ) -> Self {
+        Self {
+            commit_type: BenchmarkRequestType::Release {
+                tag: tag.to_string(),
+            },
+            created_at,
+            completed_at: None,
+            status,
+            backends: backends.to_string(),
+            profiles: profiles.to_string(),
+        }
+    }
+
+    pub fn create_try(
+        sha: &str,
+        parent_sha: Option<&str>,
+        pr: u32,
+        created_at: DateTime<Utc>,
+        status: BenchmarkRequestStatus,
+        backends: &str,
+        profiles: &str,
+    ) -> Self {
+        Self {
+            commit_type: BenchmarkRequestType::Try {
+                pr,
+                sha: sha.to_string(),
+                parent_sha: parent_sha.map(|it| it.to_string()),
+            },
+            created_at,
+            completed_at: None,
+            status,
+            backends: backends.to_string(),
+            profiles: profiles.to_string(),
+        }
+    }
+
+    pub fn create_master(
+        sha: &str,
+        parent_sha: Option<&str>,
+        pr: u32,
+        created_at: DateTime<Utc>,
+        status: BenchmarkRequestStatus,
+        backends: &str,
+        profiles: &str,
+    ) -> Self {
+        Self {
+            commit_type: BenchmarkRequestType::Master {
+                pr,
+                sha: sha.to_string(),
+                parent_sha: parent_sha.map(|it| it.to_string()),
+            },
+            created_at,
+            completed_at: None,
+            status,
+            backends: backends.to_string(),
+            profiles: profiles.to_string(),
+        }
+    }
+}
