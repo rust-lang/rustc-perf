@@ -64,7 +64,7 @@ async fn main() {
 
     if run_cron_job {
         task::spawn(async move {
-            site::queue_jobs::cron_enqueue_jobs(ctxt.clone(), queue_update_interval_seconds).await;
+            site::job_queue::cron_main(ctxt.clone(), queue_update_interval_seconds).await;
         });
     }
 

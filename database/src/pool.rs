@@ -306,7 +306,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::{tests::run_db_test, Commit, CommitType, Date};
+    use crate::{tests::run_db_test, BenchmarkRequestStatus, Commit, CommitType, Date};
 
     /// Create a Commit
     fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
@@ -371,6 +371,52 @@ mod tests {
 
             // artifact two
             assert_eq!(Some(128), result_two.get("another-llvm.a").copied());
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn insert_benchmark_requests() {
+        run_db_test(|ctx| async {
+            let db = ctx.db_client();
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let master_benchmark_request = BenchmarkRequest::create_master(
+                "a-sha-1",
+                Some("parent-sha-1"),
+                42,
+                time,
+                BenchmarkRequestStatus::WaitingForParent,
+                "llvm",
+                "",
+            );
+
+            let try_benchmark_request = BenchmarkRequest::create_try(
+                "b-sha-2",
+                Some("parent-sha-2"),
+                32,
+                time,
+                BenchmarkRequestStatus::WaitingForParent,
+                "cranelift",
+                "",
+            );
+
+            let release_benchmark_request = BenchmarkRequest::create_release(
+                "1.8.0",
+                time,
+                BenchmarkRequestStatus::WaitingForParent,
+                "cranelift,llvm",
+                "",
+            );
+
+            let db = db.connection().await;
+            db.insert_benchmark_request(&master_benchmark_request).await;
+            db.insert_benchmark_request(&try_benchmark_request).await;
+            db.insert_benchmark_request(&release_benchmark_request)
+                .await;
+            // duplicate insert
+            db.insert_benchmark_request(&master_benchmark_request).await;
+
             Ok(ctx)
         })
         .await;

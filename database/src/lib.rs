@@ -800,27 +800,9 @@ pub struct ArtifactCollection {
 }
 
 #[derive(Debug)]
-pub enum BenchmarkRequestCommitType {
-    Try { pr: u32 },
-    Master { pr: u32 },
-    Release { tag: String },
-}
-
-impl fmt::Display for BenchmarkRequestCommitType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BenchmarkRequestCommitType::Try { pr: _ } => write!(f, "try"),
-            BenchmarkRequestCommitType::Master { pr: _ } => write!(f, "master"),
-            BenchmarkRequestCommitType::Release { tag: _ } => write!(f, "release"),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     WaitingForParent,
-    Queued,
     InProgress,
     Completed,
 }
@@ -830,7 +812,6 @@ impl fmt::Display for BenchmarkRequestStatus {
         match self {
             BenchmarkRequestStatus::WaitingForArtifacts => write!(f, "waiting_for_artifacts"),
             BenchmarkRequestStatus::WaitingForParent => write!(f, "waiting_for_parent"),
-            BenchmarkRequestStatus::Queued => write!(f, "queued"),
             BenchmarkRequestStatus::InProgress => write!(f, "in_progress"),
             BenchmarkRequestStatus::Completed => write!(f, "completed"),
         }
@@ -853,6 +834,24 @@ pub enum BenchmarkRequestType {
     },
     /// A release only has a tag
     Release { tag: String },
+}
+
+impl BenchmarkRequestType {
+    pub fn commit_type_str(&self) -> &str {
+        match self {
+            BenchmarkRequestType::Try {
+                sha: _,
+                parent_sha: _,
+                pr: _,
+            } => "try",
+            BenchmarkRequestType::Master {
+                sha: _,
+                parent_sha: _,
+                pr: _,
+            } => "master",
+            BenchmarkRequestType::Release { tag: _ } => "release",
+        }
+    }
 }
 
 impl fmt::Display for BenchmarkRequestType {
@@ -946,6 +945,63 @@ impl BenchmarkRequest {
             status,
             backends: backends.to_string(),
             profiles: profiles.to_string(),
+        }
+    }
+
+    /// Get either the `sha` for a `try` or `master` commit or a `tag` for a
+    /// `release`
+    pub fn tag(&self) -> &str {
+        match &self.commit_type {
+            BenchmarkRequestType::Try {
+                sha,
+                parent_sha: _,
+                pr: _,
+            }
+            | BenchmarkRequestType::Master {
+                sha,
+                parent_sha: _,
+                pr: _,
+            } => sha,
+            BenchmarkRequestType::Release { tag } => tag,
+        }
+    }
+
+    pub fn pr(&self) -> Option<&u32> {
+        match &self.commit_type {
+            BenchmarkRequestType::Try {
+                sha: _,
+                parent_sha: _,
+                pr,
+            }
+            | BenchmarkRequestType::Master {
+                sha: _,
+                parent_sha: _,
+                pr,
+            } => Some(pr),
+            BenchmarkRequestType::Release { tag: _ } => None,
+        }
+    }
+
+    pub fn commit_type(&self) -> &str {
+        self.commit_type.commit_type_str()
+    }
+
+    pub fn parent_sha(&self) -> Option<&str> {
+        match &self.commit_type {
+            BenchmarkRequestType::Try {
+                sha: _,
+                parent_sha,
+                pr: _,
+            }
+            | BenchmarkRequestType::Master {
+                sha: _,
+                parent_sha,
+                pr: _,
+            } => match parent_sha {
+                Some(parent_sha) => Some(parent_sha),
+                None => None,
+            },
+            BenchmarkRequestType::Release { tag: _ } => None,
         }
     }
 }

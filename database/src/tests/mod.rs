@@ -126,6 +126,9 @@ where
         let ctx = TestContext::new_postgres(&db_url).await;
         let ctx = f(ctx).await.expect("Postgres test failed");
         ctx.finish().await;
+        // We don't want to run both postgres tests & sqlite tests as some tests
+        // are only designed for postgres
+        return;
     } else {
         // The github CI does not yet support running containers on Windows,
         // meaning that the test suite would fail.
