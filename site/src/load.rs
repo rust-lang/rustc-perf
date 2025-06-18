@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::RangeInclusive;
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 
@@ -288,19 +289,25 @@ impl SiteCtxt {
     pub async fn enqueue_master_commits(&self) {
         let conn = self.conn().await;
         let master_commits = &self.get_master_commits().commits;
+        // TODO; delete at some point in the future
+        let cutoff: chrono::DateTime<Utc> =
+            chrono::DateTime::from_str("2025-06-01T00:00:00.000Z").unwrap();
 
         for master_commit in master_commits {
-            let pr = master_commit.pr.unwrap_or(0);
-            let benchmark = BenchmarkRequest::create_master(
-                &master_commit.sha,
-                Some(&master_commit.parent_sha),
-                pr,
-                master_commit.time,
-                BenchmarkRequestStatus::Queued,
-                "",
-                "",
-            );
-            conn.insert_benchmark_request(&benchmark).await;
+            // We don't want to add masses of obsolete data
+            if master_commit.time >= cutoff {
+                let pr = master_commit.pr.unwrap_or(0);
+                let benchmark = BenchmarkRequest::create_master(
+                    &master_commit.sha,
+                    Some(&master_commit.parent_sha),
+                    pr,
+                    master_commit.time,
+                    BenchmarkRequestStatus::Queued,
+                    "",
+                    "",
+                );
+                conn.insert_benchmark_request(&benchmark).await;
+            }
         }
     }
 }
