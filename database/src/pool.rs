@@ -181,7 +181,7 @@ pub trait Connection: Send + Sync {
     async fn purge_artifact(&self, aid: &ArtifactId);
 
     /// Add an item to the `benchmark_requests`, if the `benchmark_request`
-    /// extists it will be ignored
+    /// exists it will be ignored
     async fn insert_benchmark_request(&self, benchmark_request: &BenchmarkRequest);
 }
 
