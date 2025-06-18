@@ -113,9 +113,8 @@ impl TestContext {
     }
 }
 
-/// Runs a test against an actual database.
-/// Checks both Postgres and SQLite.
-pub(crate) async fn run_db_test<F, Fut>(f: F)
+/// Runs a test against an actual postgres database.
+pub(crate) async fn run_postgres_test<F, Fut>(f: F)
 where
     F: Fn(TestContext) -> Fut,
     Fut: Future<Output = anyhow::Result<TestContext>>,
@@ -126,9 +125,6 @@ where
         let ctx = TestContext::new_postgres(&db_url).await;
         let ctx = f(ctx).await.expect("Postgres test failed");
         ctx.finish().await;
-        // We don't want to run both postgres tests & sqlite tests as some tests
-        // are only designed for postgres
-        return;
     } else {
         // The github CI does not yet support running containers on Windows,
         // meaning that the test suite would fail.
@@ -141,7 +137,16 @@ where
             );
         }
     }
+}
 
+/// Runs a test against an actual database.
+/// Checks both Postgres and SQLite.
+pub(crate) async fn run_db_test<F, Fut>(f: F)
+where
+    F: Fn(TestContext) -> Fut + Clone,
+    Fut: Future<Output = anyhow::Result<TestContext>>,
+{
+    run_postgres_test(f.clone()).await;
     // SQLite
     eprintln!("Running test with SQLite");
     let ctx = TestContext::new_sqlite().await;

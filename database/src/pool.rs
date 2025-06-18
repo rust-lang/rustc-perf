@@ -306,7 +306,10 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::{tests::run_db_test, BenchmarkRequestStatus, Commit, CommitType, Date};
+    use crate::{
+        tests::{run_db_test, run_postgres_test},
+        BenchmarkRequestStatus, Commit, CommitType, Date,
+    };
 
     /// Create a Commit
     fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
@@ -378,7 +381,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_benchmark_requests() {
-        run_db_test(|ctx| async {
+        run_postgres_test(|ctx| async {
             let db = ctx.db_client();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let master_benchmark_request = BenchmarkRequest::create_master(
