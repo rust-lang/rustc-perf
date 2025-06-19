@@ -1,7 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, CodegenBackend, CollectionId,
-    Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest, CodegenBackend,
+    CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
+    Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -284,6 +285,21 @@ static MIGRATIONS: &[&str] = &[
     alter table pstat_series add target text not null default 'x86_64-unknown-linux-gnu';
     alter table pstat_series drop constraint test_case;
     alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, target, metric);
+    "#,
+    r#"
+    CREATE TABLE IF NOT EXISTS benchmark_request (
+        id           SERIAL PRIMARY KEY,
+        tag          TEXT NOT NULL UNIQUE,
+        parent_sha   TEXT,
+        commit_type  TEXT NOT NULL,
+        pr           INTEGER,
+        created_at   TIMESTAMPTZ NOT NULL,
+        completed_at TIMESTAMPTZ,
+        status       TEXT NOT NULL,
+        backends     TEXT NOT NULL,
+        profiles     TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS benchmark_request_status_idx on benchmark_request (status) WHERE status != 'completed';
     "#,
 ];
 
@@ -1361,6 +1377,38 @@ where
             .execute(
                 "delete from pull_request_build where bors_sha = $1",
                 &[&info.name],
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn insert_benchmark_request(&self, benchmark_request: &BenchmarkRequest) {
+        self.conn()
+            .execute(
+                r#"
+                INSERT INTO benchmark_request(
+                    tag,
+                    parent_sha,
+                    pr,
+                    commit_type,
+                    status,
+                    created_at,
+                    backends,
+                    profiles
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT DO NOTHING;
+            "#,
+                &[
+                    &benchmark_request.tag(),
+                    &benchmark_request.parent_sha(),
+                    &benchmark_request.pr().map(|it| *it as i32),
+                    &benchmark_request.commit_type(),
+                    &benchmark_request.status.to_string(),
+                    &benchmark_request.created_at,
+                    &benchmark_request.backends,
+                    &benchmark_request.profiles,
+                ],
             )
             .await
             .unwrap();

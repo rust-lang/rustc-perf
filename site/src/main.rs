@@ -3,6 +3,7 @@ use parking_lot::RwLock;
 use site::load;
 use std::env;
 use std::sync::Arc;
+use tokio::task;
 
 #[cfg(unix)]
 #[global_allocator]
@@ -28,6 +29,15 @@ async fn main() {
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(2346);
+    let queue_update_interval_seconds = env::var("QUEUE_UPDATE_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(30);
+    let run_cron_job = env::var("RUN_CRON")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(false);
+
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
             let res = Arc::new(load::SiteCtxt::from_db_url(&db_url).await.unwrap());
@@ -50,7 +60,14 @@ async fn main() {
     .fuse();
     println!("Starting server with port={:?}", port);
 
-    let server = site::server::start(ctxt, port).fuse();
+    let server = site::server::start(ctxt.clone(), port).fuse();
+
+    if run_cron_job {
+        task::spawn(async move {
+            site::job_queue::cron_main(ctxt.clone(), queue_update_interval_seconds).await;
+        });
+    }
+
     futures::pin_mut!(server);
     futures::pin_mut!(fut);
     loop {

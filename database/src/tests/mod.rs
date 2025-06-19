@@ -113,9 +113,8 @@ impl TestContext {
     }
 }
 
-/// Runs a test against an actual database.
-/// Checks both Postgres and SQLite.
-pub(crate) async fn run_db_test<F, Fut>(f: F)
+/// Runs a test against an actual postgres database.
+pub(crate) async fn run_postgres_test<F, Fut>(f: F)
 where
     F: Fn(TestContext) -> Fut,
     Fut: Future<Output = anyhow::Result<TestContext>>,
@@ -138,7 +137,16 @@ where
             );
         }
     }
+}
 
+/// Runs a test against an actual database.
+/// Checks both Postgres and SQLite.
+pub(crate) async fn run_db_test<F, Fut>(f: F)
+where
+    F: Fn(TestContext) -> Fut + Clone,
+    Fut: Future<Output = anyhow::Result<TestContext>>,
+{
+    run_postgres_test(f.clone()).await;
     // SQLite
     eprintln!("Running test with SQLite");
     let ctx = TestContext::new_sqlite().await;

@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, CodegenBackend, CollectionId, Commit, CommitType,
-    CompileBenchmark, Date, Profile, Target,
+    ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, CodegenBackend, CollectionId,
+    Commit, CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -1251,6 +1251,10 @@ impl Connection for SqliteConnection {
                 [info.name],
             )
             .unwrap();
+    }
+
+    async fn insert_benchmark_request(&self, _benchmark_request: &BenchmarkRequest) {
+        panic!("Queueing for SQLite has not been implemented, if you are wanting to test the queueing functionality please use postgres. Presuming you have docker installed, at the root of the repo you can run `make start-postgres` to spin up a postgres database.");
     }
 }
 
