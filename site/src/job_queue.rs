@@ -41,17 +41,18 @@ async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) {
 
 /// Entry point for the cron
 pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u64) {
-    let ctxt = site_ctxt.clone();
     let mut interval = time::interval(Duration::from_secs(seconds));
+    let ctxt = site_ctxt.clone();
 
-    if let Some(ctxt_clone) = {
-        let guard = ctxt.read();
-        guard.as_ref().cloned()
-    } {
-        loop {
+    loop {
+        interval.tick().await;
+
+        if let Some(ctxt_clone) = {
+            let guard = ctxt.read();
+            guard.as_ref().cloned()
+        } {
             cron_enqueue_jobs(&ctxt_clone).await;
-            interval.tick().await;
-            println!("Cron job executed at: {:?}", std::time::SystemTime::now());
+            log::info!("Cron job executed at: {:?}", std::time::SystemTime::now());
         }
     }
 }
