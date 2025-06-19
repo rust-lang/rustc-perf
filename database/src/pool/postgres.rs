@@ -313,11 +313,16 @@ static MIGRATIONS: &[&str] = &[
     CREATE TABLE IF NOT EXISTS collector_config (
         id                SERIAL PRIMARY KEY,
         target            TEXT NOT NULL,
-        name              TEXT NOT NULL,
+        name              TEXT NOT NULL UNIQUE,
         date_added        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         last_heartbeat_at TIMESTAMPTZ,
         benchmark_set     INTEGER NOT NULL,
-        is_active         BOOLEAN DEFAULT FALSE NOT NULL
+        is_active         BOOLEAN DEFAULT FALSE NOT NULL,
+
+        -- Given the current setup, we do not want 2 collectors that are active
+        -- with the same target using the same benchmark set.
+        CONSTRAINT collector_config_target_bench_active_uniq
+            UNIQUE (target, benchmark_set, is_active)
     );
     "#,
 ];
