@@ -823,13 +823,13 @@ pub enum BenchmarkRequestType {
     /// A Try commit
     Try {
         sha: String,
-        parent_sha: Option<String>,
+        parent_sha: String,
         pr: u32,
     },
     /// A Master commit
     Master {
         sha: String,
-        parent_sha: Option<String>,
+        parent_sha: String,
         pr: u32,
     },
     /// A release only has a tag
@@ -857,16 +857,8 @@ impl BenchmarkRequestType {
 impl fmt::Display for BenchmarkRequestType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BenchmarkRequestType::Try {
-                sha: _,
-                parent_sha: _,
-                pr: _,
-            } => write!(f, "try"),
-            BenchmarkRequestType::Master {
-                sha: _,
-                parent_sha: _,
-                pr: _,
-            } => write!(f, "master"),
+            BenchmarkRequestType::Try { .. } => write!(f, "try"),
+            BenchmarkRequestType::Master { .. } => write!(f, "master"),
             BenchmarkRequestType::Release { tag: _ } => write!(f, "release"),
         }
     }
@@ -904,7 +896,7 @@ impl BenchmarkRequest {
 
     pub fn create_try(
         sha: &str,
-        parent_sha: Option<&str>,
+        parent_sha: &str,
         pr: u32,
         created_at: DateTime<Utc>,
         status: BenchmarkRequestStatus,
@@ -915,7 +907,7 @@ impl BenchmarkRequest {
             commit_type: BenchmarkRequestType::Try {
                 pr,
                 sha: sha.to_string(),
-                parent_sha: parent_sha.map(|it| it.to_string()),
+                parent_sha: parent_sha.to_string(),
             },
             created_at,
             completed_at: None,
@@ -927,7 +919,7 @@ impl BenchmarkRequest {
 
     pub fn create_master(
         sha: &str,
-        parent_sha: Option<&str>,
+        parent_sha: &str,
         pr: u32,
         created_at: DateTime<Utc>,
         status: BenchmarkRequestStatus,
@@ -938,7 +930,7 @@ impl BenchmarkRequest {
             commit_type: BenchmarkRequestType::Master {
                 pr,
                 sha: sha.to_string(),
-                parent_sha: parent_sha.map(|it| it.to_string()),
+                parent_sha: parent_sha.to_string(),
             },
             created_at,
             completed_at: None,
@@ -952,32 +944,16 @@ impl BenchmarkRequest {
     /// `release`
     pub fn tag(&self) -> &str {
         match &self.commit_type {
-            BenchmarkRequestType::Try {
-                sha,
-                parent_sha: _,
-                pr: _,
-            }
-            | BenchmarkRequestType::Master {
-                sha,
-                parent_sha: _,
-                pr: _,
-            } => sha,
+            BenchmarkRequestType::Try { sha, .. } | BenchmarkRequestType::Master { sha, .. } => sha,
             BenchmarkRequestType::Release { tag } => tag,
         }
     }
 
     pub fn pr(&self) -> Option<&u32> {
         match &self.commit_type {
-            BenchmarkRequestType::Try {
-                sha: _,
-                parent_sha: _,
-                pr,
+            BenchmarkRequestType::Try { pr, .. } | BenchmarkRequestType::Master { pr, .. } => {
+                Some(pr)
             }
-            | BenchmarkRequestType::Master {
-                sha: _,
-                parent_sha: _,
-                pr,
-            } => Some(pr),
             BenchmarkRequestType::Release { tag: _ } => None,
         }
     }
@@ -988,19 +964,8 @@ impl BenchmarkRequest {
 
     pub fn parent_sha(&self) -> Option<&str> {
         match &self.commit_type {
-            BenchmarkRequestType::Try {
-                sha: _,
-                parent_sha,
-                pr: _,
-            }
-            | BenchmarkRequestType::Master {
-                sha: _,
-                parent_sha,
-                pr: _,
-            } => match parent_sha {
-                Some(parent_sha) => Some(parent_sha),
-                None => None,
-            },
+            BenchmarkRequestType::Try { parent_sha, .. }
+            | BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
             BenchmarkRequestType::Release { tag: _ } => None,
         }
     }

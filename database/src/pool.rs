@@ -386,7 +386,7 @@ mod tests {
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let master_benchmark_request = BenchmarkRequest::create_master(
                 "a-sha-1",
-                Some("parent-sha-1"),
+                "parent-sha-1",
                 42,
                 time,
                 BenchmarkRequestStatus::WaitingForParent,
@@ -396,7 +396,7 @@ mod tests {
 
             let try_benchmark_request = BenchmarkRequest::create_try(
                 "b-sha-2",
-                Some("parent-sha-2"),
+                "parent-sha-2",
                 32,
                 time,
                 BenchmarkRequestStatus::WaitingForParent,
