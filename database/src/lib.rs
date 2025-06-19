@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
 use intern::intern;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 use std::hash;
 use std::ops::{Add, Sub};
 use std::sync::Arc;
@@ -151,6 +151,15 @@ impl FromStr for CommitType {
             "try" => Ok(CommitType::Try),
             "master" => Ok(CommitType::Master),
             _ => Err(format!("Wrong commit type {}", ty)),
+        }
+    }
+}
+
+impl Display for CommitType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CommitType::Try => f.write_str("try"),
+            CommitType::Master => f.write_str("master"),
         }
     }
 }
@@ -797,4 +806,166 @@ pub struct ArtifactCollection {
     pub artifact: ArtifactId,
     pub duration: Duration,
     pub end_time: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CommitJobType {
+    Try { pr: u32 },
+    Master { pr: u32 },
+    Release { tag: String },
+}
+
+impl CommitJobType {
+    /// Get the name of the type as a `str`
+    pub fn name(&self) -> &'static str {
+        match self {
+            CommitJobType::Try { pr: _ } => "try",
+            CommitJobType::Master { pr: _ } => "master",
+            CommitJobType::Release { tag: _ } => "release",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitJob {
+    pub sha: String,
+    pub parent_sha: String,
+    pub commit_time: Date,
+    pub target: Target,
+    pub include: Option<String>,
+    pub exclude: Option<String>,
+    pub runs: Option<i32>,
+    pub backends: Option<String>,
+    pub job_type: CommitJobType,
+    pub state: CommitJobState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CommitJobState {
+    Queued,
+    Finished(CommitJobFinished),
+    Failed(CommitJobFailed),
+    InProgress(CommitJobInProgress),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitJobInProgress {
+    pub machine_id: String,
+    pub started_at: Date,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitJobFinished {
+    pub machine_id: String,
+    pub started_at: Date,
+    pub finished_at: Date,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitJobFailed {
+    pub machine_id: String,
+    pub started_at: Date,
+    pub finished_at: Date,
+}
+
+impl CommitJob {
+    /// Get the status as a string
+    pub fn status(&self) -> &'static str {
+        match self.state {
+            CommitJobState::Queued => "queued",
+            CommitJobState::InProgress(_) => "in_progress",
+            CommitJobState::Finished(_) => "finished",
+            CommitJobState::Failed(_) => "failed",
+        }
+    }
+}
+
+/// Maps from the database to a Rust struct
+#[allow(clippy::too_many_arguments)]
+fn commit_job_create(
+    sha: String,
+    parent_sha: String,
+    commit_type: &str,
+    pr: Option<u32>,
+    release_tag: Option<String>,
+    commit_time: Date,
+    target: Target,
+    machine_id: Option<String>,
+    started_at: Option<Date>,
+    finished_at: Option<Date>,
+    status: &str,
+    include: Option<String>,
+    exclude: Option<String>,
+    runs: Option<i32>,
+    backends: Option<String>,
+) -> CommitJob {
+    let job_type = match commit_type {
+        "try" => CommitJobType::Try {
+            pr: pr.expect("`pr` cannot be `None` for a Commit of type `try`"),
+        },
+        "master" => CommitJobType::Master {
+            pr: pr.expect("`pr` cannot be `None` for a Commit of type `master`"),
+        },
+        "release" => CommitJobType::Release {
+            tag: release_tag
+                .expect("`release_tag` cannot be `None` for a Commit of type `release`"),
+        },
+        _ => panic!("Unhandled commit_type {}", commit_type),
+    };
+
+    let state = match status {
+        "queued" => CommitJobState::Queued,
+
+        "in_progress" => {
+            let started_at =
+                started_at.expect("`started_at` must be Some for an `in_progress` job");
+            let machine_id =
+                machine_id.expect("`machine_id` must be Some for an `in_progress` job");
+
+            CommitJobState::InProgress(CommitJobInProgress {
+                started_at,
+                machine_id,
+            })
+        }
+
+        "finished" | "failed" => {
+            let started_at =
+                started_at.expect("`started_at` must be Some for finished or failed job");
+            let finished_at =
+                finished_at.expect("`finished_at` must be Some for finished or failed");
+            let machine_id =
+                machine_id.expect("`machine_id` must be Some for finished or failed a job");
+
+            if status == "finished" {
+                CommitJobState::Finished(CommitJobFinished {
+                    started_at,
+                    finished_at,
+                    machine_id,
+                })
+            } else {
+                CommitJobState::Failed(CommitJobFailed {
+                    started_at,
+                    finished_at,
+                    machine_id,
+                })
+            }
+        }
+
+        other => {
+            panic!("unknown status `{other}` (expected `queued`, `in_progress`, `finished` or `failed`)")
+        }
+    };
+
+    CommitJob {
+        sha,
+        parent_sha,
+        commit_time,
+        target,
+        include,
+        exclude,
+        runs,
+        backends,
+        job_type,
+        state,
+    }
 }
