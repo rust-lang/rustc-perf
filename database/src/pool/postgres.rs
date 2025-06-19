@@ -299,8 +299,7 @@ static MIGRATIONS: &[&str] = &[
         backends     TEXT NOT NULL,
         profiles     TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS benchmark_request_status_idx on benchmark_request (status);
-    CREATE INDEX IF NOT EXISTS benchmark_request_commit_type on benchmark_request (commit_type);
+    CREATE INDEX IF NOT EXISTS benchmark_request_status_idx on benchmark_request (status) WHERE status != 'completed';
     "#,
 ];
 
