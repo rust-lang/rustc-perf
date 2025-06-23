@@ -1,0 +1,8 @@
+{
+    "cargo_rustc_opts": "--cap-lints=warn",
+    "cargo_opts": "--lib",
+    "runs": 1,
+    "touch_file": "src/cargo/lib.rs",
+    "category": "stable",
+    "artifact": "library"
+}

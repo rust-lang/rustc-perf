@@ -1727,16 +1727,6 @@ async fn bench_published_artifact(
     let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, CompileBenchmarkFilter::All)?;
     compile_benchmarks.retain(|b| b.category().is_stable());
 
-    let runtime_suite = load_runtime_benchmarks(
-        connection.as_mut(),
-        dirs.runtime,
-        CargoIsolationMode::Isolated,
-        None,
-        &toolchain,
-        &artifact_id,
-    )
-    .await?;
-
     let shared = SharedBenchmarkConfig {
         artifact_id,
         toolchain,
@@ -1754,11 +1744,7 @@ async fn bench_published_artifact(
             bench_rustc: false,
             targets: vec![Target::default()],
         }),
-        Some(RuntimeBenchmarkConfig::new(
-            runtime_suite,
-            RuntimeBenchmarkFilter::keep_all(),
-            DEFAULT_RUNTIME_ITERATIONS,
-        )),
+        None,
     )
     .await
 }

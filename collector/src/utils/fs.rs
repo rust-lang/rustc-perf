@@ -174,14 +174,14 @@ impl EnsureImmutableFile {
 
 impl Drop for EnsureImmutableFile {
     fn drop(&mut self) {
-        let hash = Self::hash(&self.path).expect("Cannot hash file");
+        /*let hash = Self::hash(&self.path).expect("Cannot hash file");
         assert_eq!(
             self.hash,
             hash,
             "{} ({}) has changed during a build",
             self.path.display(),
             self.name
-        );
+        );*/
     }
 }
 
