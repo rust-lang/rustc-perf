@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import {ref, onMounted, Ref, computed} from "vue";
 import {
-  getUrlParams
+  getUrlParams,
+  changeUrl
 } from "../../utils/navigation";
 import {postMsgpack} from "../../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../../urls";
@@ -104,7 +105,7 @@ const tableData = computed(() => {
     }
 
     // Handle string vs number comparison
-    let comparison;
+    let comparison: number;
     if (typeof aValue === "string" && typeof bValue === "string") {
       comparison = aValue.localeCompare(bValue);
     } else {
@@ -129,9 +130,34 @@ function handlePerfettoClick(event: Event, link: string, title: string) {
   openTraceInPerfetto(link, title);
 }
 
+function loadSortFromUrl(urlParams: Dict<string>) {
+  const sort = urlParams["sort"] ?? "-timeSeconds"; // Default to descending timeSeconds
+  // Handle sort format: either "columnName" for asc or "-columnName" for desc
+  if (sort.startsWith("-")) {
+    currentSortColumn.value = sort.substring(1);
+    currentSortDirection.value = "desc";
+  } else {
+    currentSortColumn.value = sort;
+    currentSortDirection.value = "asc";
+  }
+}
+
+function storeSortToUrl() {
+  const params = getUrlParams();
+  const sortValue = currentSortDirection.value === "desc"
+    ? `-${currentSortColumn.value}`
+    : currentSortColumn.value;
+  params["sort"] = sortValue;
+  changeUrl(params);
+}
+
 async function loadData() {
   const params = getUrlParams();
   const {commit, base_commit, benchmark, scenario} = params;
+
+  // Load sort state from URL
+  loadSortFromUrl(params);
+
   const currentSelector: Selector = {
     commit,
     base_commit: base_commit ?? null,
@@ -168,6 +194,9 @@ function sortTable(columnName: string, defaultDirection: number) {
     currentSortColumn.value = columnName;
     currentSortDirection.value = defaultDirection === 1 ? "asc" : "desc";
   }
+
+  // Update URL with new sort state
+  storeSortToUrl();
 }
 
 function getSortAttributes(columnName: string) {
