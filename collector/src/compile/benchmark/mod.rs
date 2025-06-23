@@ -277,7 +277,7 @@ impl Benchmark {
 
         struct BenchmarkDir {
             dir: TempDir,
-            scenarios: HashSet<Scenario>,
+            scenarios: Vec<Scenario>,
             profile: Profile,
             backend: CodegenBackend,
             target: Target,
@@ -293,14 +293,17 @@ impl Benchmark {
                     // Do we have any scenarios left to compute?
                     let remaining_scenarios = scenarios
                         .iter()
-                        .flat_map(|scenario| {
-                            self.create_test_cases(scenario, profile, backend, target)
-                                .into_iter()
-                                .map(|test_case| (*scenario, test_case))
+                        .filter(|scenario| {
+                            self.should_run_scenario(
+                                scenario,
+                                profile,
+                                backend,
+                                target,
+                                already_computed,
+                            )
                         })
-                        .filter(|(_, test_case)| !already_computed.contains(test_case))
-                        .map(|(scenario, _)| scenario)
-                        .collect::<HashSet<Scenario>>();
+                        .copied()
+                        .collect::<Vec<Scenario>>();
                     if remaining_scenarios.is_empty() {
                         continue;
                     }
@@ -505,40 +508,65 @@ impl Benchmark {
         Ok(())
     }
 
-    fn create_test_cases(
+    /// Return true if the given `scenario` should be computed.
+    fn should_run_scenario(
         &self,
         scenario: &Scenario,
         profile: &Profile,
         backend: &CodegenBackend,
         target: &Target,
-    ) -> Vec<CompileTestCase> {
-        self.patches
-            .iter()
-            .map(|patch| CompileTestCase {
-                benchmark: database::Benchmark::from(self.name.0.as_str()),
-                profile: match profile {
-                    Profile::Check => database::Profile::Check,
-                    Profile::Debug => database::Profile::Debug,
-                    Profile::Doc => database::Profile::Doc,
-                    Profile::DocJson => database::Profile::DocJson,
-                    Profile::Opt => database::Profile::Opt,
-                    Profile::Clippy => database::Profile::Clippy,
-                },
-                scenario: match scenario {
-                    Scenario::Full => database::Scenario::Empty,
-                    Scenario::IncrFull => database::Scenario::IncrementalEmpty,
-                    Scenario::IncrUnchanged => database::Scenario::IncrementalFresh,
-                    Scenario::IncrPatched => database::Scenario::IncrementalPatch(patch.name),
-                },
-                backend: match backend {
-                    CodegenBackend::Llvm => database::CodegenBackend::Llvm,
-                    CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
-                },
-                target: match target {
-                    Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
-                },
-            })
-            .collect()
+        already_computed: &hashbrown::HashSet<CompileTestCase>,
+    ) -> bool {
+        let benchmark = database::Benchmark::from(self.name.0.as_str());
+        let profile = match profile {
+            Profile::Check => database::Profile::Check,
+            Profile::Debug => database::Profile::Debug,
+            Profile::Doc => database::Profile::Doc,
+            Profile::DocJson => database::Profile::DocJson,
+            Profile::Opt => database::Profile::Opt,
+            Profile::Clippy => database::Profile::Clippy,
+        };
+        let backend = match backend {
+            CodegenBackend::Llvm => database::CodegenBackend::Llvm,
+            CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
+        };
+        let target = match target {
+            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
+        };
+
+        match scenario {
+            // For these scenarios, we can simply check if they were benchmarked or not
+            Scenario::Full | Scenario::IncrFull | Scenario::IncrUnchanged => {
+                let test_case = CompileTestCase {
+                    benchmark,
+                    profile,
+                    backend,
+                    target,
+                    scenario: match scenario {
+                        Scenario::Full => database::Scenario::Empty,
+                        Scenario::IncrFull => database::Scenario::IncrementalEmpty,
+                        Scenario::IncrUnchanged => database::Scenario::IncrementalFresh,
+                        Scenario::IncrPatched => unreachable!(),
+                    },
+                };
+                !already_computed.contains(&test_case)
+            }
+            // For incr-patched, it is a bit more complicated.
+            // If there is at least a single uncomputed `IncrPatched`, we need to rerun
+            // all of them, because they stack on top of one another.
+            // Note that we don't need to explicitly include `IncrFull` if `IncrPatched`
+            // is selected, as the benchmark code will always run `IncrFull` before `IncrPatched`.
+            Scenario::IncrPatched => self.patches.iter().any(|patch| {
+                let test_case = CompileTestCase {
+                    benchmark,
+                    profile,
+                    scenario: database::Scenario::IncrementalPatch(patch.name),
+                    backend,
+                    target,
+                };
+                !already_computed.contains(&test_case)
+            }),
+        }
     }
 }
 
