@@ -267,66 +267,6 @@ fn get_self_profile_delta(
     })
 }
 
-fn sort_self_profile(
-    profile: &mut self_profile::SelfProfile,
-    base_profile_delta: &mut Option<self_profile::SelfProfileDelta>,
-    sort_idx: i32,
-) {
-    let qd = &mut profile.query_data;
-    let qd_deltas = base_profile_delta.as_mut().map(|bpd| &mut bpd.query_data);
-    let mut indices: Vec<_> = (0..qd.len()).collect();
-
-    match sort_idx.abs() {
-        1 => indices.sort_by_key(|&i| qd[i].label),
-        2 => indices.sort_by_key(|&i| qd[i].self_time),
-        3 => indices.sort_by_key(|&i| qd[i].number_of_cache_misses),
-        4 => indices.sort_by_key(|&i| qd[i].number_of_cache_hits),
-        5 => indices.sort_by_key(|&i| qd[i].invocation_count),
-        6 => indices.sort_by_key(|&i| qd[i].blocked_time),
-        7 => indices.sort_by_key(|&i| qd[i].incremental_load_time),
-        9 => indices.sort_by_key(|&i| {
-            // convert to displayed percentage
-            ((qd[i].number_of_cache_hits as f64 / qd[i].invocation_count as f64) * 10_000.0) as u64
-        }),
-        10 => indices.sort_by(|&a, &b| {
-            qd[a]
-                .percent_total_time
-                .partial_cmp(&qd[b].percent_total_time)
-                .unwrap()
-        }),
-        11 => {
-            if let Some(ref deltas) = qd_deltas {
-                indices.sort_by_key(|&i| deltas[i].self_time);
-            }
-        }
-        12 => {
-            if let Some(ref deltas) = qd_deltas {
-                indices.sort_by_key(|&i| deltas[i].invocation_count);
-            }
-        }
-        13 => {
-            if let Some(ref deltas) = qd_deltas {
-                indices.sort_by_key(|&i| deltas[i].incremental_load_time);
-            }
-        }
-        _ => return,
-    }
-
-    profile.query_data = if sort_idx < 0 {
-        indices.iter().map(|&i| qd[i].clone()).rev().collect()
-    } else {
-        indices.iter().map(|&i| qd[i].clone()).collect()
-    };
-
-    if let Some(deltas) = qd_deltas {
-        base_profile_delta.as_mut().unwrap().query_data = if sort_idx < 0 {
-            indices.iter().map(|&i| deltas[i].clone()).rev().collect()
-        } else {
-            indices.iter().map(|&i| deltas[i].clone()).collect()
-        };
-    }
-}
-
 pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
     ctxt: &SiteCtxt,
@@ -516,12 +456,6 @@ pub async fn handle_self_profile(
         .map_err(|e| format!("invalid run name: {:?}", e))?;
     let index = ctxt.index.load();
 
-    let sort_idx = body
-        .sort_idx
-        .parse::<i32>()
-        .ok()
-        .ok_or("sort_idx needs to be i32".to_string())?;
-
     let query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::One(bench_name.to_string()))
         .profile(selector::Selector::One(profile.parse().unwrap()))
@@ -573,13 +507,12 @@ pub async fn handle_self_profile(
         base_self_profile.as_ref().map(|p| &p.profile),
     );
 
-    let mut base_profile_delta = get_self_profile_delta(
+    let base_profile_delta = get_self_profile_delta(
         &self_profile.profile,
         base_self_profile.as_ref().map(|p| &p.profile),
         &self_profile.profiling_data,
         base_self_profile.as_ref().map(|p| &p.profiling_data),
     );
-    sort_self_profile(&mut self_profile.profile, &mut base_profile_delta, sort_idx);
 
     Ok(self_profile::Response {
         base_profile_delta,

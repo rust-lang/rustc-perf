@@ -455,7 +455,6 @@ pub mod self_profile {
         pub benchmark: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
-        pub sort_idx: String,
     }
 
     #[derive(Debug, Clone, Serialize)]
