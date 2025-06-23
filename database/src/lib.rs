@@ -799,7 +799,7 @@ pub struct ArtifactCollection {
     pub end_time: DateTime<Utc>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     WaitingForParent,
@@ -818,7 +818,7 @@ impl fmt::Display for BenchmarkRequestStatus {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BenchmarkRequestType {
     /// A Try commit
     Try {
@@ -852,6 +852,18 @@ impl BenchmarkRequestType {
             BenchmarkRequestType::Release { tag: _ } => "release",
         }
     }
+
+    /// For getting the priority of the request type;
+    /// - Release
+    /// - Master
+    /// - Try
+    pub fn rank(&self) -> u8 {
+        match self {
+            BenchmarkRequestType::Release { .. } => 0,
+            BenchmarkRequestType::Master { .. } => 1,
+            BenchmarkRequestType::Try { .. } => 2,
+        }
+    }
 }
 
 impl fmt::Display for BenchmarkRequestType {
@@ -864,7 +876,7 @@ impl fmt::Display for BenchmarkRequestType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BenchmarkRequest {
     pub commit_type: BenchmarkRequestType,
     pub created_at: DateTime<Utc>,

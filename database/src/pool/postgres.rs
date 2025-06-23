@@ -1,8 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest, CodegenBackend,
-    CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
-    Scenario, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
+    BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, CollectionId, Commit, CommitType,
+    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -13,6 +13,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio_postgres::types::{FromSql, Type};
 use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
@@ -1413,6 +1414,110 @@ where
             .await
             .unwrap();
     }
+
+    async fn get_benchmark_requests_by_status(
+        &self,
+        statuses: &[BenchmarkRequestStatus],
+        days: Option<i32>,
+    ) -> Vec<BenchmarkRequest> {
+        let mut query = "
+                SELECT
+                    tag,
+                    parent_sha,
+                    pr,
+                    commit_type,
+                    status,
+                    created_at,
+                    completed_at,
+                    backends,
+                    profiles
+                FROM benchmark_request
+                WHERE status = ANY($1) "
+            .to_string();
+
+        // Optionally add interval
+        let rows = if let Some(days) = days {
+            // postgres expects the interval to be a `float` so we cast with;
+            // `::INT`, we can't do; `INTERVAL '$2 day'` which, while looking
+            // natural is invalid.
+            query += "AND created_at > current_date - $2::INT * INTERVAL '1 day'";
+            self.conn()
+                .query(&query, &[&statuses, &days])
+                .await
+                .unwrap()
+        } else {
+            self.conn().query(&query, &[&statuses]).await.unwrap()
+        };
+
+        rows.iter()
+            .map(|row| {
+                let tag = row.get::<_, String>(0);
+                let parent_sha = row.get::<_, Option<String>>(1);
+                let pr = row.get::<_, Option<i32>>(2);
+                let commit_type = row.get::<_, String>(3);
+                let status = row.get::<_, BenchmarkRequestStatus>(4);
+                let created_at = row.get::<_, DateTime<Utc>>(5);
+                let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
+                let backends = row.get::<_, String>(7);
+                let profiles = row.get::<_, String>(8);
+
+                match commit_type.as_str() {
+                    "try" => {
+                        let mut try_benchmark = BenchmarkRequest::create_try(
+                            &tag,
+                            &parent_sha.unwrap(),
+                            pr.unwrap() as u32,
+                            created_at,
+                            status,
+                            &backends,
+                            &profiles,
+                        );
+                        try_benchmark.completed_at = completed_at;
+                        try_benchmark
+                    }
+                    "master" => {
+                        let mut master_benchmark = BenchmarkRequest::create_master(
+                            &tag,
+                            &parent_sha.unwrap(),
+                            pr.unwrap() as u32,
+                            created_at,
+                            status,
+                            &backends,
+                            &profiles,
+                        );
+                        master_benchmark.completed_at = completed_at;
+                        master_benchmark
+                    }
+                    "release" => {
+                        let mut release_benchmark = BenchmarkRequest::create_release(
+                            &tag, created_at, status, &backends, &profiles,
+                        );
+                        release_benchmark.completed_at = completed_at;
+                        release_benchmark
+                    }
+                    _ => panic!(
+                        "Invalid `commit_type` for `BenchmarkRequest` {}",
+                        commit_type
+                    ),
+                }
+            })
+            .collect()
+    }
+
+    async fn update_benchmark_request_status(
+        &mut self,
+        benchmark_request: &BenchmarkRequest,
+        benchmark_request_status: BenchmarkRequestStatus,
+    ) {
+        let tx = self.conn_mut().transaction().await.unwrap();
+        tx.execute(
+            "UPDATE benchmark_request SET status = $1 WHERE tag = $2;",
+            &[&benchmark_request_status, &benchmark_request.tag()],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
@@ -1431,6 +1536,53 @@ fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> Artifa
         }),
         "release" => ArtifactId::Tag(sha.to_owned()),
         _ => panic!("unknown artifact type: {:?}", ty),
+    }
+}
+
+macro_rules! impl_to_postgresql_via_to_string {
+    ($t:ty) => {
+        impl tokio_postgres::types::ToSql for $t {
+            fn to_sql(
+                &self,
+                ty: &tokio_postgres::types::Type,
+                out: &mut bytes::BytesMut,
+            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            {
+                self.to_string().to_sql(ty, out)
+            }
+
+            fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+                <String as tokio_postgres::types::ToSql>::accepts(ty)
+            }
+
+            // Only compile if the type is acceptable
+            tokio_postgres::types::to_sql_checked!();
+        }
+    };
+}
+
+impl_to_postgresql_via_to_string!(BenchmarkRequestType);
+impl_to_postgresql_via_to_string!(BenchmarkRequestStatus);
+
+impl<'a> FromSql<'a> for BenchmarkRequestStatus {
+    fn from_sql(
+        ty: &Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        // Decode raw bytes into &str with Postgres' own text codec
+        let s: &str = <&str as FromSql>::from_sql(ty, raw)?;
+
+        match s {
+            "waiting_for_artifacts" => Ok(Self::WaitingForArtifacts),
+            "waiting_for_parent" => Ok(Self::WaitingForParent),
+            "in_progress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            other => Err(format!("unknown benchmark_request_status '{other}'").into()),
+        }
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <&str as FromSql>::accepts(ty)
     }
 }
 
