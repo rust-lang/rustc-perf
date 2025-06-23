@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import {ref, onMounted, Ref, computed} from "vue";
 import {
-  createUrlWithAppendedParams,
-  getUrlParams,
-  navigateToUrlParams,
+  getUrlParams
 } from "../../utils/navigation";
 import {postMsgpack} from "../../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../../urls";
@@ -14,7 +12,7 @@ import {
   createTitleData,
   createDownloadLinksData,
   createTableData,
-  createArtifactData,
+  createArtifactData
 } from "./utils";
 
 const loading = ref(true);
@@ -23,12 +21,107 @@ const selector: Ref<Selector | null> = ref(null);
 const showIncr = ref(true);
 const showDelta = ref(true);
 
+// Client-side sorting state
+const currentSortColumn = ref<string>("timeSeconds");
+const currentSortDirection = ref<"asc" | "desc">("desc");
+
 // Computed properties for UI data
 const titleData = computed(() => createTitleData(selector.value));
 const downloadLinksData = computed(() =>
   createDownloadLinksData(selector.value)
 );
-const tableData = computed(() => createTableData(data.value));
+const unsortedTableData = computed(() => createTableData(data.value));
+const tableData = computed(() => {
+  const rows = unsortedTableData.value;
+  if (rows.length === 0) return rows;
+
+  // Separate totals row from data rows
+  const totalsRow = rows.find((row) => row.isTotal);
+  const dataRows = rows.filter((row) => !row.isTotal);
+
+  // Sort data rows based on current sort column and direction
+  const sortedDataRows = [...dataRows].sort((a, b) => {
+    let aValue: string | number;
+    let bValue: string | number;
+    let aSecondary: number | undefined;
+    let bSecondary: number | undefined;
+
+    // Map column name to data property
+    switch (currentSortColumn.value) {
+      case "label": // Query/Function
+        aValue = a.label;
+        bValue = b.label;
+        break;
+      case "timeSeconds": // Time (s)
+        aValue = a.timeSeconds;
+        bValue = b.timeSeconds;
+        // Use percentage change as secondary sort for equal absolute values
+        aSecondary = a.timeDelta.hasData ? Math.abs(a.timeDelta.percentage) : 0;
+        bSecondary = b.timeDelta.hasData ? Math.abs(b.timeDelta.percentage) : 0;
+        break;
+      case "executions": // Executions
+        aValue = a.executions;
+        bValue = b.executions;
+        // Use percentage change as secondary sort for equal absolute values
+        aSecondary = a.executionsDelta.hasData ? Math.abs(a.executionsDelta.percentage) : 0;
+        bSecondary = b.executionsDelta.hasData ? Math.abs(b.executionsDelta.percentage) : 0;
+        break;
+      case "incrementalLoading": // Incremental loading (s)
+        aValue = a.incrementalLoading;
+        bValue = b.incrementalLoading;
+        // Use percentage change as secondary sort for equal absolute values
+        aSecondary = a.incrementalLoadingDelta.hasData ? Math.abs(a.incrementalLoadingDelta.percentage) : 0;
+        bSecondary = b.incrementalLoadingDelta.hasData ? Math.abs(b.incrementalLoadingDelta.percentage) : 0;
+        break;
+      case "timePercent": // Time (%)
+        aValue = a.timePercent.value;
+        bValue = b.timePercent.value;
+        break;
+      case "timeDelta": // Time delta
+        aValue = a.timeDelta.hasData ? a.timeDelta.value : -Infinity;
+        bValue = b.timeDelta.hasData ? b.timeDelta.value : -Infinity;
+        // Use percentage as secondary sort for equal delta values
+        aSecondary = a.timeDelta.hasData ? Math.abs(a.timeDelta.percentage) : 0;
+        bSecondary = b.timeDelta.hasData ? Math.abs(b.timeDelta.percentage) : 0;
+        break;
+      case "executionsDelta": // Executions delta
+        aValue = a.executionsDelta.hasData ? a.executionsDelta.value : -Infinity;
+        bValue = b.executionsDelta.hasData ? b.executionsDelta.value : -Infinity;
+        // Use percentage as secondary sort for equal delta values
+        aSecondary = a.executionsDelta.hasData ? Math.abs(a.executionsDelta.percentage) : 0;
+        bSecondary = b.executionsDelta.hasData ? Math.abs(b.executionsDelta.percentage) : 0;
+        break;
+      case "incrementalLoadingDelta": // Incremental loading delta
+        aValue = a.incrementalLoadingDelta.hasData ? a.incrementalLoadingDelta.value : -Infinity;
+        bValue = b.incrementalLoadingDelta.hasData ? b.incrementalLoadingDelta.value : -Infinity;
+        // Use percentage as secondary sort for equal delta values
+        aSecondary = a.incrementalLoadingDelta.hasData ? Math.abs(a.incrementalLoadingDelta.percentage) : 0;
+        bSecondary = b.incrementalLoadingDelta.hasData ? Math.abs(b.incrementalLoadingDelta.percentage) : 0;
+        break;
+      default:
+        aValue = a.label;
+        bValue = b.label;
+    }
+
+    // Handle string vs number comparison
+    let comparison;
+    if (typeof aValue === "string" && typeof bValue === "string") {
+      comparison = aValue.localeCompare(bValue);
+    } else {
+      comparison = (aValue as number) - (bValue as number);
+
+      // If primary values are equal and we have secondary sort criteria, use percentage change
+      if (comparison === 0 && aSecondary !== undefined && bSecondary !== undefined) {
+        comparison = bSecondary - aSecondary; // Higher percentage change comes first
+      }
+    }
+
+    return currentSortDirection.value === "asc" ? comparison : -comparison;
+  });
+
+  // Return totals row first, then sorted data rows
+  return totalsRow ? [totalsRow, ...sortedDataRows] : sortedDataRows;
+});
 const artifactData = computed(() => createArtifactData(data.value));
 
 function handlePerfettoClick(event: Event, link: string, title: string) {
@@ -38,13 +131,12 @@ function handlePerfettoClick(event: Event, link: string, title: string) {
 
 async function loadData() {
   const params = getUrlParams();
-  const {commit, base_commit, benchmark, scenario, sort_idx} = params;
+  const {commit, base_commit, benchmark, scenario} = params;
   const currentSelector: Selector = {
     commit,
     base_commit: base_commit ?? null,
     benchmark,
-    scenario,
-    sort_idx: sort_idx ?? "-2",
+    scenario
   };
   selector.value = currentSelector;
 
@@ -67,31 +159,21 @@ function populateUIData(responseData: SelfProfileResponse, state: Selector) {
   }
 }
 
-function sortTable(columnIndex: number, defaultDirection: number) {
-  if (!selector.value) return;
-
-  let newSortIdx: number;
-  if (Math.abs(Number(selector.value.sort_idx)) === columnIndex) {
-    newSortIdx = -Number(selector.value.sort_idx);
+function sortTable(columnName: string, defaultDirection: number) {
+  // Toggle direction if clicking the same column, otherwise use default direction
+  if (currentSortColumn.value === columnName) {
+    currentSortDirection.value =
+      currentSortDirection.value === "asc" ? "desc" : "asc";
   } else {
-    newSortIdx = defaultDirection * columnIndex;
+    currentSortColumn.value = columnName;
+    currentSortDirection.value = defaultDirection === 1 ? "asc" : "desc";
   }
-
-  const newSelector = {
-    ...selector.value,
-    sort_idx: newSortIdx,
-  };
-
-  navigateToUrlParams(createUrlWithAppendedParams(newSelector).searchParams);
 }
 
-function getSortAttributes(columnIndex: number) {
-  if (!selector.value) return {};
-
-  const currentSortIdx = Number(selector.value.sort_idx);
-  if (Math.abs(currentSortIdx) === columnIndex) {
+function getSortAttributes(columnName: string) {
+  if (currentSortColumn.value === columnName) {
     return {
-      "data-sorted-by": currentSortIdx > 0 ? "desc" : "asc",
+      "data-sorted-by": currentSortDirection.value
     };
   }
   return {};
@@ -126,16 +208,16 @@ onMounted(async () => {
           <a :href="downloadLinksData.baseLinks.crox">crox</a>,
           <a :href="downloadLinksData.baseLinks.codegen">codegen-schedule</a>
           (<a
-            href="#"
-            @click="
+          href="#"
+          @click="
               handlePerfettoClick(
                 $event,
                 downloadLinksData.baseLinks.perfetto.link,
                 downloadLinksData.baseLinks.perfetto.traceTitle
               )
             "
-            >Perfetto</a
-          >,
+        >Perfetto</a
+        >,
           <a :href="downloadLinksData.baseLinks.firefox">Firefox profiler</a>)
           results for {{ selector?.base_commit?.substring(0, 10) }} (base
           commit)
@@ -148,16 +230,16 @@ onMounted(async () => {
         <a :href="downloadLinksData.newLinks.crox">crox</a>,
         <a :href="downloadLinksData.newLinks.codegen">codegen-schedule</a>
         (<a
-          href="#"
-          @click="
+        href="#"
+        @click="
             handlePerfettoClick(
               $event,
               downloadLinksData.newLinks.perfetto.link,
               downloadLinksData.newLinks.perfetto.traceTitle
             )
           "
-          >Perfetto</a
-        >, <a :href="downloadLinksData.newLinks.firefox">Firefox profiler</a>)
+      >Perfetto</a
+      >, <a :href="downloadLinksData.newLinks.firefox">Firefox profiler</a>)
         results for {{ selector?.commit?.substring(0, 10) }} (new commit)
 
         <template v-if="downloadLinksData.diffLink">
@@ -185,18 +267,18 @@ onMounted(async () => {
       <h4>Artifact Size</h4>
       <table id="artifact-table">
         <thead>
-          <tr>
-            <th>Artifact</th>
-            <th>Size</th>
-            <th>Size delta</th>
-          </tr>
+        <tr>
+          <th>Artifact</th>
+          <th>Size</th>
+          <th>Size delta</th>
+        </tr>
         </thead>
         <tbody id="artifact-body">
-          <tr v-for="artifact in artifactData" :key="artifact.name">
-            <td style="text-align: center">{{ artifact.name }}</td>
-            <td>{{ artifact.size }}</td>
-            <td>{{ artifact.sizeDelta }}</td>
-          </tr>
+        <tr v-for="artifact in artifactData" :key="artifact.name">
+          <td style="text-align: center">{{ artifact.name }}</td>
+          <td>{{ artifact.size }}</td>
+          <td>{{ artifact.sizeDelta }}</td>
+        </tr>
         </tbody>
       </table>
 
@@ -208,91 +290,91 @@ onMounted(async () => {
 
       <table :class="{'hide-incr': !showIncr, 'hide-delta': !showDelta}">
         <thead>
-          <tr id="table-header">
-            <th
-              v-bind="getSortAttributes(1)"
-              data-sort-idx="1"
-              data-default-sort-dir="1"
+        <tr id="table-header">
+          <th
+            v-bind="getSortAttributes('label')"
+            data-sort-column="label"
+            data-default-sort-dir="1"
+          >
+            <a href="#" @click.prevent="sortTable('label', 1)">Query/Function</a>
+          </th>
+          <th
+            v-bind="getSortAttributes('timePercent')"
+            data-sort-column="timePercent"
+            data-default-sort-dir="-1"
+          >
+            <a href="#" @click.prevent="sortTable('timePercent', -1)">Time (%)</a>
+          </th>
+          <th
+            v-bind="getSortAttributes('timeSeconds')"
+            data-sort-column="timeSeconds"
+            data-default-sort-dir="-1"
+          >
+            <a href="#" @click.prevent="sortTable('timeSeconds', -1)">Time (s)</a>
+          </th>
+          <th
+            v-bind="getSortAttributes('timeDelta')"
+            class="delta"
+            data-sort-column="timeDelta"
+            data-default-sort-dir="-1"
+          >
+            <a href="#" @click.prevent="sortTable('timeDelta', -1)">Time delta</a>
+          </th>
+          <th
+            v-bind="getSortAttributes('executions')"
+            data-sort-column="executions"
+            data-default-sort-dir="-1"
+          >
+            <a href="#" @click.prevent="sortTable('executions', -1)">Executions</a>
+          </th>
+          <th
+            v-bind="getSortAttributes('executionsDelta')"
+            class="delta"
+            data-sort-column="executionsDelta"
+            data-default-sort-dir="-1"
+          >
+            <a href="#" @click.prevent="sortTable('executionsDelta', -1)"
+            >Executions delta</a
             >
-              <a href="#" @click.prevent="sortTable(1, 1)">Query/Function</a>
-            </th>
-            <th
-              v-bind="getSortAttributes(10)"
-              data-sort-idx="10"
-              data-default-sort-dir="-1"
+          </th>
+          <th
+            v-bind="getSortAttributes('incrementalLoading')"
+            class="incr"
+            data-sort-column="incrementalLoading"
+            data-default-sort-dir="-1"
+            title="Incremental loading time"
+          >
+            <a href="#" @click.prevent="sortTable('incrementalLoading', -1)"
+            >Incremental loading (s)</a
             >
-              <a href="#" @click.prevent="sortTable(10, -1)">Time (%)</a>
-            </th>
-            <th
-              v-bind="getSortAttributes(2)"
-              data-sort-idx="2"
-              data-default-sort-dir="-1"
+          </th>
+          <th
+            v-bind="getSortAttributes('incrementalLoadingDelta')"
+            class="incr delta"
+            data-sort-column="incrementalLoadingDelta"
+            data-default-sort-dir="-1"
+          >
+            <a href="#" @click.prevent="sortTable('incrementalLoadingDelta', -1)"
+            >Incremental loading delta</a
             >
-              <a href="#" @click.prevent="sortTable(2, -1)">Time (s)</a>
-            </th>
-            <th
-              v-bind="getSortAttributes(11)"
-              class="delta"
-              data-sort-idx="11"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable(11, -1)">Time delta</a>
-            </th>
-            <th
-              v-bind="getSortAttributes(5)"
-              data-sort-idx="5"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable(5, -1)">Executions</a>
-            </th>
-            <th
-              v-bind="getSortAttributes(12)"
-              class="delta"
-              data-sort-idx="12"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable(12, -1)"
-                >Executions delta</a
-              >
-            </th>
-            <th
-              v-bind="getSortAttributes(7)"
-              class="incr"
-              data-sort-idx="7"
-              data-default-sort-dir="-1"
-              title="Incremental loading time"
-            >
-              <a href="#" @click.prevent="sortTable(7, -1)"
-                >Incremental loading (s)</a
-              >
-            </th>
-            <th
-              v-bind="getSortAttributes(13)"
-              class="incr delta"
-              data-sort-idx="13"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable(13, -1)"
-                >Incremental loading delta</a
-              >
-            </th>
-          </tr>
+          </th>
+        </tr>
         </thead>
         <tbody id="primary-table">
-          <tr
-            v-for="(row, index) in tableData"
-            :key="index"
-            :class="{'total-row': row.isTotal}"
-          >
-            <td>{{ row.label }}</td>
-            <td :title="row.timePercent.title">{{ row.timePercent.value }}</td>
-            <td>{{ row.timeSeconds }}</td>
-            <td class="delta" v-html="row.timeDelta"></td>
-            <td>{{ row.executions }}</td>
-            <td class="delta" v-html="row.executionsDelta"></td>
-            <td class="incr">{{ row.incrementalLoading }}</td>
-            <td class="incr delta" v-html="row.incrementalLoadingDelta"></td>
-          </tr>
+        <tr
+          v-for="(row, index) in tableData"
+          :key="index"
+          :class="{'total-row': row.isTotal}"
+        >
+          <td>{{ row.label }}</td>
+          <td :title="row.timePercent.title">{{ row.timePercent.formatted }}</td>
+          <td>{{ row.timeSeconds.toFixed(3) }}</td>
+          <td class="delta" v-html="row.timeDelta.formatted"></td>
+          <td>{{ row.executions }}</td>
+          <td class="delta" v-html="row.executionsDelta.formatted"></td>
+          <td class="incr">{{ row.incrementalLoading.toFixed(3) }}</td>
+          <td class="incr delta" v-html="row.incrementalLoadingDelta.formatted"></td>
+        </tr>
         </tbody>
       </table>
     </div>
@@ -362,16 +444,16 @@ thead th {
   border-bottom: 1px solid black;
 }
 
-[data-sort-idx]::after {
+[data-sort-column]::after {
   content: "⇕";
 }
 
 [data-sorted-by="desc"]::after {
-  content: "▲";
+  content: "▼";
 }
 
 [data-sorted-by="asc"]::after {
-  content: "▼";
+  content: "▲";
 }
 
 code {
