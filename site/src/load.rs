@@ -481,7 +481,7 @@ fn sort_queue(
 }
 
 // Copy of Iterator::partition_in_place, which is currently unstable.
-fn partition_in_place<'a, I, T: 'a, P>(mut iter: I, mut predicate: P) -> usize
+pub fn partition_in_place<'a, I, T: 'a, P>(mut iter: I, mut predicate: P) -> usize
 where
     I: Sized + DoubleEndedIterator<Item = &'a mut T>,
     P: FnMut(&T) -> bool,

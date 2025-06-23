@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::future::Future;
 use tokio_postgres::config::Host;
 use tokio_postgres::Config;
@@ -16,7 +18,7 @@ enum TestDb {
 /// Represents a connection to a Postgres database that can be
 /// used in integration tests to test logic that interacts with
 /// a database.
-pub(crate) struct TestContext {
+pub struct TestContext {
     test_db: TestDb,
     // Pre-cached client to avoid creating unnecessary connections in tests
     client: Pool,
@@ -27,7 +29,7 @@ impl TestContext {
         let config: Config = db_url.parse().expect("Cannot parse connection string");
 
         // Create a new database that will be used for this specific test
-        let client = make_client(&db_url)
+        let client = make_client(db_url)
             .await
             .expect("Cannot connect to database");
         let db_name = format!("db{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
@@ -48,10 +50,6 @@ impl TestContext {
             // cfg-gated to keep non-unix builds happy.
             #[cfg(unix)]
             Host::Unix(_) => panic!("Unix sockets in Postgres connection string are not supported"),
-
-            // On non-unix targets the enum has no other variants.
-            #[cfg(not(unix))]
-            _ => unreachable!("non-TCP hosts cannot appear on this platform"),
         };
 
         // We need to connect to the database against, because Postgres doesn't allow
@@ -85,7 +83,7 @@ impl TestContext {
         }
     }
 
-    pub(crate) fn db_client(&self) -> &Pool {
+    pub fn db_client(&self) -> &Pool {
         &self.client
     }
 
@@ -114,7 +112,7 @@ impl TestContext {
 }
 
 /// Runs a test against an actual postgres database.
-pub(crate) async fn run_postgres_test<F, Fut>(f: F)
+pub async fn run_postgres_test<F, Fut>(f: F)
 where
     F: Fn(TestContext) -> Fut,
     Fut: Future<Output = anyhow::Result<TestContext>>,
@@ -141,7 +139,8 @@ where
 
 /// Runs a test against an actual database.
 /// Checks both Postgres and SQLite.
-pub(crate) async fn run_db_test<F, Fut>(f: F)
+#[allow(dead_code)]
+pub async fn run_db_test<F, Fut>(f: F)
 where
     F: Fn(TestContext) -> Fut + Clone,
     Fut: Future<Output = anyhow::Result<TestContext>>,

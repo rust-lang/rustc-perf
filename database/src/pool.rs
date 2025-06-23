@@ -1,7 +1,7 @@
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, CodegenBackend,
-    CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestStatus,
+    CodegenBackend, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -195,6 +195,20 @@ pub trait Connection: Send + Sync {
         &self,
         artifact_row_id: &ArtifactIdNumber,
     ) -> anyhow::Result<HashSet<CompileTestCase>>;
+
+    /// Gets the benchmark requests matching the status. Optionally provide the
+    /// number of days from whence to search from
+    async fn get_benchmark_requests_by_status(
+        &self,
+        statuses: &[BenchmarkRequestStatus],
+    ) -> anyhow::Result<Vec<BenchmarkRequest>>;
+
+    /// Update the status of a `benchmark_request`
+    async fn update_benchmark_request_status(
+        &mut self,
+        benchmark_request: &BenchmarkRequest,
+        benchmark_request_status: BenchmarkRequestStatus,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -406,7 +420,7 @@ mod tests {
 
             let try_benchmark_request = BenchmarkRequest::create_try(
                 "b-sha-2",
-                "parent-sha-2",
+                Some("parent-sha-2"),
                 32,
                 time,
                 BenchmarkRequestStatus::ArtifactsReady,
@@ -489,6 +503,102 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_benchmark_requests_by_status() {
+        // Ensure we get back the requests matching the status with no date
+        // limit
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let master_benchmark_request = BenchmarkRequest::create_master(
+                "a-sha-1",
+                "parent-sha-1",
+                42,
+                time,
+                BenchmarkRequestStatus::ArtifactsReady,
+                "llvm",
+                "",
+            );
+
+            let try_benchmark_request = BenchmarkRequest::create_try(
+                "b-sha-2",
+                Some("parent-sha-2"),
+                32,
+                time,
+                BenchmarkRequestStatus::Completed,
+                "cranelift",
+                "",
+            );
+
+            let release_benchmark_request = BenchmarkRequest::create_release(
+                "1.8.0",
+                time,
+                BenchmarkRequestStatus::ArtifactsReady,
+                "cranelift,llvm",
+                "",
+            );
+
+            let db = db.connection().await;
+            db.insert_benchmark_request(&master_benchmark_request).await;
+            db.insert_benchmark_request(&try_benchmark_request).await;
+            db.insert_benchmark_request(&release_benchmark_request)
+                .await;
+
+            let requests = db
+                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::ArtifactsReady])
+                .await
+                .unwrap();
+
+            assert_eq!(requests.len(), 2);
+            assert_eq!(requests[0].status, BenchmarkRequestStatus::ArtifactsReady);
+            assert_eq!(requests[1].status, BenchmarkRequestStatus::ArtifactsReady);
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn update_benchmark_request_status() {
+        // Insert one item into the database, change the status and then
+        // get the item back out again to ensure it has changed status
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let master_benchmark_request = BenchmarkRequest::create_master(
+                "a-sha-1",
+                "parent-sha-1",
+                42,
+                time,
+                BenchmarkRequestStatus::ArtifactsReady,
+                "llvm",
+                "",
+            );
+
+            let mut db = db.connection().await;
+            db.insert_benchmark_request(&master_benchmark_request).await;
+
+            db.update_benchmark_request_status(
+                &master_benchmark_request,
+                BenchmarkRequestStatus::InProgress,
+            )
+            .await
+            .unwrap();
+
+            let requests = db
+                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::InProgress])
+                .await
+                .unwrap();
+
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0].tag(), master_benchmark_request.tag());
+            assert_eq!(requests[0].status, BenchmarkRequestStatus::InProgress);
 
             Ok(ctx)
         })

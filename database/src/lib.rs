@@ -13,9 +13,7 @@ pub mod interpolate;
 pub mod metric;
 pub mod pool;
 pub mod selector;
-
-#[cfg(test)]
-mod tests;
+pub mod tests;
 
 pub use pool::{Connection, Pool};
 
@@ -799,7 +797,7 @@ pub struct ArtifactCollection {
     pub end_time: DateTime<Utc>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     ArtifactsReady,
@@ -818,12 +816,34 @@ impl fmt::Display for BenchmarkRequestStatus {
     }
 }
 
-#[derive(Debug)]
+impl<'a> tokio_postgres::types::FromSql<'a> for BenchmarkRequestStatus {
+    fn from_sql(
+        ty: &tokio_postgres::types::Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        // Decode raw bytes into &str with Postgres' own text codec
+        let s: &str = <&str as tokio_postgres::types::FromSql>::from_sql(ty, raw)?;
+
+        match s {
+            "waiting_for_artifacts" => Ok(Self::WaitingForArtifacts),
+            "artifacts_ready" => Ok(Self::ArtifactsReady),
+            "in_progress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            other => Err(format!("unknown benchmark_request_status '{other}'").into()),
+        }
+    }
+
+    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+        <&str as tokio_postgres::types::FromSql>::accepts(ty)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestType {
     /// A Try commit
     Try {
         sha: String,
-        parent_sha: String,
+        parent_sha: Option<String>,
         pr: u32,
     },
     /// A Master commit
@@ -864,7 +884,7 @@ impl fmt::Display for BenchmarkRequestType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkRequest {
     pub commit_type: BenchmarkRequestType,
     pub created_at: DateTime<Utc>,
@@ -896,7 +916,7 @@ impl BenchmarkRequest {
 
     pub fn create_try(
         sha: &str,
-        parent_sha: &str,
+        parent_sha: Option<&str>,
         pr: u32,
         created_at: DateTime<Utc>,
         status: BenchmarkRequestStatus,
@@ -907,7 +927,7 @@ impl BenchmarkRequest {
             commit_type: BenchmarkRequestType::Try {
                 pr,
                 sha: sha.to_string(),
-                parent_sha: parent_sha.to_string(),
+                parent_sha: parent_sha.map(|it| it.to_string()),
             },
             created_at,
             completed_at: None,
@@ -964,8 +984,11 @@ impl BenchmarkRequest {
 
     pub fn parent_sha(&self) -> Option<&str> {
         match &self.commit_type {
-            BenchmarkRequestType::Try { parent_sha, .. }
-            | BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
+            BenchmarkRequestType::Try { parent_sha, .. } => match parent_sha {
+                Some(parent_sha) => Some(parent_sha),
+                _ => None,
+            },
+            BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
             BenchmarkRequestType::Release { tag: _ } => None,
         }
     }
