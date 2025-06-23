@@ -1,6 +1,6 @@
 import {
   chromeProfileUrl,
-  processedSelfProfileRelativeUrl
+  processedSelfProfileRelativeUrl,
 } from "../../self-profile";
 
 export interface Selector {
@@ -81,15 +81,15 @@ export function fmtDeltaWithData(
   } else {
     text += `-`.padStart(10, " ");
   }
-  const formatted = `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(
+  const formatted = `<span class="${classes}" title="${from.toFixed(
     3
-  )} ≈ ${delta.toFixed(3)}">${text}</span>`;
+  )} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${text}</span>`;
 
   return {
     value: delta,
     percentage: pct,
     formatted,
-    hasData: true
+    hasData: true,
   };
 }
 
@@ -154,10 +154,10 @@ export function createDownloadLinksData(selector: Selector | null): {
         crox: "",
         codegen: "",
         perfetto: {link: "", traceTitle: ""},
-        firefox: ""
+        firefox: "",
       },
       diffLink: "",
-      localCommands: {base: "", new: "", diff: ""}
+      localCommands: {base: "", new: "", diff: ""},
     };
 
   const state = selector;
@@ -165,23 +165,23 @@ export function createDownloadLinksData(selector: Selector | null): {
     b.endsWith("-opt")
       ? "Opt"
       : b.endsWith("-doc")
-        ? "Doc"
-        : b.endsWith("-debug")
-          ? "Debug"
-          : b.endsWith("-check")
-            ? "Check"
-            : "???";
+      ? "Doc"
+      : b.endsWith("-debug")
+      ? "Debug"
+      : b.endsWith("-check")
+      ? "Check"
+      : "???";
   const benchName = (b: string) => b.replace(/-[^-]*$/, "");
   const scenarioFilter = (s: string) =>
     s == "full"
       ? "Full"
       : s == "incr-full"
-        ? "IncrFull"
-        : s == "incr-unchanged"
-          ? "IncrUnchanged"
-          : s.startsWith("incr-patched")
-            ? "IncrPatched"
-            : "???";
+      ? "IncrFull"
+      : s == "incr-unchanged"
+      ? "IncrUnchanged"
+      : s.startsWith("incr-patched")
+      ? "IncrPatched"
+      : "???";
 
   const createLinks = (commit: string) => ({
     raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&scenario=${state.scenario}`,
@@ -206,7 +206,7 @@ export function createDownloadLinksData(selector: Selector | null): {
     perfetto: perfettoProfilerData(commit, state.benchmark, state.scenario),
     firefox: `https://profiler.firefox.com/from-url/${encodeURIComponent(
       chromeProfileUrl(commit, state.benchmark, state.scenario)
-    )}/marker-chart/?v=5`
+    )}/marker-chart/?v=5`,
   });
 
   const baseLinks = state.base_commit ? createLinks(state.base_commit) : null;
@@ -220,11 +220,11 @@ export function createDownloadLinksData(selector: Selector | null): {
     base: state.base_commit
       ? `./target/release/collector profile_local cachegrind
                     +${state.base_commit} --exact-match ${benchName(
-        state.benchmark
-      )} --profiles
+          state.benchmark
+        )} --profiles
                 ${profile(state.benchmark)} --scenarios ${scenarioFilter(
-        state.scenario
-      )}`
+          state.scenario
+        )}`
       : "",
     new: `./target/release/collector profile_local cachegrind
                 +${state.commit} --exact-match ${benchName(
@@ -236,12 +236,12 @@ export function createDownloadLinksData(selector: Selector | null): {
     diff: state.base_commit
       ? `./target/release/collector profile_local cachegrind
                 +${state.base_commit} --rustc2 +${
-        state.commit
-      } --exact-match ${benchName(state.benchmark)} --profiles
+          state.commit
+        } --exact-match ${benchName(state.benchmark)} --profiles
                 ${profile(state.benchmark)} --scenarios ${scenarioFilter(
-        state.scenario
-      )}`
-      : ""
+          state.scenario
+        )}`
+      : "",
   };
 
   return {baseLinks, newLinks, diffLink, localCommands};
@@ -266,7 +266,9 @@ interface TableRowData {
   incrementalLoadingDelta: DeltaData;
 }
 
-export function createTableData(data: SelfProfileResponse | null): TableRowData[] {
+export function createTableData(
+  data: SelfProfileResponse | null
+): TableRowData[] {
   if (!data) return [];
   const result: TableRowData[] = [];
   const profile = data.profile;
@@ -280,32 +282,40 @@ export function createTableData(data: SelfProfileResponse | null): TableRowData[
     label: totals.label,
     timePercent:
       totals.percent_total_time < 0
-        ? {value: -1, formatted: "-", title: "No wall-time stat collected for this run"}
+        ? {
+            value: -1,
+            formatted: "-",
+            title: "No wall-time stat collected for this run",
+          }
         : {
-          value: totals.percent_total_time,
-          formatted: totals.percent_total_time.toFixed(2) + "%*",
-          title: "% of cpu-time stat"
-        },
+            value: totals.percent_total_time,
+            formatted: totals.percent_total_time.toFixed(2) + "%*",
+            title: "% of cpu-time stat",
+          },
     timeSeconds: toSeconds(totals.self_time),
     timeDelta: totalsDelta
       ? fmtDeltaWithData(
-        toSeconds(totals.self_time),
-        toSeconds(totalsDelta.self_time),
-        false
-      )
+          toSeconds(totals.self_time),
+          toSeconds(totalsDelta.self_time),
+          false
+        )
       : {value: 0, percentage: 0, formatted: "-", hasData: false},
     executions: totals.invocation_count,
     executionsDelta: totalsDelta
-      ? fmtDeltaWithData(totals.invocation_count, totalsDelta.invocation_count, true)
+      ? fmtDeltaWithData(
+          totals.invocation_count,
+          totalsDelta.invocation_count,
+          true
+        )
       : {value: 0, percentage: 0, formatted: "-", hasData: false},
     incrementalLoading: toSeconds(totals.incremental_load_time),
     incrementalLoadingDelta: totalsDelta
       ? fmtDeltaWithData(
-        toSeconds(totals.incremental_load_time),
-        toSeconds(totalsDelta.incremental_load_time),
-        false
-      )
-      : {value: 0, percentage: 0, formatted: "-", hasData: false}
+          toSeconds(totals.incremental_load_time),
+          toSeconds(totalsDelta.incremental_load_time),
+          false
+        )
+      : {value: 0, percentage: 0, formatted: "-", hasData: false},
   });
 
   // Add query data rows
@@ -316,32 +326,40 @@ export function createTableData(data: SelfProfileResponse | null): TableRowData[
       label: query.label,
       timePercent:
         query.percent_total_time < 0
-          ? {value: -1, formatted: "-", title: "No wall-time stat collected for this run"}
+          ? {
+              value: -1,
+              formatted: "-",
+              title: "No wall-time stat collected for this run",
+            }
           : {
-            value: query.percent_total_time,
-            formatted: query.percent_total_time.toFixed(2) + "%",
-            title: ""
-          },
+              value: query.percent_total_time,
+              formatted: query.percent_total_time.toFixed(2) + "%",
+              title: "",
+            },
       timeSeconds: toSeconds(query.self_time),
       timeDelta: queryDelta
         ? fmtDeltaWithData(
-          toSeconds(query.self_time),
-          toSeconds(queryDelta.self_time),
-          false
-        )
+            toSeconds(query.self_time),
+            toSeconds(queryDelta.self_time),
+            false
+          )
         : {value: 0, percentage: 0, formatted: "-", hasData: false},
       executions: query.invocation_count,
       executionsDelta: queryDelta
-        ? fmtDeltaWithData(query.invocation_count, queryDelta.invocation_count, true)
+        ? fmtDeltaWithData(
+            query.invocation_count,
+            queryDelta.invocation_count,
+            true
+          )
         : {value: 0, percentage: 0, formatted: "-", hasData: false},
       incrementalLoading: toSeconds(query.incremental_load_time),
       incrementalLoadingDelta: queryDelta
         ? fmtDeltaWithData(
-          toSeconds(query.incremental_load_time),
-          toSeconds(queryDelta.incremental_load_time),
-          false
-        )
-        : {value: 0, percentage: 0, formatted: "-", hasData: false}
+            toSeconds(query.incremental_load_time),
+            toSeconds(queryDelta.incremental_load_time),
+            false
+          )
+        : {value: 0, percentage: 0, formatted: "-", hasData: false},
     });
   });
 
@@ -357,6 +375,6 @@ export function createArtifactData(data: SelfProfileResponse | null): {
   return data.profile.artifact_sizes.map((artifact, idx) => ({
     name: artifact.label,
     size: artifact.bytes,
-    sizeDelta: data?.base_profile_delta?.artifact_sizes[idx]?.bytes || "0"
+    sizeDelta: data?.base_profile_delta?.artifact_sizes[idx]?.bytes || "0",
   }));
 }
