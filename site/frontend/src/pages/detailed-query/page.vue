@@ -20,9 +20,11 @@ const selector: Ref<Selector | null> = ref(null);
 const showIncr = ref(true);
 const showDelta = ref(true);
 
+type SortDirection = "asc" | "desc";
+
 // Client-side sorting state
 const currentSortColumn = ref<string>("timeSeconds");
-const currentSortDirection = ref<"asc" | "desc">("desc");
+const currentSortDirection = ref<SortDirection>("desc");
 
 // Computed properties for UI data
 const titleData = computed(() => createTitleData(selector.value));
@@ -223,14 +225,14 @@ function populateUIData(responseData: SelfProfileResponse, state: Selector) {
   }
 }
 
-function sortTable(columnName: string, defaultDirection: number) {
+function sortTable(columnName: string, defaultDirection: SortDirection) {
   // Toggle direction if clicking the same column, otherwise use default direction
   if (currentSortColumn.value === columnName) {
     currentSortDirection.value =
       currentSortDirection.value === "asc" ? "desc" : "asc";
   } else {
     currentSortColumn.value = columnName;
-    currentSortDirection.value = defaultDirection === 1 ? "asc" : "desc";
+    currentSortDirection.value = defaultDirection;
   }
 
   // Update URL with new sort state
@@ -401,6 +403,7 @@ loadData();
               data-default-sort-dir="1"
             >
               <a href="#" @click.prevent="sortTable('label', 1)"
+              <a href="#" @click.prevent="sortTable('label', 'asc')"
                 >Query/Function</a
               >
             </th>
@@ -409,7 +412,7 @@ loadData();
               data-sort-column="timePercent"
               data-default-sort-dir="-1"
             >
-              <a href="#" @click.prevent="sortTable('timePercent', -1)"
+              <a href="#" @click.prevent="sortTable('timePercent', 'desc')"
                 >Time (%)</a
               >
             </th>
@@ -418,7 +421,7 @@ loadData();
               data-sort-column="timeSeconds"
               data-default-sort-dir="-1"
             >
-              <a href="#" @click.prevent="sortTable('timeSeconds', -1)"
+              <a href="#" @click.prevent="sortTable('timeSeconds', 'desc')"
                 >Time (s)</a
               >
             </th>
@@ -428,7 +431,7 @@ loadData();
               data-sort-column="timeDelta"
               data-default-sort-dir="-1"
             >
-              <a href="#" @click.prevent="sortTable('timeDelta', -1)"
+              <a href="#" @click.prevent="sortTable('timeDelta', 'desc')"
                 >Time delta</a
               >
             </th>
@@ -437,7 +440,7 @@ loadData();
               data-sort-column="executions"
               data-default-sort-dir="-1"
             >
-              <a href="#" @click.prevent="sortTable('executions', -1)"
+              <a href="#" @click.prevent="sortTable('executions', 'desc')"
                 >Executions</a
               >
             </th>
@@ -447,7 +450,7 @@ loadData();
               data-sort-column="executionsDelta"
               data-default-sort-dir="-1"
             >
-              <a href="#" @click.prevent="sortTable('executionsDelta', -1)"
+              <a href="#" @click.prevent="sortTable('executionsDelta', 'desc')"
                 >Executions delta</a
               >
             </th>
@@ -458,7 +461,9 @@ loadData();
               data-default-sort-dir="-1"
               title="Incremental loading time"
             >
-              <a href="#" @click.prevent="sortTable('incrementalLoading', -1)"
+              <a
+                href="#"
+                @click.prevent="sortTable('incrementalLoading', 'desc')"
                 >Incremental loading (s)</a
               >
             </th>
@@ -470,7 +475,7 @@ loadData();
             >
               <a
                 href="#"
-                @click.prevent="sortTable('incrementalLoadingDelta', -1)"
+                @click.prevent="sortTable('incrementalLoadingDelta', 'desc')"
                 >Incremental loading delta</a
               >
             </th>
