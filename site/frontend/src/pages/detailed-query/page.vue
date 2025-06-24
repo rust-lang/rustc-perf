@@ -449,7 +449,7 @@ loadData();
                 @click.prevent="
                   changeSortParameters('incrementalLoading', 'desc')
                 "
-                >Incremental loading (s)</a
+                >Incr. loading (s)</a
               >
             </th>
             <th
@@ -461,7 +461,7 @@ loadData();
                 @click.prevent="
                   changeSortParameters('incrementalLoadingDelta', 'desc')
                 "
-                >Incremental loading delta</a
+                >Incr. loading delta</a
               >
             </th>
           </tr>
