@@ -216,13 +216,10 @@ async function loadData() {
 }
 
 function populateUIData(responseData: SelfProfileResponse, state: Selector) {
-  if (!responseData.base_profile_delta) {
-    showDelta.value = false;
-  }
-
-  if (!state.scenario.includes("incr-")) {
-    showIncr.value = false;
-  }
+  showDelta.value =
+    responseData.base_profile_delta !== undefined &&
+    responseData.base_profile_delta !== null;
+  showIncr.value = state.scenario.includes("incr-");
 }
 
 function changeSortParameters(
@@ -399,7 +396,7 @@ loadData();
       </p>
       <p>Executions do not include cached executions.</p>
 
-      <table :class="{'hide-incr': !showIncr, 'hide-delta': !showDelta}">
+      <table>
         <thead>
           <tr id="table-header">
             <th :class="getHeaderClass('label')">
@@ -421,7 +418,7 @@ loadData();
                 >Time (s)</a
               >
             </th>
-            <th :class="{[getHeaderClass('timeDelta')]: true, delta: true}">
+            <th v-if="showDelta" :class="getHeaderClass('timeDelta')">
               <a
                 href="#"
                 @click.prevent="changeSortParameters('timeDelta', 'desc')"
@@ -435,9 +432,7 @@ loadData();
                 >Executions</a
               >
             </th>
-            <th
-              :class="{[getHeaderClass('executionsDelta')]: true, delta: true}"
-            >
+            <th v-if="showDelta" :class="getHeaderClass('executionsDelta')">
               <a
                 href="#"
                 @click.prevent="changeSortParameters('executionsDelta', 'desc')"
@@ -445,10 +440,8 @@ loadData();
               >
             </th>
             <th
-              :class="{
-                [getHeaderClass('incrementalLoading')]: true,
-                incr: true,
-              }"
+              v-if="showIncr"
+              :class="getHeaderClass('incrementalLoading')"
               title="Incremental loading time"
             >
               <a
@@ -460,11 +453,8 @@ loadData();
               >
             </th>
             <th
-              :class="{
-                [getHeaderClass('incrementalLoadingDelta')]: true,
-                incr: true,
-                delta: true,
-              }"
+              v-if="showIncr && showDelta"
+              :class="getHeaderClass('incrementalLoadingDelta')"
             >
               <a
                 href="#"
@@ -487,15 +477,15 @@ loadData();
               {{ row.timePercent.formatted }}
             </td>
             <td>{{ row.timeSeconds.toFixed(3) }}</td>
-            <td class="delta">
+            <td v-if="showDelta">
               <DeltaComponent :delta="row.timeDelta" />
             </td>
             <td>{{ row.executions }}</td>
-            <td class="delta">
+            <td v-if="showDelta">
               <DeltaComponent :delta="row.executionsDelta" />
             </td>
-            <td class="incr">{{ row.incrementalLoading.toFixed(3) }}</td>
-            <td class="incr delta">
+            <td v-if="showIncr">{{ row.incrementalLoading.toFixed(3) }}</td>
+            <td v-if="showDelta && showIncr">
               <DeltaComponent :delta="row.incrementalLoadingDelta" />
             </td>
           </tr>
@@ -512,22 +502,6 @@ table {
 
 thead th {
   padding-left: 1em;
-}
-
-:global(body.hide-incr) .incr {
-  display: none;
-}
-
-:global(body.hide-delta) .delta {
-  display: none;
-}
-
-.hide-incr .incr {
-  display: none;
-}
-
-.hide-delta .delta {
-  display: none;
 }
 
 .positive {
