@@ -163,8 +163,7 @@ const tableData = computed(() => {
 });
 const artifactData = computed(() => createArtifactData(data.value));
 
-function handlePerfettoClick(event: Event, link: string, title: string) {
-  event.preventDefault();
+function handlePerfettoClick(link: string, title: string) {
   openTraceInPerfetto(link, title);
 }
 
@@ -316,16 +315,15 @@ function DeltaComponent({delta}: {delta: DeltaData | null}) {
           <a :href="downloadLinksData.baseLinks.crox">crox</a>,
           <a :href="downloadLinksData.baseLinks.codegen">codegen-schedule</a>
           (<a
-            href="#"
-            @click="
+          href="#"
+          @click.prevent="
               handlePerfettoClick(
-                $event,
                 downloadLinksData.baseLinks.perfetto.link,
                 downloadLinksData.baseLinks.perfetto.traceTitle
               )
             "
-            >Perfetto</a
-          >,
+        >Perfetto</a
+        >,
           <a :href="downloadLinksData.baseLinks.firefox">Firefox profiler</a>)
           results for {{ selector?.base_commit?.substring(0, 10) }} (base
           commit)
@@ -338,16 +336,15 @@ function DeltaComponent({delta}: {delta: DeltaData | null}) {
         <a :href="downloadLinksData.newLinks.crox">crox</a>,
         <a :href="downloadLinksData.newLinks.codegen">codegen-schedule</a>
         (<a
-          href="#"
-          @click="
+        href="#"
+        @click.prevent="
             handlePerfettoClick(
-              $event,
               downloadLinksData.newLinks.perfetto.link,
               downloadLinksData.newLinks.perfetto.traceTitle
             )
           "
-          >Perfetto</a
-        >, <a :href="downloadLinksData.newLinks.firefox">Firefox profiler</a>)
+      >Perfetto</a
+      >, <a :href="downloadLinksData.newLinks.firefox">Firefox profiler</a>)
         results for {{ selector?.commit?.substring(0, 10) }} (new commit)
 
         <template v-if="downloadLinksData.diffLink">
