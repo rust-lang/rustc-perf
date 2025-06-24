@@ -225,7 +225,10 @@ function populateUIData(responseData: SelfProfileResponse, state: Selector) {
   }
 }
 
-function sortTable(columnName: string, defaultDirection: SortDirection) {
+function changeSortParameters(
+  columnName: string,
+  defaultDirection: SortDirection
+) {
   // Toggle direction if clicking the same column, otherwise use default direction
   if (currentSortColumn.value === columnName) {
     currentSortDirection.value =
@@ -239,13 +242,15 @@ function sortTable(columnName: string, defaultDirection: SortDirection) {
   storeSortToUrl();
 }
 
-function getSortAttributes(columnName: string) {
-  if (currentSortColumn.value === columnName) {
-    return {
-      "data-sorted-by": currentSortDirection.value,
-    };
+function getHeaderClass(columnName: string): string {
+  if (columnName === currentSortColumn.value) {
+    if (currentSortDirection.value === "asc") {
+      return "header-sort-asc";
+    } else {
+      return "header-sort-desc";
+    }
   }
-  return {};
+  return "header-sort";
 }
 
 function DeltaComponent({delta}: {delta: DeltaData | null}) {
@@ -316,15 +321,15 @@ loadData();
           <a :href="downloadLinksData.baseLinks.crox">crox</a>,
           <a :href="downloadLinksData.baseLinks.codegen">codegen-schedule</a>
           (<a
-          href="#"
-          @click.prevent="
+            href="#"
+            @click.prevent="
               handlePerfettoClick(
                 downloadLinksData.baseLinks.perfetto.link,
                 downloadLinksData.baseLinks.perfetto.traceTitle
               )
             "
-        >Perfetto</a
-        >,
+            >Perfetto</a
+          >,
           <a :href="downloadLinksData.baseLinks.firefox">Firefox profiler</a>)
           results for {{ selector?.base_commit?.substring(0, 10) }} (base
           commit)
@@ -337,15 +342,15 @@ loadData();
         <a :href="downloadLinksData.newLinks.crox">crox</a>,
         <a :href="downloadLinksData.newLinks.codegen">codegen-schedule</a>
         (<a
-        href="#"
-        @click.prevent="
+          href="#"
+          @click.prevent="
             handlePerfettoClick(
               downloadLinksData.newLinks.perfetto.link,
               downloadLinksData.newLinks.perfetto.traceTitle
             )
           "
-      >Perfetto</a
-      >, <a :href="downloadLinksData.newLinks.firefox">Firefox profiler</a>)
+          >Perfetto</a
+        >, <a :href="downloadLinksData.newLinks.firefox">Firefox profiler</a>)
         results for {{ selector?.commit?.substring(0, 10) }} (new commit)
 
         <template v-if="downloadLinksData.diffLink">
@@ -397,85 +402,75 @@ loadData();
       <table :class="{'hide-incr': !showIncr, 'hide-delta': !showDelta}">
         <thead>
           <tr id="table-header">
-            <th
-              v-bind="getSortAttributes('label')"
-              data-sort-column="label"
-              data-default-sort-dir="1"
-            >
-              <a href="#" @click.prevent="sortTable('label', 1)"
-              <a href="#" @click.prevent="sortTable('label', 'asc')"
+            <th :class="getHeaderClass('label')">
+              <a href="#" @click.prevent="changeSortParameters('label', 'asc')"
                 >Query/Function</a
               >
             </th>
-            <th
-              v-bind="getSortAttributes('timePercent')"
-              data-sort-column="timePercent"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable('timePercent', 'desc')"
+            <th :class="getHeaderClass('timePercent')">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('timePercent', 'desc')"
                 >Time (%)</a
               >
             </th>
-            <th
-              v-bind="getSortAttributes('timeSeconds')"
-              data-sort-column="timeSeconds"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable('timeSeconds', 'desc')"
+            <th :class="getHeaderClass('timeSeconds')">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('timeSeconds', 'desc')"
                 >Time (s)</a
               >
             </th>
-            <th
-              v-bind="getSortAttributes('timeDelta')"
-              class="delta"
-              data-sort-column="timeDelta"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable('timeDelta', 'desc')"
+            <th :class="{[getHeaderClass('timeDelta')]: true, delta: true}">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('timeDelta', 'desc')"
                 >Time delta</a
               >
             </th>
-            <th
-              v-bind="getSortAttributes('executions')"
-              data-sort-column="executions"
-              data-default-sort-dir="-1"
-            >
-              <a href="#" @click.prevent="sortTable('executions', 'desc')"
+            <th :class="getHeaderClass('executions')">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('executions', 'desc')"
                 >Executions</a
               >
             </th>
             <th
-              v-bind="getSortAttributes('executionsDelta')"
-              class="delta"
-              data-sort-column="executionsDelta"
-              data-default-sort-dir="-1"
+              :class="{[getHeaderClass('executionsDelta')]: true, delta: true}"
             >
-              <a href="#" @click.prevent="sortTable('executionsDelta', 'desc')"
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('executionsDelta', 'desc')"
                 >Executions delta</a
               >
             </th>
             <th
-              v-bind="getSortAttributes('incrementalLoading')"
-              class="incr"
-              data-sort-column="incrementalLoading"
-              data-default-sort-dir="-1"
+              :class="{
+                [getHeaderClass('incrementalLoading')]: true,
+                incr: true,
+              }"
               title="Incremental loading time"
             >
               <a
                 href="#"
-                @click.prevent="sortTable('incrementalLoading', 'desc')"
+                @click.prevent="
+                  changeSortParameters('incrementalLoading', 'desc')
+                "
                 >Incremental loading (s)</a
               >
             </th>
             <th
-              v-bind="getSortAttributes('incrementalLoadingDelta')"
-              class="incr delta"
-              data-sort-column="incrementalLoadingDelta"
-              data-default-sort-dir="-1"
+              :class="{
+                [getHeaderClass('incrementalLoadingDelta')]: true,
+                incr: true,
+                delta: true,
+              }"
             >
               <a
                 href="#"
-                @click.prevent="sortTable('incrementalLoadingDelta', 'desc')"
+                @click.prevent="
+                  changeSortParameters('incrementalLoadingDelta', 'desc')
+                "
                 >Incremental loading delta</a
               >
             </th>
@@ -573,15 +568,15 @@ thead th {
   border-bottom: 1px solid black;
 }
 
-[data-sort-column]::after {
+.header-sort::after {
   content: "⇕";
 }
 
-[data-sorted-by="desc"]::after {
+.header-sort-desc::after {
   content: "▼";
 }
 
-[data-sorted-by="asc"]::after {
+.header-sort-asc::after {
   content: "▲";
 }
 
