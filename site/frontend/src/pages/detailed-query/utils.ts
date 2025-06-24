@@ -41,15 +41,7 @@ export function toSeconds(time: number): number {
   return time / 1000000000;
 }
 
-export function fmtDelta(
-  to: number,
-  delta: number,
-  isIntegralDelta: boolean
-): string {
-  return fmtDeltaWithData(to, delta, isIntegralDelta).formatted;
-}
-
-export function fmtDeltaWithData(
+export function createDelta(
   to: number,
   delta: number,
   isIntegralDelta: boolean
@@ -59,37 +51,12 @@ export function fmtDeltaWithData(
   if (from == to) {
     pct = 0;
   }
-  let classes;
-  if (pct > 1) {
-    classes = "positive";
-  } else if (pct < -1) {
-    classes = "negative";
-  } else {
-    classes = "neutral";
-  }
-  if (Math.abs(delta) <= 0.05) {
-    classes = "neutral";
-  }
-  let text;
-  if (isIntegralDelta) {
-    text = delta.toString();
-  } else {
-    text = delta.toFixed(3);
-  }
-  if (pct != Infinity && pct != -Infinity) {
-    text += `(${pct.toFixed(1)}%)`.padStart(10, " ");
-  } else {
-    text += `-`.padStart(10, " ");
-  }
-  const formatted = `<span class="${classes}" title="${from.toFixed(
-    3
-  )} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${text}</span>`;
 
   return {
-    value: delta,
+    delta,
+    from,
     percentage: pct,
-    formatted,
-    hasData: true,
+    isIntegral: isIntegralDelta,
   };
 }
 
@@ -247,11 +214,11 @@ export function createDownloadLinksData(selector: Selector | null): {
   return {baseLinks, newLinks, diffLink, localCommands};
 }
 
-interface DeltaData {
-  value: number;
+export interface DeltaData {
+  from: number;
+  delta: number;
   percentage: number;
-  formatted: string;
-  hasData: boolean;
+  isIntegral: boolean;
 }
 
 interface TableRowData {
@@ -259,11 +226,11 @@ interface TableRowData {
   label: string;
   timePercent: {value: number; formatted: string; title: string};
   timeSeconds: number;
-  timeDelta: DeltaData;
+  timeDelta: DeltaData | null;
   executions: number;
-  executionsDelta: DeltaData;
+  executionsDelta: DeltaData | null;
   incrementalLoading: number;
-  incrementalLoadingDelta: DeltaData;
+  incrementalLoadingDelta: DeltaData | null;
 }
 
 export function createTableData(
@@ -294,28 +261,24 @@ export function createTableData(
           },
     timeSeconds: toSeconds(totals.self_time),
     timeDelta: totalsDelta
-      ? fmtDeltaWithData(
+      ? createDelta(
           toSeconds(totals.self_time),
           toSeconds(totalsDelta.self_time),
           false
         )
-      : {value: 0, percentage: 0, formatted: "-", hasData: false},
+      : null,
     executions: totals.invocation_count,
     executionsDelta: totalsDelta
-      ? fmtDeltaWithData(
-          totals.invocation_count,
-          totalsDelta.invocation_count,
-          true
-        )
-      : {value: 0, percentage: 0, formatted: "-", hasData: false},
+      ? createDelta(totals.invocation_count, totalsDelta.invocation_count, true)
+      : null,
     incrementalLoading: toSeconds(totals.incremental_load_time),
     incrementalLoadingDelta: totalsDelta
-      ? fmtDeltaWithData(
+      ? createDelta(
           toSeconds(totals.incremental_load_time),
           toSeconds(totalsDelta.incremental_load_time),
           false
         )
-      : {value: 0, percentage: 0, formatted: "-", hasData: false},
+      : null,
   });
 
   // Add query data rows
@@ -338,28 +301,24 @@ export function createTableData(
             },
       timeSeconds: toSeconds(query.self_time),
       timeDelta: queryDelta
-        ? fmtDeltaWithData(
+        ? createDelta(
             toSeconds(query.self_time),
             toSeconds(queryDelta.self_time),
             false
           )
-        : {value: 0, percentage: 0, formatted: "-", hasData: false},
+        : null,
       executions: query.invocation_count,
       executionsDelta: queryDelta
-        ? fmtDeltaWithData(
-            query.invocation_count,
-            queryDelta.invocation_count,
-            true
-          )
-        : {value: 0, percentage: 0, formatted: "-", hasData: false},
+        ? createDelta(query.invocation_count, queryDelta.invocation_count, true)
+        : null,
       incrementalLoading: toSeconds(query.incremental_load_time),
       incrementalLoadingDelta: queryDelta
-        ? fmtDeltaWithData(
+        ? createDelta(
             toSeconds(query.incremental_load_time),
             toSeconds(queryDelta.incremental_load_time),
             false
           )
-        : {value: 0, percentage: 0, formatted: "-", hasData: false},
+        : null,
     });
   });
 

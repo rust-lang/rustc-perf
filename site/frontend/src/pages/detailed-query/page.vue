@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import {ref, onMounted, Ref, computed} from "vue";
+<script setup lang="tsx">
+import {h, ref, Ref, computed} from "vue";
 import {getUrlParams, changeUrl} from "../../utils/navigation";
 import {postMsgpack} from "../../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../../urls";
@@ -11,6 +11,7 @@ import {
   createDownloadLinksData,
   createTableData,
   createArtifactData,
+  DeltaData,
 } from "./utils";
 
 const loading = ref(true);
@@ -54,71 +55,83 @@ const tableData = computed(() => {
         aValue = a.timeSeconds;
         bValue = b.timeSeconds;
         // Use percentage change as secondary sort for equal absolute values
-        aSecondary = a.timeDelta.hasData ? Math.abs(a.timeDelta.percentage) : 0;
-        bSecondary = b.timeDelta.hasData ? Math.abs(b.timeDelta.percentage) : 0;
+        aSecondary =
+          a.timeDelta !== null ? Math.abs(a.timeDelta.percentage) : 0;
+        bSecondary =
+          b.timeDelta !== null ? Math.abs(b.timeDelta.percentage) : 0;
         break;
       case "executions": // Executions
         aValue = a.executions;
         bValue = b.executions;
         // Use percentage change as secondary sort for equal absolute values
-        aSecondary = a.executionsDelta.hasData
-          ? Math.abs(a.executionsDelta.percentage)
-          : 0;
-        bSecondary = b.executionsDelta.hasData
-          ? Math.abs(b.executionsDelta.percentage)
-          : 0;
+        aSecondary =
+          a.executionsDelta !== null
+            ? Math.abs(a.executionsDelta.percentage)
+            : 0;
+        bSecondary =
+          b.executionsDelta !== null
+            ? Math.abs(b.executionsDelta.percentage)
+            : 0;
         break;
       case "incrementalLoading": // Incremental loading (s)
         aValue = a.incrementalLoading;
         bValue = b.incrementalLoading;
         // Use percentage change as secondary sort for equal absolute values
-        aSecondary = a.incrementalLoadingDelta.hasData
-          ? Math.abs(a.incrementalLoadingDelta.percentage)
-          : 0;
-        bSecondary = b.incrementalLoadingDelta.hasData
-          ? Math.abs(b.incrementalLoadingDelta.percentage)
-          : 0;
+        aSecondary =
+          a.incrementalLoadingDelta !== null
+            ? Math.abs(a.incrementalLoadingDelta.percentage)
+            : 0;
+        bSecondary =
+          b.incrementalLoadingDelta !== null
+            ? Math.abs(b.incrementalLoadingDelta.percentage)
+            : 0;
         break;
       case "timePercent": // Time (%)
         aValue = a.timePercent.value;
         bValue = b.timePercent.value;
         break;
       case "timeDelta": // Time delta
-        aValue = a.timeDelta.hasData ? a.timeDelta.value : -Infinity;
-        bValue = b.timeDelta.hasData ? b.timeDelta.value : -Infinity;
+        aValue = a.timeDelta !== null ? a.timeDelta.delta : -Infinity;
+        bValue = b.timeDelta !== null ? b.timeDelta.delta : -Infinity;
         // Use percentage as secondary sort for equal delta values
-        aSecondary = a.timeDelta.hasData ? Math.abs(a.timeDelta.percentage) : 0;
-        bSecondary = b.timeDelta.hasData ? Math.abs(b.timeDelta.percentage) : 0;
+        aSecondary =
+          a.timeDelta !== null ? Math.abs(a.timeDelta.percentage) : 0;
+        bSecondary =
+          b.timeDelta !== null ? Math.abs(b.timeDelta.percentage) : 0;
         break;
       case "executionsDelta": // Executions delta
-        aValue = a.executionsDelta.hasData
-          ? a.executionsDelta.value
-          : -Infinity;
-        bValue = b.executionsDelta.hasData
-          ? b.executionsDelta.value
-          : -Infinity;
+        aValue =
+          a.executionsDelta !== null ? a.executionsDelta.delta : -Infinity;
+        bValue =
+          b.executionsDelta !== null ? b.executionsDelta.delta : -Infinity;
         // Use percentage as secondary sort for equal delta values
-        aSecondary = a.executionsDelta.hasData
-          ? Math.abs(a.executionsDelta.percentage)
-          : 0;
-        bSecondary = b.executionsDelta.hasData
-          ? Math.abs(b.executionsDelta.percentage)
-          : 0;
+        aSecondary =
+          a.executionsDelta !== null
+            ? Math.abs(a.executionsDelta.percentage)
+            : 0;
+        bSecondary =
+          b.executionsDelta !== null
+            ? Math.abs(b.executionsDelta.percentage)
+            : 0;
         break;
       case "incrementalLoadingDelta": // Incremental loading delta
-        aValue = a.incrementalLoadingDelta.hasData
-          ? a.incrementalLoadingDelta.value
-          : -Infinity;
-        bValue = b.incrementalLoadingDelta.hasData
-          ? b.incrementalLoadingDelta.value
-          : -Infinity;
+        aValue =
+          a.incrementalLoadingDelta !== null
+            ? a.incrementalLoadingDelta.delta
+            : -Infinity;
+        bValue =
+          b.incrementalLoadingDelta !== null
+            ? b.incrementalLoadingDelta.delta
+            : -Infinity;
         // Use percentage as secondary sort for equal delta values
-        aSecondary = a.incrementalLoadingDelta.hasData
-          ? Math.abs(a.incrementalLoadingDelta.percentage)
-          : 0;
-        bSecondary = b.incrementalLoadingDelta.hasData
-          ? Math.abs(b.incrementalLoadingDelta.percentage)
-          : 0;
+        aSecondary =
+          a.incrementalLoadingDelta !== null
+            ? Math.abs(a.incrementalLoadingDelta.percentage)
+            : 0;
+        bSecondary =
+          b.incrementalLoadingDelta !== null
+            ? Math.abs(b.incrementalLoadingDelta.percentage)
+            : 0;
         break;
       default:
         aValue = a.label;
@@ -237,6 +250,46 @@ function getSortAttributes(columnName: string) {
 onMounted(async () => {
   await loadData();
 });
+function DeltaComponent({delta}: {delta: DeltaData | null}) {
+  if (delta === null) {
+    return <span>-</span>;
+  }
+
+  let {from, percentage, isIntegral} = delta;
+  const to = from + delta.delta;
+
+  let classes: string;
+  if (percentage > 1) {
+    classes = "positive";
+  } else if (percentage < -1) {
+    classes = "negative";
+  } else {
+    classes = "neutral";
+  }
+  if (Math.abs(delta.delta) <= 0.05) {
+    classes = "neutral";
+  }
+  let text: string;
+  if (isIntegral) {
+    text = delta.delta.toString();
+  } else {
+    text = delta.delta.toFixed(3);
+  }
+  if (percentage != Infinity && percentage != -Infinity) {
+    text += `(${percentage.toFixed(1)}%)`.padStart(10, " ");
+  } else {
+    text += `-`.padStart(10, " ");
+  }
+
+  const title = `${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.delta.toFixed(
+    3
+  )}`;
+  return (
+    <span class={classes} title={title}>
+      {text}
+    </span>
+  );
+}
 </script>
 
 <template>
@@ -438,14 +491,17 @@ onMounted(async () => {
               {{ row.timePercent.formatted }}
             </td>
             <td>{{ row.timeSeconds.toFixed(3) }}</td>
-            <td class="delta" v-html="row.timeDelta.formatted"></td>
+            <td class="delta">
+              <DeltaComponent :delta="row.timeDelta" />
+            </td>
             <td>{{ row.executions }}</td>
-            <td class="delta" v-html="row.executionsDelta.formatted"></td>
+            <td class="delta">
+              <DeltaComponent :delta="row.executionsDelta" />
+            </td>
             <td class="incr">{{ row.incrementalLoading.toFixed(3) }}</td>
-            <td
-              class="incr delta"
-              v-html="row.incrementalLoadingDelta.formatted"
-            ></td>
+            <td class="incr delta">
+              <DeltaComponent :delta="row.incrementalLoadingDelta" />
+            </td>
           </tr>
         </tbody>
       </table>
