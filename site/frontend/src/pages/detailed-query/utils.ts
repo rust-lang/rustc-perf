@@ -14,10 +14,17 @@ export interface ProfileElement {
   label: string;
   self_time: number;
   percent_total_time: number;
-  number_of_cache_misses?: number;
-  number_of_cache_hits?: number;
+  number_of_cache_misses: number;
+  number_of_cache_hits: number;
   invocation_count: number;
-  blocked_time?: number;
+  blocked_time: number;
+  incremental_load_time: number;
+}
+
+export interface ProfileElementDelta {
+  self_time: number;
+  invocation_count: number;
+  number_of_cache_hits: number;
   incremental_load_time: number;
 }
 
@@ -34,7 +41,13 @@ export interface ProfileData {
 
 export interface SelfProfileResponse {
   profile: ProfileData;
-  base_profile_delta?: ProfileData;
+  base_profile_delta?: ProfileDataDelta;
+}
+
+export interface ProfileDataDelta {
+  totals: ProfileElementDelta;
+  query_data: ProfileElementDelta[];
+  artifact_sizes: ArtifactSize[];
 }
 
 export function toSeconds(time: number): number {
@@ -221,7 +234,7 @@ export interface DeltaData {
   isIntegral: boolean;
 }
 
-interface TableRowData {
+export interface TableRowData {
   isTotal: boolean;
   label: string;
   timePercent: {value: number; formatted: string; title: string};
@@ -258,7 +271,7 @@ export function createTableData(
 function createRowData(
   isTotal: boolean,
   value: ProfileElement,
-  delta?: ProfileElement
+  delta: ProfileElementDelta | undefined
 ): TableRowData {
   return {
     isTotal,
