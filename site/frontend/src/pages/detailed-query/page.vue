@@ -21,9 +21,10 @@ const showIncr = ref(true);
 const showDelta = ref(true);
 
 type SortDirection = "asc" | "desc";
+type ColumnName = keyof TableRowData;
 
 // Client-side sorting state
-const currentSortColumn = ref<string>("timeSeconds");
+const currentSortColumn = ref<ColumnName>("timeSeconds");
 const currentSortDirection = ref<SortDirection>("desc");
 
 // Computed properties for UI data
@@ -173,10 +174,10 @@ function loadSortFromUrl(urlParams: Dict<string>) {
   const sort = urlParams["sort"] ?? "-timeSeconds"; // Default to descending timeSeconds
   // Handle sort format: either "columnName" for asc or "-columnName" for desc
   if (sort.startsWith("-")) {
-    currentSortColumn.value = sort.substring(1);
+    currentSortColumn.value = sort.substring(1) as ColumnName;
     currentSortDirection.value = "desc";
   } else {
-    currentSortColumn.value = sort;
+    currentSortColumn.value = sort as ColumnName;
     currentSortDirection.value = "asc";
   }
 }
@@ -223,7 +224,7 @@ function populateUIData(responseData: SelfProfileResponse, state: Selector) {
 }
 
 function changeSortParameters(
-  columnName: string,
+  columnName: ColumnName,
   defaultDirection: SortDirection
 ) {
   // Toggle direction if clicking the same column, otherwise use default direction
@@ -239,7 +240,7 @@ function changeSortParameters(
   storeSortToUrl();
 }
 
-function getHeaderClass(columnName: string): string {
+function getHeaderClass(columnName: keyof TableRowData): string {
   if (columnName === currentSortColumn.value) {
     if (currentSortDirection.value === "asc") {
       return "header-sort-asc";
