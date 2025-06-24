@@ -567,17 +567,4 @@ code {
 #artifact-table td {
   padding: 0 0 0 20px;
 }
-
-button {
-  margin-right: 10px;
-  padding: 5px 10px;
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: #e0e0e0;
-  }
-}
 </style>
