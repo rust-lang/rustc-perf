@@ -246,9 +246,6 @@ function getSortAttributes(columnName: string) {
   return {};
 }
 
-onMounted(async () => {
-  await loadData();
-});
 function DeltaComponent({delta}: {delta: DeltaData | null}) {
   if (delta === null) {
     return <span>-</span>;
@@ -289,6 +286,8 @@ function DeltaComponent({delta}: {delta: DeltaData | null}) {
     </span>
   );
 }
+
+loadData();
 </script>
 
 <template>
