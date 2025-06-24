@@ -39,7 +39,7 @@ const tableData = computed(() => {
   const dataRows = rows.filter((row) => !row.isTotal);
 
   // Sort data rows based on current sort column and direction
-  const sortedDataRows = [...dataRows].sort((a, b) => {
+  const sortedDataRows = dataRows.sort((a, b) => {
     let aValue: string | number;
     let bValue: string | number;
     let aSecondary: number | undefined;
