@@ -504,6 +504,7 @@ pub mod self_profile {
         // Nanoseconds
         pub self_time: i64,
         pub invocation_count: i32,
+        pub number_of_cache_hits: i32,
         // Nanoseconds
         pub incremental_load_time: i64,
     }
