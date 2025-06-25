@@ -1,0 +1,24 @@
+---
+source: src/tests/krate/publish/dependencies.rs
+expression: crates
+---
+[
+  {
+    "name": "new_dep",
+    "vers": "1.0.0",
+    "deps": [
+      {
+        "name": "foo-dep",
+        "req": "^1.0.0",
+        "features": [],
+        "optional": false,
+        "default_features": true,
+        "target": null,
+        "kind": "normal"
+      }
+    ],
+    "cksum": "5503e734eb2fdc003688c5a275d4a6d8cd2a82135eb37befbda449feb8ea1800",
+    "features": {},
+    "yanked": false
+  }
+]

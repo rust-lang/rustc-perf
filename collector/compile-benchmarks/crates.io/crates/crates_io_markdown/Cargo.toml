@@ -1,0 +1,22 @@
+[package]
+name = "crates_io_markdown"
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rust-lang/crates.io"
+description = "crates.io markdown renderer"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+ammonia = "=4.1.0"
+comrak = { version = "=0.39.0", default-features = false, features = ["bon"] }
+htmlescape = "=0.3.1"
+url = "=2.5.4"
+
+[dev-dependencies]
+insta = "=1.43.1"
