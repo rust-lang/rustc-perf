@@ -1419,7 +1419,7 @@ where
         &self,
         statuses: &[BenchmarkRequestStatus],
         days: Option<i32>,
-    ) -> Vec<BenchmarkRequest> {
+    ) -> anyhow::Result<Vec<BenchmarkRequest>> {
         let mut query = "
                 SELECT
                     tag,
@@ -1441,15 +1441,14 @@ where
             // `::INT`, we can't do; `INTERVAL '$2 day'` which, while looking
             // natural is invalid.
             query += "AND created_at > current_date - $2::INT * INTERVAL '1 day'";
-            self.conn()
-                .query(&query, &[&statuses, &days])
-                .await
-                .unwrap()
+            self.conn().query(&query, &[&statuses, &days]).await
         } else {
-            self.conn().query(&query, &[&statuses]).await.unwrap()
-        };
+            self.conn().query(&query, &[&statuses]).await
+        }
+        .context("Failed to get benchmark requests")?;
 
-        rows.iter()
+        let benchmark_requests = rows
+            .iter()
             .map(|row| {
                 let tag = row.get::<_, String>(0);
                 let parent_sha = row.get::<_, Option<String>>(1);
@@ -1501,22 +1500,31 @@ where
                     ),
                 }
             })
-            .collect()
+            .collect();
+        Ok(benchmark_requests)
     }
 
     async fn update_benchmark_request_status(
         &mut self,
         benchmark_request: &BenchmarkRequest,
         benchmark_request_status: BenchmarkRequestStatus,
-    ) {
-        let tx = self.conn_mut().transaction().await.unwrap();
+    ) -> anyhow::Result<()> {
+        let tx = self
+            .conn_mut()
+            .transaction()
+            .await
+            .context("failed to start transaction")?;
+
         tx.execute(
             "UPDATE benchmark_request SET status = $1 WHERE tag = $2;",
             &[&benchmark_request_status, &benchmark_request.tag()],
         )
         .await
-        .unwrap();
-        tx.commit().await.unwrap();
+        .context("failed to execute UPDATE benchmark_request")?;
+
+        tx.commit().await.context("failed to commit transaction")?;
+
+        Ok(())
     }
 }
 

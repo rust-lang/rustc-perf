@@ -9,7 +9,7 @@ use tokio::time::{self, Duration};
 
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database
-async fn enqueue_master_commits(ctxt: &Arc<SiteCtxt>) {
+async fn enqueue_master_commits(ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     let conn = ctxt.conn().await;
     let master_commits = &ctxt.get_master_commits().commits;
     // TODO; delete at some point in the future
@@ -32,6 +32,7 @@ async fn enqueue_master_commits(ctxt: &Arc<SiteCtxt>) {
             conn.insert_benchmark_request(&benchmark).await;
         }
     }
+    Ok(())
 }
 
 // This function is split for testing purposes as mocking out `SiteCtxt` is non
@@ -86,7 +87,7 @@ fn get_next_benchmark_request(
 }
 
 /// Enqueue the job into the job_queue
-async fn enqueue_next_job(site_ctxt: &Arc<SiteCtxt>) {
+async fn enqueue_next_job(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
     let mut pending = conn
         .get_benchmark_requests_by_status(
@@ -96,35 +97,38 @@ async fn enqueue_next_job(site_ctxt: &Arc<SiteCtxt>) {
             ],
             None,
         )
-        .await;
+        .await?;
 
     // No requests to process or we have something currently in progress
     if pending
         .iter()
         .any(|r| r.status == BenchmarkRequestStatus::InProgress)
     {
-        return;
+        return Ok(());
     }
 
     // We draw back the last 30 days of completed requests
     let completed = conn
         .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed], Some(30))
-        .await;
+        .await?;
 
     // And we now see if we have another request that can be processed
     if let Some(next_request) = get_next_benchmark_request(&mut pending, &completed) {
         // TODO; we simply flip the status for now however this should also
         // create the relevant jobs in the `job_queue`
         conn.update_benchmark_request_status(&next_request, BenchmarkRequestStatus::InProgress)
-            .await;
+            .await?
     }
+
+    Ok(())
 }
 
 /// For queueing jobs, add the jobs you want to queue to this function
-async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) {
+async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     // Put the master commits into the `benchmark_requests` queue
-    enqueue_master_commits(site_ctxt).await;
-    enqueue_next_job(site_ctxt).await;
+    enqueue_master_commits(site_ctxt).await?;
+    enqueue_next_job(site_ctxt).await?;
+    Ok(())
 }
 
 /// Entry point for the cron
@@ -139,8 +143,10 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
             let guard = ctxt.read();
             guard.as_ref().cloned()
         } {
-            cron_enqueue_jobs(&ctxt_clone).await;
-            log::info!("Cron job executed at: {:?}", std::time::SystemTime::now());
+            match cron_enqueue_jobs(&ctxt_clone).await {
+                Ok(_) => log::info!("Cron job executed at: {:?}", std::time::SystemTime::now()),
+                Err(e) => log::error!("Cron job failed to execute {}", e),
+            }
         }
     }
 }

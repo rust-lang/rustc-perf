@@ -1272,7 +1272,7 @@ impl Connection for SqliteConnection {
         &self,
         _statuses: &[BenchmarkRequestStatus],
         _days: Option<i32>,
-    ) -> Vec<BenchmarkRequest> {
+    ) -> anyhow::Result<Vec<BenchmarkRequest>> {
         no_queue_implementation_abort!()
     }
 
@@ -1280,7 +1280,7 @@ impl Connection for SqliteConnection {
         &mut self,
         _benchmark_request: &BenchmarkRequest,
         _benchmark_request_status: BenchmarkRequestStatus,
-    ) {
+    ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
 }

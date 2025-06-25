@@ -190,14 +190,14 @@ pub trait Connection: Send + Sync {
         &self,
         statuses: &[BenchmarkRequestStatus],
         days: Option<i32>,
-    ) -> Vec<BenchmarkRequest>;
+    ) -> anyhow::Result<Vec<BenchmarkRequest>>;
 
     /// Update the status of a `benchmark_request`
     async fn update_benchmark_request_status(
         &mut self,
         benchmark_request: &BenchmarkRequest,
         benchmark_request_status: BenchmarkRequestStatus,
-    );
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
