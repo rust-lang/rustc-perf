@@ -9,7 +9,7 @@ use tokio::time::{self, Duration};
 
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database
-async fn enqueue_master_commits(
+async fn create_benchmark_request_master_commits(
     ctxt: &Arc<SiteCtxt>,
     conn: &dyn database::pool::Connection,
 ) -> anyhow::Result<()> {
@@ -136,7 +136,7 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
     // Put the master commits into the `benchmark_requests` queue
-    enqueue_master_commits(site_ctxt, &*conn).await?;
+    create_benchmark_request_master_commits(site_ctxt, &*conn).await?;
     enqueue_next_job(&mut *conn).await?;
     Ok(())
 }
