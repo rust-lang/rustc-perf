@@ -11,7 +11,7 @@ use tokio::time::{self, Duration};
 /// already in the database
 async fn enqueue_master_commits(
     ctxt: &Arc<SiteCtxt>,
-    conn: &Box<dyn database::pool::Connection>,
+    conn: &dyn database::pool::Connection,
 ) -> anyhow::Result<()> {
     let master_commits = &ctxt.get_master_commits().commits;
     // TODO; delete at some point in the future
@@ -94,7 +94,7 @@ fn get_next_benchmark_request<'a>(
 }
 
 /// Enqueue the job into the job_queue
-async fn enqueue_next_job(conn: &mut Box<dyn database::pool::Connection>) -> anyhow::Result<()> {
+async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::Result<()> {
     let mut pending = conn
         .get_benchmark_requests_by_status(
             &[
@@ -125,7 +125,7 @@ async fn enqueue_next_job(conn: &mut Box<dyn database::pool::Connection>) -> any
     if let Some(next_request) = get_next_benchmark_request(&mut pending, &mut completed_set) {
         // TODO; we simply flip the status for now however this should also
         // create the relevant jobs in the `job_queue`
-        conn.update_benchmark_request_status(&next_request, BenchmarkRequestStatus::InProgress)
+        conn.update_benchmark_request_status(next_request, BenchmarkRequestStatus::InProgress)
             .await?
     }
 
@@ -136,8 +136,8 @@ async fn enqueue_next_job(conn: &mut Box<dyn database::pool::Connection>) -> any
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
     // Put the master commits into the `benchmark_requests` queue
-    enqueue_master_commits(site_ctxt, &conn).await?;
-    enqueue_next_job(&mut conn).await?;
+    enqueue_master_commits(site_ctxt, &*conn).await?;
+    enqueue_next_job(&mut *conn).await?;
     Ok(())
 }
 
