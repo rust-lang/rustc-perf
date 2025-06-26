@@ -1,16 +1,18 @@
 use std::{str::FromStr, sync::Arc};
 
-use crate::load::SiteCtxt;
+use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use database::{BenchmarkRequest, BenchmarkRequestStatus};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashSet;
 use parking_lot::RwLock;
 use tokio::time::{self, Duration};
 
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database
-async fn enqueue_master_commits(ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
-    let conn = ctxt.conn().await;
+async fn enqueue_master_commits(
+    ctxt: &Arc<SiteCtxt>,
+    conn: &Box<dyn database::pool::Connection>,
+) -> anyhow::Result<()> {
     let master_commits = &ctxt.get_master_commits().commits;
     // TODO; delete at some point in the future
     let cutoff: chrono::DateTime<Utc> =
@@ -25,7 +27,7 @@ async fn enqueue_master_commits(ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
                 &master_commit.parent_sha,
                 pr,
                 master_commit.time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "",
                 "",
             );
@@ -35,65 +37,69 @@ async fn enqueue_master_commits(ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     Ok(())
 }
 
-// This function is split for testing purposes as mocking out `SiteCtxt` is non
-// trivial
+/// This function requires the sorts the priority order of the queue. It assumes
+/// that the only status is `ArtifactsReady`
+fn sort_benchmark_requests<'a>(
+    done: &mut HashSet<String>,
+    unordered_queue: &'a mut [BenchmarkRequest],
+) -> &'a [BenchmarkRequest] {
+    // A topological sort, where each "level" is additionally altered such that
+    // try commits come first, and then sorted by PR # (as a rough heuristic for
+    // earlier requests).
+
+    // Ensure the queue is ordered by status and the `commit_type`
+    unordered_queue.sort_unstable_by_key(|bmr| (bmr.status.rank(), bmr.commit_type.rank()));
+
+    let mut finished = 0;
+    while finished < unordered_queue.len() {
+        // The next level is those elements in the unordered queue which
+        // are ready to be benchmarked (i.e., those with parent in done or no
+        // parent).
+        let level_len = partition_in_place(unordered_queue[finished..].iter_mut(), |bmr| {
+            bmr.parent_sha().is_none_or(|parent| done.contains(parent))
+        });
+
+        // No commit is ready for benchmarking. This can happen e.g. when a try parent commit
+        // was forcefully removed from the master branch of rust-lang/rust. In this case, just
+        // let the commits be benchmarked in the current order that we have, these benchmark runs
+        // just won't have a parent result available.
+        if level_len == 0 {
+            return unordered_queue;
+        }
+
+        let level = &mut unordered_queue[finished..][..level_len];
+        level.sort_unstable_by_key(|bmr| {
+            (
+                bmr.parent_sha().is_some(),
+                *bmr.pr().unwrap_or(&0),
+                bmr.created_at,
+                bmr.tag().to_string(),
+            )
+        });
+        for c in level {
+            done.insert(c.tag().to_string());
+        }
+        finished += level_len;
+    }
+    unordered_queue
+}
+
 /// Given some pending requests and a list of completed requests determine if
 /// we have another request the we can process
-fn get_next_benchmark_request(
-    pending: &mut [BenchmarkRequest],
-    completed: &[BenchmarkRequest],
-) -> Option<BenchmarkRequest> {
-    // We now know we are only looking at commits which are possibly waiting
-    // for their parent to be complete.
-    pending.sort_by(|a, b| {
-        a.commit_type
-            .rank()
-            .cmp(&b.commit_type.rank())
-            .then_with(|| a.pr().unwrap_or(&0).cmp(b.pr().unwrap_or(&0)))
-            .then_with(|| a.created_at.cmp(&b.created_at))
-            .then_with(|| a.tag().cmp(b.tag()))
-    });
-
-    let completed_set: HashSet<String> = completed.iter().map(|r| r.tag().to_string()).collect();
-
-    let cutoff = Utc::now() - chrono::Duration::days(30);
-
-    let pending_by_sha: HashMap<String, &BenchmarkRequest> =
-        pending.iter().map(|r| (r.tag().to_string(), r)).collect();
-
-    for req in pending.iter() {
-        // release -> always ready
-        let parent_sha_opt = req.parent_sha();
-
-        let ready = match parent_sha_opt {
-            None => true,
-            Some(p_sha) => {
-                if completed_set.contains(p_sha) {
-                    true // parent is fresh & Completed
-                } else if let Some(parent_req) = pending_by_sha.get(p_sha) {
-                    parent_req.created_at < cutoff
-                } else {
-                    true // parent missing entirely
-                }
-            }
-        };
-
-        if ready {
-            return Some(req.clone());
-        }
-    }
-
-    None
+fn get_next_benchmark_request<'a>(
+    pending: &'a mut [BenchmarkRequest],
+    completed_set: &mut HashSet<String>,
+) -> Option<&'a BenchmarkRequest> {
+    sort_benchmark_requests(completed_set, pending).first()
 }
 
 /// Enqueue the job into the job_queue
-async fn enqueue_next_job(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
-    let mut conn = site_ctxt.conn().await;
+async fn enqueue_next_job(conn: &mut Box<dyn database::pool::Connection>) -> anyhow::Result<()> {
     let mut pending = conn
         .get_benchmark_requests_by_status(
             &[
                 BenchmarkRequestStatus::InProgress,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
             ],
             None,
         )
@@ -112,8 +118,11 @@ async fn enqueue_next_job(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
         .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed], Some(30))
         .await?;
 
+    let mut completed_set: HashSet<String> =
+        completed.iter().map(|r| r.tag().to_string()).collect();
+
     // And we now see if we have another request that can be processed
-    if let Some(next_request) = get_next_benchmark_request(&mut pending, &completed) {
+    if let Some(next_request) = get_next_benchmark_request(&mut pending, &mut completed_set) {
         // TODO; we simply flip the status for now however this should also
         // create the relevant jobs in the `job_queue`
         conn.update_benchmark_request_status(&next_request, BenchmarkRequestStatus::InProgress)
@@ -125,9 +134,10 @@ async fn enqueue_next_job(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
 
 /// For queueing jobs, add the jobs you want to queue to this function
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
+    let mut conn = site_ctxt.conn().await;
     // Put the master commits into the `benchmark_requests` queue
-    enqueue_master_commits(site_ctxt).await?;
-    enqueue_next_job(site_ctxt).await?;
+    enqueue_master_commits(site_ctxt, &conn).await?;
+    enqueue_next_job(&mut conn).await?;
     Ok(())
 }
 
@@ -154,10 +164,20 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Duration, Utc};
+    use chrono::{Datelike, Duration, TimeZone, Utc};
 
     fn days_ago(n: i64) -> chrono::DateTime<Utc> {
-        Utc::now() - Duration::days(n)
+        let timestamp = Utc::now() - Duration::days(n);
+        // zero out the seconds
+        Utc.with_ymd_and_hms(
+            timestamp.year(),
+            timestamp.month(),
+            timestamp.day(),
+            0,
+            0,
+            0,
+        )
+        .unwrap()
     }
 
     fn create_master(
@@ -192,21 +212,21 @@ mod tests {
     #[test]
     fn enqueue_next_job_no_jobs() {
         let mut pending = vec![];
-        let completed = vec![];
+        let mut completed = HashSet::new();
 
-        assert!(get_next_benchmark_request(&mut pending, &completed).is_none());
+        assert!(get_next_benchmark_request(&mut pending, &mut completed).is_none());
     }
 
     /// Parent completed < 30 d ago -> child is picked
     #[test]
     fn get_next_benchmark_request_completed_parent() {
         let parent = create_master("a", "x", 1, 5, BenchmarkRequestStatus::Completed);
-        let child = create_master("b", "a", 1, 1, BenchmarkRequestStatus::WaitingForParent);
+        let child = create_master("b", "a", 1, 1, BenchmarkRequestStatus::ArtifactsReady);
 
         let mut pending = vec![child.clone()];
-        let completed = vec![parent];
+        let mut completed = HashSet::from([parent.tag().to_string()]);
 
-        let picked = get_next_benchmark_request(&mut pending, &completed)
+        let picked = get_next_benchmark_request(&mut pending, &mut completed)
             .expect("child should be scheduled");
         assert_eq!(picked.tag(), "b");
     }
@@ -214,12 +234,12 @@ mod tests {
     /// Release (no parent) is always eligible
     #[test]
     fn get_next_benchmark_request_no_parent_release() {
-        let release = create_release("v1.2.3", 2, BenchmarkRequestStatus::WaitingForParent);
+        let release = create_release("v1.2.3", 2, BenchmarkRequestStatus::ArtifactsReady);
 
         let mut pending = vec![release.clone()];
-        let completed: Vec<BenchmarkRequest> = vec![];
+        let mut completed = HashSet::new();
 
-        let picked = get_next_benchmark_request(&mut pending, &completed)
+        let picked = get_next_benchmark_request(&mut pending, &mut completed)
             .expect("release should be scheduled immediately");
         assert_eq!(picked.tag(), "v1.2.3");
     }
@@ -227,13 +247,13 @@ mod tests {
     /// Parent exists but is > 30 d old -> parent gets picked
     #[test]
     fn get_next_benchmark_request_stale_parent() {
-        let parent = create_master("old", "x", 1, 45, BenchmarkRequestStatus::WaitingForParent);
-        let child = create_master("new", "old", 1, 1, BenchmarkRequestStatus::WaitingForParent);
+        let parent = create_master("old", "x", 1, 45, BenchmarkRequestStatus::ArtifactsReady);
+        let child = create_master("new", "old", 1, 1, BenchmarkRequestStatus::ArtifactsReady);
 
         let mut pending = vec![parent, child.clone()];
-        let completed: Vec<BenchmarkRequest> = vec![];
+        let mut completed = HashSet::new();
 
-        let picked = get_next_benchmark_request(&mut pending, &completed)
+        let picked = get_next_benchmark_request(&mut pending, &mut completed)
             .expect("child should be scheduled because parent is stale");
         assert_eq!(picked.tag(), "old");
     }
@@ -246,13 +266,13 @@ mod tests {
             "gone",
             42,
             1,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
 
         let mut pending = vec![orphan.clone()];
-        let completed: Vec<BenchmarkRequest> = vec![];
+        let mut completed = HashSet::new();
 
-        let picked = get_next_benchmark_request(&mut pending, &completed)
+        let picked = get_next_benchmark_request(&mut pending, &mut completed)
             .expect("orphan should be scheduled because parent is missing");
         assert_eq!(picked.tag(), "orphan");
     }
@@ -265,8 +285,8 @@ mod tests {
         let parent_try = create_try("parent_t", "x", 888, 4, BenchmarkRequestStatus::Completed);
 
         // Two releases, the older one should win overall
-        let rel_old = create_release("v0.8.0", 40, BenchmarkRequestStatus::WaitingForParent); // 40days old
-        let rel_new = create_release("v1.0.0", 10, BenchmarkRequestStatus::WaitingForParent);
+        let rel_old = create_release("v0.8.0", 40, BenchmarkRequestStatus::ArtifactsReady); // 40days old
+        let rel_new = create_release("v1.0.0", 10, BenchmarkRequestStatus::ArtifactsReady);
 
         // Ready masters (parents completed)
         let master_low_pr = create_master(
@@ -274,14 +294,14 @@ mod tests {
             "parent_m",
             1,
             12,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
         let master_high_pr = create_master(
             "m_high",
             "parent_m",
             7,
             8,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
 
         let blocked_parent = create_master(
@@ -289,14 +309,14 @@ mod tests {
             "gp",
             0,
             3,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
         let master_blocked = create_master(
             "blocked_c",
             "blocked_p",
             0,
             1,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
 
         // A try commit that is ready
@@ -305,7 +325,7 @@ mod tests {
             "parent_t",
             42,
             2,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
 
         let mut pending = vec![
@@ -319,9 +339,12 @@ mod tests {
         ];
 
         // Only the fresh parents go in the completed slice
-        let completed = vec![parent_master, parent_try];
+        let mut completed = HashSet::from([
+            parent_master.tag().to_string(),
+            parent_try.tag().to_string(),
+        ]);
 
-        let picked = get_next_benchmark_request(&mut pending, &completed)
+        let picked = get_next_benchmark_request(&mut pending, &mut completed)
             .expect("There should be an eligible job");
 
         // The oldest release ("v0.8.0") outranks everything else
@@ -338,33 +361,34 @@ mod tests {
 
         // Three PR-0 masters; the oldest ready should win as it's pr number is
         // 0 indicating that it was created before the other commits
-        let stale_parent = create_master(
+        let m_stale_parent = create_master(
             "stale_par",
             "z",
             0,
             45,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
         let m_stale = create_master(
             "m_stale",
             "stale_par",
             0,
             15,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         ); // blocked by the above
+
         let m_old_ready = create_master(
             "m_old",
             "parent_m",
             0,
             10,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
         let m_new_ready = create_master(
             "m_new",
             "missing",
             0,
             1,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         ); // parent missing -> ready
 
         // A PR-1 master that's also ready
@@ -373,24 +397,24 @@ mod tests {
             "parent_m",
             1,
             8,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
 
         // Blocked chain, PR is also 0 however the 40 day old commit will still
         // win.
-        let fresh_parent = create_master(
+        let m_fresh_parent = create_master(
             "fresh_par",
             "x",
             0,
-            3,
-            BenchmarkRequestStatus::WaitingForParent,
+            5,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
         let m_blocked = create_master(
             "m_blocked",
             "fresh_par",
             0,
             2,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
 
         // Ready try commit (lower priority than any master)
@@ -399,26 +423,61 @@ mod tests {
             "parent_t",
             7,
             2,
-            BenchmarkRequestStatus::WaitingForParent,
+            BenchmarkRequestStatus::ArtifactsReady,
         );
 
         let mut pending = vec![
-            m_blocked,
-            fresh_parent,
-            m_pr1,
+            m_stale,
+            m_stale_parent,
             m_new_ready,
             m_old_ready,
-            m_stale,
-            stale_parent,
+            m_blocked,
+            m_fresh_parent,
+            m_pr1,
             t_ready,
         ];
 
         // Only the fresh parents go in the completed slice
-        let completed = vec![parent_master, parent_try];
+        let mut completed = HashSet::from([
+            parent_master.tag().to_string(),
+            parent_try.tag().to_string(),
+        ]);
 
-        let picked = get_next_benchmark_request(&mut pending, &completed)
+        let picked = get_next_benchmark_request(&mut pending, &mut completed)
             .expect("there should be an eligible job");
 
-        assert_eq!(picked.tag(), "stale_par");
+        assert_eq!(picked.tag(), "m_old");
+    }
+
+    // This is the same ordering as `calculates_missing_correct(...)` in
+    // `load.rs`
+    #[test]
+    fn queue_ordering() {
+        let mut requests = vec![
+            create_master("foo", "bar", 77, 2, BenchmarkRequestStatus::ArtifactsReady),
+            create_master("123", "345", 11, 2, BenchmarkRequestStatus::ArtifactsReady),
+            create_try("baz", "foo", 1, 2, BenchmarkRequestStatus::ArtifactsReady),
+            create_try("yee", "rrr", 4, 2, BenchmarkRequestStatus::ArtifactsReady),
+        ];
+
+        let mut completed: HashSet<String> = HashSet::from([
+            "def".to_string(),
+            "bar".to_string(),
+            "345".to_string(),
+            "rrr".to_string(),
+        ]);
+
+        let sorted: Vec<BenchmarkRequest> = sort_benchmark_requests(&mut completed, &mut requests)
+            .iter()
+            .map(|it| it.clone())
+            .collect();
+        let expected = vec![
+            create_try("yee", "rrr", 4, 2, BenchmarkRequestStatus::ArtifactsReady),
+            create_master("123", "345", 11, 2, BenchmarkRequestStatus::ArtifactsReady),
+            create_master("foo", "bar", 77, 2, BenchmarkRequestStatus::ArtifactsReady),
+            create_try("baz", "foo", 1, 2, BenchmarkRequestStatus::ArtifactsReady),
+        ];
+
+        assert_eq!(sorted, expected);
     }
 }

@@ -404,7 +404,7 @@ mod tests {
                 "parent-sha-1",
                 42,
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "llvm",
                 "",
             );
@@ -414,7 +414,7 @@ mod tests {
                 "parent-sha-2",
                 32,
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "cranelift",
                 "",
             );
@@ -422,7 +422,7 @@ mod tests {
             let release_benchmark_request = BenchmarkRequest::create_release(
                 "1.8.0",
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "cranelift,llvm",
                 "",
             );
@@ -452,7 +452,7 @@ mod tests {
                 "parent-sha-1",
                 42,
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "llvm",
                 "",
             );
@@ -470,7 +470,7 @@ mod tests {
             let release_benchmark_request = BenchmarkRequest::create_release(
                 "1.8.0",
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "cranelift,llvm",
                 "",
             );
@@ -482,12 +482,13 @@ mod tests {
                 .await;
 
             let requests = db
-                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::WaitingForParent], None)
-                .await;
+                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::ArtifactsReady], None)
+                .await
+                .unwrap();
 
             assert_eq!(requests.len(), 2);
-            assert_eq!(requests[0].status, BenchmarkRequestStatus::WaitingForParent);
-            assert_eq!(requests[1].status, BenchmarkRequestStatus::WaitingForParent);
+            assert_eq!(requests[0].status, BenchmarkRequestStatus::ArtifactsReady);
+            assert_eq!(requests[1].status, BenchmarkRequestStatus::ArtifactsReady);
 
             Ok(ctx)
         })
@@ -509,7 +510,7 @@ mod tests {
                 "parent-sha-1",
                 42,
                 created_at,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "llvm",
                 "",
             );
@@ -545,7 +546,7 @@ mod tests {
             let release_benchmark_request = BenchmarkRequest::create_release(
                 "1.8.0",
                 old_created_at,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "cranelift,llvm",
                 "",
             );
@@ -563,7 +564,7 @@ mod tests {
             let requests = db
                 .get_benchmark_requests_by_status(
                     &[
-                        BenchmarkRequestStatus::WaitingForParent,
+                        BenchmarkRequestStatus::ArtifactsReady,
                         BenchmarkRequestStatus::InProgress,
                         BenchmarkRequestStatus::Completed,
                     ],
@@ -571,7 +572,7 @@ mod tests {
                 )
                 .await;
 
-            assert_eq!(requests.len(), 3);
+            assert_eq!(requests?.len(), 3);
 
             Ok(ctx)
         })
@@ -590,7 +591,7 @@ mod tests {
                 "parent-sha-1",
                 42,
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "llvm",
                 "",
             );
@@ -602,11 +603,13 @@ mod tests {
                 &master_benchmark_request,
                 BenchmarkRequestStatus::InProgress,
             )
-            .await;
+            .await
+            .unwrap();
 
             let requests = db
                 .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::InProgress], None)
-                .await;
+                .await
+                .unwrap();
 
             assert_eq!(requests.len(), 1);
             assert_eq!(requests[0].tag(), master_benchmark_request.tag());

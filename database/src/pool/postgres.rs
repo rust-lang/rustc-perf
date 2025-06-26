@@ -1582,7 +1582,7 @@ impl<'a> FromSql<'a> for BenchmarkRequestStatus {
 
         match s {
             "waiting_for_artifacts" => Ok(Self::WaitingForArtifacts),
-            "waiting_for_parent" => Ok(Self::WaitingForParent),
+            "artifacts_ready" => Ok(Self::ArtifactsReady),
             "in_progress" => Ok(Self::InProgress),
             "completed" => Ok(Self::Completed),
             other => Err(format!("unknown benchmark_request_status '{other}'").into()),

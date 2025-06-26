@@ -801,24 +801,35 @@ pub struct ArtifactCollection {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestStatus {
-    WaitingForArtifacts,
-    WaitingForParent,
     InProgress,
     Completed,
+    ArtifactsReady,
+    WaitingForArtifacts,
 }
 
 impl fmt::Display for BenchmarkRequestStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BenchmarkRequestStatus::WaitingForArtifacts => write!(f, "waiting_for_artifacts"),
-            BenchmarkRequestStatus::WaitingForParent => write!(f, "waiting_for_parent"),
-            BenchmarkRequestStatus::InProgress => write!(f, "in_progress"),
             BenchmarkRequestStatus::Completed => write!(f, "completed"),
+            BenchmarkRequestStatus::InProgress => write!(f, "in_progress"),
+            BenchmarkRequestStatus::ArtifactsReady => write!(f, "artifacts_ready"),
+            BenchmarkRequestStatus::WaitingForArtifacts => write!(f, "waiting_for_artifacts"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+impl BenchmarkRequestStatus {
+    pub fn rank(&self) -> u8 {
+        match self {
+            BenchmarkRequestStatus::Completed => 0,
+            BenchmarkRequestStatus::InProgress => 1,
+            BenchmarkRequestStatus::ArtifactsReady => 2,
+            BenchmarkRequestStatus::WaitingForArtifacts => 3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestType {
     /// A Try commit
     Try {
@@ -876,7 +887,7 @@ impl fmt::Display for BenchmarkRequestType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkRequest {
     pub commit_type: BenchmarkRequestType,
     pub created_at: DateTime<Utc>,
