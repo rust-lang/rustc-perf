@@ -276,7 +276,7 @@ might be optimized.
 
 If you are going to use any of the profilers that rely on line numbers
 (OProfile, Cachegrind, Callgrind, DHAT, Massif or Bytehound) use the following
-`config.toml` file for your local build.
+`bootstrap.toml` file for your local build.
 ```
 [llvm]
 release-debuginfo = true
