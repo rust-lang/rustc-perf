@@ -10,6 +10,7 @@ use crate::compile::execute::{
 };
 use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
+use crate::CollectorCtx;
 use anyhow::Context;
 use database::CollectionId;
 use futures::stream::FuturesUnordered;
@@ -42,7 +43,7 @@ pub struct BenchProcessor<'a> {
     benchmark: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     artifact: &'a database::ArtifactId,
-    artifact_row_id: database::ArtifactIdNumber,
+    collector_ctx: &'a CollectorCtx,
     is_first_collection: bool,
     is_self_profile: bool,
     tries: u8,
@@ -54,7 +55,7 @@ impl<'a> BenchProcessor<'a> {
         conn: &'a mut dyn database::Connection,
         benchmark: &'a BenchmarkName,
         artifact: &'a database::ArtifactId,
-        artifact_row_id: database::ArtifactIdNumber,
+        collector_ctx: &'a CollectorCtx,
         is_self_profile: bool,
     ) -> Self {
         // Check we have `perf` or (`xperf.exe` and `tracelog.exe`)  available.
@@ -78,7 +79,7 @@ impl<'a> BenchProcessor<'a> {
             conn,
             benchmark,
             artifact,
-            artifact_row_id,
+            collector_ctx,
             is_first_collection: true,
             is_self_profile,
             tries: 0,
@@ -108,7 +109,7 @@ impl<'a> BenchProcessor<'a> {
         for (stat, value) in stats.iter() {
             buf.push(self.conn.record_statistic(
                 collection,
-                self.artifact_row_id,
+                self.collector_ctx.artifact_row_id,
                 self.benchmark.0.as_str(),
                 profile,
                 scenario,
@@ -123,7 +124,13 @@ impl<'a> BenchProcessor<'a> {
     }
 
     pub async fn measure_rustc(&mut self, toolchain: &Toolchain) -> anyhow::Result<()> {
-        rustc::measure(self.conn, toolchain, self.artifact, self.artifact_row_id).await
+        rustc::measure(
+            self.conn,
+            toolchain,
+            self.artifact,
+            self.collector_ctx.artifact_row_id,
+        )
+        .await
     }
 }
 
@@ -252,7 +259,7 @@ impl Processor for BenchProcessor<'_> {
                     .map(|profile| {
                         self.conn.record_raw_self_profile(
                             profile.collection,
-                            self.artifact_row_id,
+                            self.collector_ctx.artifact_row_id,
                             self.benchmark.0.as_str(),
                             profile.profile,
                             profile.scenario,
@@ -270,7 +277,7 @@ impl Processor for BenchProcessor<'_> {
 
                     // FIXME: Record codegen backend in the self profile name
                     let prefix = PathBuf::from("self-profile")
-                        .join(self.artifact_row_id.0.to_string())
+                        .join(self.collector_ctx.artifact_row_id.0.to_string())
                         .join(self.benchmark.0.as_str())
                         .join(profile.profile.to_string())
                         .join(profile.scenario.to_id());
