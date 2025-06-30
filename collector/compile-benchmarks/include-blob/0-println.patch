@@ -1,0 +1,11 @@
+diff --git a/src/main.rs b/src/main.rs
+index 9cb1671e..fc854410 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -6,5 +6,5 @@ fn main() {
+         "Binary blob last element: {}",
+         BLOB_BINARY[BLOB_BINARY.len() - 1]
+     );
+-    println!("String blob: {BLOB_STRING}");
++    println!("String blob contents: {BLOB_STRING}");
+ }

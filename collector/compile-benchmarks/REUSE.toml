@@ -131,6 +131,11 @@ SPDX-FileCopyrightText = "The image-rs Developers"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
+path = "include-blob/**"
+SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "inflate/**"
 SPDX-FileCopyrightText = "inflate contributors"
 SPDX-License-Identifier = "MIT"
