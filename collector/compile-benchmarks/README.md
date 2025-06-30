@@ -79,6 +79,8 @@ compiler in interesting ways.
 - **externs**: A large number of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
 - **helloworld-tiny**: A trivial program optimized with flags that should reduce binary size.
   Gives a lower bound on compiled binary size.
+- **include-blob**: Stress test for including binary and string blobs with `include_str!` and
+  `include_bytes!`. Its build script generates 30 MiB blobs that are then included into the program.
 - **issue-46449**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
 - **issue-58319**: A small program that caused [poor
