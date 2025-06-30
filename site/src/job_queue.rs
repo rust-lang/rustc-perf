@@ -2,7 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
-use database::{BenchmarkRequest, BenchmarkRequestStatus};
+use database::{BenchmarkRequest, BenchmarkRequestStatus, BenchmarkRequestType};
 use hashbrown::HashSet;
 use parking_lot::RwLock;
 use tokio::time::{self, Duration};
@@ -37,8 +37,20 @@ async fn create_benchmark_request_master_commits(
     Ok(())
 }
 
-/// This function requires the sorts the priority order of the queue. It assumes
-/// that the only status is `ArtifactsReady`
+/// For getting the priority of the request type;
+/// - Release
+/// - Master
+/// - Try
+fn benchmark_request_commit_type_rank(commit_type: &BenchmarkRequestType) -> u8 {
+    match commit_type {
+        BenchmarkRequestType::Release { .. } => 0,
+        BenchmarkRequestType::Master { .. } => 1,
+        BenchmarkRequestType::Try { .. } => 2,
+    }
+}
+
+/// Sorts the priority order of the queue. It assumes that the only status
+/// is `ArtifactsReady`
 fn sort_benchmark_requests<'a>(
     done: &mut HashSet<String>,
     unordered_queue: &'a mut [BenchmarkRequest],
@@ -47,8 +59,15 @@ fn sort_benchmark_requests<'a>(
     // try commits come first, and then sorted by PR # (as a rough heuristic for
     // earlier requests).
 
+    // Ensure all the items are ready to be sorted, if they are not this is
+    // undefined behaviour
+    assert!(unordered_queue
+        .iter()
+        .all(|bmr| bmr.status == BenchmarkRequestStatus::ArtifactsReady));
+
     // Ensure the queue is ordered by status and the `commit_type`
-    unordered_queue.sort_unstable_by_key(|bmr| (bmr.status.rank(), bmr.commit_type.rank()));
+    unordered_queue
+        .sort_unstable_by_key(|bmr| (benchmark_request_commit_type_rank(&bmr.commit_type)));
 
     let mut finished = 0;
     while finished < unordered_queue.len() {
@@ -105,7 +124,12 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
         )
         .await?;
 
-    // No requests to process or we have something currently in progress
+    // No requests to process
+    if pending.is_empty() {
+        return Ok(());
+    }
+
+    // We have something currently in progress
     if pending
         .iter()
         .any(|r| r.status == BenchmarkRequestStatus::InProgress)
@@ -113,9 +137,9 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
         return Ok(());
     }
 
-    // We draw back the last 30 days of completed requests
+    // We draw back all completed requests
     let completed = conn
-        .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed], Some(30))
+        .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed], None)
         .await?;
 
     let mut completed_set: HashSet<String> =
@@ -329,13 +353,13 @@ mod tests {
         );
 
         let mut pending = vec![
-            rel_new,
             master_high_pr,
             master_low_pr,
             master_blocked,
             blocked_parent,
             try_ready,
             rel_old,
+            rel_new,
         ];
 
         // Only the fresh parents go in the completed slice

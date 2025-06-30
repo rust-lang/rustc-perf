@@ -818,17 +818,6 @@ impl fmt::Display for BenchmarkRequestStatus {
     }
 }
 
-impl BenchmarkRequestStatus {
-    pub fn rank(&self) -> u8 {
-        match self {
-            BenchmarkRequestStatus::Completed => 0,
-            BenchmarkRequestStatus::InProgress => 1,
-            BenchmarkRequestStatus::ArtifactsReady => 2,
-            BenchmarkRequestStatus::WaitingForArtifacts => 3,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestType {
     /// A Try commit
@@ -861,18 +850,6 @@ impl BenchmarkRequestType {
                 pr: _,
             } => "master",
             BenchmarkRequestType::Release { tag: _ } => "release",
-        }
-    }
-
-    /// For getting the priority of the request type;
-    /// - Release
-    /// - Master
-    /// - Try
-    pub fn rank(&self) -> u8 {
-        match self {
-            BenchmarkRequestType::Release { .. } => 0,
-            BenchmarkRequestType::Master { .. } => 1,
-            BenchmarkRequestType::Try { .. } => 2,
         }
     }
 }
