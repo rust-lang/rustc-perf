@@ -4,18 +4,19 @@ use collector::api::next_artifact;
 use std::sync::Arc;
 
 pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Response {
+    // Temporarily disabled while we migrate to a new collector machine
     // Prefer benchmarking released artifacts first
-    match ctxt.missing_published_artifacts().await {
-        Ok(next_artifact) => {
-            if let Some(next_artifact) = next_artifact.into_iter().next() {
-                log::debug!("next_artifact: {next_artifact}");
-                return next_artifact::Response {
-                    artifact: Some(next_artifact::NextArtifact::Release(next_artifact)),
-                };
-            }
-        }
-        Err(error) => log::error!("Failed to fetch missing artifacts: {error:?}"),
-    }
+    // match ctxt.missing_published_artifacts().await {
+    //     Ok(next_artifact) => {
+    //         if let Some(next_artifact) = next_artifact.into_iter().next() {
+    //             log::debug!("next_artifact: {next_artifact}");
+    //             return next_artifact::Response {
+    //                 artifact: Some(next_artifact::NextArtifact::Release(next_artifact)),
+    //             };
+    //         }
+    //     }
+    //     Err(error) => log::error!("Failed to fetch missing artifacts: {error:?}"),
+    // }
 
     let next_commit = ctxt.missing_commits().await.into_iter().next();
 
