@@ -1,0 +1,60 @@
+language: rust
+rust: stable
+sudo: required
+dist: trusty
+
+git:
+  depth: 1
+
+cache:
+  directories:
+    - $HOME/.cargo/bin/
+
+matrix:
+  include:
+    - env: TARGET=x86_64-unknown-linux-gnu
+           ALT=i686-unknown-linux-gnu
+    - env: TARGET=x86_64-apple-darwin
+           ALT=i686-apple-darwin
+      os: osx
+
+    - env: TARGET=x86_64-unknown-linux-gnu
+           ALT=i686-unknown-linux-gnu
+      rust: beta
+
+    - env: TARGET=x86_64-unknown-linux-gnu
+           ALT=i686-unknown-linux-gnu
+      rust: nightly
+      install:
+        - mdbook --help || cargo install mdbook --force
+      script:
+        - cargo test
+        - cargo doc --no-deps
+        - sh src/ci/dox.sh
+      after_success: |
+        [ $TRAVIS_BRANCH = master ] &&
+        [ $TRAVIS_PULL_REQUEST = false ] &&
+        [ $(uname -s) = Linux ] &&
+        pip install ghp-import --user &&
+        $HOME/.local/bin/ghp-import -n target/doc &&
+        git push -qf https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages 2>&1 >/dev/null
+
+  exclude:
+    - rust: stable
+
+before_script:
+  - rustup target add $ALT
+script:
+  - cargo test
+
+env:
+  global:
+    - secure: "hWheSLilMM4DXChfSy2XsDlLw338X2o+fw8bE590xxU2TzngFW8GUfq7lGfZEp/l4SNNIS6ROU/igyttCZtxZMANZ4aMQZR5E8Fp4yPOyE1pZLDH/LdQVXnROsfburQJeq+GIYIbZ01Abzh5ClpgLg5KX0H627uj063zZ7Ljo/w="
+
+notifications:
+  email:
+    on_success: never
+addons:
+  apt:
+    packages:
+      - gcc-multilib

@@ -140,6 +140,9 @@ Rust code being written today.
 
 - **encoding**: An old crate providing character encoding support. Contains
   some large tables.
+- **cargo**: An old version of Cargo, corresponding to the 1.24.0 Rust release.
+  Two of its dependencies (`socket2` and `url`) had to be vendored, to provide patches
+  so that it can compile with old rustc.
 - **futures**: v0.1.0 of the popular `futures` crate, which was used by many
   Rust programs. Newer versions of this crate (e.g. v0.3.21 from February 2021)
   contain very little code, instead relying on sub-crates. This makes them less

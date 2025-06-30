@@ -28,6 +28,21 @@ SPDX-License-Identifier = "MPL-2.0"
 SPDX-FileCopyrightText = "Bodil Stokke"
 
 [[annotations]]
+path = "cargo/**"
+SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = "cargo/socket2-0.2.3/**"
+SPDX-FileCopyrightText = "Alex Crichton"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = "cargo/url-1.5.1/**"
+SPDX-FileCopyrightText = "The rust-url developers"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "cargo-0.87.1/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
