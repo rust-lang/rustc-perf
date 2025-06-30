@@ -1,11 +1,11 @@
 diff --git a/src/main.rs b/src/main.rs
-index 9cb1671e..fc854410 100644
+index 3f07848e..f0c0dc70 100644
 --- a/src/main.rs
 +++ b/src/main.rs
-@@ -6,5 +6,5 @@ fn main() {
-         "Binary blob last element: {}",
-         BLOB_BINARY[BLOB_BINARY.len() - 1]
-     );
--    println!("String blob: {BLOB_STRING}");
-+    println!("String blob contents: {BLOB_STRING}");
+@@ -3,5 +3,5 @@ const BLOB_STRING: &str = include_str!(concat!(env!("OUT_DIR"), "/blob-string"))
+
+ fn main() {
+     println!("Binary blob: {BLOB_BINARY:?}");
+-    println!("String blob: {BLOB_STRING:?}");
++    println!("String blob contents: {BLOB_STRING:?}");
  }
