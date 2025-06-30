@@ -151,8 +151,6 @@ Rust code being written today.
   obligation processing.
 - **regex**: See above. This is an older version of the crate.
 - **piston-image**: See above. This is an older version of the `image` crate.
-- **style-servo**: An old version of Servo's `style` crate. A large crate, and
-  one used by old versions of Firefox. Built with `--features=gecko`.
 - **syn**: See above. This is an older version (0.11.11) of the crate.
 - **tokio-webpush-simple**: A simple web server built with a very old version
   of tokio. Uses futures a lot, but doesn't use `async`/`await`.

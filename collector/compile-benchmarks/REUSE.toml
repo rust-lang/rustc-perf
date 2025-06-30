@@ -241,11 +241,6 @@ SPDX-FileCopyrightText = "stm32-rs contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = "style-servo/**"
-SPDX-FileCopyrightText = "The Servo Project Developers"
-SPDX-License-Identifier = "MPL-2.0"
-
-[[annotations]]
 path = "syn/**"
 SPDX-FileCopyrightText = "syn contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
