@@ -1420,6 +1420,8 @@ where
         statuses: &[BenchmarkRequestStatus],
         days: Option<i32>,
     ) -> anyhow::Result<Vec<BenchmarkRequest>> {
+        // There is a small period of time where a try commit's parent_sha
+        // could be NULL, this query will filter that out.
         let mut query = "
                 SELECT
                     tag,
@@ -1432,7 +1434,8 @@ where
                     backends,
                     profiles
                 FROM benchmark_request
-                WHERE status = ANY($1) "
+                WHERE status = ANY($1)
+                AND (commit_type <> 'try' OR parent_sha IS NOT NULL) "
             .to_string();
 
         // Optionally add interval
