@@ -24,7 +24,7 @@ async fn enqueue_master_commits(ctxt: &Arc<SiteCtxt>) {
                 &master_commit.parent_sha,
                 pr,
                 master_commit.time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "",
                 "",
             );

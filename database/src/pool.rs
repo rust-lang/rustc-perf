@@ -389,7 +389,7 @@ mod tests {
                 "parent-sha-1",
                 42,
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "llvm",
                 "",
             );
@@ -399,7 +399,7 @@ mod tests {
                 "parent-sha-2",
                 32,
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "cranelift",
                 "",
             );
@@ -407,7 +407,7 @@ mod tests {
             let release_benchmark_request = BenchmarkRequest::create_release(
                 "1.8.0",
                 time,
-                BenchmarkRequestStatus::WaitingForParent,
+                BenchmarkRequestStatus::ArtifactsReady,
                 "cranelift,llvm",
                 "",
             );

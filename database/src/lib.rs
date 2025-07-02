@@ -802,7 +802,7 @@ pub struct ArtifactCollection {
 #[derive(Debug)]
 pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
-    WaitingForParent,
+    ArtifactsReady,
     InProgress,
     Completed,
 }
@@ -811,7 +811,7 @@ impl fmt::Display for BenchmarkRequestStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BenchmarkRequestStatus::WaitingForArtifacts => write!(f, "waiting_for_artifacts"),
-            BenchmarkRequestStatus::WaitingForParent => write!(f, "waiting_for_parent"),
+            BenchmarkRequestStatus::ArtifactsReady => write!(f, "artifacts_ready"),
             BenchmarkRequestStatus::InProgress => write!(f, "in_progress"),
             BenchmarkRequestStatus::Completed => write!(f, "completed"),
         }
