@@ -14,7 +14,8 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
 
     let mut versions = index
         .artifacts()
-        .filter(|a| a.starts_with("1.") || a.starts_with("beta"))
+        // Do not consider patch releases, only consider 1.XYZ.0
+        .filter(|a| (a.starts_with("1.") && a.ends_with(".0")) || a.starts_with("beta"))
         .collect::<Vec<_>>();
     versions.sort_by(|a, b| {
         match (
