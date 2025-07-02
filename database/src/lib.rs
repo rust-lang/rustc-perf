@@ -14,8 +14,7 @@ pub mod metric;
 pub mod pool;
 pub mod selector;
 
-#[cfg(test)]
-mod tests;
+pub mod tests;
 
 pub use pool::{Connection, Pool};
 

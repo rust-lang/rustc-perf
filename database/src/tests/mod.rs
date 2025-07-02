@@ -16,7 +16,7 @@ enum TestDb {
 /// Represents a connection to a Postgres database that can be
 /// used in integration tests to test logic that interacts with
 /// a database.
-pub(crate) struct TestContext {
+pub struct TestContext {
     test_db: TestDb,
     // Pre-cached client to avoid creating unnecessary connections in tests
     client: Pool,
@@ -85,7 +85,7 @@ impl TestContext {
         }
     }
 
-    pub(crate) fn db_client(&self) -> &Pool {
+    pub fn db_client(&self) -> &Pool {
         &self.client
     }
 
@@ -114,7 +114,7 @@ impl TestContext {
 }
 
 /// Runs a test against an actual postgres database.
-pub(crate) async fn run_postgres_test<F, Fut>(f: F)
+pub async fn run_postgres_test<F, Fut>(f: F)
 where
     F: Fn(TestContext) -> Fut,
     Fut: Future<Output = anyhow::Result<TestContext>>,
@@ -141,7 +141,7 @@ where
 
 /// Runs a test against an actual database.
 /// Checks both Postgres and SQLite.
-pub(crate) async fn run_db_test<F, Fut>(f: F)
+pub async fn run_db_test<F, Fut>(f: F)
 where
     F: Fn(TestContext) -> Fut + Clone,
     Fut: Future<Output = anyhow::Result<TestContext>>,
