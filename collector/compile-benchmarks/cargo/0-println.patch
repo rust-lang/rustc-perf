@@ -1,0 +1,13 @@
+diff --git a/src/cargo/lib.rs b/src/cargo/lib.rs
+index f20118b8..350d8e47 100755
+--- a/src/cargo/lib.rs
++++ b/src/cargo/lib.rs
+@@ -98,6 +98,8 @@ impl fmt::Display for VersionInfo {
+             }
+         };
+ 
++        println!("testing");
++
+         if let Some(ref cfg) = self.cfg_info {
+             if let Some(ref ci) = cfg.commit_info {
+                 write!(f, " ({} {})",

@@ -1,0 +1,21 @@
+
+[package]
+name = "url-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies.url]
+path = ".."
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+
+[[bin]]
+name = "parse"
+path = "fuzzers/parse.rs"
+
+[workspace]
+members = ["."]
