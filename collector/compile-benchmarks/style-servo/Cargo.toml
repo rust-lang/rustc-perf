@@ -1,6 +1,0 @@
-[workspace]
-members = ["components/style"]
-
-[patch.crates-io]
-cssparser = { path = "./rust-cssparser" }
-cssparser-macros = { path = "./cssparser-macros" }
