@@ -6,7 +6,8 @@ resolver = "2"
 [workspace.dependencies]
 anyhow = "1"
 chrono = "0.4"
-clap = "4.1"
+# this is latest version with small number of deps
+clap = "=4.1.14"
 env_logger = "0.10"
 hashbrown = "0.14"
 log = "0.4"
