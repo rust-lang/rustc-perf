@@ -1,11 +1,12 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, CodegenBackend, CollectionId,
     Commit, CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::path::PathBuf;
@@ -1049,18 +1050,13 @@ impl Connection for SqliteConnection {
     }
 
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        let did_modify = self
-            .raw_ref()
+        self.raw_ref()
             .execute(
                 "update collector_progress set end = strftime('%s','now') \
-                where aid = ? and step = ? and start is not null and end is null;",
+                where aid = ? and step = ? and start is not null;",
                 params![&aid.0, &step],
             )
-            .unwrap()
-            == 1;
-        if !did_modify {
-            log::error!("did not end {} for {:?}", step, aid);
-        }
+            .unwrap();
     }
 
     async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
@@ -1255,6 +1251,33 @@ impl Connection for SqliteConnection {
 
     async fn insert_benchmark_request(&self, _benchmark_request: &BenchmarkRequest) {
         panic!("Queueing for SQLite has not been implemented, if you are wanting to test the queueing functionality please use postgres. Presuming you have docker installed, at the root of the repo you can run `make start-postgres` to spin up a postgres database.");
+    }
+
+    async fn get_compile_test_cases_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<CompileTestCase>> {
+        Ok(self
+            .raw_ref()
+            .prepare_cached(
+                "SELECT DISTINCT crate, profile, scenario, backend, target
+                FROM pstat_series
+                WHERE id IN (
+                    SELECT DISTINCT series
+                    FROM pstat
+                    WHERE aid = ?
+                );",
+            )?
+            .query_map(params![artifact_row_id.0], |row| {
+                Ok(CompileTestCase {
+                    benchmark: Benchmark::from(row.get::<_, String>(0)?.as_str()),
+                    profile: row.get::<_, String>(1)?.parse().unwrap(),
+                    scenario: row.get::<_, String>(2)?.parse().unwrap(),
+                    backend: row.get::<_, String>(3)?.parse().unwrap(),
+                    target: row.get::<_, String>(4)?.parse().unwrap(),
+                })
+            })?
+            .collect::<Result<_, _>>()?)
     }
 }
 
