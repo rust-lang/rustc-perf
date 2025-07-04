@@ -1,6 +1,6 @@
 {
-  "artifact": "binary",
+  "artifact": "library",
   "category": "primary",
-  "cargo_opts": "--bin triagebot",
-  "touch_file": "src/main.rs"
+  "cargo_opts": "--lib",
+  "touch_file": "src/lib.rs"
 }
