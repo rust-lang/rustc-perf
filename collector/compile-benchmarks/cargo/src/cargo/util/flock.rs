@@ -222,9 +222,9 @@ impl Filesystem {
                         &|| f.lock_exclusive())?;
             }
             State::Shared => {
-                acquire(config, msg, &path,
-                        &|| f.try_lock_shared(),
-                        &|| f.lock_shared())?;
+                // acquire(config, msg, &path,
+                //         &|| f.try_lock_shared(),
+                //         &|| f.lock_shared())?;
             }
             State::Unlocked => {}
 
