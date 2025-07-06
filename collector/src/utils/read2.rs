@@ -31,11 +31,12 @@ mod imp {
     use std::os::unix::prelude::*;
     use std::process::{ChildStderr, ChildStdout};
 
+    /// Returns (stdout, stderr).
     pub fn read2(
         mut out_pipe: ChildStdout,
         mut err_pipe: ChildStderr,
         data: &mut dyn FnMut(bool, &mut Vec<u8>, bool),
-    ) -> io::Result<()> {
+    ) -> io::Result<(Vec<u8>, Vec<u8>)> {
         unsafe {
             libc::fcntl(out_pipe.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK);
             libc::fcntl(err_pipe.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK);
@@ -93,7 +94,7 @@ mod imp {
             }
             data(true, &mut out, out_done);
         }
-        Ok(())
+        Ok((out, err))
     }
 }
 
@@ -120,7 +121,7 @@ mod imp {
         out_pipe: ChildStdout,
         err_pipe: ChildStderr,
         data: &mut dyn FnMut(bool, &mut Vec<u8>, bool),
-    ) -> io::Result<()> {
+    ) -> io::Result<(Vec<u8>, Vec<u8>)> {
         let mut out = Vec::new();
         let mut err = Vec::new();
 
@@ -151,7 +152,7 @@ mod imp {
                 }
             }
 
-            Ok(())
+            Ok((out, err))
         }
     }
 

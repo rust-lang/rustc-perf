@@ -177,11 +177,12 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
         .spawn()
         .with_context(|| format!("failed to spawn process for cmd: {:?}", cmd))?;
 
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-    let mut stdout_writer = std::io::LineWriter::new(std::io::stdout());
-    let mut stderr_writer = std::io::LineWriter::new(std::io::stderr());
-    read2::read2(
+    let mut stdout_writer = std::io::LineWriter::new(std::io::stdout().lock());
+    let mut stderr_writer = std::io::LineWriter::new(std::io::stderr().lock());
+
+    let mut stdout_written = 0;
+    let mut stderr_written = 0;
+    let (stdout, stderr) = read2::read2(
         child.stdout.take().unwrap(),
         child.stderr.take().unwrap(),
         &mut |is_stdout, buffer, _is_done| {
@@ -189,15 +190,15 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
             if log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
                 use std::io::Write;
                 if is_stdout {
-                    stdout_writer.write_all(&buffer[stdout.len()..]).unwrap();
+                    stdout_writer.write_all(&buffer[stdout_written..]).unwrap();
                 } else {
-                    stderr_writer.write_all(&buffer[stderr.len()..]).unwrap();
+                    stderr_writer.write_all(&buffer[stderr_written..]).unwrap();
                 }
             }
             if is_stdout {
-                stdout = buffer.clone();
+                stdout_written = buffer.len();
             } else {
-                stderr = buffer.clone();
+                stderr_written = buffer.len();
             }
         },
     )?;
