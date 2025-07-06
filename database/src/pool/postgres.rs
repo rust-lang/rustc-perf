@@ -1,9 +1,9 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest, CodegenBackend,
-    CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
-    Scenario, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
+    BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, CollectionId, Commit, CommitType,
+    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -1443,6 +1443,113 @@ where
             })
             .collect())
     }
+
+    async fn get_benchmark_requests_by_status(
+        &self,
+        statuses: &[BenchmarkRequestStatus],
+    ) -> anyhow::Result<Vec<BenchmarkRequest>> {
+        // There is a small period of time where a try commit's parent_sha
+        // could be NULL, this query will filter that out.
+        let query = "
+                SELECT
+                    tag,
+                    parent_sha,
+                    pr,
+                    commit_type,
+                    status,
+                    created_at,
+                    completed_at,
+                    backends,
+                    profiles
+                FROM benchmark_request
+                WHERE status = ANY($1)"
+            .to_string();
+
+        let rows = self
+            .conn()
+            .query(&query, &[&statuses])
+            .await
+            .context("Failed to get benchmark requests")?;
+
+        let benchmark_requests = rows
+            .iter()
+            .map(|row| {
+                let tag = row.get::<_, &str>(0);
+                let parent_sha = row.get::<_, Option<&str>>(1);
+                let pr = row.get::<_, Option<i32>>(2);
+                let commit_type = row.get::<_, &str>(3);
+                let status = row.get::<_, BenchmarkRequestStatus>(4);
+                let created_at = row.get::<_, DateTime<Utc>>(5);
+                let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
+                let backends = row.get::<_, &str>(7);
+                let profiles = row.get::<_, &str>(8);
+
+                match commit_type {
+                    "try" => {
+                        let mut try_benchmark = BenchmarkRequest::create_try(
+                            tag,
+                            parent_sha,
+                            pr.unwrap() as u32,
+                            created_at,
+                            status,
+                            backends,
+                            profiles,
+                        );
+                        try_benchmark.completed_at = completed_at;
+                        try_benchmark
+                    }
+                    "master" => {
+                        let mut master_benchmark = BenchmarkRequest::create_master(
+                            tag,
+                            parent_sha.unwrap(),
+                            pr.unwrap() as u32,
+                            created_at,
+                            status,
+                            backends,
+                            profiles,
+                        );
+                        master_benchmark.completed_at = completed_at;
+                        master_benchmark
+                    }
+                    "release" => {
+                        let mut release_benchmark = BenchmarkRequest::create_release(
+                            tag, created_at, status, backends, profiles,
+                        );
+                        release_benchmark.completed_at = completed_at;
+                        release_benchmark
+                    }
+                    _ => panic!(
+                        "Invalid `commit_type` for `BenchmarkRequest` {}",
+                        commit_type
+                    ),
+                }
+            })
+            .collect();
+        Ok(benchmark_requests)
+    }
+
+    async fn update_benchmark_request_status(
+        &mut self,
+        benchmark_request: &BenchmarkRequest,
+        benchmark_request_status: BenchmarkRequestStatus,
+    ) -> anyhow::Result<()> {
+        let tx = self
+            .conn_mut()
+            .transaction()
+            .await
+            .context("failed to start transaction")?;
+
+        tx.execute(
+            "UPDATE benchmark_request SET status = $1 WHERE tag = $2;",
+            &[&benchmark_request_status, &benchmark_request.tag()],
+        )
+        .await
+        .context("failed to execute UPDATE benchmark_request")?;
+
+        tx.commit().await.context("failed to commit transaction")?;
+
+        Ok(())
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
@@ -1463,6 +1570,31 @@ fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> Artifa
         _ => panic!("unknown artifact type: {:?}", ty),
     }
 }
+
+macro_rules! impl_to_postgresql_via_to_string {
+    ($t:ty) => {
+        impl tokio_postgres::types::ToSql for $t {
+            fn to_sql(
+                &self,
+                ty: &tokio_postgres::types::Type,
+                out: &mut bytes::BytesMut,
+            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            {
+                self.to_string().to_sql(ty, out)
+            }
+
+            fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+                <String as tokio_postgres::types::ToSql>::accepts(ty)
+            }
+
+            // Only compile if the type is acceptable
+            tokio_postgres::types::to_sql_checked!();
+        }
+    };
+}
+
+impl_to_postgresql_via_to_string!(BenchmarkRequestType);
+impl_to_postgresql_via_to_string!(BenchmarkRequestStatus);
 
 #[cfg(test)]
 mod tests {

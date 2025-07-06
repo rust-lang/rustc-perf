@@ -1,8 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, CodegenBackend, CollectionId,
-    Commit, CommitType, CompileBenchmark, Date, Profile, Target,
+    ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, BenchmarkRequestStatus,
+    CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -457,6 +457,17 @@ impl SqliteConnection {
     pub fn raw_ref(&self) -> std::sync::MutexGuard<'_, rusqlite::Connection> {
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
+}
+
+macro_rules! no_queue_implementation_abort {
+    () => {
+        panic!(
+            "Queueing for SQLite has not been implemented; if you want to test the queueing \
+             functionality please use Postgres. Presuming you have Docker installed, at the \
+             root of the repo you can run `make start-postgres` to spin up a Postgres \
+             database."
+        )
+    };
 }
 
 #[async_trait::async_trait]
@@ -1250,7 +1261,22 @@ impl Connection for SqliteConnection {
     }
 
     async fn insert_benchmark_request(&self, _benchmark_request: &BenchmarkRequest) {
-        panic!("Queueing for SQLite has not been implemented, if you are wanting to test the queueing functionality please use postgres. Presuming you have docker installed, at the root of the repo you can run `make start-postgres` to spin up a postgres database.");
+        no_queue_implementation_abort!()
+    }
+
+    async fn get_benchmark_requests_by_status(
+        &self,
+        _statuses: &[BenchmarkRequestStatus],
+    ) -> anyhow::Result<Vec<BenchmarkRequest>> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn update_benchmark_request_status(
+        &mut self,
+        _benchmark_request: &BenchmarkRequest,
+        _benchmark_request_status: BenchmarkRequestStatus,
+    ) -> anyhow::Result<()> {
+        no_queue_implementation_abort!()
     }
 
     async fn get_compile_test_cases_with_measurements(
