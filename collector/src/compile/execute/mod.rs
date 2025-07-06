@@ -22,6 +22,7 @@ use std::pin::Pin;
 use std::process::{self, Command};
 use std::str;
 use std::sync::LazyLock;
+use std::time::Instant;
 
 pub mod bencher;
 mod etw_parser;
@@ -758,6 +759,7 @@ fn parse_self_profile(
     }
     let (profile, files) = if let Some(profile_path) = full_path {
         // measureme 0.8+ uses a single file
+        let start = Instant::now();
         let data = fs::read(&profile_path)?;
 
         // HACK: `decodeme` can unexpectedly panic on invalid data produced by rustc. We catch this
@@ -779,6 +781,10 @@ fn parse_self_profile(
                 return Err(std::io::Error::new(ErrorKind::InvalidData, error));
             }
         };
+        log::trace!(
+            "Self profile analyze duration: {}",
+            start.elapsed().as_secs_f64()
+        );
 
         let profile = SelfProfile {
             artifact_sizes: results.artifact_sizes,
