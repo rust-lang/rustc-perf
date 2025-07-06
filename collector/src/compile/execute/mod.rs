@@ -446,8 +446,6 @@ impl<'a> CargoProcess<'a> {
                 client.configure(&mut cmd);
             }
 
-            log::debug!("{:?}", cmd);
-
             let cmd = tokio::process::Command::from(cmd);
             let output = async_command_output(cmd).await?;
 

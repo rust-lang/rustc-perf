@@ -249,6 +249,8 @@ pub async fn async_command_output(
 ) -> anyhow::Result<process::Output> {
     use anyhow::Context;
 
+    log::debug!("Executing {:?}", cmd);
+
     let start = Instant::now();
     let child = cmd
         .stdout(Stdio::piped())
@@ -256,16 +258,9 @@ pub async fn async_command_output(
         .spawn()
         .with_context(|| format!("failed to spawn process for cmd: {:?}", cmd))?;
     let output = child.wait_with_output().await?;
-    log::trace!("command {cmd:?} took {} ms", start.elapsed().as_millis());
+    log::trace!("Command took {} ms", start.elapsed().as_millis());
 
-    if !output.status.success() {
-        return Err(anyhow::anyhow!(
-            "expected success, got {}\n\nstderr={}\n\n stdout={}\n",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
-        ));
-    }
+    check_command_output(&output)?;
 
     Ok(output)
 }
