@@ -17,9 +17,7 @@ pub mod utils;
 
 use crate::compile::benchmark::{Benchmark, BenchmarkName};
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
-use database::selector::CompileTestCase;
 use database::{ArtifactId, ArtifactIdNumber, Connection};
-use hashbrown::HashSet;
 use process::Stdio;
 use std::time::{Duration, Instant};
 
@@ -332,30 +330,23 @@ impl CollectorStepBuilder {
             tx.commit().await.unwrap();
             artifact_row_id
         };
-        // Find out which tests cases were already computed
-        let measured_compile_test_cases = conn
-            .get_compile_test_cases_with_measurements(&artifact_row_id)
-            .await
-            .expect("cannot fetch measured compile test cases from DB");
-
-        CollectorCtx {
-            artifact_row_id,
-            measured_compile_test_cases,
-        }
+        CollectorCtx { artifact_row_id }
     }
 }
 
 /// Represents an in-progress run for a given artifact.
 pub struct CollectorCtx {
     pub artifact_row_id: ArtifactIdNumber,
-    /// Which tests cases were already computed **before** this collection began?
-    pub measured_compile_test_cases: HashSet<CompileTestCase>,
 }
 
 impl CollectorCtx {
-    pub async fn start_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {
+    pub async fn start_compile_step(
+        &self,
+        conn: &dyn Connection,
+        benchmark_name: &BenchmarkName,
+    ) -> bool {
         conn.collector_start_step(self.artifact_row_id, &benchmark_name.0)
-            .await;
+            .await
     }
 
     pub async fn end_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {

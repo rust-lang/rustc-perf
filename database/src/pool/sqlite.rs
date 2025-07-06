@@ -1,12 +1,11 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, BenchmarkRequestStatus,
     CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::path::PathBuf;
@@ -1061,13 +1060,18 @@ impl Connection for SqliteConnection {
     }
 
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        self.raw_ref()
+        let did_modify = self
+            .raw_ref()
             .execute(
                 "update collector_progress set end = strftime('%s','now') \
-                where aid = ? and step = ? and start is not null;",
+                where aid = ? and step = ? and start is not null and end is null;",
                 params![&aid.0, &step],
             )
-            .unwrap();
+            .unwrap()
+            == 1;
+        if !did_modify {
+            log::error!("did not end {} for {:?}", step, aid);
+        }
     }
 
     async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
@@ -1277,33 +1281,6 @@ impl Connection for SqliteConnection {
         _benchmark_request_status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
-    }
-
-    async fn get_compile_test_cases_with_measurements(
-        &self,
-        artifact_row_id: &ArtifactIdNumber,
-    ) -> anyhow::Result<HashSet<CompileTestCase>> {
-        Ok(self
-            .raw_ref()
-            .prepare_cached(
-                "SELECT DISTINCT crate, profile, scenario, backend, target
-                FROM pstat_series
-                WHERE id IN (
-                    SELECT DISTINCT series
-                    FROM pstat
-                    WHERE aid = ?
-                );",
-            )?
-            .query_map(params![artifact_row_id.0], |row| {
-                Ok(CompileTestCase {
-                    benchmark: Benchmark::from(row.get::<_, String>(0)?.as_str()),
-                    profile: row.get::<_, String>(1)?.parse().unwrap(),
-                    scenario: row.get::<_, String>(2)?.parse().unwrap(),
-                    backend: row.get::<_, String>(3)?.parse().unwrap(),
-                    target: row.get::<_, String>(4)?.parse().unwrap(),
-                })
-            })?
-            .collect::<Result<_, _>>()?)
     }
 }
 

@@ -1,5 +1,4 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
     BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, CollectionId, Commit, CommitType,
@@ -7,7 +6,7 @@ use crate::{
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::str::FromStr;
@@ -383,7 +382,6 @@ pub struct CachedStatements {
     get_runtime_pstat: Statement,
     record_artifact_size: Statement,
     get_artifact_size: Statement,
-    get_compile_test_cases_with_measurements: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -565,16 +563,7 @@ impl PostgresConnection {
                 get_artifact_size: conn.prepare("
                     select component, size from artifact_size
                     where aid = $1
-                ").await.unwrap(),
-                get_compile_test_cases_with_measurements: conn.prepare("
-                    SELECT DISTINCT crate, profile, scenario, backend, target
-                    FROM pstat_series
-                    WHERE id IN (
-                        SELECT DISTINCT series
-                        FROM pstat
-                        WHERE aid = $1
-                    )
-                ").await.unwrap(),
+                ").await.unwrap()
             }),
             conn,
         }
@@ -1111,14 +1100,19 @@ where
             == 1
     }
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        self.conn()
+        let did_modify = self
+            .conn()
             .execute(
                 "update collector_progress set end_time = statement_timestamp() \
-                where aid = $1 and step = $2 and start_time is not null;",
+                where aid = $1 and step = $2 and start_time is not null and end_time is null;",
                 &[&(aid.0 as i32), &step],
             )
             .await
-            .unwrap();
+            .unwrap()
+            == 1;
+        if !did_modify {
+            log::error!("did not end {} for {:?}", step, aid);
+        }
     }
     async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.conn()
@@ -1418,30 +1412,6 @@ where
             )
             .await
             .unwrap();
-    }
-
-    async fn get_compile_test_cases_with_measurements(
-        &self,
-        artifact_row_id: &ArtifactIdNumber,
-    ) -> anyhow::Result<HashSet<CompileTestCase>> {
-        let rows = self
-            .conn()
-            .query(
-                &self.statements().get_compile_test_cases_with_measurements,
-                &[&(artifact_row_id.0 as i32)],
-            )
-            .await
-            .context("cannot query compile-time test cases with measurements")?;
-        Ok(rows
-            .into_iter()
-            .map(|row| CompileTestCase {
-                benchmark: Benchmark::from(row.get::<_, &str>(0)),
-                profile: Profile::from_str(row.get::<_, &str>(1)).unwrap(),
-                scenario: row.get::<_, &str>(2).parse().unwrap(),
-                backend: CodegenBackend::from_str(row.get::<_, &str>(3)).unwrap(),
-                target: Target::from_str(row.get::<_, &str>(4)).unwrap(),
-            })
-            .collect())
     }
 
     async fn get_benchmark_requests_by_status(
