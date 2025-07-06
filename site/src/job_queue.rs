@@ -95,33 +95,6 @@ fn sort_benchmark_requests(done: &HashSet<String>, request_queue: &mut [Benchmar
     }
 }
 
-pub trait ExtractIf<T> {
-    fn extract_if_stable<F>(&mut self, predicate: F) -> Vec<T>
-    where
-        F: FnMut(&T) -> bool;
-}
-
-/// Vec method `extract_if` is unstable, this very simple implementation
-/// can be deleted once it is stable
-impl<T> ExtractIf<T> for Vec<T> {
-    fn extract_if_stable<F>(&mut self, mut predicate: F) -> Vec<T>
-    where
-        F: FnMut(&T) -> bool,
-    {
-        let mut extracted = Vec::new();
-        let mut i = 0;
-
-        while i < self.len() {
-            if predicate(&self[i]) {
-                extracted.push(self.remove(i));
-            } else {
-                i += 1;
-            }
-        }
-        extracted
-    }
-}
-
 /// Assumes that master/release artifacts have been put into the DB.
 pub async fn build_queue(
     conn: &mut dyn database::pool::Connection,
@@ -136,15 +109,20 @@ pub async fn build_queue(
 
     // The queue starts with in progress
     let mut queue: Vec<BenchmarkRequest> = pending
-        .extract_if_stable(|request| matches!(request.status, BenchmarkRequestStatus::InProgress));
+        .extract_if(.., |request| {
+            matches!(request.status, BenchmarkRequestStatus::InProgress)
+        })
+        .collect();
 
     // We sort the in-progress ones based on the started date
     queue.sort_unstable_by(|a, b| a.created_at.cmp(&b.created_at));
 
     // Add release artifacts ordered by the release tag (1.87.0 before 1.88.0) and `created_at`.
-    let mut release_artifacts: Vec<BenchmarkRequest> = pending.extract_if_stable(|request| {
-        matches!(request.commit_type, BenchmarkRequestType::Release { .. })
-    });
+    let mut release_artifacts: Vec<BenchmarkRequest> = pending
+        .extract_if(.., |request| {
+            matches!(request.commit_type, BenchmarkRequestType::Release { .. })
+        })
+        .collect();
 
     release_artifacts.sort_unstable_by(|a, b| {
         a.tag()
