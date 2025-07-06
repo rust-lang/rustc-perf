@@ -1,11 +1,10 @@
-use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestStatus,
     CodegenBackend, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -185,17 +184,6 @@ pub trait Connection: Send + Sync {
     /// exists it will be ignored
     async fn insert_benchmark_request(&self, benchmark_request: &BenchmarkRequest);
 
-    /// Returns a set of compile-time benchmark test cases that were already computed for the
-    /// given artifact.
-    /// Note that for efficiency reasons, the function only checks if we have at least a single
-    /// result for a given test case. It does not check if *all* test results from all test
-    /// iterations were finished.
-    /// Therefore, the result is an over-approximation.
-    async fn get_compile_test_cases_with_measurements(
-        &self,
-        artifact_row_id: &ArtifactIdNumber,
-    ) -> anyhow::Result<HashSet<CompileTestCase>>;
-
     /// Gets the benchmark requests matching the status. Optionally provide the
     /// number of days from whence to search from
     async fn get_benchmark_requests_by_status(
@@ -328,12 +316,14 @@ impl Pool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::metric::Metric;
-    use crate::tests::run_postgres_test;
-    use crate::{tests::run_db_test, BenchmarkRequestStatus, Commit, CommitType, Date};
     use chrono::Utc;
     use std::str::FromStr;
+
+    use super::*;
+    use crate::{
+        tests::{run_db_test, run_postgres_test},
+        BenchmarkRequestStatus, Commit, CommitType, Date,
+    };
 
     /// Create a Commit
     fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
@@ -443,66 +433,6 @@ mod tests {
                 .await;
             // duplicate insert
             db.insert_benchmark_request(&master_benchmark_request).await;
-
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn get_compile_test_cases_with_data() {
-        run_db_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
-
-            let collection = db.collection_id("test").await;
-            let artifact = db
-                .artifact_id(&ArtifactId::Commit(create_commit(
-                    "abcdef",
-                    Utc::now(),
-                    CommitType::Try,
-                )))
-                .await;
-            db.record_compile_benchmark("benchmark", None, "primary".to_string())
-                .await;
-
-            db.record_statistic(
-                collection,
-                artifact,
-                "benchmark",
-                Profile::Check,
-                Scenario::IncrementalFresh,
-                CodegenBackend::Llvm,
-                Target::X86_64UnknownLinuxGnu,
-                Metric::CacheMisses.as_str(),
-                1.0,
-            )
-            .await;
-
-            assert_eq!(
-                db.get_compile_test_cases_with_measurements(&artifact)
-                    .await
-                    .unwrap(),
-                HashSet::from([CompileTestCase {
-                    benchmark: "benchmark".into(),
-                    profile: Profile::Check,
-                    scenario: Scenario::IncrementalFresh,
-                    backend: CodegenBackend::Llvm,
-                    target: Target::X86_64UnknownLinuxGnu,
-                }])
-            );
-
-            let artifact2 = db
-                .artifact_id(&ArtifactId::Commit(create_commit(
-                    "abcdef2",
-                    Utc::now(),
-                    CommitType::Try,
-                )))
-                .await;
-            assert!(db
-                .get_compile_test_cases_with_measurements(&artifact2)
-                .await
-                .unwrap()
-                .is_empty());
 
             Ok(ctx)
         })

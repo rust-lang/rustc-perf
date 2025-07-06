@@ -8,7 +8,6 @@ use crate::compile::execute::{CargoProcess, Processor};
 use crate::toolchain::Toolchain;
 use crate::utils::wait_for_future;
 use anyhow::{bail, Context};
-use database::selector::CompileTestCase;
 use log::debug;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
@@ -244,7 +243,6 @@ impl Benchmark {
         toolchain: &Toolchain,
         iterations: Option<usize>,
         targets: &[Target],
-        already_computed: &hashbrown::HashSet<CompileTestCase>,
     ) -> anyhow::Result<()> {
         if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
@@ -275,64 +273,18 @@ impl Benchmark {
             return Ok(());
         }
 
-        struct BenchmarkDir {
-            dir: TempDir,
-            scenarios: Vec<Scenario>,
-            profile: Profile,
-            backend: CodegenBackend,
-            target: Target,
-        }
-
-        // Materialize the test cases that we want to benchmark
-        // We need to handle scenarios a bit specially, because they share the target directory
-        let mut benchmark_dirs: Vec<BenchmarkDir> = vec![];
-
+        eprintln!("Preparing {}", self.name);
+        let mut target_dirs: Vec<((CodegenBackend, Profile, Target), TempDir)> = vec![];
         for backend in backends {
             for profile in &profiles {
                 for target in targets {
-                    // Do we have any scenarios left to compute?
-                    let remaining_scenarios = scenarios
-                        .iter()
-                        .filter(|scenario| {
-                            self.should_run_scenario(
-                                scenario,
-                                profile,
-                                backend,
-                                target,
-                                already_computed,
-                            )
-                        })
-                        .copied()
-                        .collect::<Vec<Scenario>>();
-                    if remaining_scenarios.is_empty() {
-                        continue;
-                    }
-
-                    let temp_dir = self.make_temp_dir(&self.path)?;
-                    benchmark_dirs.push(BenchmarkDir {
-                        dir: temp_dir,
-                        scenarios: remaining_scenarios,
-                        profile: *profile,
-                        backend: *backend,
-                        target: *target,
-                    });
+                    target_dirs.push((
+                        (*backend, *profile, *target),
+                        self.make_temp_dir(&self.path)?,
+                    ));
                 }
             }
         }
-
-        if benchmark_dirs.is_empty() {
-            eprintln!(
-                "Skipping {}: all test cases were previously computed",
-                self.name
-            );
-            return Ok(());
-        }
-
-        eprintln!(
-            "Preparing {} (test cases: {})",
-            self.name,
-            benchmark_dirs.len()
-        );
 
         // In parallel (but with a limit to the number of CPUs), prepare all
         // profiles. This is done in parallel vs. sequentially because:
@@ -367,18 +319,18 @@ impl Benchmark {
                     .get(),
             )
             .context("jobserver::new")?;
-            let mut threads = Vec::with_capacity(benchmark_dirs.len());
-            for benchmark_dir in &benchmark_dirs {
+            let mut threads = Vec::with_capacity(target_dirs.len());
+            for ((backend, profile, target), prep_dir) in &target_dirs {
                 let server = server.clone();
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
                     wait_for_future(async move {
                         let server = server.clone();
                         self.mk_cargo_process(
                             toolchain,
-                            benchmark_dir.dir.path(),
-                            benchmark_dir.profile,
-                            benchmark_dir.backend,
-                            benchmark_dir.target,
+                            prep_dir.path(),
+                            *profile,
+                            *backend,
+                            *target,
                         )
                         .jobserver(server)
                         .run_rustc(false)
@@ -413,11 +365,10 @@ impl Benchmark {
         let mut timing_dirs: Vec<ManuallyDrop<TempDir>> = vec![];
 
         let benchmark_start = std::time::Instant::now();
-        for benchmark_dir in &benchmark_dirs {
-            let backend = benchmark_dir.backend;
-            let profile = benchmark_dir.profile;
-            let target = benchmark_dir.target;
-            let scenarios = &benchmark_dir.scenarios;
+        for ((backend, profile, target), prep_dir) in &target_dirs {
+            let backend = *backend;
+            let profile = *profile;
+            let target = *target;
             eprintln!(
                 "Running {}: {:?} + {:?} + {:?} + {:?}",
                 self.name, profile, scenarios, backend, target,
@@ -437,7 +388,7 @@ impl Benchmark {
                 }
                 log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 // Don't delete the directory on error.
-                let timing_dir = ManuallyDrop::new(self.make_temp_dir(benchmark_dir.dir.path())?);
+                let timing_dir = ManuallyDrop::new(self.make_temp_dir(prep_dir.path())?);
                 let cwd = timing_dir.path();
 
                 // A full non-incremental build.
@@ -506,67 +457,6 @@ impl Benchmark {
         }
 
         Ok(())
-    }
-
-    /// Return true if the given `scenario` should be computed.
-    fn should_run_scenario(
-        &self,
-        scenario: &Scenario,
-        profile: &Profile,
-        backend: &CodegenBackend,
-        target: &Target,
-        already_computed: &hashbrown::HashSet<CompileTestCase>,
-    ) -> bool {
-        let benchmark = database::Benchmark::from(self.name.0.as_str());
-        let profile = match profile {
-            Profile::Check => database::Profile::Check,
-            Profile::Debug => database::Profile::Debug,
-            Profile::Doc => database::Profile::Doc,
-            Profile::DocJson => database::Profile::DocJson,
-            Profile::Opt => database::Profile::Opt,
-            Profile::Clippy => database::Profile::Clippy,
-        };
-        let backend = match backend {
-            CodegenBackend::Llvm => database::CodegenBackend::Llvm,
-            CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
-        };
-        let target = match target {
-            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
-        };
-
-        match scenario {
-            // For these scenarios, we can simply check if they were benchmarked or not
-            Scenario::Full | Scenario::IncrFull | Scenario::IncrUnchanged => {
-                let test_case = CompileTestCase {
-                    benchmark,
-                    profile,
-                    backend,
-                    target,
-                    scenario: match scenario {
-                        Scenario::Full => database::Scenario::Empty,
-                        Scenario::IncrFull => database::Scenario::IncrementalEmpty,
-                        Scenario::IncrUnchanged => database::Scenario::IncrementalFresh,
-                        Scenario::IncrPatched => unreachable!(),
-                    },
-                };
-                !already_computed.contains(&test_case)
-            }
-            // For incr-patched, it is a bit more complicated.
-            // If there is at least a single uncomputed `IncrPatched`, we need to rerun
-            // all of them, because they stack on top of one another.
-            // Note that we don't need to explicitly include `IncrFull` if `IncrPatched`
-            // is selected, as the benchmark code will always run `IncrFull` before `IncrPatched`.
-            Scenario::IncrPatched => self.patches.iter().any(|patch| {
-                let test_case = CompileTestCase {
-                    benchmark,
-                    profile,
-                    scenario: database::Scenario::IncrementalPatch(patch.name),
-                    backend,
-                    target,
-                };
-                !already_computed.contains(&test_case)
-            }),
-        }
     }
 }
 
