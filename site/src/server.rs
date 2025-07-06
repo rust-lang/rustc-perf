@@ -1,6 +1,7 @@
 use brotli::enc::BrotliEncoderParams;
 use brotli::BrotliCompress;
 use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -18,7 +19,6 @@ use log::{debug, error, info};
 use parking_lot::{Mutex, RwLock};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sha1::Sha1;
 use uuid::Uuid;
 
 pub use crate::api::{
@@ -690,23 +690,25 @@ fn not_found() -> http::Response<hyper::Body> {
 }
 
 fn verify_gh(config: &Config, req: &http::request::Parts, body: &[u8]) -> bool {
-    let gh_header = req.headers.get("X-Hub-Signature").cloned();
-    let gh_header = gh_header.and_then(|g| g.to_str().ok().map(|s| s.to_owned()));
+    let gh_header = req
+        .headers
+        .get("X-Hub-Signature-256")
+        .and_then(|g| g.to_str().ok());
     let gh_header = match gh_header {
         Some(v) => v,
         None => return false,
     };
-    verify_gh_sig(config, &gh_header, body).unwrap_or(false)
+    verify_gh_sig(config, gh_header, body).unwrap_or(false)
 }
 
 fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
-    type HmacSha1 = Hmac<Sha1>;
+    type HmacSha256 = Hmac<Sha256>;
 
     let mut mac =
-        HmacSha1::new_from_slice(cfg.keys.github_webhook_secret.as_ref().unwrap().as_bytes())
+        HmacSha256::new_from_slice(cfg.keys.github_webhook_secret.as_ref().unwrap().as_bytes())
             .expect("HMAC can take key of any size");
     mac.update(body);
-    let sha = header.get(5..)?; // strip sha1=
+    let sha = header.strip_prefix("sha256=")?;
     let sha = hex::decode(sha).ok()?;
     if let Ok(()) = mac.verify_slice(&sha) {
         return Some(true);
