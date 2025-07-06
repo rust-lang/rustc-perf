@@ -15,7 +15,7 @@ pub use benchmark::{
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::utils::git::get_rustc_perf_commit;
-use crate::{run_command_with_output, CollectorCtx};
+use crate::{command_output, CollectorCtx};
 
 mod benchmark;
 mod profile;
@@ -218,15 +218,7 @@ fn execute_runtime_benchmark_binary(
         command.args(["--include", &filter.include.join(",")]);
     }
 
-    let output = run_command_with_output(&mut command)?;
-    if !output.status.success() {
-        return Err(anyhow::anyhow!(
-            "Process finished with exit code {}\n{}",
-            output.status.code().unwrap_or(-1),
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-
+    let output = command_output(&mut command)?;
     let reader = BufReader::new(Cursor::new(output.stdout));
     Ok(reader.lines().map(|line| {
         Ok(line.and_then(|line| Ok(serde_json::from_str::<BenchmarkMessage>(&line)?))?)
