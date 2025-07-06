@@ -168,7 +168,12 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
+/// If `stream_output` is true, stdout/stderr of `cmd` should be streamed to stdout/stderr of the
+/// current process, in addition to being captured.
+fn run_command_with_output(
+    cmd: &mut Command,
+    stream_output: bool,
+) -> anyhow::Result<process::Output> {
     use anyhow::Context;
     use utils::read2;
     let mut child = cmd
@@ -187,7 +192,7 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
         child.stderr.take().unwrap(),
         &mut |is_stdout, buffer, _is_done| {
             // Send output if trace logging is enabled
-            if log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
+            if stream_output || log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
                 use std::io::Write;
                 if is_stdout {
                     stdout_writer.write_all(&buffer[stdout_written..]).unwrap();
@@ -215,18 +220,28 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
 }
 
 pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
-    let output = run_command_with_output(cmd)?;
+    let output = run_command_with_output(cmd, false)?;
+    check_command_output(&output)?;
+    Ok(output)
+}
 
+pub fn command_output_stream(cmd: &mut Command) -> anyhow::Result<process::Output> {
+    let output = run_command_with_output(cmd, true)?;
+    check_command_output(&output)?;
+    Ok(output)
+}
+
+fn check_command_output(output: &process::Output) -> anyhow::Result<()> {
     if !output.status.success() {
-        return Err(anyhow::anyhow!(
+        Err(anyhow::anyhow!(
             "expected success, got {}\n\nstderr={}\n\n stdout={}\n",
             output.status,
             String::from_utf8_lossy(&output.stderr),
             String::from_utf8_lossy(&output.stdout)
-        ));
+        ))
+    } else {
+        Ok(())
     }
-
-    Ok(output)
 }
 
 pub async fn async_command_output(
