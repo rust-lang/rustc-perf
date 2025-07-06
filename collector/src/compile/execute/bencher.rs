@@ -338,9 +338,9 @@ impl SelfProfileS3Upload {
         let start = std::time::Instant::now();
         let status = self.0.wait().expect("waiting for child");
         if !status.success() {
-            panic!("S3 upload failed: {:?}", status);
+            log::error!("S3 upload failed: {status:?}");
+        } else {
+            log::trace!("uploaded to S3, additional wait: {:?}", start.elapsed());
         }
-
-        log::trace!("uploaded to S3, additional wait: {:?}", start.elapsed());
     }
 }
