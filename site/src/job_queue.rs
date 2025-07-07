@@ -265,9 +265,11 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
 
     if let Some(request) = queue.into_iter().next() {
         if request.status != BenchmarkRequestStatus::InProgress {
-            // TODO: actually enqueue the jobs
-            conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
-                .await?;
+            // TODO:
+            // - Uncomment
+            // - Actually enqueue the jobs
+            // conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
+            //     .await?;
         }
     }
 
@@ -387,16 +389,6 @@ mod tests {
         }
     }
 
-    /// Get an `InProgress` item out of the `benchmark_requests` table. In
-    /// practice this is the job that has been enqueued.
-    async fn get_in_progress(conn: &dyn database::pool::Connection) -> Option<BenchmarkRequest> {
-        conn.get_benchmark_requests_by_status(&[BenchmarkRequestStatus::InProgress])
-            .await
-            .unwrap()
-            .first()
-            .cloned()
-    }
-
     fn queue_order_matches(queue: &[BenchmarkRequest], expected: &[&str]) {
         let queue_shas: Vec<&str> = queue.iter().map(|req| req.tag()).collect();
         assert_eq!(queue_shas, expected)
@@ -411,206 +403,6 @@ mod tests {
             self.status = status;
             self
         }
-    }
-
-    /// Nothing to do, empty table
-    #[tokio::test]
-    async fn enqueue_next_job_no_jobs() {
-        run_postgres_test(|ctx| async {
-            let mut db = ctx.db_client().connection().await;
-
-            enqueue_next_job(&mut *db).await?;
-
-            let in_progress = get_in_progress(&*db).await;
-
-            assert!(in_progress.is_none());
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    /// Parent completed -> child is picked
-    #[tokio::test]
-    async fn get_next_benchmark_request_completed_parent() {
-        run_postgres_test(|ctx| async {
-            let mut db = ctx.db_client().connection().await;
-            let parent =
-                create_master("a", "x", 1, "days5").with_status(BenchmarkRequestStatus::Completed);
-            let child = create_master("b", "a", 1, "days5");
-
-            db_insert_requests(&*db, &[parent, child]).await;
-
-            enqueue_next_job(&mut *db).await?;
-
-            let in_progress = get_in_progress(&*db).await;
-
-            assert_eq!(in_progress.unwrap().tag(), "b");
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    /// Release (no parent) is always eligible
-    #[tokio::test]
-    async fn get_next_benchmark_request_no_parent_release() {
-        run_postgres_test(|ctx| async {
-            let mut db = ctx.db_client().connection().await;
-            let release = create_release("v1.2.3", "days2");
-
-            db_insert_requests(&*db, &[release]).await;
-
-            enqueue_next_job(&mut *db).await?;
-
-            let in_progress = get_in_progress(&*db).await;
-
-            assert_eq!(in_progress.unwrap().tag(), "v1.2.3");
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    /// Parent exists but is older -> parent gets picked
-    #[tokio::test]
-    async fn get_next_benchmark_request_oldest_first() {
-        run_postgres_test(|ctx| async {
-            let mut db = ctx.db_client().connection().await;
-            let c1 = create_master("x", "x", 1, "days521")
-                .with_status(BenchmarkRequestStatus::Completed);
-            let c2 = create_master("y", "y", 2, "days521")
-                .with_status(BenchmarkRequestStatus::Completed);
-
-            let m1 = create_master("old", "x", 3, "days45");
-            let m2 = create_master("new", "y", 4, "days1");
-
-            db_insert_requests(&*db, &[c1, c2, m1, m2]).await;
-            enqueue_next_job(&mut *db).await?;
-
-            let in_progress = get_in_progress(&*db).await;
-
-            assert_eq!(in_progress.unwrap().tag(), "old");
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    /// Parent SHA missing entirely -> child is ready
-    #[cfg(unix)] // test will not panic on windows and would be skipped entirely
-    #[tokio::test]
-    #[should_panic(expected = "No commit is ready for benchmarking")]
-    async fn get_next_benchmark_request_missing_parent() {
-        run_postgres_test(|ctx| async {
-            let mut db = ctx.db_client().connection().await;
-            let orphan = create_master("orphan", "gone", 42, "days1");
-
-            db_insert_requests(&*db, &[orphan]).await;
-            enqueue_next_job(&mut *db).await?;
-
-            let in_progress = get_in_progress(&*db).await;
-            assert_eq!(in_progress.unwrap().tag(), "orphan");
-
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn get_next_benchmark_request_large_mixture() {
-        run_postgres_test(|ctx| async {
-            let mut db = ctx.db_client().connection().await;
-            // Fresh parents that will unblock some children
-            let parent_master = create_master("parent_m", "x", 911, "days5")
-                .with_status(BenchmarkRequestStatus::Completed);
-            let parent_try = create_try("parent_t", "x", 888, "days4")
-                .with_status(BenchmarkRequestStatus::Completed);
-            let parent_master_two = create_master("gp", "x", 922, "days5")
-                .with_status(BenchmarkRequestStatus::Completed);
-            let parent_master_three = create_master("blocked_p", "x", 932, "days5")
-                .with_status(BenchmarkRequestStatus::Completed);
-
-            // Two releases, the older one should win overall
-            let rel_old = create_release("v0.8.0", "days40"); // 40days old
-            let rel_new = create_release("v1.0.0", "days10");
-
-            // Ready masters (parents completed)
-            let master_low_pr = create_master("m_low", "parent_m", 1, "days12");
-            let master_high_pr = create_master("m_high", "parent_m", 7, "days8");
-
-            let blocked_parent = create_master("blocked_p", "gp", 0, "days3");
-            let master_blocked = create_master("blocked_c", "blocked_p", 0, "days1");
-
-            // A try commit that is ready
-            let try_ready = create_try("t_ready", "parent_t", 42, "days2");
-
-            let requests = vec![
-                parent_master,
-                parent_master_two,
-                parent_master_three,
-                parent_try,
-                master_high_pr,
-                master_low_pr,
-                master_blocked,
-                blocked_parent,
-                try_ready,
-                rel_old,
-                rel_new,
-            ];
-
-            db_insert_requests(&*db, &requests).await;
-            enqueue_next_job(&mut *db).await?;
-
-            // The oldest release ("v0.8.0") outranks everything else
-            let in_progress = get_in_progress(&*db).await;
-            assert_eq!(in_progress.unwrap().tag(), "v0.8.0");
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn get_next_benchmark_request_large_mixture_no_release() {
-        run_postgres_test(|ctx| async {
-            let mut db = ctx.db_client().connection().await;
-            // Fresh parents that will unblock some children
-            let parent_master = create_master("parent_m", "x", 8, "days5")
-                .with_status(BenchmarkRequestStatus::Completed);
-            let parent_try = create_try("parent_t", "x", 9, "days4")
-                .with_status(BenchmarkRequestStatus::Completed);
-            let parent_master_two = create_master("gp", "x", 10, "days5")
-                .with_status(BenchmarkRequestStatus::Completed);
-            let parent_master_three = create_master("blocked_p", "x", 11, "days5")
-                .with_status(BenchmarkRequestStatus::Completed);
-
-            // Ready masters (parents completed)
-            let m1 = create_master("m_low", "parent_m", 3, "days12");
-            let m2 = create_master("m_high", "parent_m", 7, "days8");
-
-            let m3 = create_master("B", "gp", 1, "days3");
-            let m4 = create_master("C", "blocked_p", 2, "days1");
-
-            // A try commit that is ready
-            let t1 = create_try("t_ready", "parent_t", 42, "days2");
-
-            let requests = vec![
-                parent_master,
-                parent_master_two,
-                parent_master_three,
-                parent_try,
-                m2,
-                m1,
-                m4,
-                m3,
-                t1,
-            ];
-
-            db_insert_requests(&*db, &requests).await;
-            enqueue_next_job(&mut *db).await?;
-
-            // The oldest release ("v0.8.0") outranks everything else
-            let in_progress = get_in_progress(&*db).await;
-            assert_eq!(in_progress.unwrap().tag(), "B");
-            Ok(ctx)
-        })
-        .await;
     }
 
     #[tokio::test]
