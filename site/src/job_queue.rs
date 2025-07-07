@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::load::{partition_in_place, SiteCtxt};
-use chrono::{DateTime, NaiveDate, Timelike, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use database::{BenchmarkRequest, BenchmarkRequestStatus, BenchmarkRequestType};
 use hashbrown::HashSet;
 use parking_lot::RwLock;
@@ -48,20 +48,16 @@ async fn create_benchmark_request_master_commits(
 /// `static.rust-lang.org/dist/2025-06-26/channel-rust-1.89-beta.toml`
 /// `static.rust-lang.org/dist/2025-06-26/channel-rust-1.89.0-beta.toml`
 /// `static.rust-lang.org/dist/2025-06-26/channel-rust-1.89.0-beta.2.toml`
-fn parse_release_string(url: &str) -> anyhow::Result<Option<(String, DateTime<Utc>)>> {
+fn parse_release_string(url: &str) -> Option<(String, DateTime<Utc>)> {
     static VERSION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+\.\d+\.\d+)").unwrap());
 
     // Grab ".../YYYY-MM-DD/FILE.toml" components with Path helpers.
-    let file = Path::new(url)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| anyhow::anyhow!("URL lacks a file name"))?;
+    let file = Path::new(url).file_name().and_then(|n| n.to_str())?;
 
     let date_str = Path::new(url)
         .parent()
         .and_then(Path::file_name)
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| anyhow::anyhow!("URL lacks a date segment"))?;
+        .and_then(|n| n.to_str())?;
 
     // No other beta releases are recognized as toolchains.
     //
@@ -73,30 +69,30 @@ fn parse_release_string(url: &str) -> anyhow::Result<Option<(String, DateTime<Ut
     //
     // Which should get ignored for now, they're not consumable via rustup yet.
     if file.contains("beta") && file != "channel-rust-beta.toml" {
-        return Ok(None);
+        return None;
     }
 
     // Parse the YYYY-MM-DD segment and stamp it with *current* UTC time.
-    let naive = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")?;
-    let now = Utc::now();
-    let published = naive
-        .and_hms_nano_opt(now.hour(), now.minute(), now.second(), now.nanosecond())
-        .expect("valid HMS")
-        .and_local_timezone(Utc)
-        .single()
-        .unwrap();
+    if let Ok(naive) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+        let published = naive
+            .and_hms_opt(0, 0, 0)
+            .expect("valid HMS")
+            .and_local_timezone(Utc)
+            .single()
+            .unwrap();
 
-    // Special-case the rolling beta channel.
-    if file == "channel-rust-beta.toml" {
-        return Ok(Some((format!("beta-{date_str}"), published)));
+        // Special-case the rolling beta channel.
+        if file == "channel-rust-beta.toml" {
+            return Some((format!("beta-{date_str}"), published));
+        }
+
+        // Otherwise pull out a semver like "1.70.0" and return it.
+        if let Some(cap) = VERSION_RE.captures(file).and_then(|m| m.get(1)) {
+            return Some((cap.as_str().to_owned(), published));
+        }
     }
 
-    // Otherwise pull out a semver like "1.70.0" and return it.
-    if let Some(cap) = VERSION_RE.captures(file).and_then(|m| m.get(1)) {
-        return Ok(Some((cap.as_str().to_owned(), published)));
-    }
-
-    Ok(None)
+    None
 }
 
 /// Store the latest release commits or do nothing if all of them are
@@ -111,8 +107,8 @@ async fn create_benchmark_request_releases(
     // TODO; delete at some point in the future
     let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-06-01T00:00:00.000Z")?;
 
-    for release_string in releases.lines() {
-        if let Some((name, date_time)) = parse_release_string(release_string)? {
+    for release_string in releases.lines().rev().take(20) {
+        if let Some((name, date_time)) = parse_release_string(release_string) {
             if date_time >= cutoff {
                 let release_request = BenchmarkRequest::create_release(
                     &name,
@@ -313,18 +309,13 @@ mod tests {
     /// Helper: unwrap the Option, panic otherwise.
     fn tag(url: &str) -> String {
         parse_release_string(url)
-            .unwrap() // anyhow::Result<_>
             .expect("Some") // Option<_>
             .0 // take the tag
     }
 
     /// Helper: unwrap the DateTime and keep only the YYYY-MM-DD part
     fn day(url: &str) -> NaiveDate {
-        parse_release_string(url)
-            .unwrap()
-            .expect("Some")
-            .1
-            .date_naive()
+        parse_release_string(url).expect("Some").1.date_naive()
     }
 
     fn days_ago(day_str: &str) -> chrono::DateTime<Utc> {
@@ -749,7 +740,6 @@ mod tests {
         assert!(parse_release_string(
             "static.rust-lang.org/dist/2016-05-31/channel-rust-nightly.toml"
         )
-        .unwrap()
         .is_none());
 
         // versioned-beta artefacts are skipped too
@@ -759,7 +749,7 @@ mod tests {
             "static.rust-lang.org/dist/2025-06-26/channel-rust-1.89.0-beta.2.toml",
         ] {
             assert!(
-                parse_release_string(should_ignore).unwrap().is_none(),
+                parse_release_string(should_ignore).is_none(),
                 "{should_ignore} should be ignored"
             );
         }
