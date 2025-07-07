@@ -252,7 +252,10 @@ pub async fn build_queue(
 }
 
 /// Enqueue the job into the job_queue
-async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::Result<()> {
+async fn enqueue_next_job(
+    conn: &mut dyn database::pool::Connection,
+    should_add_to_db: bool,
+) -> anyhow::Result<()> {
     // We draw back all completed requests
     let completed: HashSet<String> = conn
         .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed])
@@ -265,12 +268,15 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
 
     if let Some(request) = queue.into_iter().next() {
         if request.status != BenchmarkRequestStatus::InProgress {
-            log::info!("{:?} would have been marked as InProgress", request);
             // TODO:
-            // - Uncomment this code
+            // - Remove this if condition
             // - Actually enqueue the jobs
-            // conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
-            //     .await?;
+            if !should_add_to_db {
+                log::info!("{:?} would have been marked as InProgress", request);
+            } else {
+                conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
+                    .await?;
+            }
         }
     }
 
@@ -278,13 +284,16 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
 }
 
 /// For queueing jobs, add the jobs you want to queue to this function
-async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
+async fn cron_enqueue_jobs(
+    site_ctxt: &Arc<SiteCtxt>,
+    should_add_to_db: bool,
+) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
     // Put the master commits into the `benchmark_requests` queue
     create_benchmark_request_master_commits(site_ctxt, &*conn).await?;
     // Put the releases into the `benchmark_requests` queue
     create_benchmark_request_releases(&*conn).await?;
-    enqueue_next_job(&mut *conn).await?;
+    enqueue_next_job(&mut *conn, should_add_to_db).await?;
     Ok(())
 }
 
@@ -300,7 +309,7 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
             let guard = ctxt.read();
             guard.as_ref().cloned()
         } {
-            match cron_enqueue_jobs(&ctxt_clone).await {
+            match cron_enqueue_jobs(&ctxt_clone, false).await {
                 Ok(_) => log::info!("Cron job executed at: {:?}", std::time::SystemTime::now()),
                 Err(e) => log::error!("Cron job failed to execute {}", e),
             }
@@ -422,7 +431,7 @@ mod tests {
         run_postgres_test(|ctx| async {
             let mut db = ctx.db_client().connection().await;
 
-            enqueue_next_job(&mut *db).await?;
+            enqueue_next_job(&mut *db, true).await?;
 
             let in_progress = get_in_progress(&*db).await;
 
@@ -443,7 +452,7 @@ mod tests {
 
             db_insert_requests(&*db, &[parent, child]).await;
 
-            enqueue_next_job(&mut *db).await?;
+            enqueue_next_job(&mut *db, true).await?;
 
             let in_progress = get_in_progress(&*db).await;
 
@@ -462,7 +471,7 @@ mod tests {
 
             db_insert_requests(&*db, &[release]).await;
 
-            enqueue_next_job(&mut *db).await?;
+            enqueue_next_job(&mut *db, true).await?;
 
             let in_progress = get_in_progress(&*db).await;
 
@@ -486,7 +495,7 @@ mod tests {
             let m2 = create_master("new", "y", 4, "days1");
 
             db_insert_requests(&*db, &[c1, c2, m1, m2]).await;
-            enqueue_next_job(&mut *db).await?;
+            enqueue_next_job(&mut *db, true).await?;
 
             let in_progress = get_in_progress(&*db).await;
 
@@ -506,7 +515,7 @@ mod tests {
             let orphan = create_master("orphan", "gone", 42, "days1");
 
             db_insert_requests(&*db, &[orphan]).await;
-            enqueue_next_job(&mut *db).await?;
+            enqueue_next_job(&mut *db, true).await?;
 
             let in_progress = get_in_progress(&*db).await;
             assert_eq!(in_progress.unwrap().tag(), "orphan");
@@ -559,7 +568,7 @@ mod tests {
             ];
 
             db_insert_requests(&*db, &requests).await;
-            enqueue_next_job(&mut *db).await?;
+            enqueue_next_job(&mut *db, true).await?;
 
             // The oldest release ("v0.8.0") outranks everything else
             let in_progress = get_in_progress(&*db).await;
@@ -606,7 +615,7 @@ mod tests {
             ];
 
             db_insert_requests(&*db, &requests).await;
-            enqueue_next_job(&mut *db).await?;
+            enqueue_next_job(&mut *db, true).await?;
 
             // The oldest release ("v0.8.0") outranks everything else
             let in_progress = get_in_progress(&*db).await;
