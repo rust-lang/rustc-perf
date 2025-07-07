@@ -265,9 +265,12 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
 
     if let Some(request) = queue.into_iter().next() {
         if request.status != BenchmarkRequestStatus::InProgress {
-            // TODO: actually enqueue the jobs
-            conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
-                .await?;
+            log::info!("{:?} would have been marked as InProgress", request);
+            // TODO:
+            // - Uncomment this code
+            // - Actually enqueue the jobs
+            // conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
+            //     .await?;
         }
     }
 
