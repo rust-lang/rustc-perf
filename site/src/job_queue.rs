@@ -107,18 +107,23 @@ async fn create_benchmark_request_releases(
     // TODO; delete at some point in the future
     let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-06-01T00:00:00.000Z")?;
 
-    for release_string in releases.lines().rev().take(20) {
-        if let Some((name, date_time)) = parse_release_string(release_string) {
-            if date_time >= cutoff {
-                let release_request = BenchmarkRequest::create_release(
-                    &name,
-                    date_time,
-                    BenchmarkRequestStatus::ArtifactsReady,
-                    "",
-                    "",
-                );
-                conn.insert_benchmark_request(&release_request).await;
-            }
+    let releases: Vec<_> = releases
+        .lines()
+        .rev()
+        .filter_map(parse_release_string)
+        .take(20)
+        .collect();
+
+    for (name, date_time) in releases {
+        if date_time >= cutoff {
+            let release_request = BenchmarkRequest::create_release(
+                &name,
+                date_time,
+                BenchmarkRequestStatus::ArtifactsReady,
+                "",
+                "",
+            );
+            conn.insert_benchmark_request(&release_request).await;
         }
     }
     Ok(())
