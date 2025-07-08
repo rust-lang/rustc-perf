@@ -303,8 +303,9 @@ static MIGRATIONS: &[&str] = &[
     "#,
     // Remove that tag cannot be NULL
     r#"ALTER TABLE benchmark_request ALTER COLUMN tag DROP NOT NULL;"#,
-    // Prevent multiple try commits without a `sha` being added to the table
-    r#"CREATE UNIQUE INDEX benchmark_request_pr_status_idx ON benchmark_request (pr, commit_type) WHERE tag IS NULL;"#,
+    // Prevent multiple try commits without a `sha` and the same `pr` number
+    // being added to the table
+    r#"CREATE UNIQUE INDEX benchmark_request_pr_commit_type_idx ON benchmark_request (pr, commit_type) WHERE tag IS NULL;"#,
 ];
 
 #[async_trait::async_trait]
