@@ -12,6 +12,7 @@ import {
   createTableData,
   createArtifactData,
   DeltaData,
+  TableRowData,
 } from "./utils";
 
 const loading = ref(true);
@@ -76,6 +77,15 @@ const tableData = computed(() => {
             ? Math.abs(b.executionsDelta.percentage)
             : 0;
         break;
+      case "cacheHits": // Hits
+        aValue = a.cacheHits;
+        bValue = b.cacheHits;
+        // Use percentage change as secondary sort for equal absolute values
+        aSecondary =
+          a.cacheHitsDelta !== null ? Math.abs(a.cacheHitsDelta.percentage) : 0;
+        bSecondary =
+          b.cacheHitsDelta !== null ? Math.abs(b.cacheHitsDelta.percentage) : 0;
+        break;
       case "incrementalLoading": // Incremental loading (s)
         aValue = a.incrementalLoading;
         bValue = b.incrementalLoading;
@@ -116,6 +126,15 @@ const tableData = computed(() => {
           b.executionsDelta !== null
             ? Math.abs(b.executionsDelta.percentage)
             : 0;
+        break;
+      case "cacheHitsDelta": // Cache hits delta
+        aValue = a.cacheHitsDelta !== null ? a.cacheHitsDelta.delta : -Infinity;
+        bValue = b.cacheHitsDelta !== null ? b.cacheHitsDelta.delta : -Infinity;
+        // Use percentage as secondary sort for equal delta values
+        aSecondary =
+          a.cacheHitsDelta !== null ? Math.abs(a.cacheHitsDelta.percentage) : 0;
+        bSecondary =
+          b.cacheHitsDelta !== null ? Math.abs(b.cacheHitsDelta.percentage) : 0;
         break;
       case "incrementalLoadingDelta": // Incremental loading delta
         aValue =
@@ -440,6 +459,20 @@ loadData();
                 >Executions delta</a
               >
             </th>
+            <th :class="getHeaderClass('cacheHits')">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('cacheHits', 'desc')"
+                >Hits</a
+              >
+            </th>
+            <th v-if="showDelta" :class="getHeaderClass('cacheHitsDelta')">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('cacheHitsDelta', 'desc')"
+                >Hits delta</a
+              >
+            </th>
             <th
               v-if="showIncr"
               :class="getHeaderClass('incrementalLoading')"
@@ -484,6 +517,10 @@ loadData();
             <td>{{ row.executions }}</td>
             <td v-if="showDelta">
               <DeltaComponent :delta="row.executionsDelta" />
+            </td>
+            <td>{{ row.cacheHits }}</td>
+            <td v-if="showDelta">
+              <DeltaComponent :delta="row.cacheHitsDelta" />
             </td>
             <td v-if="showIncr">{{ row.incrementalLoading.toFixed(3) }}</td>
             <td v-if="showDelta && showIncr">

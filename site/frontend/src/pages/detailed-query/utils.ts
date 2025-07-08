@@ -242,6 +242,8 @@ export interface TableRowData {
   timeDelta: DeltaData | null;
   executions: number;
   executionsDelta: DeltaData | null;
+  cacheHits: number;
+  cacheHitsDelta: DeltaData | null;
   incrementalLoading: number;
   incrementalLoadingDelta: DeltaData | null;
 }
@@ -299,6 +301,14 @@ function createRowData(
     executions: value.invocation_count,
     executionsDelta: delta
       ? createDelta(value.invocation_count, delta.invocation_count, true)
+      : null,
+    cacheHits: value.number_of_cache_hits,
+    cacheHitsDelta: delta
+      ? createDelta(
+          value.number_of_cache_hits,
+          delta.number_of_cache_hits,
+          true
+        )
       : null,
     incrementalLoading: toSeconds(value.incremental_load_time),
     incrementalLoadingDelta: delta
