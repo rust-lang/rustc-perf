@@ -182,9 +182,16 @@ fn sort_benchmark_requests(done: &HashSet<String>, request_queue: &mut [Benchmar
             )
         });
         for c in level {
-            if let Some(tag) = c.tag() {
-                done.insert(tag.to_string());
-            }
+            // As the only `commit_type` that will not have a `tag` is a `Try`
+            // with the status of `AwaitingArtifacts` and we have asserted above
+            // that all of the statuses of the benchmark requests are
+            // `ArtifactsReady` it is implausable for this `expect(...)` to be
+            // hit.
+            done.insert(
+                c.tag()
+                    .expect("Tag should exist on a benchmark request being sorted")
+                    .to_string(),
+            );
         }
         finished += level_len;
     }
