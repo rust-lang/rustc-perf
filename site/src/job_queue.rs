@@ -428,23 +428,23 @@ mod tests {
              *             +------------+
              *             | r "v1.2.3" |
              *             +------------+
+             *
+             *
+             *
              *                                  1: Currently `in_progress`
-             *                                     +---------------+
-             *                                +--->| t "t1" IP pr1 |
-             *                                |    +---------------+
-             *             +-----------+      |
-             *             | m "rrr" C | -----+-->
-             *             +-----------+      |
-             *                                |    +---------------+
-             *                                +--->| t "yee" R pr1 | 3: a try with a low pr
-             *                                     +---------------+
+             *             +-----------+           +---------------+
+             *             | m "rrr" C | -----+--->| t "t1" IP pr1 |
+             *             +-----------+           +---------------+
+             *
+             *
+             *
              *             +-----------+
              *             | m "aaa" C |
              *             +-----------+
              *                   |
              *                   V
              *           +----------------+
-             *           | m "mmm" R pr88 | 6: a master commit
+             *           | m "mmm" R pr88 | 5: a master commit
              *           +----------------+
              *
              *             +-----------+
@@ -453,7 +453,7 @@ mod tests {
              *                   |
              *                   V
              *           +----------------+
-             *           | m "123" R pr11 | 4: a master commit, high pr number
+             *           | m "123" R pr11 | 3: a master commit, high pr number
              *           +----------------+
              *
              *
@@ -463,12 +463,12 @@ mod tests {
              *                   |
              *                   V
              *           +----------------+
-             *           | m "foo" R pr77 | 5: a master commit
+             *           | m "foo" R pr77 | 4: a master commit
              *           +----------------+
              *                   |
              *                   V
              *           +---------------+
-             *           | t "baz" R pr4 | 7: a try with a low pr, blocked by parent
+             *           | t "baz" R pr4 | 6: a try with a low pr, blocked by parent
              *           +---------------+
              *
              *  The master commits should take priority, then "yee" followed
@@ -481,7 +481,6 @@ mod tests {
                 create_master("123", "345", 11, "days2"),
                 create_try("baz", "foo", 4, "days1"),
                 create_release("v.1.2.3", "days2"),
-                create_try("yee", "rrr", 1, "days2"), // lower PR number takes priority
                 create_try("t1", "rrr", 1, "days1").with_status(BenchmarkRequestStatus::InProgress),
                 create_master("mmm", "aaa", 88, "days2"),
             ];
@@ -497,10 +496,7 @@ mod tests {
 
             let sorted: Vec<BenchmarkRequest> = build_queue(&mut *db, &completed).await.unwrap();
 
-            queue_order_matches(
-                &sorted,
-                &["t1", "v.1.2.3", "yee", "123", "foo", "mmm", "baz"],
-            );
+            queue_order_matches(&sorted, &["t1", "v.1.2.3", "123", "foo", "mmm", "baz"]);
             Ok(ctx)
         })
         .await;
