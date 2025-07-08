@@ -842,7 +842,7 @@ impl<'a> tokio_postgres::types::FromSql<'a> for BenchmarkRequestStatus {
 pub enum BenchmarkRequestType {
     /// A Try commit
     Try {
-        sha: String,
+        sha: Option<String>,
         parent_sha: Option<String>,
         pr: u32,
     },
@@ -915,7 +915,7 @@ impl BenchmarkRequest {
     }
 
     pub fn create_try(
-        sha: &str,
+        sha: Option<&str>,
         parent_sha: Option<&str>,
         pr: u32,
         created_at: DateTime<Utc>,
@@ -926,7 +926,7 @@ impl BenchmarkRequest {
         Self {
             commit_type: BenchmarkRequestType::Try {
                 pr,
-                sha: sha.to_string(),
+                sha: sha.map(|it| it.to_string()),
                 parent_sha: parent_sha.map(|it| it.to_string()),
             },
             created_at,
@@ -962,10 +962,11 @@ impl BenchmarkRequest {
 
     /// Get either the `sha` for a `try` or `master` commit or a `tag` for a
     /// `release`
-    pub fn tag(&self) -> &str {
+    pub fn tag(&self) -> Option<&str> {
         match &self.commit_type {
-            BenchmarkRequestType::Try { sha, .. } | BenchmarkRequestType::Master { sha, .. } => sha,
-            BenchmarkRequestType::Release { tag } => tag,
+            BenchmarkRequestType::Try { sha, .. } => sha.as_deref(),
+            BenchmarkRequestType::Master { sha, .. } => Some(sha),
+            BenchmarkRequestType::Release { tag } => Some(tag),
         }
     }
 

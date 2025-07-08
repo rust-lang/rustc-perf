@@ -301,6 +301,10 @@ static MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX IF NOT EXISTS benchmark_request_status_idx on benchmark_request (status) WHERE status != 'completed';
     "#,
+    // Remove that tag cannot be NULL
+    r#"ALTER TABLE benchmark_request ALTER COLUMN tag DROP NOT NULL;"#,
+    // Prevent multiple try commits without a `sha` being added to the table
+    r#"CREATE UNIQUE INDEX benchmark_request_pr_status_idx ON benchmark_request (pr, commit_type) WHERE tag IS NULL;"#,
 ];
 
 #[async_trait::async_trait]
@@ -1457,7 +1461,7 @@ where
                 match commit_type {
                     "try" => {
                         let mut try_benchmark = BenchmarkRequest::create_try(
-                            tag,
+                            Some(tag),
                             parent_sha,
                             pr.unwrap() as u32,
                             created_at,

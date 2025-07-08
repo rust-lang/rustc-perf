@@ -182,7 +182,9 @@ fn sort_benchmark_requests(done: &HashSet<String>, request_queue: &mut [Benchmar
             )
         });
         for c in level {
-            done.insert(c.tag().to_string());
+            if let Some(tag) = c.tag() {
+                done.insert(tag.to_string());
+            }
         }
         finished += level_len;
     }
@@ -241,7 +243,7 @@ pub async fn build_queue(
 
     release_artifacts.sort_unstable_by(|a, b| {
         a.tag()
-            .cmp(b.tag())
+            .cmp(&b.tag())
             .then_with(|| a.created_at.cmp(&b.created_at))
     });
 
@@ -258,7 +260,7 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
         .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed])
         .await?
         .into_iter()
-        .map(|request| request.tag().to_string())
+        .filter_map(|request| request.tag().map(|tag| tag.to_string()))
         .collect();
 
     let queue = build_queue(conn, &completed).await?;
@@ -360,7 +362,7 @@ mod tests {
 
     fn create_try(sha: &str, parent: &str, pr: u32, age_days: &str) -> BenchmarkRequest {
         BenchmarkRequest::create_try(
-            sha,
+            Some(sha),
             Some(parent),
             pr,
             days_ago(age_days),
@@ -390,7 +392,10 @@ mod tests {
     }
 
     fn queue_order_matches(queue: &[BenchmarkRequest], expected: &[&str]) {
-        let queue_shas: Vec<&str> = queue.iter().map(|req| req.tag()).collect();
+        let queue_shas: Vec<&str> = queue
+            .iter()
+            .filter_map(|request| request.tag().map(|tag| tag))
+            .collect();
         assert_eq!(queue_shas, expected)
     }
 
