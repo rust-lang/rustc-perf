@@ -62,14 +62,14 @@ checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
 
 [[package]]
 name = "analyzeme"
-version = "12.0.0"
+version = "12.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20feead6e1e9722cb326230127d5ca89fe5c4609cb0dd047c3b58c81a26cfd18"
+checksum = "e204612e886ffe830ae0a943d9b66bd3418adb17d859d81cb1c457eee38557aa"
 dependencies = [
  "decodeme 10.1.3",
- "decodeme 12.0.0",
+ "decodeme 12.0.3",
  "measureme 10.1.3",
- "measureme 12.0.0",
+ "measureme 12.0.3",
  "memchr",
  "rustc-hash",
  "serde",
@@ -614,11 +614,11 @@ dependencies = [
 
 [[package]]
 name = "decodeme"
-version = "12.0.0"
+version = "12.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad52c78335c03452cb0404e5ae32e9e291f15186091be8d2e22d942f417475e0"
+checksum = "ecd00d8cf813abee38134c06d9164d1b82f75158c0dbfdb1fde429dee1e2ce9d"
 dependencies = [
- "measureme 12.0.0",
+ "measureme 12.0.3",
  "memchr",
  "rustc-hash",
  "serde",
@@ -1585,9 +1585,9 @@ dependencies = [
 
 [[package]]
 name = "measureme"
-version = "12.0.0"
+version = "12.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ed2d26a61b68ba37bf203340b6b6addf4da2c2e7cfb0cff700792088d69ebc9"
+checksum = "6ebd1ebda747ae161a4a377bf93f87e18d46faad2331cc0c7d25b84b1d445f49"
 dependencies = [
  "log",
  "memmap2",
