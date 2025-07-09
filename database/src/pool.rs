@@ -182,7 +182,10 @@ pub trait Connection: Send + Sync {
 
     /// Add an item to the `benchmark_requests`, if the `benchmark_request`
     /// exists it will be ignored
-    async fn insert_benchmark_request(&self, benchmark_request: &BenchmarkRequest);
+    async fn insert_benchmark_request(
+        &self,
+        benchmark_request: &BenchmarkRequest,
+    ) -> anyhow::Result<()>;
 
     /// Gets the benchmark requests matching the status. Optionally provide the
     /// number of days from whence to search from
@@ -436,12 +439,23 @@ mod tests {
             );
 
             let db = db.connection().await;
-            db.insert_benchmark_request(&master_benchmark_request).await;
-            db.insert_benchmark_request(&try_benchmark_request).await;
-            db.insert_benchmark_request(&release_benchmark_request)
-                .await;
+            assert!(db
+                .insert_benchmark_request(&master_benchmark_request)
+                .await
+                .is_ok());
+            assert!(db
+                .insert_benchmark_request(&try_benchmark_request)
+                .await
+                .is_ok());
+            assert!(db
+                .insert_benchmark_request(&release_benchmark_request)
+                .await
+                .is_ok());
             // duplicate insert
-            db.insert_benchmark_request(&master_benchmark_request).await;
+            assert!(db
+                .insert_benchmark_request(&master_benchmark_request)
+                .await
+                .is_err());
 
             Ok(ctx)
         })
@@ -484,10 +498,18 @@ mod tests {
             );
 
             let db = db.connection().await;
-            db.insert_benchmark_request(&master_benchmark_request).await;
-            db.insert_benchmark_request(&try_benchmark_request).await;
-            db.insert_benchmark_request(&release_benchmark_request)
-                .await;
+            assert!(db
+                .insert_benchmark_request(&master_benchmark_request)
+                .await
+                .is_ok());
+            assert!(db
+                .insert_benchmark_request(&try_benchmark_request)
+                .await
+                .is_ok());
+            assert!(db
+                .insert_benchmark_request(&release_benchmark_request)
+                .await
+                .is_ok());
 
             let requests = db
                 .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::ArtifactsReady])
@@ -521,7 +543,10 @@ mod tests {
             );
 
             let mut db = db.connection().await;
-            db.insert_benchmark_request(&master_benchmark_request).await;
+            assert!(db
+                .insert_benchmark_request(&master_benchmark_request)
+                .await
+                .is_ok());
 
             db.update_benchmark_request_status(
                 &master_benchmark_request,
@@ -561,7 +586,10 @@ mod tests {
                 "cranelift",
                 "",
             );
-            db.insert_benchmark_request(&try_benchmark_request).await;
+            assert!(db
+                .insert_benchmark_request(&try_benchmark_request)
+                .await
+                .is_ok());
             db.attach_shas_to_try_benchmark_request(pr, "foo", "bar")
                 .await
                 .unwrap();
@@ -597,7 +625,7 @@ mod tests {
                 "cranelift",
                 "",
             );
-            db.insert_benchmark_request(&completed_try).await;
+            assert!(db.insert_benchmark_request(&completed_try).await.is_ok());
 
             let try_benchmark_request = BenchmarkRequest::create_try(
                 None,
@@ -609,9 +637,15 @@ mod tests {
                 "",
             );
             // deliberately insert twice
-            db.insert_benchmark_request(&try_benchmark_request).await;
+            assert!(db
+                .insert_benchmark_request(&try_benchmark_request)
+                .await
+                .is_ok());
             // this one should fail
-            db.insert_benchmark_request(&try_benchmark_request).await;
+            assert!(db
+                .insert_benchmark_request(&try_benchmark_request)
+                .await
+                .is_err());
             db.attach_shas_to_try_benchmark_request(pr, "foo", "bar")
                 .await
                 .unwrap();

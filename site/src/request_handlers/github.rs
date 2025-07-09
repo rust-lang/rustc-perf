@@ -93,7 +93,9 @@ async fn queue_partial_try_benchmark_request(
             backends,
             "",
         );
-        conn.insert_benchmark_request(&try_request).await;
+        if let Err(e) = conn.insert_benchmark_request(&try_request).await {
+            log::error!("Failed to insert try benchmark request: {}", e);
+        }
     }
 }
 
