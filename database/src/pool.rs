@@ -579,4 +579,68 @@ mod tests {
         })
         .await;
     }
+
+    #[tokio::test]
+    async fn adding_try_commit_to_completed_request() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let pr = 42;
+
+            let completed_try = BenchmarkRequest::create_try(
+                Some("sha-2"),
+                Some("p-sha-1"),
+                pr,
+                time,
+                BenchmarkRequestStatus::Completed,
+                "cranelift",
+                "",
+            );
+            db.insert_benchmark_request(&completed_try).await;
+
+            let try_benchmark_request = BenchmarkRequest::create_try(
+                None,
+                None,
+                pr,
+                time,
+                BenchmarkRequestStatus::WaitingForArtifacts,
+                "cranelift",
+                "",
+            );
+            // deliberately insert twice
+            db.insert_benchmark_request(&try_benchmark_request).await;
+            // this one should fail
+            db.insert_benchmark_request(&try_benchmark_request).await;
+            db.attach_shas_to_try_benchmark_request(pr, "foo", "bar")
+                .await
+                .unwrap();
+
+            let requests = db
+                .get_benchmark_requests_by_status(&[
+                    BenchmarkRequestStatus::WaitingForArtifacts,
+                    BenchmarkRequestStatus::ArtifactsReady,
+                    BenchmarkRequestStatus::InProgress,
+                    BenchmarkRequestStatus::Completed,
+                ])
+                .await
+                .unwrap();
+
+            assert_eq!(requests.len(), 2);
+            let completed_try = requests
+                .iter()
+                .find(|req| req.status == BenchmarkRequestStatus::Completed);
+            assert!(completed_try.is_some());
+            assert_eq!(completed_try.unwrap().pr(), Some(&pr));
+
+            let artifacts_ready_try = requests
+                .iter()
+                .find(|req| req.status == BenchmarkRequestStatus::ArtifactsReady);
+            assert!(artifacts_ready_try.is_some());
+            assert_eq!(artifacts_ready_try.unwrap().pr(), Some(&pr));
+
+            Ok(ctx)
+        })
+        .await;
+    }
 }
