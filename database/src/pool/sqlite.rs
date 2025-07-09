@@ -1282,6 +1282,15 @@ impl Connection for SqliteConnection {
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
+
+    async fn attach_shas_to_try_benchmark_request(
+        &self,
+        _pr: u32,
+        _sha: &str,
+        _parent_sha: &str,
+    ) -> anyhow::Result<()> {
+        no_queue_implementation_abort!()
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {

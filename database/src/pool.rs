@@ -197,6 +197,15 @@ pub trait Connection: Send + Sync {
         benchmark_request: &BenchmarkRequest,
         benchmark_request_status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()>;
+
+    /// Update a Try commit to have a `sha` and `parent_sha`. Will update the
+    /// status of the request too a ready state.
+    async fn attach_shas_to_try_benchmark_request(
+        &self,
+        pr: u32,
+        sha: &str,
+        parent_sha: &str,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -529,6 +538,42 @@ mod tests {
             assert_eq!(requests.len(), 1);
             assert_eq!(requests[0].tag(), master_benchmark_request.tag());
             assert_eq!(requests[0].status, BenchmarkRequestStatus::InProgress);
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn updating_try_commits() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let pr = 42;
+
+            let try_benchmark_request = BenchmarkRequest::create_try(
+                None,
+                None,
+                pr,
+                time,
+                BenchmarkRequestStatus::WaitingForArtifacts,
+                "cranelift",
+                "",
+            );
+            db.insert_benchmark_request(&try_benchmark_request).await;
+            db.attach_shas_to_try_benchmark_request(pr, "foo", "bar")
+                .await
+                .unwrap();
+            let requests = db
+                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::ArtifactsReady])
+                .await
+                .unwrap();
+
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0].tag(), Some("foo"));
+            assert_eq!(requests[0].parent_sha(), Some("bar"));
+            assert_eq!(requests[0].status, BenchmarkRequestStatus::ArtifactsReady);
 
             Ok(ctx)
         })
