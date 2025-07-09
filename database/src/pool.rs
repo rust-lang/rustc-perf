@@ -632,12 +632,16 @@ mod tests {
                 .find(|req| req.status == BenchmarkRequestStatus::Completed);
             assert!(completed_try.is_some());
             assert_eq!(completed_try.unwrap().pr(), Some(&pr));
+            assert_eq!(completed_try.unwrap().tag(), Some("sha-2"));
+            assert_eq!(completed_try.unwrap().parent_sha(), Some("p-sha-1"));
 
             let artifacts_ready_try = requests
                 .iter()
                 .find(|req| req.status == BenchmarkRequestStatus::ArtifactsReady);
             assert!(artifacts_ready_try.is_some());
             assert_eq!(artifacts_ready_try.unwrap().pr(), Some(&pr));
+            assert_eq!(artifacts_ready_try.unwrap().tag(), Some("foo"));
+            assert_eq!(artifacts_ready_try.unwrap().parent_sha(), Some("bar"));
 
             Ok(ctx)
         })
