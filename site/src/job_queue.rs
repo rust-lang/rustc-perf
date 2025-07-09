@@ -12,6 +12,13 @@ use parking_lot::RwLock;
 use regex::Regex;
 use tokio::time::{self, Duration};
 
+pub fn run_new_queue() -> bool {
+    std::env::var("RUN_CRON")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(false)
+}
+
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database
 async fn create_benchmark_request_master_commits(

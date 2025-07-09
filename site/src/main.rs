@@ -1,5 +1,6 @@
 use futures::future::FutureExt;
 use parking_lot::RwLock;
+use site::job_queue::{cron_main, run_new_queue};
 use site::load;
 use std::env;
 use std::sync::Arc;
@@ -33,10 +34,6 @@ async fn main() {
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(30);
-    let run_cron_job = env::var("RUN_CRON")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(false);
 
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
@@ -62,9 +59,9 @@ async fn main() {
 
     let server = site::server::start(ctxt.clone(), port).fuse();
 
-    if run_cron_job {
+    if run_new_queue() {
         task::spawn(async move {
-            site::job_queue::cron_main(ctxt.clone(), queue_update_interval_seconds).await;
+            cron_main(ctxt.clone(), queue_update_interval_seconds).await;
         });
     }
 
