@@ -985,10 +985,7 @@ impl BenchmarkRequest {
 
     pub fn parent_sha(&self) -> Option<&str> {
         match &self.commit_type {
-            BenchmarkRequestType::Try { parent_sha, .. } => match parent_sha {
-                Some(parent_sha) => Some(parent_sha),
-                _ => None,
-            },
+            BenchmarkRequestType::Try { parent_sha, .. } => parent_sha.as_deref(),
             BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
             BenchmarkRequestType::Release { tag: _ } => None,
         }
