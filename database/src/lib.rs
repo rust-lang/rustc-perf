@@ -805,14 +805,20 @@ pub enum BenchmarkRequestStatus {
     Completed,
 }
 
+impl BenchmarkRequestStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            BenchmarkRequestStatus::WaitingForArtifacts => "waiting_for_artifacts",
+            BenchmarkRequestStatus::ArtifactsReady => "artifacts_ready",
+            BenchmarkRequestStatus::InProgress => "in_progress",
+            BenchmarkRequestStatus::Completed => "completed",
+        }
+    }
+}
+
 impl fmt::Display for BenchmarkRequestStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BenchmarkRequestStatus::WaitingForArtifacts => write!(f, "waiting_for_artifacts"),
-            BenchmarkRequestStatus::ArtifactsReady => write!(f, "artifacts_ready"),
-            BenchmarkRequestStatus::InProgress => write!(f, "in_progress"),
-            BenchmarkRequestStatus::Completed => write!(f, "completed"),
-        }
+        f.write_str(self.as_str())
     }
 }
 
@@ -825,10 +831,10 @@ impl<'a> tokio_postgres::types::FromSql<'a> for BenchmarkRequestStatus {
         let s: &str = <&str as tokio_postgres::types::FromSql>::from_sql(ty, raw)?;
 
         match s {
-            "waiting_for_artifacts" => Ok(Self::WaitingForArtifacts),
-            "artifacts_ready" => Ok(Self::ArtifactsReady),
-            "in_progress" => Ok(Self::InProgress),
-            "completed" => Ok(Self::Completed),
+            x if x == Self::WaitingForArtifacts.as_str() => Ok(Self::WaitingForArtifacts),
+            x if x == Self::ArtifactsReady.as_str() => Ok(Self::ArtifactsReady),
+            x if x == Self::InProgress.as_str() => Ok(Self::InProgress),
+            x if x == Self::Completed.as_str() => Ok(Self::Completed),
             other => Err(format!("unknown benchmark_request_status '{other}'").into()),
         }
     }
@@ -856,30 +862,12 @@ pub enum BenchmarkRequestType {
     Release { tag: String },
 }
 
-impl BenchmarkRequestType {
-    pub fn commit_type_str(&self) -> &str {
-        match self {
-            BenchmarkRequestType::Try {
-                sha: _,
-                parent_sha: _,
-                pr: _,
-            } => "try",
-            BenchmarkRequestType::Master {
-                sha: _,
-                parent_sha: _,
-                pr: _,
-            } => "master",
-            BenchmarkRequestType::Release { tag: _ } => "release",
-        }
-    }
-}
-
 impl fmt::Display for BenchmarkRequestType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BenchmarkRequestType::Try { .. } => write!(f, "try"),
             BenchmarkRequestType::Master { .. } => write!(f, "master"),
-            BenchmarkRequestType::Release { tag: _ } => write!(f, "release"),
+            BenchmarkRequestType::Release { .. } => write!(f, "release"),
         }
     }
 }
@@ -975,19 +963,15 @@ impl BenchmarkRequest {
             BenchmarkRequestType::Try { pr, .. } | BenchmarkRequestType::Master { pr, .. } => {
                 Some(pr)
             }
-            BenchmarkRequestType::Release { tag: _ } => None,
+            BenchmarkRequestType::Release { .. } => None,
         }
-    }
-
-    pub fn commit_type(&self) -> &str {
-        self.commit_type.commit_type_str()
     }
 
     pub fn parent_sha(&self) -> Option<&str> {
         match &self.commit_type {
             BenchmarkRequestType::Try { parent_sha, .. } => parent_sha.as_deref(),
             BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
-            BenchmarkRequestType::Release { tag: _ } => None,
+            BenchmarkRequestType::Release { .. } => None,
         }
     }
 }

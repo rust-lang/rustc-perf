@@ -1387,7 +1387,10 @@ where
             .unwrap();
     }
 
-    async fn insert_benchmark_request(&self, benchmark_request: &BenchmarkRequest) {
+    async fn insert_benchmark_request(
+        &self,
+        benchmark_request: &BenchmarkRequest,
+    ) -> anyhow::Result<()> {
         self.conn()
             .execute(
                 r#"
@@ -1401,22 +1404,22 @@ where
                     backends,
                     profiles
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT DO NOTHING;
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
             "#,
                 &[
                     &benchmark_request.tag(),
                     &benchmark_request.parent_sha(),
                     &benchmark_request.pr().map(|it| *it as i32),
-                    &benchmark_request.commit_type(),
-                    &benchmark_request.status.to_string(),
+                    &benchmark_request.commit_type,
+                    &benchmark_request.status,
                     &benchmark_request.created_at,
                     &benchmark_request.backends,
                     &benchmark_request.profiles,
                 ],
             )
             .await
-            .unwrap();
+            .context("Failed to insert benchmark request")?;
+        Ok(())
     }
 
     async fn get_benchmark_requests_by_status(

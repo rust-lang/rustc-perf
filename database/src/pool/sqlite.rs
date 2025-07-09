@@ -1264,7 +1264,10 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    async fn insert_benchmark_request(&self, _benchmark_request: &BenchmarkRequest) {
+    async fn insert_benchmark_request(
+        &self,
+        _benchmark_request: &BenchmarkRequest,
+    ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
 

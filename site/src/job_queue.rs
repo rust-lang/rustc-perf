@@ -42,7 +42,9 @@ async fn create_benchmark_request_master_commits(
                 "",
                 "",
             );
-            conn.insert_benchmark_request(&benchmark).await;
+            if let Err(e) = conn.insert_benchmark_request(&benchmark).await {
+                log::error!("Failed to insert master benchmark request: {}", e);
+            }
         }
     }
     Ok(())
@@ -130,7 +132,9 @@ async fn create_benchmark_request_releases(
                 "",
                 "",
             );
-            conn.insert_benchmark_request(&release_request).await;
+            if let Err(e) = conn.insert_benchmark_request(&release_request).await {
+                log::error!("Failed to insert release benchmark request: {}", e);
+            }
         }
     }
     Ok(())
@@ -401,7 +405,7 @@ mod tests {
         requests: &[BenchmarkRequest],
     ) {
         for request in requests {
-            conn.insert_benchmark_request(&request).await;
+            conn.insert_benchmark_request(&request).await.unwrap();
         }
     }
 
