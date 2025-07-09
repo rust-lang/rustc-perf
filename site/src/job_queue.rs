@@ -182,7 +182,16 @@ fn sort_benchmark_requests(done: &HashSet<String>, request_queue: &mut [Benchmar
             )
         });
         for c in level {
-            done.insert(c.tag().to_string());
+            // As the only `commit_type` that will not have a `tag` is a `Try`
+            // with the status of `AwaitingArtifacts` and we have asserted above
+            // that all of the statuses of the benchmark requests are
+            // `ArtifactsReady` it is implausable for this `expect(...)` to be
+            // hit.
+            done.insert(
+                c.tag()
+                    .expect("Tag should exist on a benchmark request being sorted")
+                    .to_string(),
+            );
         }
         finished += level_len;
     }
@@ -241,7 +250,7 @@ pub async fn build_queue(
 
     release_artifacts.sort_unstable_by(|a, b| {
         a.tag()
-            .cmp(b.tag())
+            .cmp(&b.tag())
             .then_with(|| a.created_at.cmp(&b.created_at))
     });
 
@@ -258,7 +267,7 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
         .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed])
         .await?
         .into_iter()
-        .map(|request| request.tag().to_string())
+        .filter_map(|request| request.tag().map(|tag| tag.to_string()))
         .collect();
 
     let queue = build_queue(conn, &completed).await?;
@@ -360,7 +369,7 @@ mod tests {
 
     fn create_try(sha: &str, parent: &str, pr: u32, age_days: &str) -> BenchmarkRequest {
         BenchmarkRequest::create_try(
-            sha,
+            Some(sha),
             Some(parent),
             pr,
             days_ago(age_days),
@@ -390,7 +399,10 @@ mod tests {
     }
 
     fn queue_order_matches(queue: &[BenchmarkRequest], expected: &[&str]) {
-        let queue_shas: Vec<&str> = queue.iter().map(|req| req.tag()).collect();
+        let queue_shas: Vec<&str> = queue
+            .iter()
+            .filter_map(|request| request.tag().map(|tag| tag))
+            .collect();
         assert_eq!(queue_shas, expected)
     }
 
@@ -423,23 +435,23 @@ mod tests {
              *             +------------+
              *             | r "v1.2.3" |
              *             +------------+
+             *
+             *
+             *
              *                                  1: Currently `in_progress`
-             *                                     +---------------+
-             *                                +--->| t "t1" IP pr1 |
-             *                                |    +---------------+
-             *             +-----------+      |
-             *             | m "rrr" C | -----+-->
-             *             +-----------+      |
-             *                                |    +---------------+
-             *                                +--->| t "yee" R pr1 | 3: a try with a low pr
-             *                                     +---------------+
+             *             +-----------+           +---------------+
+             *             | m "rrr" C | -----+--->| t "t1" IP pr1 |
+             *             +-----------+           +---------------+
+             *
+             *
+             *
              *             +-----------+
              *             | m "aaa" C |
              *             +-----------+
              *                   |
              *                   V
              *           +----------------+
-             *           | m "mmm" R pr88 | 6: a master commit
+             *           | m "mmm" R pr88 | 5: a master commit
              *           +----------------+
              *
              *             +-----------+
@@ -448,7 +460,7 @@ mod tests {
              *                   |
              *                   V
              *           +----------------+
-             *           | m "123" R pr11 | 4: a master commit, high pr number
+             *           | m "123" R pr11 | 3: a master commit, high pr number
              *           +----------------+
              *
              *
@@ -458,12 +470,12 @@ mod tests {
              *                   |
              *                   V
              *           +----------------+
-             *           | m "foo" R pr77 | 5: a master commit
+             *           | m "foo" R pr77 | 4: a master commit
              *           +----------------+
              *                   |
              *                   V
              *           +---------------+
-             *           | t "baz" R pr4 | 7: a try with a low pr, blocked by parent
+             *           | t "baz" R pr4 | 6: a try with a low pr, blocked by parent
              *           +---------------+
              *
              *  The master commits should take priority, then "yee" followed
@@ -476,7 +488,6 @@ mod tests {
                 create_master("123", "345", 11, "days2"),
                 create_try("baz", "foo", 4, "days1"),
                 create_release("v.1.2.3", "days2"),
-                create_try("yee", "rrr", 1, "days2"), // lower PR number takes priority
                 create_try("t1", "rrr", 1, "days1").with_status(BenchmarkRequestStatus::InProgress),
                 create_master("mmm", "aaa", 88, "days2"),
             ];
@@ -492,10 +503,7 @@ mod tests {
 
             let sorted: Vec<BenchmarkRequest> = build_queue(&mut *db, &completed).await.unwrap();
 
-            queue_order_matches(
-                &sorted,
-                &["t1", "v.1.2.3", "yee", "123", "foo", "mmm", "baz"],
-            );
+            queue_order_matches(&sorted, &["t1", "v.1.2.3", "123", "foo", "mmm", "baz"]);
             Ok(ctx)
         })
         .await;

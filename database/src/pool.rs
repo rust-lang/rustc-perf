@@ -409,7 +409,7 @@ mod tests {
             );
 
             let try_benchmark_request = BenchmarkRequest::create_try(
-                "b-sha-2",
+                Some("b-sha-2"),
                 Some("parent-sha-2"),
                 32,
                 time,
@@ -457,7 +457,7 @@ mod tests {
             );
 
             let try_benchmark_request = BenchmarkRequest::create_try(
-                "b-sha-2",
+                Some("b-sha-2"),
                 Some("parent-sha-2"),
                 32,
                 time,
