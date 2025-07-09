@@ -3,8 +3,10 @@ use crate::github::{
     client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
+use crate::job_queue::run_new_queue;
 use crate::load::SiteCtxt;
 
+use database::{BenchmarkRequest, BenchmarkRequestStatus};
 use hashbrown::HashMap;
 use std::sync::Arc;
 
@@ -72,6 +74,29 @@ async fn handle_issue(
     Ok(github::Response)
 }
 
+/// The try does not have a `sha` or a `parent_sha` but we need to keep a record
+/// of this commit existing. We make sure there can only be one `pr` with a
+/// status of `WaitingForArtifacts` to ensure we don't have duplicates.
+async fn queue_partial_try_benchmark_request(
+    conn: &dyn database::pool::Connection,
+    pr: u32,
+    backends: &str,
+) {
+    // We only want to run this if the new system is running
+    if run_new_queue() {
+        let try_request = BenchmarkRequest::create_try(
+            None,
+            None,
+            pr,
+            chrono::Utc::now(),
+            BenchmarkRequestStatus::WaitingForArtifacts,
+            backends,
+            "",
+        );
+        conn.insert_benchmark_request(&try_request).await;
+    }
+}
+
 async fn handle_rust_timer(
     ctxt: Arc<SiteCtxt>,
     main_client: &client::Client,
@@ -97,6 +122,13 @@ async fn handle_rust_timer(
         let msg = match queue {
             Ok(cmd) => {
                 let conn = ctxt.conn().await;
+
+                queue_partial_try_benchmark_request(
+                    &*conn,
+                    issue.number,
+                    cmd.params.backends.unwrap_or(""),
+                )
+                .await;
                 conn.queue_pr(
                     issue.number,
                     cmd.params.include,
@@ -137,6 +169,12 @@ async fn handle_rust_timer(
     {
         let conn = ctxt.conn().await;
         for command in &valid_build_cmds {
+            queue_partial_try_benchmark_request(
+                &*conn,
+                issue.number,
+                command.params.backends.unwrap_or(""),
+            )
+            .await;
             conn.queue_pr(
                 issue.number,
                 command.params.include,

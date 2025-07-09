@@ -1525,6 +1525,39 @@ where
 
         Ok(())
     }
+
+    async fn attach_shas_to_try_benchmark_request(
+        &self,
+        pr: u32,
+        sha: &str,
+        parent_sha: &str,
+    ) -> anyhow::Result<()> {
+        self.conn()
+            .execute(
+                "UPDATE
+                benchmark_request
+            SET
+                tag = $1,
+                parent_sha = $2,
+                status = $3
+            WHERE
+                pr = $4
+                AND commit_type = 'try'
+                AND tag IS NULL
+                AND status = $5;",
+                &[
+                    &sha,
+                    &parent_sha,
+                    &BenchmarkRequestStatus::ArtifactsReady,
+                    &(pr as i32),
+                    &BenchmarkRequestStatus::WaitingForArtifacts,
+                ],
+            )
+            .await
+            .context("failed to execute UPDATE benchmark_request")?;
+
+        Ok(())
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
