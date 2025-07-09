@@ -14,10 +14,17 @@ export interface ProfileElement {
   label: string;
   self_time: number;
   percent_total_time: number;
-  number_of_cache_misses?: number;
-  number_of_cache_hits?: number;
+  number_of_cache_misses: number;
+  number_of_cache_hits: number;
   invocation_count: number;
-  blocked_time?: number;
+  blocked_time: number;
+  incremental_load_time: number;
+}
+
+export interface ProfileElementDelta {
+  self_time: number;
+  invocation_count: number;
+  number_of_cache_hits: number;
   incremental_load_time: number;
 }
 
@@ -34,7 +41,13 @@ export interface ProfileData {
 
 export interface SelfProfileResponse {
   profile: ProfileData;
-  base_profile_delta?: ProfileData;
+  base_profile_delta?: ProfileDataDelta;
+}
+
+export interface ProfileDataDelta {
+  totals: ProfileElementDelta;
+  query_data: ProfileElementDelta[];
+  artifact_sizes: ArtifactSize[];
 }
 
 export function toSeconds(time: number): number {
@@ -221,7 +234,7 @@ export interface DeltaData {
   isIntegral: boolean;
 }
 
-interface TableRowData {
+export interface TableRowData {
   isTotal: boolean;
   label: string;
   timePercent: {value: number; formatted: string; title: string};
@@ -229,6 +242,8 @@ interface TableRowData {
   timeDelta: DeltaData | null;
   executions: number;
   executionsDelta: DeltaData | null;
+  cacheHits: number;
+  cacheHitsDelta: DeltaData | null;
   incrementalLoading: number;
   incrementalLoadingDelta: DeltaData | null;
 }
@@ -244,85 +259,66 @@ export function createTableData(
   // Add totals row first
   const totals = profile.totals;
   const totalsDelta = delta?.totals;
-  result.push({
-    isTotal: true,
-    label: totals.label,
+  result.push(createRowData(true, totals, totalsDelta));
+
+  // Add query data rows
+  profile.query_data.forEach((query, idx) => {
+    const queryDelta = delta?.query_data[idx];
+    result.push(createRowData(false, query, queryDelta));
+  });
+
+  return result;
+}
+
+function createRowData(
+  isTotal: boolean,
+  value: ProfileElement,
+  delta: ProfileElementDelta | undefined
+): TableRowData {
+  return {
+    isTotal,
+    label: value.label,
     timePercent:
-      totals.percent_total_time < 0
+      value.percent_total_time < 0
         ? {
             value: -1,
             formatted: "-",
             title: "No wall-time stat collected for this run",
           }
         : {
-            value: totals.percent_total_time,
-            formatted: totals.percent_total_time.toFixed(2) + "%*",
+            value: value.percent_total_time,
+            formatted: value.percent_total_time.toFixed(2) + "%",
             title: "% of cpu-time stat",
           },
-    timeSeconds: toSeconds(totals.self_time),
-    timeDelta: totalsDelta
+    timeSeconds: toSeconds(value.self_time),
+    timeDelta: delta
       ? createDelta(
-          toSeconds(totals.self_time),
-          toSeconds(totalsDelta.self_time),
+          toSeconds(value.self_time),
+          toSeconds(delta.self_time),
           false
         )
       : null,
-    executions: totals.invocation_count,
-    executionsDelta: totalsDelta
-      ? createDelta(totals.invocation_count, totalsDelta.invocation_count, true)
+    executions: value.invocation_count,
+    executionsDelta: delta
+      ? createDelta(value.invocation_count, delta.invocation_count, true)
       : null,
-    incrementalLoading: toSeconds(totals.incremental_load_time),
-    incrementalLoadingDelta: totalsDelta
+    cacheHits: value.number_of_cache_hits,
+    cacheHitsDelta: delta
       ? createDelta(
-          toSeconds(totals.incremental_load_time),
-          toSeconds(totalsDelta.incremental_load_time),
+          value.number_of_cache_hits,
+          delta.number_of_cache_hits,
+          true
+        )
+      : null,
+    incrementalLoading: toSeconds(value.incremental_load_time),
+    incrementalLoadingDelta: delta
+      ? createDelta(
+          toSeconds(value.incremental_load_time),
+          toSeconds(delta.incremental_load_time),
           false
         )
       : null,
-  });
-
-  // Add query data rows
-  profile.query_data.forEach((query, idx) => {
-    const queryDelta = delta?.query_data[idx];
-    result.push({
-      isTotal: false,
-      label: query.label,
-      timePercent:
-        query.percent_total_time < 0
-          ? {
-              value: -1,
-              formatted: "-",
-              title: "No wall-time stat collected for this run",
-            }
-          : {
-              value: query.percent_total_time,
-              formatted: query.percent_total_time.toFixed(2) + "%",
-              title: "",
-            },
-      timeSeconds: toSeconds(query.self_time),
-      timeDelta: queryDelta
-        ? createDelta(
-            toSeconds(query.self_time),
-            toSeconds(queryDelta.self_time),
-            false
-          )
-        : null,
-      executions: query.invocation_count,
-      executionsDelta: queryDelta
-        ? createDelta(query.invocation_count, queryDelta.invocation_count, true)
-        : null,
-      incrementalLoading: toSeconds(query.incremental_load_time),
-      incrementalLoadingDelta: queryDelta
-        ? createDelta(
-            toSeconds(query.incremental_load_time),
-            toSeconds(queryDelta.incremental_load_time),
-            false
-          )
-        : null,
-    });
-  });
-
-  return result;
+  };
 }
 
 export function createArtifactData(data: SelfProfileResponse | null): {

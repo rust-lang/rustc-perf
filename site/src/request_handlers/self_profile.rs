@@ -214,6 +214,8 @@ fn get_self_profile_delta(
         self_time: profile.totals.self_time as i64 - base_profile.totals.self_time as i64,
         invocation_count: profile.totals.invocation_count as i32
             - base_profile.totals.invocation_count as i32,
+        number_of_cache_hits: profile.totals.number_of_cache_hits as i32
+            - base_profile.totals.number_of_cache_hits as i32,
         incremental_load_time: profile.totals.incremental_load_time as i64
             - base_profile.totals.incremental_load_time as i64,
     };
@@ -230,6 +232,8 @@ fn get_self_profile_delta(
                 let delta = self_profile::QueryDataDelta {
                     self_time: qd.self_time as i64 - base_qd.self_time as i64,
                     invocation_count: qd.invocation_count as i32 - base_qd.invocation_count as i32,
+                    number_of_cache_hits: qd.number_of_cache_hits as i32
+                        - base_qd.number_of_cache_hits as i32,
                     incremental_load_time: qd.incremental_load_time as i64
                         - base_qd.incremental_load_time as i64,
                 };
@@ -240,6 +244,7 @@ fn get_self_profile_delta(
                 let delta = self_profile::QueryDataDelta {
                     self_time: qd.self_time as i64,
                     invocation_count: qd.invocation_count as i32,
+                    number_of_cache_hits: qd.number_of_cache_hits as i32,
                     incremental_load_time: qd.incremental_load_time as i64,
                 };
 

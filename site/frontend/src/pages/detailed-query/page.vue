@@ -12,6 +12,7 @@ import {
   createTableData,
   createArtifactData,
   DeltaData,
+  TableRowData,
 } from "./utils";
 
 const loading = ref(true);
@@ -21,9 +22,10 @@ const showIncr = ref(true);
 const showDelta = ref(true);
 
 type SortDirection = "asc" | "desc";
+type ColumnName = keyof TableRowData;
 
 // Client-side sorting state
-const currentSortColumn = ref<string>("timeSeconds");
+const currentSortColumn = ref<ColumnName>("timeSeconds");
 const currentSortDirection = ref<SortDirection>("desc");
 
 // Computed properties for UI data
@@ -57,23 +59,22 @@ const tableData = computed(() => {
         aValue = a.timeSeconds;
         bValue = b.timeSeconds;
         // Use percentage change as secondary sort for equal absolute values
-        aSecondary =
-          a.timeDelta !== null ? Math.abs(a.timeDelta.percentage) : 0;
-        bSecondary =
-          b.timeDelta !== null ? Math.abs(b.timeDelta.percentage) : 0;
+        aSecondary = Math.abs(a.timeDelta?.percentage ?? 0);
+        bSecondary = Math.abs(b.timeDelta?.percentage ?? 0);
         break;
       case "executions": // Executions
         aValue = a.executions;
         bValue = b.executions;
         // Use percentage change as secondary sort for equal absolute values
-        aSecondary =
-          a.executionsDelta !== null
-            ? Math.abs(a.executionsDelta.percentage)
-            : 0;
-        bSecondary =
-          b.executionsDelta !== null
-            ? Math.abs(b.executionsDelta.percentage)
-            : 0;
+        aSecondary = Math.abs(a.executionsDelta?.percentage ?? 0);
+        bSecondary = Math.abs(b.executionsDelta?.percentage ?? 0);
+        break;
+      case "cacheHits": // Hits
+        aValue = a.cacheHits;
+        bValue = b.cacheHits;
+        // Use percentage change as secondary sort for equal absolute values
+        aSecondary = Math.abs(a.cacheHitsDelta?.percentage ?? 0);
+        bSecondary = Math.abs(b.cacheHitsDelta?.percentage ?? 0);
         break;
       case "incrementalLoading": // Incremental loading (s)
         aValue = a.incrementalLoading;
@@ -107,14 +108,15 @@ const tableData = computed(() => {
         bValue =
           b.executionsDelta !== null ? b.executionsDelta.delta : -Infinity;
         // Use percentage as secondary sort for equal delta values
-        aSecondary =
-          a.executionsDelta !== null
-            ? Math.abs(a.executionsDelta.percentage)
-            : 0;
-        bSecondary =
-          b.executionsDelta !== null
-            ? Math.abs(b.executionsDelta.percentage)
-            : 0;
+        aSecondary = Math.abs(a.executionsDelta?.percentage ?? 0);
+        bSecondary = Math.abs(b.executionsDelta?.percentage ?? 0);
+        break;
+      case "cacheHitsDelta": // Cache hits delta
+        aValue = a.cacheHitsDelta !== null ? a.cacheHitsDelta.delta : -Infinity;
+        bValue = b.cacheHitsDelta !== null ? b.cacheHitsDelta.delta : -Infinity;
+        // Use percentage as secondary sort for equal delta values
+        aSecondary = Math.abs(a.cacheHitsDelta?.percentage ?? 0);
+        bSecondary = Math.abs(b.cacheHitsDelta?.percentage ?? 0);
         break;
       case "incrementalLoadingDelta": // Incremental loading delta
         aValue =
@@ -126,14 +128,8 @@ const tableData = computed(() => {
             ? b.incrementalLoadingDelta.delta
             : -Infinity;
         // Use percentage as secondary sort for equal delta values
-        aSecondary =
-          a.incrementalLoadingDelta !== null
-            ? Math.abs(a.incrementalLoadingDelta.percentage)
-            : 0;
-        bSecondary =
-          b.incrementalLoadingDelta !== null
-            ? Math.abs(b.incrementalLoadingDelta.percentage)
-            : 0;
+        aSecondary = Math.abs(a.incrementalLoadingDelta?.percentage ?? 0);
+        bSecondary = Math.abs(b.incrementalLoadingDelta?.percentage ?? 0);
         break;
       default:
         aValue = a.label;
@@ -173,10 +169,10 @@ function loadSortFromUrl(urlParams: Dict<string>) {
   const sort = urlParams["sort"] ?? "-timeSeconds"; // Default to descending timeSeconds
   // Handle sort format: either "columnName" for asc or "-columnName" for desc
   if (sort.startsWith("-")) {
-    currentSortColumn.value = sort.substring(1);
+    currentSortColumn.value = sort.substring(1) as ColumnName;
     currentSortDirection.value = "desc";
   } else {
-    currentSortColumn.value = sort;
+    currentSortColumn.value = sort as ColumnName;
     currentSortDirection.value = "asc";
   }
 }
@@ -223,7 +219,7 @@ function populateUIData(responseData: SelfProfileResponse, state: Selector) {
 }
 
 function changeSortParameters(
-  columnName: string,
+  columnName: ColumnName,
   defaultDirection: SortDirection
 ) {
   // Toggle direction if clicking the same column, otherwise use default direction
@@ -239,7 +235,7 @@ function changeSortParameters(
   storeSortToUrl();
 }
 
-function getHeaderClass(columnName: string): string {
+function getHeaderClass(columnName: keyof TableRowData): string {
   if (columnName === currentSortColumn.value) {
     if (currentSortDirection.value === "asc") {
       return "header-sort-asc";
@@ -439,6 +435,20 @@ loadData();
                 >Executions delta</a
               >
             </th>
+            <th :class="getHeaderClass('cacheHits')">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('cacheHits', 'desc')"
+                >Hits</a
+              >
+            </th>
+            <th v-if="showDelta" :class="getHeaderClass('cacheHitsDelta')">
+              <a
+                href="#"
+                @click.prevent="changeSortParameters('cacheHitsDelta', 'desc')"
+                >Hits delta</a
+              >
+            </th>
             <th
               v-if="showIncr"
               :class="getHeaderClass('incrementalLoading')"
@@ -449,7 +459,7 @@ loadData();
                 @click.prevent="
                   changeSortParameters('incrementalLoading', 'desc')
                 "
-                >Incremental loading (s)</a
+                >Incr. loading (s)</a
               >
             </th>
             <th
@@ -461,7 +471,7 @@ loadData();
                 @click.prevent="
                   changeSortParameters('incrementalLoadingDelta', 'desc')
                 "
-                >Incremental loading delta</a
+                >Incr. loading delta</a
               >
             </th>
           </tr>
@@ -483,6 +493,10 @@ loadData();
             <td>{{ row.executions }}</td>
             <td v-if="showDelta">
               <DeltaComponent :delta="row.executionsDelta" />
+            </td>
+            <td>{{ row.cacheHits }}</td>
+            <td v-if="showDelta">
+              <DeltaComponent :delta="row.cacheHitsDelta" />
             </td>
             <td v-if="showIncr">{{ row.incrementalLoading.toFixed(3) }}</td>
             <td v-if="showDelta && showIncr">
