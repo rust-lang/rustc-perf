@@ -1,8 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
-    BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, CollectionId, Commit, CommitType,
-    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
+    BenchmarkRequest, BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, CollectionId,
+    Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -306,6 +306,28 @@ static MIGRATIONS: &[&str] = &[
     // Prevent multiple try commits without a `sha` and the same `pr` number
     // being added to the table
     r#"CREATE UNIQUE INDEX benchmark_request_pr_commit_type_idx ON benchmark_request (pr, commit_type) WHERE status != 'completed';"#,
+    r#"
+    CREATE TABLE IF NOT EXISTS job_queue (
+        id            SERIAL PRIMARY KEY,
+        request_id    INTEGER NOT NULL,
+        target        TEXT NOT NULL,
+        backend       TEXT NOT NULL,
+        benchmark_set INTEGER NOT NULL,
+        collector_id  TEXT NOT NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        started_at    TIMESTAMPTZ,
+        completed_at  TIMESTAMPTZ,
+        status        TEXT NOT NULL,
+        retry         INTEGER DEFAULT 0,
+        error         TEXT,
+
+        CONSTRAINT job_queue_request_fk
+            FOREIGN KEY (request_id)
+            REFERENCES benchmark_request(id)
+            ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS job_queue_request_id_idx ON job_queue (request_id);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -1561,6 +1583,134 @@ where
 
         Ok(())
     }
+
+    async fn try_mark_benchmark_request_as_completed(
+        &self,
+        benchmark_request: &mut BenchmarkRequest,
+    ) -> anyhow::Result<bool> {
+        anyhow::ensure!(
+            benchmark_request.tag().is_some(),
+            "Benchmark request has no tag"
+        );
+        anyhow::ensure!(
+            benchmark_request.status == BenchmarkRequestStatus::InProgress,
+            "Can only mark benchmark request whos status is in_progress as complete"
+        );
+
+        // Find if the benchmark is completed and update it's status to completed
+        // in one SQL block
+        let row = self
+            .conn()
+            .query_opt(
+                "
+                UPDATE
+                    benchmark_request
+                SET
+                    status = $1,
+                    completed_at = NOW()
+                WHERE
+                    benchmark_request.tag = $2
+                AND benchmark_request.commit_type = $3
+                AND benchmark_request.status = $4
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        job_queue
+                    WHERE job_queue.request_id = benchmark_request.id
+                    AND job_queue.status NOT IN ($5, $6)
+                )
+                RETURNING benchmark_request.id;
+            ",
+                &[
+                    &BenchmarkRequestStatus::Completed,
+                    &benchmark_request.tag(),
+                    &benchmark_request.commit_type,
+                    &benchmark_request.status,
+                    &BenchmarkJobStatus::Success,
+                    &BenchmarkJobStatus::Failure,
+                ],
+            )
+            .await
+            .context("Failed to get id for benchmark_request")?;
+        // The affected id is returned by the query thus we can use the row's
+        // presence to determine if the request was marked as completed
+        if row.is_some() {
+            // Also mutate our object
+            benchmark_request.status = BenchmarkRequestStatus::Completed;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    async fn get_benchmark_request_id(
+        &self,
+        benchmark_request: &BenchmarkRequest,
+    ) -> anyhow::Result<u32> {
+        anyhow::ensure!(
+            benchmark_request.tag().is_some(),
+            "Benchmark request has no tag"
+        );
+
+        let row = self
+            .conn()
+            .query_opt(
+                "
+                SELECT
+                    id
+                FROM
+                    benchmark_request
+                WHERE
+                    tag = $1
+                    AND commit_type = $2
+                    AND status = $3;",
+                &[
+                    &benchmark_request.tag(),
+                    &benchmark_request.commit_type,
+                    &benchmark_request.status,
+                ],
+            )
+            .await
+            .context("Failed to get id for benchmark_request")?;
+
+        if let Some(row) = row {
+            Ok(row.get::<_, i32>(0) as u32)
+        } else {
+            Ok(1)
+        }
+    }
+
+    async fn insert_benchmark_job(
+        &self,
+        request_id: u32,
+        benchmark_job: &BenchmarkJob,
+    ) -> anyhow::Result<()> {
+        self.conn()
+            .execute(
+                "
+                INSERT INTO job_queue(
+                    request_id,
+                    target,
+                    backend,
+                    benchmark_set,
+                    collector_id,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6);",
+                &[
+                    &(request_id as i32),
+                    &benchmark_job.target,
+                    &benchmark_job.backend,
+                    &(benchmark_job.benchmark_set as i32),
+                    &benchmark_job.collector_id,
+                    &benchmark_job.status,
+                ],
+            )
+            .await
+            .context("Failed to insert benchmark job")?;
+        Ok(())
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
@@ -1606,6 +1756,9 @@ macro_rules! impl_to_postgresql_via_to_string {
 
 impl_to_postgresql_via_to_string!(BenchmarkRequestType);
 impl_to_postgresql_via_to_string!(BenchmarkRequestStatus);
+impl_to_postgresql_via_to_string!(BenchmarkJobStatus);
+impl_to_postgresql_via_to_string!(Target);
+impl_to_postgresql_via_to_string!(CodegenBackend);
 
 #[cfg(test)]
 mod tests {
