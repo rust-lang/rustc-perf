@@ -17,7 +17,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt", "process"] }
 
-thiserror = "1"
+thiserror = "2"
 tempfile = "3"
 libc = "0.2"
 semver = "1.0"
