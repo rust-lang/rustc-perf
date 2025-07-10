@@ -805,13 +805,18 @@ pub enum BenchmarkRequestStatus {
     Completed,
 }
 
+const WAITING_FOR_ARTIFACTS_STR: &str = "waiting_for_artifacts";
+const ARTIFACTS_READY_STR: &str = "artifacts_ready";
+const IN_PROGRESS_STR: &str = "in_progress";
+const COMPLETED_STR: &str = "completed";
+
 impl BenchmarkRequestStatus {
     pub fn as_str(&self) -> &str {
         match self {
-            BenchmarkRequestStatus::WaitingForArtifacts => "waiting_for_artifacts",
-            BenchmarkRequestStatus::ArtifactsReady => "artifacts_ready",
-            BenchmarkRequestStatus::InProgress => "in_progress",
-            BenchmarkRequestStatus::Completed => "completed",
+            BenchmarkRequestStatus::WaitingForArtifacts => WAITING_FOR_ARTIFACTS_STR,
+            BenchmarkRequestStatus::ArtifactsReady => ARTIFACTS_READY_STR,
+            BenchmarkRequestStatus::InProgress => IN_PROGRESS_STR,
+            BenchmarkRequestStatus::Completed { .. } => COMPLETED_STR,
         }
     }
 }
@@ -831,10 +836,10 @@ impl<'a> tokio_postgres::types::FromSql<'a> for BenchmarkRequestStatus {
         let s: &str = <&str as tokio_postgres::types::FromSql>::from_sql(ty, raw)?;
 
         match s {
-            x if x == Self::WaitingForArtifacts.as_str() => Ok(Self::WaitingForArtifacts),
-            x if x == Self::ArtifactsReady.as_str() => Ok(Self::ArtifactsReady),
-            x if x == Self::InProgress.as_str() => Ok(Self::InProgress),
-            x if x == Self::Completed.as_str() => Ok(Self::Completed),
+            WAITING_FOR_ARTIFACTS_STR => Ok(Self::WaitingForArtifacts),
+            ARTIFACTS_READY_STR => Ok(Self::ArtifactsReady),
+            IN_PROGRESS_STR => Ok(Self::InProgress),
+            COMPLETED_STR => Ok(Self::Completed),
             other => Err(format!("unknown benchmark_request_status '{other}'").into()),
         }
     }
