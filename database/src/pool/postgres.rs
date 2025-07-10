@@ -1452,7 +1452,7 @@ where
         let benchmark_requests = rows
             .iter()
             .map(|row| {
-                let tag = row.get::<_, &str>(0);
+                let tag = row.get::<_, Option<&str>>(0);
                 let parent_sha = row.get::<_, Option<&str>>(1);
                 let pr = row.get::<_, Option<i32>>(2);
                 let commit_type = row.get::<_, &str>(3);
@@ -1465,7 +1465,7 @@ where
                 match commit_type {
                     "try" => {
                         let mut try_benchmark = BenchmarkRequest::create_try(
-                            Some(tag),
+                            tag,
                             parent_sha,
                             pr.unwrap() as u32,
                             created_at,
@@ -1478,7 +1478,7 @@ where
                     }
                     "master" => {
                         let mut master_benchmark = BenchmarkRequest::create_master(
-                            tag,
+                            tag.expect("Master commit in DB without SHA"),
                             parent_sha.unwrap(),
                             pr.unwrap() as u32,
                             created_at,
@@ -1491,7 +1491,11 @@ where
                     }
                     "release" => {
                         let mut release_benchmark = BenchmarkRequest::create_release(
-                            tag, created_at, status, backends, profiles,
+                            tag.expect("Release commit in DB witohut SHA"),
+                            created_at,
+                            status,
+                            backends,
+                            profiles,
                         );
                         release_benchmark.completed_at = completed_at;
                         release_benchmark
