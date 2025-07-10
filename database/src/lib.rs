@@ -849,6 +849,10 @@ impl<'a> tokio_postgres::types::FromSql<'a> for BenchmarkRequestStatus {
     }
 }
 
+const BENCHMARK_REQUEST_TRY_STR: &str = "try";
+const BENCHMARK_REQUEST_MASTER_STR: &str = "master";
+const BENCHMARK_REQUEST_RELEASE_STR: &str = "release";
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestType {
     /// A Try commit
@@ -870,9 +874,9 @@ pub enum BenchmarkRequestType {
 impl fmt::Display for BenchmarkRequestType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BenchmarkRequestType::Try { .. } => write!(f, "try"),
-            BenchmarkRequestType::Master { .. } => write!(f, "master"),
-            BenchmarkRequestType::Release { .. } => write!(f, "release"),
+            BenchmarkRequestType::Try { .. } => write!(f, "{BENCHMARK_REQUEST_TRY_STR}"),
+            BenchmarkRequestType::Master { .. } => write!(f, "{BENCHMARK_REQUEST_MASTER_STR}"),
+            BenchmarkRequestType::Release { .. } => write!(f, "{BENCHMARK_REQUEST_RELEASE_STR}"),
         }
     }
 }

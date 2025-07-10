@@ -3,6 +3,7 @@ use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
     BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, CollectionId, Commit, CommitType,
     CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
+    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR, BENCHMARK_REQUEST_TRY_STR,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -1463,7 +1464,7 @@ where
                 let profiles = row.get::<_, &str>(8);
 
                 match commit_type {
-                    "try" => {
+                    BENCHMARK_REQUEST_TRY_STR => {
                         let mut try_benchmark = BenchmarkRequest::create_try(
                             tag,
                             parent_sha,
@@ -1476,7 +1477,7 @@ where
                         try_benchmark.completed_at = completed_at;
                         try_benchmark
                     }
-                    "master" => {
+                    BENCHMARK_REQUEST_MASTER_STR => {
                         let mut master_benchmark = BenchmarkRequest::create_master(
                             tag.expect("Master commit in DB without SHA"),
                             parent_sha.unwrap(),
@@ -1489,7 +1490,7 @@ where
                         master_benchmark.completed_at = completed_at;
                         master_benchmark
                     }
-                    "release" => {
+                    BENCHMARK_REQUEST_RELEASE_STR => {
                         let mut release_benchmark = BenchmarkRequest::create_release(
                             tag.expect("Release commit in DB witohut SHA"),
                             created_at,
