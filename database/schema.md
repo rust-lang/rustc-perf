@@ -259,7 +259,6 @@ aid         benchmark   error
 1           syn-1.0.89  Failed to compile...
 ```
 
-
 ## New benchmarking design
 We are currently implementing a new design for dispatching benchmarks to collector(s) and storing
 them in the database. It will support new use-cases, like backfilling of new benchmarks into a parent
@@ -296,3 +295,18 @@ Columns:
   * `completed`: Completed request.
 * **backends** (`text NOT NULL`): Comma-separated list of codegen backends to benchmark. If empty, the default set of codegen backends will be benchmarked.
 * **profiles** (`text NOT NULL`): Comma-separated list of profiles to benchmark. If empty, the default set of profiles will be benchmarked.
+
+### job_queue
+
+This table stores ephemeral benchmark jobs, which specifically tell the
+collector which benchmarks it should execute. The jobs will be kept in the
+table for ~30 days after being completed, so that we can quickly figure out
+what master parent jobs we need to backfill when handling try builds.
+
+```
+psql# SELECT * FROM job_queue limit 1;
+
+id   request_id   target    backend   benchmark_set  collector_id    created_at                   started_at                   completed_at                 status     retry   error 
+---  -----------  --------  --------  -------------  --------------  ---------------------------  ---------------------------  ---------------------------  ---------  ------  --------
+23            7   AArch64   llvm      5              collector-1     2025-07-10 09:00:00.123+00   2025-07-10 09:05:02.456+00   2025-07-10 09:15:17.890+00   complete       0  
+```

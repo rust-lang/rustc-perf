@@ -179,7 +179,23 @@ async fn enqueue_next_job(
     conn: &dyn database::pool::Connection,
     index: &mut BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
-    let _queue = build_queue(conn, index).await?;
+    let queue = build_queue(conn, index).await?;
+    for mut request in queue {
+        if request.status() != BenchmarkRequestStatus::InProgress {
+            // TODO:
+            // - Uncomment
+            // - Actually enqueue the jobs
+            // conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
+            //     .await?;
+            break;
+        } else if conn
+            .try_mark_benchmark_request_as_completed(&mut request)
+            .await?
+        {
+            index.add_tag(request.tag().unwrap());
+            continue;
+        }
+    }
     Ok(())
 }
 
