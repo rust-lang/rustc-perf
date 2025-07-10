@@ -1281,8 +1281,8 @@ impl Connection for SqliteConnection {
     }
 
     async fn update_benchmark_request_status(
-        &mut self,
-        _request: &BenchmarkRequest,
+        &self,
+        _tag: &str,
         _status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()

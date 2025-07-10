@@ -194,10 +194,11 @@ pub trait Connection: Send + Sync {
     /// been completed yet. Pending statuses are `ArtifactsReady` and `InProgress`.
     async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>>;
 
-    /// Update the status of a `benchmark_request`
+    /// Update the status of a `benchmark_request` with the given `tag`.
+    /// If no such request exists in the DB, returns an error.
     async fn update_benchmark_request_status(
-        &mut self,
-        request: &BenchmarkRequest,
+        &self,
+        tag: &str,
         status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()>;
 

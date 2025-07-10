@@ -1452,17 +1452,14 @@ where
     }
 
     async fn update_benchmark_request_status(
-        &mut self,
-        request: &BenchmarkRequest,
+        &self,
+        tag: &str,
         status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()> {
-        let tag = request
-            .tag()
-            .expect("Cannot update status of a benchmark request without a tag. Use `attach_shas_to_try_benchmark_request` instead.");
-
         let status_str = status.as_str();
         let completed_at = status.completed_at();
-        self.conn()
+        let modified_rows = self
+            .conn()
             .execute(
                 r#"
                 UPDATE benchmark_request
@@ -1471,9 +1468,14 @@ where
                 &[&status_str, &completed_at, &tag],
             )
             .await
-            .context("failed to benchmark request status update")?;
-
-        Ok(())
+            .context("failed to update benchmark request status")?;
+        if modified_rows == 0 {
+            Err(anyhow::anyhow!(
+                "Could not update status of benchmark request with tag `{tag}`, it was not found."
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     async fn attach_shas_to_try_benchmark_request(
