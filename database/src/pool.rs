@@ -335,7 +335,7 @@ mod tests {
     use super::*;
     use crate::{
         tests::{run_db_test, run_postgres_test},
-        BenchmarkRequestStatus, Commit, CommitType, Date,
+        BenchmarkRequestStatus, BenchmarkRequestType, Commit, CommitType, Date,
     };
 
     /// Create a Commit
@@ -406,153 +406,93 @@ mod tests {
         .await;
     }
 
+    // Check that we can't have multiple requests with the same SHA
     #[tokio::test]
-    async fn insert_benchmark_requests() {
+    async fn multiple_requests_same_sha() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client();
-            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let master_benchmark_request = BenchmarkRequest::create_master(
+            let db = db.connection().await;
+            db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-1",
                 "parent-sha-1",
                 42,
-                time,
-                BenchmarkRequestStatus::ArtifactsReady,
-                "llvm",
-                "",
-            );
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
 
-            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
-                Some("b-sha-2"),
-                Some("parent-sha-2"),
-                32,
-                time,
-                BenchmarkRequestStatus::ArtifactsReady,
-                "cranelift",
-                "",
-            );
-
-            let release_benchmark_request = BenchmarkRequest::create_release(
-                "1.8.0",
-                time,
-                BenchmarkRequestStatus::ArtifactsReady,
-            );
-
-            let db = db.connection().await;
-            db.insert_benchmark_request(&master_benchmark_request)
+            db.insert_benchmark_request(&BenchmarkRequest::create_release("a-sha-1", Utc::now()))
                 .await
-                .unwrap();
-            db.insert_benchmark_request(&try_benchmark_request)
-                .await
-                .unwrap();
-            db.insert_benchmark_request(&release_benchmark_request)
-                .await
-                .unwrap();
-            // duplicate insert
-            assert!(db
-                .insert_benchmark_request(&master_benchmark_request)
-                .await
-                .is_err());
+                .expect_err("it was possible to insert a second commit with the same SHA");
 
             Ok(ctx)
         })
         .await;
     }
 
+    // Check that we can't have multiple non-completed try requests on the same PR
     #[tokio::test]
-    async fn get_benchmark_requests_by_status() {
-        // Ensure we get back the requests matching the status with no date
-        // limit
+    async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client();
-            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let master_benchmark_request = BenchmarkRequest::create_master(
-                "a-sha-1",
-                "parent-sha-1",
-                42,
-                time,
-                BenchmarkRequestStatus::ArtifactsReady,
-                "llvm",
-                "",
-            );
-
-            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
-                Some("b-sha-2"),
-                Some("parent-sha-2"),
-                32,
-                time,
-                BenchmarkRequestStatus::Completed,
-                "cranelift",
-                "",
-            );
-
-            let release_benchmark_request = BenchmarkRequest::create_release(
-                "1.8.0",
-                time,
-                BenchmarkRequestStatus::ArtifactsReady,
-            );
-
             let db = db.connection().await;
-            db.insert_benchmark_request(&master_benchmark_request)
-                .await
-                .unwrap();
-            db.insert_benchmark_request(&try_benchmark_request)
-                .await
-                .unwrap();
-            db.insert_benchmark_request(&release_benchmark_request)
-                .await
-                .unwrap();
 
-            let requests = db
-                .load_benchmark_request_index(&[BenchmarkRequestStatus::ArtifactsReady])
-                .await
-                .unwrap();
+            // Completed
+            let req_a = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            // WaitingForArtifacts
+            let req_b = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            let req_c = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
 
-            assert_eq!(requests.len(), 2);
-            assert_eq!(requests[0].status, BenchmarkRequestStatus::ArtifactsReady);
-            assert_eq!(requests[1].status, BenchmarkRequestStatus::ArtifactsReady);
-
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn update_benchmark_request_status() {
-        // Insert one item into the database, change the status and then
-        // get the item back out again to ensure it has changed status
-        run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
-            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let master_benchmark_request = BenchmarkRequest::create_master(
-                "a-sha-1",
-                "parent-sha-1",
-                42,
-                time,
-                BenchmarkRequestStatus::ArtifactsReady,
-                "llvm",
-                "",
-            );
-
-            let mut db = db.connection().await;
-            db.insert_benchmark_request(&master_benchmark_request)
+            db.insert_benchmark_request(&req_a).await.unwrap();
+            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1")
                 .await
                 .unwrap();
 
             db.update_benchmark_request_status(
-                &master_benchmark_request,
-                BenchmarkRequestStatus::InProgress,
+                "sha1",
+                BenchmarkRequestStatus::Completed {
+                    completed_at: Utc::now(),
+                },
             )
             .await
             .unwrap();
 
-            let requests = db
-                .load_benchmark_request_index(&[BenchmarkRequestStatus::InProgress])
-                .await
-                .unwrap();
+            // This should be fine, req_a was completed
+            db.insert_benchmark_request(&req_b).await.unwrap();
+            // This should fail, we can't have two queued requests at once
+            db.insert_benchmark_request(&req_c).await.expect_err(
+                "It was possible to record two try benchmark requests without artifacts",
+            );
 
-            assert_eq!(requests.len(), 1);
-            assert_eq!(requests[0].tag(), master_benchmark_request.tag());
-            assert_eq!(requests[0].status, BenchmarkRequestStatus::InProgress);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    // Check that we can't have multiple master requests on the same PR
+    #[tokio::test]
+    async fn multiple_master_requests_same_pr() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+
+            db.insert_benchmark_request(&BenchmarkRequest::create_master(
+                "a-sha-1",
+                "parent-sha-1",
+                42,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+
+            db.insert_benchmark_request(&BenchmarkRequest::create_master(
+                "a-sha-2",
+                "parent-sha-2",
+                42,
+                Utc::now(),
+            ))
+            .await
+            .expect_err("it was possible to insert a second master commit on the same PR");
 
             Ok(ctx)
         })
@@ -560,37 +500,45 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn updating_try_commits() {
+    async fn load_pending_benchmark_requests() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client();
-            let db = db.connection().await;
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let pr = 42;
 
-            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
-                None,
-                None,
-                pr,
-                time,
-                BenchmarkRequestStatus::WaitingForArtifacts,
-                "cranelift",
-                "",
-            );
-            db.insert_benchmark_request(&try_benchmark_request)
-                .await
-                .unwrap();
-            db.attach_shas_to_try_benchmark_request(pr, "foo", "bar")
-                .await
-                .unwrap();
-            let requests = db
-                .load_benchmark_request_index(&[BenchmarkRequestStatus::ArtifactsReady])
-                .await
-                .unwrap();
+            // ArtifactsReady
+            let req_a = BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+            // ArtifactsReady
+            let req_b = BenchmarkRequest::create_release("1.80.0", time);
+            // WaitingForArtifacts
+            let req_c = BenchmarkRequest::create_try_without_artifacts(50, time, "", "");
+            // InProgress
+            let req_d = BenchmarkRequest::create_master("sha-2", "parent-sha-2", 51, time);
+            // Completed
+            let req_e = BenchmarkRequest::create_master("sha-3", "parent-sha-3", 52, time);
 
-            assert_eq!(requests.len(), 1);
-            assert_eq!(requests[0].tag(), Some("foo"));
-            assert_eq!(requests[0].parent_sha(), Some("bar"));
-            assert_eq!(requests[0].status, BenchmarkRequestStatus::ArtifactsReady);
+            let db = db.connection().await;
+            for &req in &[&req_a, &req_b, &req_c, &req_d, &req_e] {
+                db.insert_benchmark_request(req).await.unwrap();
+            }
+
+            db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
+                .await
+                .unwrap();
+            db.update_benchmark_request_status(
+                "sha-3",
+                BenchmarkRequestStatus::Completed {
+                    completed_at: Utc::now(),
+                },
+            )
+            .await
+            .unwrap();
+
+            let requests = db.load_pending_benchmark_requests().await.unwrap();
+
+            assert_eq!(requests.len(), 3);
+            for req in &[req_a, req_b, req_d] {
+                assert!(requests.iter().any(|r| r.tag() == req.tag()));
+            }
 
             Ok(ctx)
         })
@@ -598,72 +546,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn adding_try_commit_to_completed_request() {
+    async fn attach_shas_to_try_benchmark_request() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client();
             let db = db.connection().await;
-            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let pr = 42;
 
-            let completed_try = BenchmarkRequest::create_try_without_artifacts(
-                Some("sha-2"),
-                Some("p-sha-1"),
-                pr,
-                time,
-                BenchmarkRequestStatus::Completed,
-                "cranelift",
-                "",
-            );
-            db.insert_benchmark_request(&completed_try).await.unwrap();
+            let req = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
 
-            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
-                None,
-                None,
-                pr,
-                time,
-                BenchmarkRequestStatus::WaitingForArtifacts,
-                "cranelift",
-                "",
-            );
-            // deliberately insert twice
-            db.insert_benchmark_request(&try_benchmark_request)
-                .await
-                .unwrap();
-            // this one should fail
-            assert!(db
-                .insert_benchmark_request(&try_benchmark_request)
-                .await
-                .is_err());
-            db.attach_shas_to_try_benchmark_request(pr, "foo", "bar")
+            db.insert_benchmark_request(&req).await.unwrap();
+            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1")
                 .await
                 .unwrap();
 
-            let requests = db
-                .load_benchmark_request_index(&[
-                    BenchmarkRequestStatus::WaitingForArtifacts,
-                    BenchmarkRequestStatus::ArtifactsReady,
-                    BenchmarkRequestStatus::InProgress,
-                    BenchmarkRequestStatus::Completed,
-                ])
+            let req_db = db
+                .load_pending_benchmark_requests()
                 .await
+                .unwrap()
+                .into_iter()
+                .next()
                 .unwrap();
+            assert_eq!(req.backends, req_db.backends);
+            assert_eq!(req.profiles, req_db.profiles);
+            assert!(matches!(
+                req_db.status,
+                BenchmarkRequestStatus::ArtifactsReady
+            ));
+            assert!(matches!(
+                req_db.commit_type,
+                BenchmarkRequestType::Try { .. }
+            ));
 
-            assert_eq!(requests.len(), 2);
-            let completed_try = requests
-                .iter()
-                .find(|req| req.status == BenchmarkRequestStatus::Completed);
-            assert!(completed_try.is_some());
-            assert_eq!(completed_try.unwrap().pr(), Some(&pr));
-            assert_eq!(completed_try.unwrap().tag(), Some("sha-2"));
-            assert_eq!(completed_try.unwrap().parent_sha(), Some("p-sha-1"));
-
-            let artifacts_ready_try = requests
-                .iter()
-                .find(|req| req.status == BenchmarkRequestStatus::ArtifactsReady);
-            assert!(artifacts_ready_try.is_some());
-            assert_eq!(artifacts_ready_try.unwrap().pr(), Some(&pr));
-            assert_eq!(artifacts_ready_try.unwrap().tag(), Some("foo"));
-            assert_eq!(artifacts_ready_try.unwrap().parent_sha(), Some("bar"));
+            assert_eq!(req_db.tag().as_deref(), Some("sha1"));
+            assert_eq!(req_db.parent_sha().as_deref(), Some("sha-parent-1"));
+            assert_eq!(req_db.pr(), Some(&42));
 
             Ok(ctx)
         })

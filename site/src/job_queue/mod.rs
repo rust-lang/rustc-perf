@@ -144,7 +144,7 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
 ///
 /// Does not consider requests that are waiting for artifacts or that are alredy completed.
 pub async fn build_queue(
-    conn: &mut dyn database::pool::Connection,
+    conn: &dyn database::pool::Connection,
     index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<Vec<BenchmarkRequest>> {
     // Load ArtifactsReady and InProgress benchmark requests
@@ -176,7 +176,7 @@ pub async fn build_queue(
 
 /// Enqueue the job into the job_queue
 async fn enqueue_next_job(
-    conn: &mut dyn database::pool::Connection,
+    conn: &dyn database::pool::Connection,
     index: &mut BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
     let _queue = build_queue(conn, index).await?;
@@ -185,13 +185,13 @@ async fn enqueue_next_job(
 
 /// For queueing jobs, add the jobs you want to queue to this function
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
-    let mut conn = site_ctxt.conn().await;
+    let conn = site_ctxt.conn().await;
     let mut index = conn.load_benchmark_request_index().await?;
     // Put the master commits into the `benchmark_requests` queue
     create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
     create_benchmark_request_releases(&*conn, &index).await?;
-    enqueue_next_job(&mut *conn, &mut index).await?;
+    enqueue_next_job(&*conn, &mut index).await?;
     Ok(())
 }
 
@@ -243,35 +243,15 @@ mod tests {
     }
 
     fn create_master(sha: &str, parent: &str, pr: u32, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_master(
-            sha,
-            parent,
-            pr,
-            days_ago(age_days),
-            BenchmarkRequestStatus::ArtifactsReady,
-            "",
-            "",
-        )
+        BenchmarkRequest::create_master(sha, parent, pr, days_ago(age_days))
     }
 
-    fn create_try(sha: &str, parent: &str, pr: u32, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_try_without_artifacts(
-            Some(sha),
-            Some(parent),
-            pr,
-            days_ago(age_days),
-            BenchmarkRequestStatus::ArtifactsReady,
-            "",
-            "",
-        )
+    fn create_try(pr: u32, age_days: &str) -> BenchmarkRequest {
+        BenchmarkRequest::create_try_without_artifacts(pr, days_ago(age_days), "", "")
     }
 
     fn create_release(tag: &str, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_release(
-            tag,
-            days_ago(age_days),
-            BenchmarkRequestStatus::ArtifactsReady,
-        )
+        BenchmarkRequest::create_release(tag, days_ago(age_days))
     }
 
     async fn db_insert_requests(
@@ -283,23 +263,24 @@ mod tests {
         }
     }
 
+    async fn mark_as_completed(conn: &dyn database::pool::Connection, shas: &[&str]) {
+        let completed_at = Utc::now();
+        for sha in shas {
+            conn.update_benchmark_request_status(
+                sha,
+                BenchmarkRequestStatus::Completed { completed_at },
+            )
+            .await
+            .unwrap();
+        }
+    }
+
     fn queue_order_matches(queue: &[BenchmarkRequest], expected: &[&str]) {
         let queue_shas: Vec<&str> = queue
             .iter()
             .filter_map(|request| request.tag().map(|tag| tag))
             .collect();
         assert_eq!(queue_shas, expected)
-    }
-
-    trait BenchmarkRequestExt {
-        fn with_status(self, status: BenchmarkRequestStatus) -> Self;
-    }
-
-    impl BenchmarkRequestExt for BenchmarkRequest {
-        fn with_status(mut self, status: BenchmarkRequestStatus) -> Self {
-            self.status = status;
-            self
-        }
     }
 
     #[tokio::test]
@@ -324,9 +305,9 @@ mod tests {
              *
              *
              *                                  1: Currently `in_progress`
-             *             +-----------+           +---------------+
-             *             | m "rrr" C | -----+--->| t "t1" IP pr1 |
-             *             +-----------+           +---------------+
+             *             +-----------+           +-----------------+
+             *             | m "rrr" C | -----+--->| t "try1" IP pr6 |
+             *             +-----------+           +-----------------+
              *
              *
              *
@@ -336,7 +317,7 @@ mod tests {
              *                   |
              *                   V
              *           +----------------+
-             *           | m "mmm" R pr88 | 5: a master commit
+             *           | m "mmm" R pr18 | 5: a master commit
              *           +----------------+
              *
              *             +-----------+
@@ -345,7 +326,7 @@ mod tests {
              *                   |
              *                   V
              *           +----------------+
-             *           | m "123" R pr11 | 3: a master commit, high pr number
+             *           | m "123" R pr14 | 3: a master commit, high PR number
              *           +----------------+
              *
              *
@@ -355,40 +336,47 @@ mod tests {
              *                   |
              *                   V
              *           +----------------+
-             *           | m "foo" R pr77 | 4: a master commit
+             *           | m "foo" R pr15 | 4: a master commit
              *           +----------------+
              *                   |
              *                   V
-             *           +---------------+
-             *           | t "baz" R pr4 | 6: a try with a low pr, blocked by parent
-             *           +---------------+
-             *
-             *  The master commits should take priority, then "yee" followed
-             *  by "baz"
+             *           +----------------+
+             *           | t "baz" R pr17 | 6: a try with a low PR, blocked by parent
+             *           +----------------+
              **/
 
-            let mut db = ctx.db_client().connection().await;
+            let db = ctx.db_client().connection().await;
             let requests = vec![
-                create_master("foo", "bar", 77, "days2"),
-                create_master("123", "345", 11, "days2"),
-                create_try("baz", "foo", 4, "days1"),
-                create_release("v.1.2.3", "days2"),
-                create_try("t1", "rrr", 1, "days1").with_status(BenchmarkRequestStatus::InProgress),
-                create_master("mmm", "aaa", 88, "days2"),
+                create_master("bar", "parent1", 10, "days2"),
+                create_master("345", "parent2", 11, "days2"),
+                create_master("aaa", "parent3", 12, "days2"),
+                create_master("rrr", "parent4", 13, "days2"),
+                create_master("123", "bar", 14, "days2"),
+                create_master("foo", "345", 15, "days2"),
+                create_try(16, "days1"),
+                create_release("v1.2.3", "days2"),
+                create_try(17, "days1"),
+                create_master("mmm", "aaa", 18, "days2"),
             ];
 
             db_insert_requests(&*db, &requests).await;
+            db.attach_shas_to_try_benchmark_request(16, "try1", "rrr")
+                .await
+                .unwrap();
+            db.update_benchmark_request_status("try1", BenchmarkRequestStatus::InProgress)
+                .await
+                .unwrap();
+            db.attach_shas_to_try_benchmark_request(17, "baz", "foo")
+                .await
+                .unwrap();
 
-            let completed: HashSet<String> = HashSet::from([
-                "bar".to_string(),
-                "345".to_string(),
-                "rrr".to_string(),
-                "aaa".to_string(),
-            ]);
+            mark_as_completed(&*db, &["bar", "345", "aaa", "rrr"]).await;
 
-            let sorted: Vec<BenchmarkRequest> = build_queue(&mut *db, &completed).await.unwrap();
+            let index = db.load_benchmark_request_index().await.unwrap();
 
-            queue_order_matches(&sorted, &["t1", "v.1.2.3", "123", "foo", "mmm", "baz"]);
+            let sorted: Vec<BenchmarkRequest> = build_queue(&*db, &index).await.unwrap();
+
+            queue_order_matches(&sorted, &["try1", "v1.2.3", "123", "foo", "mmm", "baz"]);
             Ok(ctx)
         })
         .await;
