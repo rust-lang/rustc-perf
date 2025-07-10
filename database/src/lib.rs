@@ -1,6 +1,6 @@
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Utc};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use intern::intern;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -806,18 +806,18 @@ pub enum BenchmarkRequestStatus {
     Completed { completed_at: DateTime<Utc> },
 }
 
-const WAITING_FOR_ARTIFACTS_STR: &str = "waiting_for_artifacts";
-const ARTIFACTS_READY_STR: &str = "artifacts_ready";
-const IN_PROGRESS_STR: &str = "in_progress";
-const COMPLETED_STR: &str = "completed";
+const BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR: &str = "waiting_for_artifacts";
+const BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR: &str = "artifacts_ready";
+const BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR: &str = "in_progress";
+const BENCHMARK_REQUEST_STATUS_COMPLETED_STR: &str = "completed";
 
 impl BenchmarkRequestStatus {
     pub(crate) fn as_str(&self) -> &str {
         match self {
-            Self::WaitingForArtifacts => WAITING_FOR_ARTIFACTS_STR,
-            Self::ArtifactsReady => ARTIFACTS_READY_STR,
-            Self::InProgress => IN_PROGRESS_STR,
-            Self::Completed { .. } => COMPLETED_STR,
+            Self::WaitingForArtifacts => BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
+            Self::ArtifactsReady => BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR,
+            Self::InProgress => BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR,
+            Self::Completed { .. } => BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
         }
     }
 
@@ -826,10 +826,10 @@ impl BenchmarkRequestStatus {
         completion_date: Option<DateTime<Utc>>,
     ) -> anyhow::Result<Self> {
         match text {
-            WAITING_FOR_ARTIFACTS_STR => Ok(Self::WaitingForArtifacts),
-            ARTIFACTS_READY_STR => Ok(Self::ArtifactsReady),
-            IN_PROGRESS_STR => Ok(Self::InProgress),
-            COMPLETED_STR => Ok(Self::Completed {
+            BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR => Ok(Self::WaitingForArtifacts),
+            BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR => Ok(Self::ArtifactsReady),
+            BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR => Ok(Self::InProgress),
+            BENCHMARK_REQUEST_STATUS_COMPLETED_STR => Ok(Self::Completed {
                 completed_at: completion_date.ok_or_else(|| {
                     anyhow!("No completion date for a completed BenchmarkRequestStatus")
                 })?,
@@ -930,15 +930,7 @@ impl BenchmarkRequest {
         }
     }
 
-    pub fn create_master(
-        sha: &str,
-        parent_sha: &str,
-        pr: u32,
-        created_at: DateTime<Utc>,
-        status: BenchmarkRequestStatus,
-        backends: &str,
-        profiles: &str,
-    ) -> Self {
+    pub fn create_master(sha: &str, parent_sha: &str, pr: u32, created_at: DateTime<Utc>) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Master {
                 pr,
@@ -946,9 +938,9 @@ impl BenchmarkRequest {
                 parent_sha: parent_sha.to_string(),
             },
             created_at,
-            status,
-            backends: backends.to_string(),
-            profiles: profiles.to_string(),
+            status: BenchmarkRequestStatus::ArtifactsReady,
+            backends: String::new(),
+            profiles: String::new(),
         }
     }
 
@@ -977,5 +969,26 @@ impl BenchmarkRequest {
             BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
             BenchmarkRequestType::Release { .. } => None,
         }
+    }
+}
+
+/// Cached information about benchmark requests in the DB
+/// FIXME: only store non-try requests here
+pub struct BenchmarkRequestIndex {
+    /// Tags (SHA or release name) of all known benchmark requests
+    all: HashSet<String>,
+    /// Tags (SHA or release name) of all benchmark requests in the completed status
+    completed: HashSet<String>,
+}
+
+impl BenchmarkRequestIndex {
+    /// Do we already have a benchmark request for the passed `tag`?
+    pub fn contains_tag(&self, tag: &str) -> bool {
+        self.all.contains(tag)
+    }
+
+    /// Return tags of already completed benchmark requests.
+    pub fn completed_requests(&self) -> &HashSet<String> {
+        &self.completed
     }
 }

@@ -6,7 +6,9 @@ use std::{
 
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::{DateTime, NaiveDate, Utc};
-use database::{BenchmarkRequest, BenchmarkRequestStatus, BenchmarkRequestType};
+use database::{
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
+};
 use hashbrown::HashSet;
 use parking_lot::RwLock;
 use regex::Regex;
@@ -24,6 +26,7 @@ pub fn run_new_queue() -> bool {
 async fn create_benchmark_request_master_commits(
     ctxt: &Arc<SiteCtxt>,
     conn: &dyn database::pool::Connection,
+    index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
     let master_commits = &ctxt.get_master_commits().commits;
     // TODO; delete at some point in the future
@@ -31,19 +34,16 @@ async fn create_benchmark_request_master_commits(
 
     for master_commit in master_commits {
         // We don't want to add masses of obsolete data
-        if master_commit.time >= cutoff {
+        if master_commit.time >= cutoff && !index.contains_tag(&master_commit.sha) {
             let pr = master_commit.pr.unwrap_or(0);
             let benchmark = BenchmarkRequest::create_master(
                 &master_commit.sha,
                 &master_commit.parent_sha,
                 pr,
                 master_commit.time,
-                BenchmarkRequestStatus::ArtifactsReady,
-                "",
-                "",
             );
-            if let Err(e) = conn.insert_benchmark_request(&benchmark).await {
-                log::error!("Failed to insert master benchmark request: {}", e);
+            if let Err(error) = conn.insert_benchmark_request(&benchmark).await {
+                log::error!("Failed to insert master benchmark request: {error:?}");
             }
         }
     }
@@ -108,6 +108,7 @@ fn parse_release_string(url: &str) -> Option<(String, DateTime<Utc>)> {
 /// already in the database
 async fn create_benchmark_request_releases(
     conn: &dyn database::pool::Connection,
+    index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
     let releases: String = reqwest::get("https://static.rust-lang.org/manifests.txt")
         .await?
@@ -124,14 +125,14 @@ async fn create_benchmark_request_releases(
         .collect();
 
     for (name, date_time) in releases {
-        if date_time >= cutoff {
+        if date_time >= cutoff && !index.contains_tag(&name) {
             let release_request = BenchmarkRequest::create_release(
                 &name,
                 date_time,
                 BenchmarkRequestStatus::ArtifactsReady,
             );
-            if let Err(e) = conn.insert_benchmark_request(&release_request).await {
-                log::error!("Failed to insert release benchmark request: {}", e);
+            if let Err(error) = conn.insert_benchmark_request(&release_request).await {
+                log::error!("Failed to insert release benchmark request: {error}");
             }
         }
     }
@@ -140,8 +141,8 @@ async fn create_benchmark_request_releases(
 
 /// Sorts try and master requests that are in the `ArtifactsReady` status.
 /// Doesn't consider in-progress requests or release artifacts.
-fn sort_benchmark_requests(done: &HashSet<String>, request_queue: &mut [BenchmarkRequest]) {
-    let mut done: HashSet<String> = done.iter().cloned().collect();
+fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [BenchmarkRequest]) {
+    let mut done: HashSet<String> = index.completed_requests().clone();
 
     // Ensure all the items are ready to be sorted, if they are not this is
     // undefined behaviour
@@ -233,17 +234,18 @@ impl<T> ExtractIf<T> for Vec<T> {
     }
 }
 
-/// Assumes that master/release artifacts have been put into the DB.
+/// Creates a benchmark request queue that determines in what order will
+/// the requests be benchmarked. The ordering should be created in such a way that
+/// after an in-progress request is finished, the ordering of the rest of the queue does not
+/// change (unless some other request was added to the queue in the meantime).
+///
+/// Does not consider requests that are waiting for artifacts or that are alredy completed.
 pub async fn build_queue(
     conn: &mut dyn database::pool::Connection,
-    completed_set: &HashSet<String>,
+    index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<Vec<BenchmarkRequest>> {
-    let mut pending = conn
-        .get_benchmark_requests_by_status(&[
-            BenchmarkRequestStatus::InProgress,
-            BenchmarkRequestStatus::ArtifactsReady,
-        ])
-        .await?;
+    // Load ArtifactsReady and InProgress benchmark requests
+    let mut pending = conn.load_pending_benchmark_requests().await?;
 
     // The queue starts with in progress
     let mut queue: Vec<BenchmarkRequest> = pending
@@ -264,44 +266,29 @@ pub async fn build_queue(
     });
 
     queue.append(&mut release_artifacts);
-    sort_benchmark_requests(completed_set, &mut pending);
+    sort_benchmark_requests(index, &mut pending);
     queue.append(&mut pending);
     Ok(queue)
 }
 
 /// Enqueue the job into the job_queue
-async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::Result<()> {
-    // We draw back all completed requests
-    let completed: HashSet<String> = conn
-        .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed])
-        .await?
-        .into_iter()
-        .filter_map(|request| request.tag().map(|tag| tag.to_string()))
-        .collect();
-
-    let queue = build_queue(conn, &completed).await?;
-
-    if let Some(request) = queue.into_iter().next() {
-        if request.status != BenchmarkRequestStatus::InProgress {
-            // TODO:
-            // - Uncomment
-            // - Actually enqueue the jobs
-            // conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
-            //     .await?;
-        }
-    }
-
+async fn enqueue_next_job(
+    conn: &mut dyn database::pool::Connection,
+    index: &mut BenchmarkRequestIndex,
+) -> anyhow::Result<()> {
+    let _queue = build_queue(conn, index).await?;
     Ok(())
 }
 
 /// For queueing jobs, add the jobs you want to queue to this function
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
+    let mut index = conn.load_benchmark_request_index().await?;
     // Put the master commits into the `benchmark_requests` queue
-    create_benchmark_request_master_commits(site_ctxt, &*conn).await?;
+    create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
-    create_benchmark_request_releases(&*conn).await?;
-    enqueue_next_job(&mut *conn).await?;
+    create_benchmark_request_releases(&*conn, &index).await?;
+    enqueue_next_job(&mut *conn, &mut index).await?;
     Ok(())
 }
 
@@ -377,7 +364,7 @@ mod tests {
     }
 
     fn create_try(sha: &str, parent: &str, pr: u32, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_try(
+        BenchmarkRequest::create_try_without_artifacts(
             Some(sha),
             Some(parent),
             pr,

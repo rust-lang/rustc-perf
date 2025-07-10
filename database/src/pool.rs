@@ -1,6 +1,6 @@
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestStatus,
-    CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestIndex,
+    BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -187,18 +187,18 @@ pub trait Connection: Send + Sync {
         benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<()>;
 
-    /// Gets the benchmark requests matching the status. Optionally provide the
-    /// number of days from whence to search from
-    async fn get_benchmark_requests_by_status(
-        &self,
-        statuses: &[BenchmarkRequestStatus],
-    ) -> anyhow::Result<Vec<BenchmarkRequest>>;
+    /// Load all known benchmark request SHAs and all completed benchmark requests.
+    async fn load_benchmark_request_index(&self) -> anyhow::Result<BenchmarkRequestIndex>;
+
+    /// Load all pending benchmark requests, i.e. those that have artifacts ready, but haven't
+    /// been completed yet. Pending statuses are `ArtifactsReady` and `InProgress`.
+    async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>>;
 
     /// Update the status of a `benchmark_request`
     async fn update_benchmark_request_status(
         &mut self,
-        benchmark_request: &BenchmarkRequest,
-        benchmark_request_status: BenchmarkRequestStatus,
+        request: &BenchmarkRequest,
+        status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()>;
 
     /// Update a Try commit to have a `sha` and `parent_sha`. Will update the
@@ -420,7 +420,7 @@ mod tests {
                 "",
             );
 
-            let try_benchmark_request = BenchmarkRequest::create_try(
+            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
                 Some("b-sha-2"),
                 Some("parent-sha-2"),
                 32,
@@ -474,7 +474,7 @@ mod tests {
                 "",
             );
 
-            let try_benchmark_request = BenchmarkRequest::create_try(
+            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
                 Some("b-sha-2"),
                 Some("parent-sha-2"),
                 32,
@@ -502,7 +502,7 @@ mod tests {
                 .unwrap();
 
             let requests = db
-                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::ArtifactsReady])
+                .load_benchmark_request_index(&[BenchmarkRequestStatus::ArtifactsReady])
                 .await
                 .unwrap();
 
@@ -545,7 +545,7 @@ mod tests {
             .unwrap();
 
             let requests = db
-                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::InProgress])
+                .load_benchmark_request_index(&[BenchmarkRequestStatus::InProgress])
                 .await
                 .unwrap();
 
@@ -566,7 +566,7 @@ mod tests {
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let pr = 42;
 
-            let try_benchmark_request = BenchmarkRequest::create_try(
+            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
                 None,
                 None,
                 pr,
@@ -582,7 +582,7 @@ mod tests {
                 .await
                 .unwrap();
             let requests = db
-                .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::ArtifactsReady])
+                .load_benchmark_request_index(&[BenchmarkRequestStatus::ArtifactsReady])
                 .await
                 .unwrap();
 
@@ -604,7 +604,7 @@ mod tests {
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let pr = 42;
 
-            let completed_try = BenchmarkRequest::create_try(
+            let completed_try = BenchmarkRequest::create_try_without_artifacts(
                 Some("sha-2"),
                 Some("p-sha-1"),
                 pr,
@@ -615,7 +615,7 @@ mod tests {
             );
             db.insert_benchmark_request(&completed_try).await.unwrap();
 
-            let try_benchmark_request = BenchmarkRequest::create_try(
+            let try_benchmark_request = BenchmarkRequest::create_try_without_artifacts(
                 None,
                 None,
                 pr,
@@ -638,7 +638,7 @@ mod tests {
                 .unwrap();
 
             let requests = db
-                .get_benchmark_requests_by_status(&[
+                .load_benchmark_request_index(&[
                     BenchmarkRequestStatus::WaitingForArtifacts,
                     BenchmarkRequestStatus::ArtifactsReady,
                     BenchmarkRequestStatus::InProgress,

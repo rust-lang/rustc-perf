@@ -1,13 +1,15 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
-    BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, CollectionId, Commit, CommitType,
-    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
-    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR, BENCHMARK_REQUEST_TRY_STR,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend,
+    CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
+    Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
+    BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_TRY_STR,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::str::FromStr;
@@ -388,6 +390,7 @@ pub struct CachedStatements {
     get_runtime_pstat: Statement,
     record_artifact_size: Statement,
     get_artifact_size: Statement,
+    load_benchmark_request_index: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -569,7 +572,11 @@ impl PostgresConnection {
                 get_artifact_size: conn.prepare("
                     select component, size from artifact_size
                     where aid = $1
-                ").await.unwrap()
+                ").await.unwrap(),
+                load_benchmark_request_index: conn.prepare("
+                    select tag, status
+                    from benchmark_request
+                ").await.unwrap(),
             }),
             conn,
         }
@@ -1423,90 +1430,25 @@ where
         Ok(())
     }
 
-    async fn get_benchmark_requests_by_status(
-        &self,
-        statuses: &[BenchmarkRequestStatus],
-    ) -> anyhow::Result<Vec<BenchmarkRequest>> {
-        // There is a small period of time where a try commit's parent_sha
-        // could be NULL, this query will filter that out.
-        let query = "
-                SELECT
-                    tag,
-                    parent_sha,
-                    pr,
-                    commit_type,
-                    status,
-                    created_at,
-                    completed_at,
-                    backends,
-                    profiles
-                FROM benchmark_request
-                WHERE status = ANY($1)"
-            .to_string();
-
-        let rows = self
+    async fn load_benchmark_request_index(&self) -> anyhow::Result<BenchmarkRequestIndex> {
+        let requests = self
             .conn()
-            .query(&query, &[&statuses])
+            .query(&self.statements().load_benchmark_request_index, &[])
             .await
-            .context("Failed to get benchmark requests")?;
+            .context("Cannot load benchmark request index")?;
 
-        let benchmark_requests = rows
-            .iter()
-            .map(|row| {
-                let tag = row.get::<_, Option<String>>(0);
-                let parent_sha = row.get::<_, Option<String>>(1);
-                let pr = row.get::<_, Option<i32>>(2);
-                let commit_type = row.get::<_, &str>(3);
-                let status = row.get::<_, &str>(4);
-                let created_at = row.get::<_, DateTime<Utc>>(5);
-                let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
-                let backends = row.get::<_, String>(7);
-                let profiles = row.get::<_, String>(8);
+        let mut all = HashSet::with_capacity(requests.len());
+        let mut completed = HashSet::with_capacity(requests.len());
+        for request in requests {
+            let tag = request.get::<_, String>(0);
+            let status = request.get::<_, &str>(1);
 
-                let pr = pr.map(|v| v as u32);
-
-                let status =
-                    BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at)
-                        .expect("Invalid BenchmarkRequestStatus data in the database");
-
-                match commit_type {
-                    BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {
-                        commit_type: BenchmarkRequestType::Try {
-                            sha: tag,
-                            parent_sha,
-                            pr: pr.expect("Try commit in the DB without a PR"),
-                        },
-                        created_at,
-                        status,
-                        backends,
-                        profiles,
-                    },
-                    BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
-                        commit_type: BenchmarkRequestType::Master {
-                            sha: tag.expect("Master commit in the DB without a SHA"),
-                            parent_sha: parent_sha
-                                .expect("Master commit in the DB without a parent SHA"),
-                            pr: pr.expect("Master commit in the DB without a PR"),
-                        },
-                        created_at,
-                        status,
-                        backends,
-                        profiles,
-                    },
-                    BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
-                        commit_type: BenchmarkRequestType::Release {
-                            tag: tag.expect("Release commit in the DB without a SHA"),
-                        },
-                        created_at,
-                        status,
-                        backends,
-                        profiles,
-                    },
-                    _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
-                }
-            })
-            .collect();
-        Ok(benchmark_requests)
+            if status == BENCHMARK_REQUEST_STATUS_COMPLETED_STR {
+                completed.insert(tag.clone());
+            }
+            all.insert(tag);
+        }
+        Ok(BenchmarkRequestIndex { all, completed })
     }
 
     async fn update_benchmark_request_status(
@@ -1565,6 +1507,88 @@ where
             .context("failed to execute UPDATE benchmark_request")?;
 
         Ok(())
+    }
+
+    async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>> {
+        let query = format!(
+            r#"
+                SELECT
+                    tag,
+                    parent_sha,
+                    pr,
+                    commit_type,
+                    status,
+                    created_at,
+                    completed_at,
+                    backends,
+                    profiles
+                FROM benchmark_request
+                WHERE status = ANY('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')"#
+        );
+
+        let rows = self
+            .conn()
+            .query(&query, &[])
+            .await
+            .context("Failed to get pending benchmark requests")?;
+
+        let requests = rows
+            .into_iter()
+            .map(|row| {
+                let tag = row.get::<_, Option<String>>(0);
+                let parent_sha = row.get::<_, Option<String>>(1);
+                let pr = row.get::<_, Option<i32>>(2);
+                let commit_type = row.get::<_, &str>(3);
+                let status = row.get::<_, &str>(4);
+                let created_at = row.get::<_, DateTime<Utc>>(5);
+                let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
+                let backends = row.get::<_, String>(7);
+                let profiles = row.get::<_, String>(8);
+
+                let pr = pr.map(|v| v as u32);
+
+                let status =
+                    BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at)
+                        .expect("Invalid BenchmarkRequestStatus data in the database");
+
+                match commit_type {
+                    BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {
+                        commit_type: BenchmarkRequestType::Try {
+                            sha: tag,
+                            parent_sha,
+                            pr: pr.expect("Try commit in the DB without a PR"),
+                        },
+                        created_at,
+                        status,
+                        backends,
+                        profiles,
+                    },
+                    BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
+                        commit_type: BenchmarkRequestType::Master {
+                            sha: tag.expect("Master commit in the DB without a SHA"),
+                            parent_sha: parent_sha
+                                .expect("Master commit in the DB without a parent SHA"),
+                            pr: pr.expect("Master commit in the DB without a PR"),
+                        },
+                        created_at,
+                        status,
+                        backends,
+                        profiles,
+                    },
+                    BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
+                        commit_type: BenchmarkRequestType::Release {
+                            tag: tag.expect("Release commit in the DB without a SHA"),
+                        },
+                        created_at,
+                        status,
+                        backends,
+                        profiles,
+                    },
+                    _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
+                }
+            })
+            .collect();
+        Ok(requests)
     }
 }
 
