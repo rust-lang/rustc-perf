@@ -309,6 +309,7 @@ impl Scenario {
     }
 }
 
+use anyhow::anyhow;
 use std::cmp::Ordering;
 use std::str::FromStr;
 
@@ -802,7 +803,7 @@ pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     ArtifactsReady,
     InProgress,
-    Completed,
+    Completed { completed_at: DateTime<Utc> },
 }
 
 const WAITING_FOR_ARTIFACTS_STR: &str = "waiting_for_artifacts";
@@ -811,12 +812,36 @@ const IN_PROGRESS_STR: &str = "in_progress";
 const COMPLETED_STR: &str = "completed";
 
 impl BenchmarkRequestStatus {
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         match self {
-            BenchmarkRequestStatus::WaitingForArtifacts => WAITING_FOR_ARTIFACTS_STR,
-            BenchmarkRequestStatus::ArtifactsReady => ARTIFACTS_READY_STR,
-            BenchmarkRequestStatus::InProgress => IN_PROGRESS_STR,
-            BenchmarkRequestStatus::Completed { .. } => COMPLETED_STR,
+            Self::WaitingForArtifacts => WAITING_FOR_ARTIFACTS_STR,
+            Self::ArtifactsReady => ARTIFACTS_READY_STR,
+            Self::InProgress => IN_PROGRESS_STR,
+            Self::Completed { .. } => COMPLETED_STR,
+        }
+    }
+
+    pub(crate) fn from_str_and_completion_date(
+        text: &str,
+        completion_date: Option<DateTime<Utc>>,
+    ) -> anyhow::Result<Self> {
+        match text {
+            WAITING_FOR_ARTIFACTS_STR => Ok(Self::WaitingForArtifacts),
+            ARTIFACTS_READY_STR => Ok(Self::ArtifactsReady),
+            IN_PROGRESS_STR => Ok(Self::InProgress),
+            COMPLETED_STR => Ok(Self::Completed {
+                completed_at: completion_date.ok_or_else(|| {
+                    anyhow!("No completion date for a completed BenchmarkRequestStatus")
+                })?,
+            }),
+            _ => Err(anyhow!("Unknown BenchmarkRequestStatus `{text}`")),
+        }
+    }
+
+    pub(crate) fn completed_at(&self) -> Option<DateTime<Utc>> {
+        match self {
+            Self::Completed { completed_at } => Some(*completed_at),
+            _ => None,
         }
     }
 }
@@ -827,27 +852,7 @@ impl fmt::Display for BenchmarkRequestStatus {
     }
 }
 
-impl<'a> tokio_postgres::types::FromSql<'a> for BenchmarkRequestStatus {
-    fn from_sql(
-        ty: &tokio_postgres::types::Type,
-        raw: &'a [u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        // Decode raw bytes into &str with Postgres' own text codec
-        let s: &str = <&str as tokio_postgres::types::FromSql>::from_sql(ty, raw)?;
 
-        match s {
-            WAITING_FOR_ARTIFACTS_STR => Ok(Self::WaitingForArtifacts),
-            ARTIFACTS_READY_STR => Ok(Self::ArtifactsReady),
-            IN_PROGRESS_STR => Ok(Self::InProgress),
-            COMPLETED_STR => Ok(Self::Completed),
-            other => Err(format!("unknown benchmark_request_status '{other}'").into()),
-        }
-    }
-
-    fn accepts(ty: &tokio_postgres::types::Type) -> bool {
-        <&str as tokio_postgres::types::FromSql>::accepts(ty)
-    }
-}
 
 const BENCHMARK_REQUEST_TRY_STR: &str = "try";
 const BENCHMARK_REQUEST_MASTER_STR: &str = "master";
@@ -885,7 +890,6 @@ impl fmt::Display for BenchmarkRequestType {
 pub struct BenchmarkRequest {
     pub commit_type: BenchmarkRequestType,
     pub created_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
     pub status: BenchmarkRequestStatus,
     pub backends: String,
     pub profiles: String,
@@ -896,18 +900,15 @@ impl BenchmarkRequest {
         tag: &str,
         created_at: DateTime<Utc>,
         status: BenchmarkRequestStatus,
-        backends: &str,
-        profiles: &str,
     ) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Release {
                 tag: tag.to_string(),
             },
             created_at,
-            completed_at: None,
             status,
-            backends: backends.to_string(),
-            profiles: profiles.to_string(),
+            backends: String::new(),
+            profiles: String::new(),
         }
     }
 
@@ -927,7 +928,6 @@ impl BenchmarkRequest {
                 parent_sha: parent_sha.map(|it| it.to_string()),
             },
             created_at,
-            completed_at: None,
             status,
             backends: backends.to_string(),
             profiles: profiles.to_string(),
@@ -950,7 +950,6 @@ impl BenchmarkRequest {
                 parent_sha: parent_sha.to_string(),
             },
             created_at,
-            completed_at: None,
             status,
             backends: backends.to_string(),
             profiles: profiles.to_string(),

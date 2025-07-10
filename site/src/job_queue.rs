@@ -129,8 +129,6 @@ async fn create_benchmark_request_releases(
                 &name,
                 date_time,
                 BenchmarkRequestStatus::ArtifactsReady,
-                "",
-                "",
             );
             if let Err(e) = conn.insert_benchmark_request(&release_request).await {
                 log::error!("Failed to insert release benchmark request: {}", e);
@@ -395,8 +393,6 @@ mod tests {
             tag,
             days_ago(age_days),
             BenchmarkRequestStatus::ArtifactsReady,
-            "",
-            "",
         )
     }
 

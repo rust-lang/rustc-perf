@@ -1453,58 +1453,56 @@ where
         let benchmark_requests = rows
             .iter()
             .map(|row| {
-                let tag = row.get::<_, Option<&str>>(0);
-                let parent_sha = row.get::<_, Option<&str>>(1);
+                let tag = row.get::<_, Option<String>>(0);
+                let parent_sha = row.get::<_, Option<String>>(1);
                 let pr = row.get::<_, Option<i32>>(2);
                 let commit_type = row.get::<_, &str>(3);
-                let status = row.get::<_, BenchmarkRequestStatus>(4);
+                let status = row.get::<_, &str>(4);
                 let created_at = row.get::<_, DateTime<Utc>>(5);
                 let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
-                let backends = row.get::<_, &str>(7);
-                let profiles = row.get::<_, &str>(8);
+                let backends = row.get::<_, String>(7);
+                let profiles = row.get::<_, String>(8);
+
+                let pr = pr.map(|v| v as u32);
+
+                let status =
+                    BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at)
+                        .expect("Invalid BenchmarkRequestStatus data in the database");
 
                 match commit_type {
-                    BENCHMARK_REQUEST_TRY_STR => {
-                        let mut try_benchmark = BenchmarkRequest::create_try(
-                            tag,
+                    BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {
+                        commit_type: BenchmarkRequestType::Try {
+                            sha: tag,
                             parent_sha,
-                            pr.unwrap() as u32,
-                            created_at,
-                            status,
-                            backends,
-                            profiles,
-                        );
-                        try_benchmark.completed_at = completed_at;
-                        try_benchmark
-                    }
-                    BENCHMARK_REQUEST_MASTER_STR => {
-                        let mut master_benchmark = BenchmarkRequest::create_master(
-                            tag.expect("Master commit in DB without SHA"),
-                            parent_sha.unwrap(),
-                            pr.unwrap() as u32,
-                            created_at,
-                            status,
-                            backends,
-                            profiles,
-                        );
-                        master_benchmark.completed_at = completed_at;
-                        master_benchmark
-                    }
-                    BENCHMARK_REQUEST_RELEASE_STR => {
-                        let mut release_benchmark = BenchmarkRequest::create_release(
-                            tag.expect("Release commit in DB witohut SHA"),
-                            created_at,
-                            status,
-                            backends,
-                            profiles,
-                        );
-                        release_benchmark.completed_at = completed_at;
-                        release_benchmark
-                    }
-                    _ => panic!(
-                        "Invalid `commit_type` for `BenchmarkRequest` {}",
-                        commit_type
-                    ),
+                            pr: pr.expect("Try commit in the DB without a PR"),
+                        },
+                        created_at,
+                        status,
+                        backends,
+                        profiles,
+                    },
+                    BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
+                        commit_type: BenchmarkRequestType::Master {
+                            sha: tag.expect("Master commit in the DB without a SHA"),
+                            parent_sha: parent_sha
+                                .expect("Master commit in the DB without a parent SHA"),
+                            pr: pr.expect("Master commit in the DB without a PR"),
+                        },
+                        created_at,
+                        status,
+                        backends,
+                        profiles,
+                    },
+                    BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
+                        commit_type: BenchmarkRequestType::Release {
+                            tag: tag.expect("Release commit in the DB without a SHA"),
+                        },
+                        created_at,
+                        status,
+                        backends,
+                        profiles,
+                    },
+                    _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
                 }
             })
             .collect();
@@ -1513,23 +1511,25 @@ where
 
     async fn update_benchmark_request_status(
         &mut self,
-        benchmark_request: &BenchmarkRequest,
-        benchmark_request_status: BenchmarkRequestStatus,
+        request: &BenchmarkRequest,
+        status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()> {
-        let tx = self
-            .conn_mut()
-            .transaction()
+        let tag = request
+            .tag()
+            .expect("Cannot update status of a benchmark request without a tag. Use `attach_shas_to_try_benchmark_request` instead.");
+
+        let status_str = status.as_str();
+        let completed_at = status.completed_at();
+        self.conn()
+            .execute(
+                r#"
+                UPDATE benchmark_request
+                SET status = $1, completed_at = $2
+                WHERE tag = $3;"#,
+                &[&status_str, &completed_at, &tag],
+            )
             .await
-            .context("failed to start transaction")?;
-
-        tx.execute(
-            "UPDATE benchmark_request SET status = $1 WHERE tag = $2;",
-            &[&benchmark_request_status, &benchmark_request.tag()],
-        )
-        .await
-        .context("failed to execute UPDATE benchmark_request")?;
-
-        tx.commit().await.context("failed to commit transaction")?;
+            .context("failed to benchmark request status update")?;
 
         Ok(())
     }

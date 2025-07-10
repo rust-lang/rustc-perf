@@ -434,8 +434,6 @@ mod tests {
                 "1.8.0",
                 time,
                 BenchmarkRequestStatus::ArtifactsReady,
-                "cranelift,llvm",
-                "",
             );
 
             let db = db.connection().await;
@@ -490,8 +488,6 @@ mod tests {
                 "1.8.0",
                 time,
                 BenchmarkRequestStatus::ArtifactsReady,
-                "cranelift,llvm",
-                "",
             );
 
             let db = db.connection().await;
