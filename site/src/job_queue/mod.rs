@@ -156,7 +156,7 @@ pub async fn build_queue(
     });
 
     // We sort the in-progress ones based on the started date
-    queue.sort_unstable_by(|a, b| a.created_at().cmp(&b.created_at()));
+    queue.sort_unstable_by_key(|req| req.created_at());
 
     // Add release artifacts ordered by the release tag (1.87.0 before 1.88.0) and `created_at`.
     let mut release_artifacts: Vec<BenchmarkRequest> =
