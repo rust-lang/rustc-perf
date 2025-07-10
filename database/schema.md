@@ -313,3 +313,19 @@ Columns:
   execute.
 * **is_active** (`boolean NOT NULL`): For controlling whether the collector is
   active for use. Useful for adding/removing collectors.
+
+### job_queue
+
+This table stores ephemeral benchmark jobs, which specifically tell the
+collector which benchmarks it should execute. The jobs will be kept in the
+table for ~30 days after being completed, so that we can quickly figure out
+what master parent jobs we need to backfill when handling try builds.
+
+```
+psql# SELECT * FROM job_queue limit 1;
+
+id   request_id   target    backend   benchmark_set  collector_id    created_at                   started_at                   completed_at                 status     retry   error 
+---  -----------  --------  --------  -------------  --------------  ---------------------------  ---------------------------  ---------------------------  ---------  ------  --------
+23            7   AArch64   llvm      5              collector-1     2025-07-10 09:00:00.123+00   2025-07-10 09:05:02.456+00   2025-07-10 09:15:17.890+00   complete       0  
+```
+>>>>>>> d0ed82ff (Feat; job_queue table definition & mark a request as complete if all jobs are finished)

@@ -1,9 +1,9 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark,
-    Date, Profile, Target,
+    ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, CodegenBackend, CollectionId, Commit,
+    CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -1329,6 +1329,20 @@ impl Connection for SqliteConnection {
                 })
             })?
             .collect::<Result<_, _>>()?)
+    }
+
+    async fn try_mark_benchmark_request_as_completed(
+        &self,
+        _benchmark_request: &mut BenchmarkRequest,
+    ) -> anyhow::Result<bool> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn get_benchmark_request_id(
+        &self,
+        _benchmark_request: &BenchmarkRequest,
+    ) -> anyhow::Result<u32> {
+        no_queue_implementation_abort!()
     }
 }
 

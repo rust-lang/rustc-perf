@@ -253,8 +253,13 @@ async fn try_enqueue_next_benchmark_request(
                 break;
             }
             BenchmarkRequestStatus::InProgress => {
-                // TODO: Try to mark as completed
-                break;
+                if conn
+                    .try_mark_benchmark_request_as_completed(&mut request)
+                    .await?
+                {
+                    index.add_tag(request.tag().unwrap());
+                    continue;
+                }
             }
             BenchmarkRequestStatus::WaitingForArtifacts
             | BenchmarkRequestStatus::Completed { .. } => {

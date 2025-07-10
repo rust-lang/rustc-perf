@@ -1026,6 +1026,10 @@ impl BenchmarkRequest {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| anyhow::anyhow!("Invalid backend: {e}"))
     }
+
+    pub fn is_completed(&self) -> bool {
+        matches!(self.status, BenchmarkRequestStatus::Completed { .. })
+    }
 }
 
 /// Cached information about benchmark requests in the DB
@@ -1046,6 +1050,70 @@ impl BenchmarkRequestIndex {
     /// Return tags of already completed benchmark requests.
     pub fn completed_requests(&self) -> &HashSet<String> {
         &self.completed
+    }
+
+    pub fn add_tag(&mut self, tag: &str) {
+        self.completed.insert(tag.to_string());
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchmarkJobStatus {
+    Queued,
+    InProgress,
+    Success,
+    Failure,
+}
+
+impl BenchmarkJobStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            BenchmarkJobStatus::Queued => "queued",
+            BenchmarkJobStatus::InProgress => "in_progress",
+            BenchmarkJobStatus::Success => "success",
+            BenchmarkJobStatus::Failure => "failure",
+        }
+    }
+}
+
+impl fmt::Display for BenchmarkJobStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BenchmarkJob {
+    pub target: Target,
+    pub backend: CodegenBackend,
+    pub benchmark_set: u32,
+    pub collector_id: String,
+    pub created_at: Option<DateTime<Utc>>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub status: BenchmarkJobStatus,
+    pub retry: u32,
+}
+
+impl BenchmarkJob {
+    pub fn new(
+        target: Target,
+        backend: CodegenBackend,
+        benchmark_set: u32,
+        collector_id: &str,
+        status: BenchmarkJobStatus,
+    ) -> Self {
+        BenchmarkJob {
+            target,
+            backend,
+            benchmark_set,
+            collector_id: collector_id.to_string(),
+            created_at: None,
+            started_at: None,
+            completed_at: None,
+            status,
+            retry: 0,
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -232,6 +232,19 @@ pub trait Connection: Send + Sync {
         &self,
         artifact_row_id: &ArtifactIdNumber,
     ) -> anyhow::Result<HashSet<CompileTestCase>>;
+
+    /// Try and mark the benchmark_request as completed. Will return `true` if
+    /// it has been marked as completed else `false` meaning there was no change
+    async fn try_mark_benchmark_request_as_completed(
+        &self,
+        benchmark_request: &mut BenchmarkRequest,
+    ) -> anyhow::Result<bool>;
+
+    /// Given a benchmark request get the id
+    async fn get_benchmark_request_id(
+        &self,
+        benchmark_request: &BenchmarkRequest,
+    ) -> anyhow::Result<u32>;
 }
 
 #[async_trait::async_trait]
@@ -358,6 +371,12 @@ mod tests {
     use chrono::Utc;
     use std::str::FromStr;
 
+    use super::*;
+    use crate::{
+        tests::{run_db_test, run_postgres_test},
+        BenchmarkJobStatus, BenchmarkRequestStatus, BenchmarkRequestType, Commit, CommitType, Date,
+    };
+
     /// Create a Commit
     fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
         Commit {
@@ -365,6 +384,43 @@ mod tests {
             date: Date(time),
             r#type,
         }
+    }
+
+    async fn db_insert_jobs(conn: &dyn Connection, request_id: u32, jobs: &[BenchmarkJob]) {
+        for job in jobs {
+            conn.insert_benchmark_job(request_id, job).await.unwrap();
+        }
+    }
+
+    /// Create a try
+    fn create_try(
+        sha: Option<&str>,
+        parent_sha: Option<&str>,
+        pr: u32,
+        created_at: DateTime<Utc>,
+        status: BenchmarkRequestStatus,
+        backends: &str,
+        profiles: &str,
+    ) -> BenchmarkRequest {
+        BenchmarkRequest {
+            commit_type: BenchmarkRequestType::Try {
+                sha: sha.map(|it| it.to_string()),
+                parent_sha: parent_sha.map(|it| it.to_string()),
+                pr,
+            },
+            created_at,
+            status,
+            backends: backends.to_string(),
+            profiles: profiles.to_string(),
+        }
+    }
+
+    async fn request_is_complete(conn: &dyn Connection, tag: &str) -> bool {
+        conn.load_benchmark_request_index()
+            .await
+            .unwrap()
+            .completed_requests()
+            .contains(tag)
     }
 
     #[tokio::test]
@@ -690,6 +746,266 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty());
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    // We can't insert jobs unless there is a corresponding benchmark request
+    #[tokio::test]
+    async fn insert_benchmark_job_fk_violation() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let job = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                3,
+                "collector 1",
+                BenchmarkJobStatus::Queued,
+            );
+
+            assert!(db.insert_benchmark_job(1, &job).await.is_err());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn insert_benchmark_job() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let job = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                3,
+                "collector 1",
+                BenchmarkJobStatus::Queued,
+            );
+            let request = create_try(
+                Some("s1"),
+                Some("p1"),
+                3,
+                Utc::now(),
+                BenchmarkRequestStatus::InProgress,
+                "",
+                "",
+            );
+            db.insert_benchmark_request(&request).await.unwrap();
+
+            assert!(db.insert_benchmark_job(1, &job).await.is_ok());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn mark_request_completed_no_tag() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let request_id = 1;
+
+            let mut request = create_try(
+                None,
+                None,
+                3,
+                Utc::now(),
+                BenchmarkRequestStatus::InProgress,
+                "",
+                "",
+            );
+            db.insert_benchmark_request(&request).await.unwrap();
+
+            let job_1 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                1,
+                "collector 1",
+                BenchmarkJobStatus::Success,
+            );
+            let job_2 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                2,
+                "collector 2",
+                BenchmarkJobStatus::Success,
+            );
+
+            db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
+
+            assert!(db
+                .try_mark_benchmark_request_as_completed(&mut request)
+                .await
+                .is_err());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn mark_request_completed_not_inprogress() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let request_id = 1;
+
+            let mut request = create_try(
+                Some("s1"),
+                Some("p1"),
+                3,
+                Utc::now(),
+                BenchmarkRequestStatus::ArtifactsReady,
+                "",
+                "",
+            );
+            db.insert_benchmark_request(&request).await.unwrap();
+
+            let job_1 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                1,
+                "collector 1",
+                BenchmarkJobStatus::Success,
+            );
+            let job_2 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                2,
+                "collector 2",
+                BenchmarkJobStatus::Success,
+            );
+
+            db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
+
+            assert!(db
+                .try_mark_benchmark_request_as_completed(&mut request)
+                .await
+                .is_err());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    // The case where the job is not complete
+    #[tokio::test]
+    async fn mark_request_completed_nop() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let request_id = 1;
+
+            let mut request = create_try(
+                Some("s1"),
+                Some("p1"),
+                3,
+                Utc::now(),
+                BenchmarkRequestStatus::InProgress,
+                "",
+                "",
+            );
+            db.insert_benchmark_request(&request).await.unwrap();
+
+            let job_1 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                1,
+                "collector 1",
+                BenchmarkJobStatus::InProgress,
+            );
+            let job_2 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                2,
+                "collector 2",
+                BenchmarkJobStatus::Success,
+            );
+
+            db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
+
+            assert!(db
+                .try_mark_benchmark_request_as_completed(&mut request)
+                .await
+                .is_ok());
+            assert_eq!(request.status(), BenchmarkRequestStatus::InProgress);
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn mark_request_completed() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let request_id = 1;
+
+            let mut request = create_try(
+                Some("s1"),
+                Some("p1"),
+                3,
+                Utc::now(),
+                BenchmarkRequestStatus::InProgress,
+                "",
+                "",
+            );
+            db.insert_benchmark_request(&request).await.unwrap();
+
+            let job_1 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                1,
+                "collector 1",
+                BenchmarkJobStatus::Success,
+            );
+            let job_2 = BenchmarkJob::new(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                2,
+                "collector 2",
+                BenchmarkJobStatus::Success,
+            );
+
+            db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
+
+            assert!(db
+                .try_mark_benchmark_request_as_completed(&mut request)
+                .await
+                .is_ok());
+            // The struct should have been mutated
+            assert!(request.is_completed());
+            // The tag should exist in the completed set
+            assert!(request_is_complete(&*db, request.tag().unwrap()).await);
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_benchmark_request_id() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let request = create_try(
+                Some("s1"),
+                Some("p1"),
+                3,
+                Utc::now(),
+                BenchmarkRequestStatus::InProgress,
+                "",
+                "",
+            );
+            db.insert_benchmark_request(&request).await.unwrap();
+
+            let retrieved = db.get_benchmark_request_id(&request).await.unwrap();
+            assert_eq!(1, retrieved);
 
             Ok(ctx)
         })

@@ -1,7 +1,16 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
+<<<<<<< HEAD
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJobStatus,
+||||||| parent of d0ed82ff (Feat; job_queue table definition & mark a request as complete if all jobs are finished)
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend,
+    CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
+    Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+=======
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
+>>>>>>> d0ed82ff (Feat; job_queue table definition & mark a request as complete if all jobs are finished)
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
     CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile,
     QueuedCommit, Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
@@ -311,6 +320,7 @@ static MIGRATIONS: &[&str] = &[
     // being added to the table
     r#"CREATE UNIQUE INDEX benchmark_request_pr_commit_type_idx ON benchmark_request (pr, commit_type) WHERE status != 'completed';"#,
     r#"
+<<<<<<< HEAD
     CREATE TABLE IF NOT EXISTS collector_config (
         id                SERIAL PRIMARY KEY,
         target            TEXT NOT NULL,
@@ -1710,6 +1720,104 @@ where
             })
             .collect())
     }
+
+    async fn try_mark_benchmark_request_as_completed(
+        &self,
+        benchmark_request: &mut BenchmarkRequest,
+    ) -> anyhow::Result<bool> {
+        anyhow::ensure!(
+            benchmark_request.tag().is_some(),
+            "Benchmark request has no tag"
+        );
+        anyhow::ensure!(
+            benchmark_request.status == BenchmarkRequestStatus::InProgress,
+            "Can only mark benchmark request whos status is in_progress as complete"
+        );
+
+        // Find if the benchmark is completed and update it's status to completed
+        // in one SQL block
+        let row = self
+            .conn()
+            .query_opt(
+                "
+                UPDATE
+                    benchmark_request
+                SET
+                    status = $1,
+                    completed_at = NOW()
+                WHERE
+                    benchmark_request.tag = $2
+                AND benchmark_request.commit_type = $3
+                AND benchmark_request.status = $4
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        job_queue
+                    WHERE job_queue.request_id = benchmark_request.id
+                    AND job_queue.status NOT IN ($5, $6)
+                )
+                RETURNING benchmark_request.id, benchmark_request.completed_at;
+            ",
+                &[
+                    &BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
+                    &benchmark_request.tag(),
+                    &benchmark_request.commit_type,
+                    &benchmark_request.status,
+                    &BenchmarkJobStatus::Success,
+                    &BenchmarkJobStatus::Failure,
+                ],
+            )
+            .await
+            .context("Failed to get id for benchmark_request")?;
+        // The affected id is returned by the query thus we can use the row's
+        // presence to determine if the request was marked as completed
+        if let Some(row) = row {
+            let completed_at = row.get::<_, DateTime<Utc>>(1);
+            // Also mutate our object
+            benchmark_request.status = BenchmarkRequestStatus::Completed { completed_at };
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    async fn get_benchmark_request_id(
+        &self,
+        benchmark_request: &BenchmarkRequest,
+    ) -> anyhow::Result<u32> {
+        anyhow::ensure!(
+            benchmark_request.tag().is_some(),
+            "Benchmark request has no tag"
+        );
+
+        let row = self
+            .conn()
+            .query_opt(
+                "
+                SELECT
+                    id
+                FROM
+                    benchmark_request
+                WHERE
+                    tag = $1
+                    AND commit_type = $2
+                    AND status = $3;",
+                &[
+                    &benchmark_request.tag(),
+                    &benchmark_request.commit_type,
+                    &benchmark_request.status,
+                ],
+            )
+            .await
+            .context("Failed to get id for benchmark_request")?;
+
+        if let Some(row) = row {
+            Ok(row.get::<_, i32>(0) as u32)
+        } else {
+            Ok(1)
+        }
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
@@ -1753,12 +1861,12 @@ macro_rules! impl_to_postgresql_via_to_string {
     };
 }
 
-impl_to_postgresql_via_to_string!(BenchmarkRequestType);
+impl_to_postgresql_via_to_string!(BenchmarkJobStatus);
 impl_to_postgresql_via_to_string!(BenchmarkRequestStatus);
-impl_to_postgresql_via_to_string!(Target);
+impl_to_postgresql_via_to_string!(BenchmarkRequestType);
 impl_to_postgresql_via_to_string!(CodegenBackend);
 impl_to_postgresql_via_to_string!(Profile);
-impl_to_postgresql_via_to_string!(BenchmarkJobStatus);
+impl_to_postgresql_via_to_string!(Target);
 
 #[cfg(test)]
 mod tests {
