@@ -574,8 +574,9 @@ impl PostgresConnection {
                     where aid = $1
                 ").await.unwrap(),
                 load_benchmark_request_index: conn.prepare("
-                    select tag, status
-                    from benchmark_request
+                    SELECT tag, status
+                    FROM benchmark_request
+                    WHERE tag IS NOT NULL
                 ").await.unwrap(),
             }),
             conn,
@@ -1506,7 +1507,7 @@ where
                 ],
             )
             .await
-            .context("failed to execute UPDATE benchmark_request")?;
+            .context("failed to attach SHAs to try benchmark request")?;
 
         Ok(())
     }
@@ -1525,7 +1526,7 @@ where
                     backends,
                     profiles
                 FROM benchmark_request
-                WHERE status = ANY('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')"#
+                WHERE status IN('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')"#
         );
 
         let rows = self
