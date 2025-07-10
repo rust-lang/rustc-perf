@@ -274,7 +274,7 @@ pub async fn build_queue(
 /// Enqueue the job into the job_queue
 async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::Result<()> {
     // We draw back all completed requests
-    let completed: HashSet<String> = conn
+    let mut completed: HashSet<String> = conn
         .get_benchmark_requests_by_status(&[BenchmarkRequestStatus::Completed])
         .await?
         .into_iter()
@@ -283,13 +283,20 @@ async fn enqueue_next_job(conn: &mut dyn database::pool::Connection) -> anyhow::
 
     let queue = build_queue(conn, &completed).await?;
 
-    if let Some(request) = queue.into_iter().next() {
+    for mut request in queue {
         if request.status != BenchmarkRequestStatus::InProgress {
             // TODO:
             // - Uncomment
             // - Actually enqueue the jobs
             // conn.update_benchmark_request_status(&request, BenchmarkRequestStatus::InProgress)
             //     .await?;
+            break;
+        } else if conn
+            .try_mark_benchmark_request_as_completed(&mut request)
+            .await?
+        {
+            completed.insert(request.tag().map(|tag| tag.to_string()).unwrap());
+            continue;
         }
     }
 
