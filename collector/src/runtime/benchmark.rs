@@ -276,7 +276,7 @@ fn parse_benchmark_group(
         if let Some(ref executable) = artifact.executable {
             // Found a binary compiled by a runtime benchmark crate.
             // Execute it so that we find all the benchmarks it contains.
-            if artifact.target.kind.iter().any(|k| k == "bin") {
+            if artifact.target.is_bin() {
                 if group.is_some() {
                     return Err(anyhow::anyhow!(
                         "Runtime benchmark group `{group_name}` has produced multiple binaries"
