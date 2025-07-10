@@ -225,7 +225,7 @@ pub fn compile_and_get_stats(
             ..
         } = artifact;
         if let Some(executable) = executable {
-            if target.kind.iter().any(|kind| kind == "bin") {
+            if target.is_bin() {
                 let stats = ArtifactStats::from_dynamic_object(executable.as_std_path())
                     .with_context(|| format!("Cannot parse executable stats from {executable}"))?;
                 archives.push(ArtifactWithStats {
