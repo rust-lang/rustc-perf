@@ -798,7 +798,7 @@ pub struct ArtifactCollection {
     pub end_time: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     ArtifactsReady,
@@ -886,31 +886,28 @@ impl fmt::Display for BenchmarkRequestType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkRequest {
-    pub commit_type: BenchmarkRequestType,
-    pub created_at: DateTime<Utc>,
-    pub status: BenchmarkRequestStatus,
-    pub backends: String,
-    pub profiles: String,
+    commit_type: BenchmarkRequestType,
+    created_at: DateTime<Utc>,
+    status: BenchmarkRequestStatus,
+    backends: String,
+    profiles: String,
 }
 
 impl BenchmarkRequest {
-    pub fn create_release(
-        tag: &str,
-        created_at: DateTime<Utc>,
-        status: BenchmarkRequestStatus,
-    ) -> Self {
+    /// Create a release benchmark request that is in the `ArtifactsReady` status.
+    pub fn create_release(tag: &str, created_at: DateTime<Utc>) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Release {
                 tag: tag.to_string(),
             },
             created_at,
-            status,
+            status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
         }
     }
 
-    /// Create a try request that is waiting for artifacts
+    /// Create a try request that is in the `WaitingForArtifacts` status.
     pub fn create_try_without_artifacts(
         pr: u32,
         created_at: DateTime<Utc>,
@@ -930,6 +927,7 @@ impl BenchmarkRequest {
         }
     }
 
+    /// Create a master benchmark request that is in the `ArtifactsReady` status.
     pub fn create_master(sha: &str, parent_sha: &str, pr: u32, created_at: DateTime<Utc>) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Master {
@@ -969,6 +967,26 @@ impl BenchmarkRequest {
             BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
             BenchmarkRequestType::Release { .. } => None,
         }
+    }
+
+    pub fn status(&self) -> BenchmarkRequestStatus {
+        self.status
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    pub fn is_master(&self) -> bool {
+        matches!(self.commit_type, BenchmarkRequestType::Master { .. })
+    }
+
+    pub fn is_try(&self) -> bool {
+        matches!(self.commit_type, BenchmarkRequestType::Try { .. })
+    }
+
+    pub fn is_release(&self) -> bool {
+        matches!(self.commit_type, BenchmarkRequestType::Release { .. })
     }
 }
 

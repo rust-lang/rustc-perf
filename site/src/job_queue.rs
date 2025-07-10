@@ -6,9 +6,7 @@ use std::{
 
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::{DateTime, NaiveDate, Utc};
-use database::{
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
-};
+use database::{BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus};
 use hashbrown::HashSet;
 use parking_lot::RwLock;
 use regex::Regex;
@@ -126,11 +124,7 @@ async fn create_benchmark_request_releases(
 
     for (name, date_time) in releases {
         if date_time >= cutoff && !index.contains_tag(&name) {
-            let release_request = BenchmarkRequest::create_release(
-                &name,
-                date_time,
-                BenchmarkRequestStatus::ArtifactsReady,
-            );
+            let release_request = BenchmarkRequest::create_release(&name, date_time);
             if let Err(error) = conn.insert_benchmark_request(&release_request).await {
                 log::error!("Failed to insert release benchmark request: {error}");
             }
@@ -147,11 +141,7 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
     // Ensure all the items are ready to be sorted, if they are not this is
     // undefined behaviour
     assert!(request_queue.iter().all(|bmr| {
-        bmr.status == BenchmarkRequestStatus::ArtifactsReady
-            && matches!(
-                bmr.commit_type,
-                BenchmarkRequestType::Master { .. } | BenchmarkRequestType::Try { .. }
-            )
+        bmr.status() == BenchmarkRequestStatus::ArtifactsReady && (bmr.is_master() || bmr.is_try())
     }));
 
     let mut finished = 0;
@@ -180,15 +170,11 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
         let level = &mut request_queue[finished..][..level_len];
         level.sort_unstable_by_key(|bmr| {
             (
-                // Pr number takes priority
+                // PR number takes priority
                 *bmr.pr().unwrap_or(&0),
                 // Order master commits before try commits
-                match bmr.commit_type {
-                    BenchmarkRequestType::Try { .. } => 1,
-                    BenchmarkRequestType::Master { .. } => 0,
-                    BenchmarkRequestType::Release { .. } => unreachable!(),
-                },
-                bmr.created_at,
+                if bmr.is_master() { 0 } else { 1 },
+                bmr.created_at(),
             )
         });
         for c in level {
@@ -248,21 +234,21 @@ pub async fn build_queue(
     let mut pending = conn.load_pending_benchmark_requests().await?;
 
     // The queue starts with in progress
-    let mut queue: Vec<BenchmarkRequest> = pending
-        .extract_if_stable(|request| matches!(request.status, BenchmarkRequestStatus::InProgress));
+    let mut queue: Vec<BenchmarkRequest> = pending.extract_if_stable(|request| {
+        matches!(request.status(), BenchmarkRequestStatus::InProgress)
+    });
 
     // We sort the in-progress ones based on the started date
-    queue.sort_unstable_by(|a, b| a.created_at.cmp(&b.created_at));
+    queue.sort_unstable_by(|a, b| a.created_at().cmp(&b.created_at()));
 
     // Add release artifacts ordered by the release tag (1.87.0 before 1.88.0) and `created_at`.
-    let mut release_artifacts: Vec<BenchmarkRequest> = pending.extract_if_stable(|request| {
-        matches!(request.commit_type, BenchmarkRequestType::Release { .. })
-    });
+    let mut release_artifacts: Vec<BenchmarkRequest> =
+        pending.extract_if_stable(|request| request.is_release());
 
     release_artifacts.sort_unstable_by(|a, b| {
         a.tag()
             .cmp(&b.tag())
-            .then_with(|| a.created_at.cmp(&b.created_at))
+            .then_with(|| a.created_at().cmp(&b.created_at()))
     });
 
     queue.append(&mut release_artifacts);
