@@ -852,8 +852,6 @@ impl fmt::Display for BenchmarkRequestStatus {
     }
 }
 
-
-
 const BENCHMARK_REQUEST_TRY_STR: &str = "try";
 const BENCHMARK_REQUEST_MASTER_STR: &str = "master";
 const BENCHMARK_REQUEST_RELEASE_STR: &str = "release";
@@ -912,23 +910,21 @@ impl BenchmarkRequest {
         }
     }
 
-    pub fn create_try(
-        sha: Option<&str>,
-        parent_sha: Option<&str>,
+    /// Create a try request that is waiting for artifacts
+    pub fn create_try_without_artifacts(
         pr: u32,
         created_at: DateTime<Utc>,
-        status: BenchmarkRequestStatus,
         backends: &str,
         profiles: &str,
     ) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Try {
                 pr,
-                sha: sha.map(|it| it.to_string()),
-                parent_sha: parent_sha.map(|it| it.to_string()),
+                sha: None,
+                parent_sha: None,
             },
             created_at,
-            status,
+            status: BenchmarkRequestStatus::WaitingForArtifacts,
             backends: backends.to_string(),
             profiles: profiles.to_string(),
         }
