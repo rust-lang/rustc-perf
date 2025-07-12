@@ -258,3 +258,41 @@ aid         benchmark   error
 ----------  ---         -----
 1           syn-1.0.89  Failed to compile...
 ```
+
+
+## New benchmarking design
+We are currently implementing a new design for dispatching benchmarks to collector(s) and storing
+them in the database. It will support new use-cases, like backfilling of new benchmarks into a parent
+commit and primarily benchmarking with multiple collectors (and multiple hardware architectures) in
+parallel.
+
+The tables below are a part of the new scheme.
+
+### benchmark_request
+
+Represents a single request for performing a benchmark collection. Each request can be one of three types:
+
+* Master: benchmark a merged master commit
+* Release: benchmark a published stable or beta compiler toolchain
+* Try: benchmark a try build on a PR
+
+Columns:
+
+* **id** (`int`): Unique ID.
+* **tag** (`text`): Identifier of the compiler toolchain that should be benchmarked.
+  * Commit SHA for master/try requests or release name (e.g. `1.80.0`) for release requests.
+  * Can be `NULL` for try requests that were queued for a perf. run, but their compiler artifacts haven't been built yet.
+* **parent_sha** (`text`): Parent SHA of the benchmarked commit.
+  * Can be `NULL` for try requests without compiler artifacts.
+* **commit_type** (`text NOT NULL`): One of `master`, `try` or `release`.
+* **pr** (`int`): Pull request number associated with the master/try commit.
+  * `NULL` for release requests.
+* **created_at** (`timestamptz NOT NULL`): Datetime when the request was created.
+* **completed_at** (`timestamptz`): Datetime when the request was completed.
+* **status** (`text NOT NULL`): Current status of the benchmark request.
+  * `waiting-for-artifacts`: A try request waiting for compiler artifacts.
+  * `artifacts-ready`: Request that has compiler artifacts ready and can be benchmarked.
+  * `in-progress`: Request that is currently being benchmarked.
+  * `completed`: Completed request.
+* **backends** (`text NOT NULL`): Comma-separated list of codegen backends to benchmark. If empty, the default set of codegen backends will be benchmarked.
+* **profiles** (`text NOT NULL`): Comma-separated list of profiles to benchmark. If empty, the default set of profiles will be benchmarked.
