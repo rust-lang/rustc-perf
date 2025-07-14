@@ -1065,13 +1065,18 @@ pub enum BenchmarkJobStatus {
     Failure,
 }
 
+const BENCHMARK_JOB_STATUS_QUEUED_STR: &str = "queued";
+const BENCHMARK_JOB_STATUS_IN_PROGRESS_STR: &str = "in_progress";
+const BENCHMARK_JOB_STATUS_SUCCESS_STR: &str = "success";
+const BENCHMARK_JOB_STATUS_FAILURE_STR: &str = "failure";
+
 impl BenchmarkJobStatus {
     pub fn as_str(&self) -> &str {
         match self {
-            BenchmarkJobStatus::Queued => "queued",
-            BenchmarkJobStatus::InProgress => "in_progress",
-            BenchmarkJobStatus::Success => "success",
-            BenchmarkJobStatus::Failure => "failure",
+            BenchmarkJobStatus::Queued => BENCHMARK_JOB_STATUS_QUEUED_STR,
+            BenchmarkJobStatus::InProgress => BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+            BenchmarkJobStatus::Success => BENCHMARK_JOB_STATUS_SUCCESS_STR,
+            BenchmarkJobStatus::Failure => BENCHMARK_JOB_STATUS_FAILURE_STR,
         }
     }
 }
@@ -1084,15 +1089,15 @@ impl fmt::Display for BenchmarkJobStatus {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkJob {
-    pub target: Target,
-    pub backend: CodegenBackend,
-    pub benchmark_set: u32,
-    pub collector_id: String,
-    pub created_at: Option<DateTime<Utc>>,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub status: BenchmarkJobStatus,
-    pub retry: u32,
+    target: Target,
+    backend: CodegenBackend,
+    benchmark_set: u32,
+    collector_id: String,
+    created_at: Option<DateTime<Utc>>,
+    started_at: Option<DateTime<Utc>>,
+    completed_at: Option<DateTime<Utc>>,
+    status: BenchmarkJobStatus,
+    retry: u32,
 }
 
 impl BenchmarkJob {
