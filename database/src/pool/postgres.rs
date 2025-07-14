@@ -1,16 +1,6 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-<<<<<<< HEAD
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJobStatus,
-||||||| parent of d0ed82ff (Feat; job_queue table definition & mark a request as complete if all jobs are finished)
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
-    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend,
-    CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
-    Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
-=======
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
->>>>>>> d0ed82ff (Feat; job_queue table definition & mark a request as complete if all jobs are finished)
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
     CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile,
     QueuedCommit, Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
@@ -1721,7 +1711,7 @@ where
             .collect())
     }
 
-    async fn try_mark_benchmark_request_as_completed(
+    async fn mark_benchmark_request_as_completed(
         &self,
         benchmark_request: &mut BenchmarkRequest,
     ) -> anyhow::Result<bool> {
@@ -1779,43 +1769,6 @@ where
             Ok(true)
         } else {
             Ok(false)
-        }
-    }
-
-    async fn get_benchmark_request_id(
-        &self,
-        benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<u32> {
-        anyhow::ensure!(
-            benchmark_request.tag().is_some(),
-            "Benchmark request has no tag"
-        );
-
-        let row = self
-            .conn()
-            .query_opt(
-                "
-                SELECT
-                    id
-                FROM
-                    benchmark_request
-                WHERE
-                    tag = $1
-                    AND commit_type = $2
-                    AND status = $3;",
-                &[
-                    &benchmark_request.tag(),
-                    &benchmark_request.commit_type,
-                    &benchmark_request.status,
-                ],
-            )
-            .await
-            .context("Failed to get id for benchmark_request")?;
-
-        if let Some(row) = row {
-            Ok(row.get::<_, i32>(0) as u32)
-        } else {
-            Ok(1)
         }
     }
 }

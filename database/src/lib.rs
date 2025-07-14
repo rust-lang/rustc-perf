@@ -1053,6 +1053,7 @@ impl BenchmarkRequestIndex {
     }
 
     pub fn add_tag(&mut self, tag: &str) {
+        self.all.insert(tag.to_string());
         self.completed.insert(tag.to_string());
     }
 }
@@ -1088,12 +1089,15 @@ impl fmt::Display for BenchmarkJobStatus {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct BenchmarkSet(u32);
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkJob {
     target: Target,
     backend: CodegenBackend,
-    benchmark_set: u32,
+    benchmark_set: BenchmarkSet,
     collector_id: String,
-    created_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
     started_at: Option<DateTime<Utc>>,
     completed_at: Option<DateTime<Utc>>,
     status: BenchmarkJobStatus,
@@ -1106,14 +1110,15 @@ impl BenchmarkJob {
         backend: CodegenBackend,
         benchmark_set: u32,
         collector_id: &str,
+        created_at: DateTime<Utc>,
         status: BenchmarkJobStatus,
     ) -> Self {
         BenchmarkJob {
             target,
             backend,
-            benchmark_set,
+            benchmark_set: BenchmarkSet(benchmark_set),
             collector_id: collector_id.to_string(),
-            created_at: None,
+            created_at,
             started_at: None,
             completed_at: None,
             status,
