@@ -1616,7 +1616,7 @@ where
         Ok(requests)
     }
 
-    async fn try_mark_benchmark_request_as_completed(
+    async fn mark_benchmark_request_as_completed(
         &self,
         benchmark_request: &mut BenchmarkRequest,
     ) -> anyhow::Result<bool> {
@@ -1677,43 +1677,6 @@ where
         }
     }
 
-    async fn get_benchmark_request_id(
-        &self,
-        benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<u32> {
-        anyhow::ensure!(
-            benchmark_request.tag().is_some(),
-            "Benchmark request has no tag"
-        );
-
-        let row = self
-            .conn()
-            .query_opt(
-                "
-                SELECT
-                    id
-                FROM
-                    benchmark_request
-                WHERE
-                    tag = $1
-                    AND commit_type = $2
-                    AND status = $3;",
-                &[
-                    &benchmark_request.tag(),
-                    &benchmark_request.commit_type,
-                    &benchmark_request.status,
-                ],
-            )
-            .await
-            .context("Failed to get id for benchmark_request")?;
-
-        if let Some(row) = row {
-            Ok(row.get::<_, i32>(0) as u32)
-        } else {
-            Ok(1)
-        }
-    }
-
     async fn insert_benchmark_job(
         &self,
         request_id: u32,
@@ -1735,7 +1698,7 @@ where
                     &(request_id as i32),
                     &benchmark_job.target,
                     &benchmark_job.backend,
-                    &(benchmark_job.benchmark_set as i32),
+                    &(benchmark_job.benchmark_set.0 as i32),
                     &benchmark_job.collector_id,
                     &benchmark_job.status,
                 ],

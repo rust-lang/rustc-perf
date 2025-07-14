@@ -213,16 +213,10 @@ pub trait Connection: Send + Sync {
 
     /// Try and mark the benchmark_request as completed. Will return `true` if
     /// it has been marked as completed else `false` meaning there was no change
-    async fn try_mark_benchmark_request_as_completed(
+    async fn mark_benchmark_request_as_completed(
         &self,
         benchmark_request: &mut BenchmarkRequest,
     ) -> anyhow::Result<bool>;
-
-    /// Given a benchmark request get the id
-    async fn get_benchmark_request_id(
-        &self,
-        benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<u32>;
 
     /// Insert a benchmark job into the `job_queue`
     async fn insert_benchmark_job(
@@ -653,6 +647,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 3,
                 "collector 1",
+                Utc::now(),
                 BenchmarkJobStatus::Queued,
             );
 
@@ -673,6 +668,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 3,
                 "collector 1",
+                Utc::now(),
                 BenchmarkJobStatus::Queued,
             );
             let request = create_try(
@@ -716,6 +712,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 1,
                 "collector 1",
+                Utc::now(),
                 BenchmarkJobStatus::Success,
             );
             let job_2 = BenchmarkJob::new(
@@ -723,13 +720,14 @@ mod tests {
                 CodegenBackend::Llvm,
                 2,
                 "collector 2",
+                Utc::now(),
                 BenchmarkJobStatus::Success,
             );
 
             db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
 
             assert!(db
-                .try_mark_benchmark_request_as_completed(&mut request)
+                .mark_benchmark_request_as_completed(&mut request)
                 .await
                 .is_err());
 
@@ -761,6 +759,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 1,
                 "collector 1",
+                Utc::now(),
                 BenchmarkJobStatus::Success,
             );
             let job_2 = BenchmarkJob::new(
@@ -768,13 +767,14 @@ mod tests {
                 CodegenBackend::Llvm,
                 2,
                 "collector 2",
+                Utc::now(),
                 BenchmarkJobStatus::Success,
             );
 
             db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
 
             assert!(db
-                .try_mark_benchmark_request_as_completed(&mut request)
+                .mark_benchmark_request_as_completed(&mut request)
                 .await
                 .is_err());
 
@@ -807,6 +807,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 1,
                 "collector 1",
+                Utc::now(),
                 BenchmarkJobStatus::InProgress,
             );
             let job_2 = BenchmarkJob::new(
@@ -814,13 +815,14 @@ mod tests {
                 CodegenBackend::Llvm,
                 2,
                 "collector 2",
+                Utc::now(),
                 BenchmarkJobStatus::Success,
             );
 
             db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
 
             assert!(db
-                .try_mark_benchmark_request_as_completed(&mut request)
+                .mark_benchmark_request_as_completed(&mut request)
                 .await
                 .is_ok());
             assert_eq!(request.status(), BenchmarkRequestStatus::InProgress);
@@ -853,6 +855,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 1,
                 "collector 1",
+                Utc::now(),
                 BenchmarkJobStatus::Success,
             );
             let job_2 = BenchmarkJob::new(
@@ -860,43 +863,20 @@ mod tests {
                 CodegenBackend::Llvm,
                 2,
                 "collector 2",
+                Utc::now(),
                 BenchmarkJobStatus::Success,
             );
 
             db_insert_jobs(&*db, request_id, &[job_1, job_2]).await;
 
             assert!(db
-                .try_mark_benchmark_request_as_completed(&mut request)
+                .mark_benchmark_request_as_completed(&mut request)
                 .await
                 .is_ok());
             // The struct should have been mutated
             assert!(request.is_completed());
             // The tag should exist in the completed set
             assert!(request_is_complete(&*db, request.tag().unwrap()).await);
-
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn get_benchmark_request_id() {
-        run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
-            let db = db.connection().await;
-            let request = create_try(
-                Some("s1"),
-                Some("p1"),
-                3,
-                Utc::now(),
-                BenchmarkRequestStatus::InProgress,
-                "",
-                "",
-            );
-            db.insert_benchmark_request(&request).await.unwrap();
-
-            let retrieved = db.get_benchmark_request_id(&request).await.unwrap();
-            assert_eq!(1, retrieved);
 
             Ok(ctx)
         })

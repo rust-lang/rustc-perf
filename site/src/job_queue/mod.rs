@@ -189,7 +189,7 @@ async fn enqueue_next_job(
             //     .await?;
             break;
         } else if conn
-            .try_mark_benchmark_request_as_completed(&mut request)
+            .mark_benchmark_request_as_completed(&mut request)
             .await?
         {
             index.add_tag(request.tag().unwrap());
