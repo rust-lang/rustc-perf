@@ -988,6 +988,10 @@ impl BenchmarkRequest {
     pub fn is_release(&self) -> bool {
         matches!(self.commit_type, BenchmarkRequestType::Release { .. })
     }
+
+    pub fn is_completed(&self) -> bool {
+        matches!(self.status, BenchmarkRequestStatus::Completed { .. })
+    }
 }
 
 /// Cached information about benchmark requests in the DB
@@ -1008,5 +1012,79 @@ impl BenchmarkRequestIndex {
     /// Return tags of already completed benchmark requests.
     pub fn completed_requests(&self) -> &HashSet<String> {
         &self.completed
+    }
+
+    pub fn add_tag(&mut self, tag: &str) {
+        self.all.insert(tag.to_string());
+        self.completed.insert(tag.to_string());
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchmarkJobStatus {
+    Queued,
+    InProgress,
+    Success,
+    Failure,
+}
+
+const BENCHMARK_JOB_STATUS_QUEUED_STR: &str = "queued";
+const BENCHMARK_JOB_STATUS_IN_PROGRESS_STR: &str = "in_progress";
+const BENCHMARK_JOB_STATUS_SUCCESS_STR: &str = "success";
+const BENCHMARK_JOB_STATUS_FAILURE_STR: &str = "failure";
+
+impl BenchmarkJobStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            BenchmarkJobStatus::Queued => BENCHMARK_JOB_STATUS_QUEUED_STR,
+            BenchmarkJobStatus::InProgress => BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+            BenchmarkJobStatus::Success => BENCHMARK_JOB_STATUS_SUCCESS_STR,
+            BenchmarkJobStatus::Failure => BENCHMARK_JOB_STATUS_FAILURE_STR,
+        }
+    }
+}
+
+impl fmt::Display for BenchmarkJobStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BenchmarkSet(u32);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BenchmarkJob {
+    target: Target,
+    backend: CodegenBackend,
+    benchmark_set: BenchmarkSet,
+    collector_id: String,
+    created_at: DateTime<Utc>,
+    started_at: Option<DateTime<Utc>>,
+    completed_at: Option<DateTime<Utc>>,
+    status: BenchmarkJobStatus,
+    retry: u32,
+}
+
+impl BenchmarkJob {
+    pub fn new(
+        target: Target,
+        backend: CodegenBackend,
+        benchmark_set: u32,
+        collector_id: &str,
+        created_at: DateTime<Utc>,
+        status: BenchmarkJobStatus,
+    ) -> Self {
+        BenchmarkJob {
+            target,
+            backend,
+            benchmark_set: BenchmarkSet(benchmark_set),
+            collector_id: collector_id.to_string(),
+            created_at,
+            started_at: None,
+            completed_at: None,
+            status,
+            retry: 0,
+        }
     }
 }

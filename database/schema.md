@@ -259,7 +259,6 @@ aid         benchmark   error
 1           syn-1.0.89  Failed to compile...
 ```
 
-
 ## New benchmarking design
 We are currently implementing a new design for dispatching benchmarks to collector(s) and storing
 them in the database. It will support new use-cases, like backfilling of new benchmarks into a parent
@@ -296,3 +295,36 @@ Columns:
   * `completed`: Completed request.
 * **backends** (`text NOT NULL`): Comma-separated list of codegen backends to benchmark. If empty, the default set of codegen backends will be benchmarked.
 * **profiles** (`text NOT NULL`): Comma-separated list of profiles to benchmark. If empty, the default set of profiles will be benchmarked.
+
+### job_queue
+
+This table stores ephemeral benchmark jobs, which specifically tell the
+collector which benchmarks it should execute. The jobs will be kept in the
+table for ~30 days after being completed, so that we can quickly figure out
+what master parent jobs we need to backfill when handling try builds.
+
+Columns:
+
+- **id** (`bigint` / `serial`): Primary-key identifier for the job row;
+  auto-increments with each new job.
+- **request_id** (`bigint`): References the parent benchmark request that
+  spawned this job.
+- **target** (`text NOT NULL`): Hardware/ISA the benchmarks must run on
+  (e.g. AArch64, x86_64).
+- **backend** (`text NOT NULL`): Code generation backend the collector should
+  test (e.g. llvm, cranelift).
+- **benchmark_set** (`int NOT NULL`): ID of the predefined benchmark suite to
+  execute.
+- **collector_id** (`text`): Id of the collector that claimed the job
+  (populated once the job is started).
+- **created_at** (`timestamptz NOT NULL`): Datetime when the job was queued.
+- **started_at** (`timestamptz`): Datetime when the collector actually began
+  running the benchmarks; NULL until the job is claimed.
+- **completed_at** (`timestampt`): Datetime when the collector finished
+  (successfully or otherwise); used to purge rows after ~30 days.
+- **status** (`text NOT NULL`): Current job state. `queued`, `in_progress`,
+  `success`, or `failure`.
+- **retry** (`int NOT NULL`): Number of times the job has been re-queued after
+  a failure; 0 on the first attempt.
+- **error** (`text`): Optional error message or stack trace from the last
+  failed run; NULL when the job succeeded.
