@@ -304,7 +304,7 @@ whether it is active and when it last had activity denoted by `last_heartbeat_at
 Columns:
 
 * **id** (`id`): A unique identifier for the collector.
-* **target** (`text NOT NULL`): The ISA of the collector for example; `AArch64`.
+* **target** (`text NOT NULL`): The ISA of the collector for example; `aarch64-unknown-linux-gnu`.
 * **name** (`text NOT NULL`): Unique name for the collector.
 * **date_added** (`timestamptz NOT NULL`): When the collector was added
 * **last_heartbeat_at** (`timestamptz`): When the collector last updated this

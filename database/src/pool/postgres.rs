@@ -317,13 +317,12 @@ static MIGRATIONS: &[&str] = &[
         date_added        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         last_heartbeat_at TIMESTAMPTZ,
         benchmark_set     INTEGER NOT NULL,
-        is_active         BOOLEAN DEFAULT FALSE NOT NULL,
-
-        -- Given the current setup, we do not want 2 collectors that are active
-        -- with the same target using the same benchmark set.
-        CONSTRAINT collector_config_target_bench_active_uniq
-            UNIQUE (target, benchmark_set, is_active)
+        is_active         BOOLEAN DEFAULT FALSE NOT NULL
     );
+    -- Given the current setup, we do not want 2 collectors that are active
+    -- with the same target using the same benchmark set.
+    CREATE UNIQUE INDEX collector_config_target_bench_active_uniq ON collector_config
+        (target, benchmark_set, is_active) WHERE is_active = TRUE;
     "#,
 ];
 
