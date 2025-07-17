@@ -259,7 +259,6 @@ aid         benchmark   error
 1           syn-1.0.89  Failed to compile...
 ```
 
-
 ## New benchmarking design
 We are currently implementing a new design for dispatching benchmarks to collector(s) and storing
 them in the database. It will support new use-cases, like backfilling of new benchmarks into a parent
@@ -296,3 +295,21 @@ Columns:
   * `completed`: Completed request.
 * **backends** (`text NOT NULL`): Comma-separated list of codegen backends to benchmark. If empty, the default set of codegen backends will be benchmarked.
 * **profiles** (`text NOT NULL`): Comma-separated list of profiles to benchmark. If empty, the default set of profiles will be benchmarked.
+
+### collector_config
+
+Information about the collector; it's target architecture, when it was added,
+whether it is active and when it last had activity denoted by `last_heartbeat_at`.
+
+Columns:
+
+* **id** (`id`): A unique identifier for the collector.
+* **target** (`text NOT NULL`): The ISA of the collector for example; `aarch64-unknown-linux-gnu`.
+* **name** (`text NOT NULL`): Unique name for the collector.
+* **date_added** (`timestamptz NOT NULL`): When the collector was added
+* **last_heartbeat_at** (`timestamptz`): When the collector last updated this
+  column, a way to test if the collector is still alive.
+* **benchmark_set** (`int NOT NULL`): ID of the predefined benchmark suite to
+  execute.
+* **is_active** (`boolean NOT NULL`): For controlling whether the collector is
+  active for use. Useful for adding/removing collectors.

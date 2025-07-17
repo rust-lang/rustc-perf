@@ -309,6 +309,21 @@ static MIGRATIONS: &[&str] = &[
     // Prevent multiple try commits without a `sha` and the same `pr` number
     // being added to the table
     r#"CREATE UNIQUE INDEX benchmark_request_pr_commit_type_idx ON benchmark_request (pr, commit_type) WHERE status != 'completed';"#,
+    r#"
+    CREATE TABLE IF NOT EXISTS collector_config (
+        id                SERIAL PRIMARY KEY,
+        target            TEXT NOT NULL,
+        name              TEXT NOT NULL UNIQUE,
+        date_added        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        last_heartbeat_at TIMESTAMPTZ,
+        benchmark_set     INTEGER NOT NULL,
+        is_active         BOOLEAN DEFAULT FALSE NOT NULL
+    );
+    -- Given the current setup, we do not want 2 collectors that are active
+    -- with the same target using the same benchmark set.
+    CREATE UNIQUE INDEX collector_config_target_bench_active_uniq ON collector_config
+        (target, benchmark_set, is_active) WHERE is_active = TRUE;
+    "#,
 ];
 
 #[async_trait::async_trait]
