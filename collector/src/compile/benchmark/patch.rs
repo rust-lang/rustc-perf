@@ -60,8 +60,19 @@ impl Patch {
     pub fn apply(&self, dir: &Path) -> anyhow::Result<()> {
         log::debug!("applying {} to {:?}", self.name, dir);
 
-        let mut cmd = Command::new("git");
-        cmd.current_dir(dir).args(["apply"]).arg(&*self.path);
+        // It's harder to use patch(1) in pure Windows MSVC toolchain
+        let mut cmd = if cfg!(all(windows, target_env = "msvc")) {
+            let mut command = Command::new("git");
+            command.current_dir(dir).args(["apply"]).arg(&*self.path);
+            command
+        } else {
+            let mut command = Command::new("patch");
+            command
+                .current_dir(dir)
+                .args(["-p1", "-i"])
+                .arg(&*self.path);
+            command
+        };
 
         command_output(&mut cmd)?;
 
