@@ -8,17 +8,14 @@ use ratatui::{
     prelude::*,
     widgets::Block,
 };
-use std::fmt::Display;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tabled::settings::object::{Column, Columns};
-use tabled::settings::Modify;
 use tabled::Tabled;
 
 static ALL_METRICS: &[Metric] = &[
     Metric::InstructionsUser,
-    Metric::Cycles,
+    Metric::CyclesUser,
     Metric::WallTime,
     Metric::MaxRSS,
     Metric::LinkedArtifactSize,
@@ -31,7 +28,7 @@ static ALL_METRICS: &[Metric] = &[
     Metric::CpuClock,
     Metric::CpuClockUser,
     Metric::CrateMetadataSize,
-    Metric::CyclesUser,
+    Metric::Cycles,
     Metric::DepGraphSize,
     Metric::DocByteSize,
     Metric::DwoFileSize,
@@ -70,14 +67,14 @@ pub async fn compare_artifacts(
         commit: Option<String>,
         label: &str,
     ) -> anyhow::Result<Option<Commit>> {
-        Ok(commit
+        commit
             .map(|commit| {
                 aids.iter()
                     .find(|c| c.sha == commit)
                     .cloned()
                     .ok_or_else(|| anyhow::anyhow!("{label} commit {commit} not found"))
             })
-            .transpose()?)
+            .transpose()
     }
 
     let base: Option<Commit> = check_commit(&aids, base, "Base")?;
@@ -111,8 +108,8 @@ pub async fn compare_artifacts(
         terminal.draw(|frame| {
             screen.draw(frame);
         })?;
-        match event::read()? {
-            Event::Key(key_event) => match key_event.code {
+        if let Event::Key(key_event) = event::read()? {
+            match key_event.code {
                 KeyCode::Char('q') | KeyCode::Esc => break,
                 key => {
                     if let Some(action) = screen.handle_key(key).await? {
@@ -123,8 +120,7 @@ pub async fn compare_artifacts(
                         }
                     }
                 }
-            },
-            _ => {}
+            }
         }
     }
     ratatui::restore();
@@ -301,7 +297,7 @@ impl CompareScreen {
         base: Commit,
         modified: Commit,
     ) -> anyhow::Result<Self> {
-        let pstats = load_data(
+        let data = load_data(
             metric,
             &db_state.index,
             db_state.db.as_mut(),
@@ -314,9 +310,21 @@ impl CompareScreen {
             modified,
             db_state,
             metric,
-            data: pstats,
+            data,
             table_state: TableState::default(),
         })
+    }
+
+    async fn reload_data(&mut self) -> anyhow::Result<()> {
+        self.data = load_data(
+            self.metric,
+            &self.db_state.index,
+            self.db_state.db.as_mut(),
+            &self.base,
+            &self.modified,
+        )
+        .await?;
+        Ok(())
     }
 }
 
@@ -330,15 +338,20 @@ impl Screen for CompareScreen {
                 [
                     // +2 because of borders
                     Constraint::Min((summary_table.lines().count() + 2) as u16),
+                    Constraint::Length(2),
                     Constraint::Percentage(100),
                 ]
                 .as_ref(),
             )
             .split(frame.area());
+
         frame.render_widget(
             Paragraph::new(Text::raw(summary_table)).block(Block::bordered().title("Summary")),
             layout[0],
         );
+
+        render_metric(frame, self.metric, layout[1]);
+
         let header = Row::new(vec![
             Line::from("Benchmark"),
             Line::from("Profile"),
@@ -398,7 +411,7 @@ impl Screen for CompareScreen {
         .row_highlight_style(Style::new().bold());
 
         let table_layout =
-            Layout::new(Direction::Horizontal, [Constraint::Max(120)]).split(layout[1]);
+            Layout::new(Direction::Horizontal, [Constraint::Max(120)]).split(layout[2]);
         frame.render_stateful_widget(table, table_layout[0], &mut self.table_state);
     }
 
@@ -410,12 +423,37 @@ impl Screen for CompareScreen {
             match key {
                 KeyCode::Down => self.table_state.select_next(),
                 KeyCode::Up => self.table_state.select_previous(),
+                KeyCode::Char('a') => {
+                    self.metric = select_metric(self.metric, -1);
+                    self.reload_data().await?;
+                }
+                KeyCode::Char('s') => {
+                    self.metric = select_metric(self.metric, 1);
+                    self.reload_data().await?;
+                }
                 _ => {}
             }
 
             Ok(None)
         })
     }
+}
+
+fn select_metric(current: Metric, direction: isize) -> Metric {
+    let index = ALL_METRICS.iter().position(|m| *m == current).unwrap_or(0) as isize;
+    let index = ((index + direction) + ALL_METRICS.len() as isize) % ALL_METRICS.len() as isize;
+    ALL_METRICS[index as usize]
+}
+
+fn render_metric(frame: &mut Frame, metric: Metric, area: Rect) {
+    frame.render_widget(
+        Line::from(vec![
+            "Metric: ".into(),
+            metric.as_str().bold(),
+            " (switch: A/S)".into(),
+        ]),
+        area,
+    )
 }
 
 async fn load_data(
@@ -429,7 +467,7 @@ async fn load_data(
     let resp = query
         .execute(
             conn,
-            &index,
+            index,
             Arc::new(vec![
                 ArtifactId::Commit(base.clone()),
                 ArtifactId::Commit(modified.clone()),
@@ -497,26 +535,19 @@ struct Regression {
     count: usize,
     #[tabled(display("display_range"))]
     range: (Option<f64>, Option<f64>),
-    #[tabled(display("display_mean"))]
+    #[tabled(display("format_value"))]
     mean: Option<f64>,
 }
 
-fn format_value(value: Option<f64>) -> String {
+fn format_value(value: &Option<f64>) -> String {
     match value {
-        Some(value) => format!("{:+.2}%", value),
+        Some(value) => format!("{value:+.2}%"),
         None => "-".to_string(),
     }
 }
 
 fn display_range(&(min, max): &(Option<f64>, Option<f64>)) -> String {
-    format!("[{}, {}]", &format_value(min), &format_value(max))
-}
-
-fn display_mean(value: &Option<f64>) -> String {
-    match value {
-        Some(value) => format!("{:+.2}%", value),
-        None => "-".to_string(),
-    }
+    format!("[{}, {}]", &format_value(&min), &format_value(&max))
 }
 
 impl From<&Vec<f64>> for Regression {
