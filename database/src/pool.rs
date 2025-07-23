@@ -1,6 +1,6 @@
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -210,6 +210,9 @@ pub trait Connection: Send + Sync {
         sha: &str,
         parent_sha: &str,
     ) -> anyhow::Result<()>;
+
+    /// Add a benchmark job to the job queue.
+    async fn enqueue_benchmark_job(&self, benchmark_job: &BenchmarkJob) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]

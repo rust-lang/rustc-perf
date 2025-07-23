@@ -1,9 +1,9 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkRequest,
-    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend,
-    CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
-    Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
+    CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile,
+    QueuedCommit, Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_TRY_STR,
 };
@@ -323,6 +323,28 @@ static MIGRATIONS: &[&str] = &[
     -- with the same target using the same benchmark set.
     CREATE UNIQUE INDEX collector_config_target_bench_active_uniq ON collector_config
         (target, benchmark_set, is_active) WHERE is_active = TRUE;
+    "#,
+    r#"
+    CREATE TABLE IF NOT EXISTS job_queue (
+        id            SERIAL PRIMARY KEY,
+        request_tag   TEXT NOT NULL,
+        target        TEXT NOT NULL,
+        backend       TEXT NOT NULL,
+        profile       TEXT NOT NULL,
+        benchmark_set INTEGER NOT NULL,
+        collector_id  TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        started_at    TIMESTAMPTZ,
+        completed_at  TIMESTAMPTZ,
+        status        TEXT NOT NULL,
+        retry         INTEGER DEFAULT 0,
+
+        CONSTRAINT job_queue_request_fk
+            FOREIGN KEY (request_tag)
+            REFERENCES benchmark_request(tag)
+            ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS job_queue_request_tag_idx ON job_queue (request_tag);
     "#,
 ];
 
@@ -1608,6 +1630,34 @@ where
             .collect();
         Ok(requests)
     }
+
+    async fn enqueue_benchmark_job(&self, benchmark_job: &BenchmarkJob) -> anyhow::Result<()> {
+        self.conn()
+            .execute(
+                r#"
+            INSERT INTO job_queue(
+                request_tag,
+                target,
+                backend,
+                profile,
+                benchmark_set,
+                status
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
+                "#,
+                &[
+                    &benchmark_job.request_tag(),
+                    &benchmark_job.target(),
+                    &benchmark_job.backend(),
+                    &benchmark_job.profile(),
+                    &(benchmark_job.benchmark_set() as i32),
+                    &benchmark_job.status(),
+                ],
+            )
+            .await
+            .context("failed to insert benchmark_job")?;
+        Ok(())
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
@@ -1653,6 +1703,10 @@ macro_rules! impl_to_postgresql_via_to_string {
 
 impl_to_postgresql_via_to_string!(BenchmarkRequestType);
 impl_to_postgresql_via_to_string!(BenchmarkRequestStatus);
+impl_to_postgresql_via_to_string!(Target);
+impl_to_postgresql_via_to_string!(CodegenBackend);
+impl_to_postgresql_via_to_string!(Profile);
+impl_to_postgresql_via_to_string!(BenchmarkJobStatus);
 
 #[cfg(test)]
 mod tests {

@@ -14,3 +14,15 @@ impl Default for Target {
         Self::X86_64UnknownLinuxGnu
     }
 }
+
+impl Target {
+    pub fn all() -> Vec<Self> {
+        vec![Self::X86_64UnknownLinuxGnu]
+    }
+
+    pub fn from_db_target(target: &database::Target) -> Target {
+        match target {
+            database::Target::X86_64UnknownLinuxGnu => Self::X86_64UnknownLinuxGnu,
+        }
+    }
+}
