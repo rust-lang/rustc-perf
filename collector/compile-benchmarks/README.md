@@ -203,6 +203,7 @@ Rust code being written today.
       applies correctly, e.g. `target/release/collector bench_local +nightly
       --id Test --profiles=Check --scenarios=IncrPatched
       --include=$NEW_BENCHMARK`
+  - Add the new entry to `collector/src/benchmark_set/compile_benchmarks.rs`.
   - Add the new entry to `collector/compile-benchmarks/README.md`.
   - Add a new licensing entry to `collector/compile-benchmarks/REUSE.toml` (see existing entries
   for inspiration).
@@ -245,6 +246,7 @@ Rust code being written today.
 - In the first commit just remove the old code.
   - Do this with `git rm -r` on the directory.
 - In the second commit do everything else.
+  - Remove the entry from `collector/src/benchmark_set/compile_benchmarks.rs`.
   - Remove the entry from `collector/compile-benchmarks/README.md`.
   - Remove the entry from `collector/compile-benchmarks/REUSE.toml`.
   - `git grep` for occurrences of the old benchmark name (e.g. in
