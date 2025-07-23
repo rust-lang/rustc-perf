@@ -98,8 +98,14 @@ impl BenchmarkConfig {
     }
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash, Debug)]
 pub struct BenchmarkName(pub String);
+
+impl<'a> From<&'a str> for BenchmarkName {
+    fn from(value: &'a str) -> Self {
+        Self(value.to_string())
+    }
+}
 
 impl std::fmt::Display for BenchmarkName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

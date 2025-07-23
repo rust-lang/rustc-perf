@@ -7,6 +7,7 @@ use std::process::{self, Command};
 
 pub mod api;
 pub mod artifact_stats;
+pub mod benchmark_set;
 pub mod cargo;
 pub mod codegen;
 pub mod compare;
