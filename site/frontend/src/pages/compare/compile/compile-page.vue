@@ -102,6 +102,18 @@ function loadFilterFromUrl(
         defaultFilter.artifact.library
       ),
     },
+    changes: {
+      regressions: getBoolOrDefault(
+        urlParams,
+        "regressions",
+        defaultFilter.changes.regressions
+      ),
+      improvements: getBoolOrDefault(
+        urlParams,
+        "improvements",
+        defaultCompileFilter.changes.improvements
+      ),
+    },
     selfCompareBackend: getBoolOrDefault(
       urlParams,
       "selfCompareBackend",
@@ -177,6 +189,16 @@ function storeFilterToUrl(
     "library",
     filter.artifact.library,
     defaultFilter.artifact.library
+  );
+  storeOrReset(
+    "regressions",
+    filter.changes.regressions,
+    defaultFilter.changes.regressions
+  );
+  storeOrReset(
+    "improvements",
+    filter.changes.improvements,
+    defaultFilter.changes.improvements
   );
   storeOrReset(
     "selfCompareBackend",

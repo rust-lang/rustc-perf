@@ -259,6 +259,33 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
               </li>
             </ul>
           </div>
+          <div class="section section-list-wrapper">
+            <div class="section-heading">
+              <div style="width: 160px">
+                <span>Changes</span>
+                <Tooltip>
+                  Select only improvements, only regressions, or both.
+                </Tooltip>
+              </div>
+            </div>
+            <ul class="states-list">
+              <li>
+                <label>
+                  <input type="checkbox" v-model="filter.changes.regressions" />
+                  <span class="label">regressions</span>
+                </label>
+              </li>
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    v-model="filter.changes.improvements"
+                  />
+                  <span class="label">improvements</span>
+                </label>
+              </li>
+            </ul>
+          </div>
           <div class="section">
             <div class="section-heading">
               <span>Show non-relevant results</span>
