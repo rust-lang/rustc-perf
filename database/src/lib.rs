@@ -1092,6 +1092,12 @@ impl fmt::Display for BenchmarkJobStatus {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkSet(u32);
 
+/// A single unit of work generated from a benchmark request. Split by profiles
+/// and backends
+///
+/// Each request is split into several `BenchmarkJob`s. Collectors poll the
+/// queue and claim a job only when its `benchmark_set` matches one of the sets
+/// they are responsible for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkJob {
     target: Target,
@@ -1102,49 +1108,4 @@ pub struct BenchmarkJob {
     created_at: DateTime<Utc>,
     status: BenchmarkJobStatus,
     retry: u32,
-}
-
-impl BenchmarkJob {
-    pub fn create_queued(
-        target: Target,
-        backend: CodegenBackend,
-        profile: Profile,
-        request_tag: &str,
-        benchmark_set: u32,
-    ) -> Self {
-        BenchmarkJob {
-            target,
-            backend,
-            profile,
-            created_at: Utc::now(),
-            request_tag: request_tag.to_string(),
-            benchmark_set: BenchmarkSet(benchmark_set),
-            status: BenchmarkJobStatus::Queued,
-            retry: 0,
-        }
-    }
-
-    pub fn request_tag(&self) -> &str {
-        &self.request_tag
-    }
-
-    pub fn target(&self) -> Target {
-        self.target
-    }
-
-    pub fn backend(&self) -> CodegenBackend {
-        self.backend
-    }
-
-    pub fn profile(&self) -> Profile {
-        self.profile
-    }
-
-    pub fn benchmark_set(&self) -> u32 {
-        self.benchmark_set.0
-    }
-
-    pub fn status(&self) -> &BenchmarkJobStatus {
-        &self.status
-    }
 }

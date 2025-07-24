@@ -6,9 +6,7 @@ use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
-use database::{
-    BenchmarkJob, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, Target,
-};
+use database::{BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, Target};
 use hashbrown::HashSet;
 use parking_lot::RwLock;
 use tokio::time::{self, Duration};
@@ -178,9 +176,11 @@ pub async fn build_queue(
 }
 
 /// From a benchmark_request create all the required jobs
-pub fn create_benchmark_jobs(
+pub async fn create_benchmark_jobs(
+    conn: &mut dyn database::pool::Connection,
     benchmark_request: &BenchmarkRequest,
-) -> anyhow::Result<Vec<BenchmarkJob>> {
+) -> anyhow::Result<()> {
+    let mut tx = conn.transaction().await;
     anyhow::ensure!(
         benchmark_request.tag().is_some(),
         "Benchmark request has no tag"
@@ -188,7 +188,7 @@ pub fn create_benchmark_jobs(
 
     let backends = benchmark_request.backends()?;
     let profiles = benchmark_request.profiles()?;
-    let mut jobs = vec![];
+    let request_tag = benchmark_request.tag().unwrap();
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
@@ -197,20 +197,40 @@ pub fn create_benchmark_jobs(
         ) {
             for backend in backends.iter() {
                 for profile in profiles.iter() {
-                    let job = BenchmarkJob::create_queued(
-                        target,
-                        *backend,
-                        *profile,
-                        benchmark_request.tag().unwrap(),
-                        benchmark_set as u32,
-                    );
-                    jobs.push(job);
+                    tx.conn()
+                        .enqueue_benchmark_job(
+                            request_tag,
+                            &target,
+                            backend,
+                            profile,
+                            benchmark_set as u32,
+                        )
+                        .await?;
+                    // If there is a parent, we create a job for it to. The
+                    // database will ignore it if there is already a job there.
+                    // If the parent job has been deleted from the database
+                    // but was already benchmarked then the collector will ignore
+                    // it as it will see it already has results.
+                    if let Some(parent_sha) = benchmark_request.parent_sha() {
+                        tx.conn()
+                            .enqueue_benchmark_job(
+                                parent_sha,
+                                &target,
+                                backend,
+                                profile,
+                                benchmark_set as u32,
+                            )
+                            .await?;
+                    }
                 }
             }
         }
     }
 
-    Ok(jobs)
+    tx.conn()
+        .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
+        .await?;
+    Ok(())
 }
 
 /// Enqueue the job into the job_queue
@@ -219,30 +239,12 @@ async fn enqueue_next_job(
     index: &mut BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
     let queue = build_queue(conn, index).await?;
-    let mut tx = conn.transaction().await;
     for request in queue {
         if request.status() != BenchmarkRequestStatus::InProgress {
-            for benchmark_job in create_benchmark_jobs(&request)? {
-                tx.conn()
-                    .enqueue_benchmark_job(
-                        benchmark_job.request_tag(),
-                        &benchmark_job.target(),
-                        &benchmark_job.backend(),
-                        &benchmark_job.profile(),
-                        benchmark_job.benchmark_set(),
-                    )
-                    .await?;
-            }
-            tx.conn()
-                .update_benchmark_request_status(
-                    request.tag().unwrap(),
-                    BenchmarkRequestStatus::InProgress,
-                )
-                .await?;
+            create_benchmark_jobs(conn, &request).await?;
             break;
         }
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -282,7 +284,7 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
 mod tests {
     use super::*;
     use chrono::{Datelike, Duration, TimeZone, Utc};
-    use database::{tests::run_postgres_test, CodegenBackend, Profile};
+    use database::tests::run_postgres_test;
 
     fn days_ago(day_str: &str) -> chrono::DateTime<Utc> {
         // Walk backwards until the first non-digit, then slice
@@ -344,18 +346,6 @@ mod tests {
             .filter_map(|request| request.tag().map(|tag| tag))
             .collect();
         assert_eq!(queue_shas, expected)
-    }
-
-    fn benchmark_jobs_match(jobs: &[BenchmarkJob], expected_jobs: &[BenchmarkJob]) {
-        assert_eq!(jobs.len(), expected_jobs.len());
-        for (job, expected) in std::iter::zip(jobs, expected_jobs) {
-            assert_eq!(job.target(), expected.target());
-            assert_eq!(job.backend(), expected.backend());
-            assert_eq!(job.profile(), expected.profile());
-            assert_eq!(job.benchmark_set(), expected.benchmark_set());
-            assert_eq!(job.request_tag(), expected.request_tag());
-            assert_eq!(job.status(), expected.status());
-        }
     }
 
     #[tokio::test]
@@ -455,31 +445,5 @@ mod tests {
             Ok(ctx)
         })
         .await;
-    }
-
-    #[test]
-    fn create_benchmark_jobs_default() {
-        let request = create_master("bar", "parent1", 10, "days2");
-        let jobs = create_benchmark_jobs(&request).unwrap();
-
-        let create_job = |profile: Profile| -> BenchmarkJob {
-            BenchmarkJob::create_queued(
-                Target::X86_64UnknownLinuxGnu,
-                CodegenBackend::Llvm,
-                profile,
-                request.tag().unwrap(),
-                0u32,
-            )
-        };
-
-        benchmark_jobs_match(
-            &vec![
-                create_job(Profile::Check),
-                create_job(Profile::Debug),
-                create_job(Profile::Doc),
-                create_job(Profile::Opt),
-            ],
-            &jobs,
-        );
     }
 }

@@ -345,7 +345,7 @@ mod tests {
     use super::*;
     use crate::{
         tests::{run_db_test, run_postgres_test},
-        BenchmarkJob, BenchmarkRequestStatus, BenchmarkRequestType, Commit, CommitType, Date,
+        BenchmarkRequestStatus, BenchmarkRequestType, Commit, CommitType, Date,
     };
 
     /// Create a Commit
@@ -604,14 +604,6 @@ mod tests {
             let benchmark_request =
                 BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
 
-            let benchmark_job = BenchmarkJob::create_queued(
-                Target::X86_64UnknownLinuxGnu,
-                CodegenBackend::Llvm,
-                Profile::Opt,
-                benchmark_request.tag().unwrap(),
-                2,
-            );
-
             // Insert the request so we don't violate the foreign key
             db.insert_benchmark_request(&benchmark_request)
                 .await
@@ -620,10 +612,10 @@ mod tests {
             // Now we can insert the job
             let result = db
                 .enqueue_benchmark_job(
-                    benchmark_job.request_tag(),
-                    &benchmark_job.target(),
-                    &benchmark_job.backend(),
-                    &benchmark_job.profile(),
+                    benchmark_request.tag().unwrap(),
+                    &Target::X86_64UnknownLinuxGnu,
+                    &CodegenBackend::Llvm,
+                    &Profile::Opt,
                     0u32,
                 )
                 .await;
