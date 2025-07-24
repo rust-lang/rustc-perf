@@ -344,13 +344,18 @@ static MIGRATIONS: &[&str] = &[
             REFERENCES benchmark_request(tag)
             ON DELETE CASCADE,
 
-       CONSTRAINT job_queue_unique
-       UNIQUE (
-           request_tag,
-           target,
-           backend,
-           profile,
-           benchmark_set
+        CONSTRAINT job_queue_collector
+            FOREIGN KEY (collector_id)
+            REFERENCES collector_config(id)
+            ON DELETE CASCADE,
+
+        CONSTRAINT job_queue_unique
+        UNIQUE (
+            request_tag,
+            target,
+            backend,
+            profile,
+            benchmark_set
         )
     );
     CREATE INDEX IF NOT EXISTS job_queue_request_tag_idx ON job_queue (request_tag);
