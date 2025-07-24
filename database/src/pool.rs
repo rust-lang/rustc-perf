@@ -1,6 +1,6 @@
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkRequest,
-    BenchmarkRequestIndex, BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestIndex,
+    BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -212,7 +212,14 @@ pub trait Connection: Send + Sync {
     ) -> anyhow::Result<()>;
 
     /// Add a benchmark job to the job queue.
-    async fn enqueue_benchmark_job(&self, benchmark_job: &BenchmarkJob) -> anyhow::Result<()>;
+    async fn enqueue_benchmark_job(
+        &self,
+        request_tag: &str,
+        target: &Target,
+        backend: &CodegenBackend,
+        profile: &Profile,
+        benchmark_set: u32,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -338,7 +345,7 @@ mod tests {
     use super::*;
     use crate::{
         tests::{run_db_test, run_postgres_test},
-        BenchmarkRequestStatus, BenchmarkRequestType, Commit, CommitType, Date,
+        BenchmarkJob, BenchmarkRequestStatus, BenchmarkRequestType, Commit, CommitType, Date,
     };
 
     /// Create a Commit
@@ -582,6 +589,45 @@ mod tests {
             assert_eq!(req_db.tag().as_deref(), Some("sha1"));
             assert_eq!(req_db.parent_sha().as_deref(), Some("sha-parent-1"));
             assert_eq!(req_db.pr(), Some(&42));
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn enqueue_benchmark_job() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let benchmark_request =
+                BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+
+            let benchmark_job = BenchmarkJob::create_queued(
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                benchmark_request.tag().unwrap(),
+                2,
+            );
+
+            // Insert the request so we don't violate the foreign key
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+
+            // Now we can insert the job
+            let result = db
+                .enqueue_benchmark_job(
+                    benchmark_job.request_tag(),
+                    &benchmark_job.target(),
+                    &benchmark_job.backend(),
+                    &benchmark_job.profile(),
+                    0u32,
+                )
+                .await;
+            assert!(result.is_ok());
 
             Ok(ctx)
         })

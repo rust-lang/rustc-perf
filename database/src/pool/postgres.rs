@@ -1,6 +1,6 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJobStatus,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
     CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile,
     QueuedCommit, Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
@@ -332,7 +332,7 @@ static MIGRATIONS: &[&str] = &[
         backend       TEXT NOT NULL,
         profile       TEXT NOT NULL,
         benchmark_set INTEGER NOT NULL,
-        collector_id  TEXT,
+        collector_id  INTEGER,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         started_at    TIMESTAMPTZ,
         completed_at  TIMESTAMPTZ,
@@ -344,7 +344,14 @@ static MIGRATIONS: &[&str] = &[
             REFERENCES benchmark_request(tag)
             ON DELETE CASCADE,
 
-       CONSTRAINT job_queue_unique UNIQUE(request_tag, target, backend, profile)
+       CONSTRAINT job_queue_unique
+       UNIQUE (
+           request_tag,
+           target,
+           backend,
+           profile,
+           benchmark_set
+        )
     );
     CREATE INDEX IF NOT EXISTS job_queue_request_tag_idx ON job_queue (request_tag);
     "#,
@@ -1633,7 +1640,14 @@ where
         Ok(requests)
     }
 
-    async fn enqueue_benchmark_job(&self, benchmark_job: &BenchmarkJob) -> anyhow::Result<()> {
+    async fn enqueue_benchmark_job(
+        &self,
+        request_tag: &str,
+        target: &Target,
+        backend: &CodegenBackend,
+        profile: &Profile,
+        benchmark_set: u32,
+    ) -> anyhow::Result<()> {
         self.conn()
             .execute(
                 r#"
@@ -1646,14 +1660,15 @@ where
                 status
             )
             VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT DO NOTHING
                 "#,
                 &[
-                    &benchmark_job.request_tag(),
-                    &benchmark_job.target(),
-                    &benchmark_job.backend(),
-                    &benchmark_job.profile(),
-                    &(benchmark_job.benchmark_set() as i32),
-                    &benchmark_job.status(),
+                    &request_tag,
+                    &target,
+                    &backend,
+                    &profile,
+                    &(benchmark_set as i32),
+                    &BenchmarkJobStatus::Queued,
                 ],
             )
             .await

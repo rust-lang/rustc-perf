@@ -1052,9 +1052,14 @@ impl BenchmarkRequestIndex {
 #[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkJobStatus {
     Queued,
-    InProgress,
-    Success,
-    Failure,
+    InProgress {
+        started_at: DateTime<Utc>,
+    },
+    Completed {
+        started_at: DateTime<Utc>,
+        completed_at: DateTime<Utc>,
+        success: bool,
+    },
 }
 
 const BENCHMARK_JOB_STATUS_QUEUED_STR: &str = "queued";
@@ -1066,9 +1071,14 @@ impl BenchmarkJobStatus {
     pub fn as_str(&self) -> &str {
         match self {
             BenchmarkJobStatus::Queued => BENCHMARK_JOB_STATUS_QUEUED_STR,
-            BenchmarkJobStatus::InProgress => BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
-            BenchmarkJobStatus::Success => BENCHMARK_JOB_STATUS_SUCCESS_STR,
-            BenchmarkJobStatus::Failure => BENCHMARK_JOB_STATUS_FAILURE_STR,
+            BenchmarkJobStatus::InProgress { .. } => BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+            BenchmarkJobStatus::Completed { success, .. } => {
+                if *success {
+                    BENCHMARK_JOB_STATUS_SUCCESS_STR
+                } else {
+                    BENCHMARK_JOB_STATUS_FAILURE_STR
+                }
+            }
         }
     }
 }
@@ -1090,32 +1100,26 @@ pub struct BenchmarkJob {
     request_tag: String,
     benchmark_set: BenchmarkSet,
     created_at: DateTime<Utc>,
-    started_at: Option<DateTime<Utc>>,
-    completed_at: Option<DateTime<Utc>>,
     status: BenchmarkJobStatus,
     retry: u32,
 }
 
 impl BenchmarkJob {
-    pub fn new(
+    pub fn create_queued(
         target: Target,
         backend: CodegenBackend,
         profile: Profile,
         request_tag: &str,
         benchmark_set: u32,
-        created_at: DateTime<Utc>,
-        status: BenchmarkJobStatus,
     ) -> Self {
         BenchmarkJob {
             target,
             backend,
             profile,
+            created_at: Utc::now(),
             request_tag: request_tag.to_string(),
             benchmark_set: BenchmarkSet(benchmark_set),
-            created_at,
-            started_at: None,
-            completed_at: None,
-            status,
+            status: BenchmarkJobStatus::Queued,
             retry: 0,
         }
     }

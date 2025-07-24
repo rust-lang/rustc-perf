@@ -1042,7 +1042,12 @@ fn main_result() -> anyhow::Result<i32> {
 
                         let compile_config = CompileBenchmarkConfig {
                             benchmarks,
-                            profiles: Profile::default_profiles(),
+                            profiles: vec![
+                                Profile::Check,
+                                Profile::Debug,
+                                Profile::Doc,
+                                Profile::Opt,
+                            ],
                             scenarios: Scenario::all(),
                             backends,
                             iterations: runs.map(|v| v as usize),

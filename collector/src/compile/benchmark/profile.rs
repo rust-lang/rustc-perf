@@ -34,11 +34,6 @@ impl Profile {
         ]
     }
 
-    /// Set of default profiles that should be benchmarked for a master/try artifact.
-    pub fn default_profiles() -> Vec<Self> {
-        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
-    }
-
     pub fn is_doc(&self) -> bool {
         match self {
             Profile::Doc | Profile::DocJson => true,

@@ -7,8 +7,7 @@ use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
 use database::{
-    BenchmarkJob, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, Target,
+    BenchmarkJob, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, Target,
 };
 use hashbrown::HashSet;
 use parking_lot::RwLock;
@@ -198,14 +197,12 @@ pub fn create_benchmark_jobs(
         ) {
             for backend in backends.iter() {
                 for profile in profiles.iter() {
-                    let job = BenchmarkJob::new(
+                    let job = BenchmarkJob::create_queued(
                         target,
                         *backend,
                         *profile,
                         benchmark_request.tag().unwrap(),
                         benchmark_set as u32,
-                        Utc::now(),
-                        BenchmarkJobStatus::Queued,
                     );
                     jobs.push(job);
                 }
@@ -218,35 +215,46 @@ pub fn create_benchmark_jobs(
 
 /// Enqueue the job into the job_queue
 async fn enqueue_next_job(
-    conn: &dyn database::pool::Connection,
+    conn: &mut dyn database::pool::Connection,
     index: &mut BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
     let queue = build_queue(conn, index).await?;
+    let mut tx = conn.transaction().await;
     for request in queue {
         if request.status() != BenchmarkRequestStatus::InProgress {
-            for job in create_benchmark_jobs(&request)? {
-                conn.enqueue_benchmark_job(&job).await?;
+            for benchmark_job in create_benchmark_jobs(&request)? {
+                tx.conn()
+                    .enqueue_benchmark_job(
+                        benchmark_job.request_tag(),
+                        &benchmark_job.target(),
+                        &benchmark_job.backend(),
+                        &benchmark_job.profile(),
+                        benchmark_job.benchmark_set(),
+                    )
+                    .await?;
             }
-            conn.update_benchmark_request_status(
-                request.tag().unwrap(),
-                BenchmarkRequestStatus::InProgress,
-            )
-            .await?;
+            tx.conn()
+                .update_benchmark_request_status(
+                    request.tag().unwrap(),
+                    BenchmarkRequestStatus::InProgress,
+                )
+                .await?;
             break;
         }
     }
+    tx.commit().await?;
     Ok(())
 }
 
 /// For queueing jobs, add the jobs you want to queue to this function
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
-    let conn = site_ctxt.conn().await;
+    let mut conn = site_ctxt.conn().await;
     let mut index = conn.load_benchmark_request_index().await?;
     // Put the master commits into the `benchmark_requests` queue
     create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
     create_benchmark_request_releases(&*conn, &index).await?;
-    enqueue_next_job(&*conn, &mut index).await?;
+    enqueue_next_job(&mut *conn, &mut index).await?;
     Ok(())
 }
 
@@ -455,14 +463,12 @@ mod tests {
         let jobs = create_benchmark_jobs(&request).unwrap();
 
         let create_job = |profile: Profile| -> BenchmarkJob {
-            BenchmarkJob::new(
+            BenchmarkJob::create_queued(
                 Target::X86_64UnknownLinuxGnu,
                 CodegenBackend::Llvm,
                 profile,
                 request.tag().unwrap(),
                 0u32,
-                Utc::now(),
-                BenchmarkJobStatus::Queued,
             )
         };
 
