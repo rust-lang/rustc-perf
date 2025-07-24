@@ -27,6 +27,10 @@ export type CompileBenchmarkFilter = {
     binary: boolean;
     library: boolean;
   };
+  changes: {
+    regressions: boolean;
+    improvements: boolean;
+  };
   selfCompareBackend: boolean;
 } & BenchmarkFilter;
 
@@ -57,6 +61,10 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
   artifact: {
     binary: true,
     library: true,
+  },
+  changes: {
+    regressions: true,
+    improvements: true,
   },
   selfCompareBackend: false,
 };
@@ -154,6 +162,16 @@ export function computeCompileComparisonsWithNonRelevant(
     return true;
   }
 
+  function changeFilter(
+    comparison: TestCaseComparison<CompileTestCase>
+  ): boolean {
+    const isImprovement = comparison.percent <= 0.0;
+    if (isImprovement && !filter.changes.improvements) return false;
+    if (!isImprovement && !filter.changes.regressions) return false;
+
+    return true;
+  }
+
   function categoryFilter(category: Category) {
     if (category === "primary" && !filter.category.primary) return false;
     if (category === "secondary" && !filter.category.secondary) return false;
@@ -167,6 +185,7 @@ export function computeCompileComparisonsWithNonRelevant(
       backendFilter(comparison.testCase.backend) &&
       categoryFilter(comparison.testCase.category) &&
       artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
+      changeFilter(comparison) &&
       benchmarkNameMatchesFilter(comparison.testCase.benchmark, filter.name)
     );
   }
