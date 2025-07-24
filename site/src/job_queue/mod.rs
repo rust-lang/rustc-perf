@@ -230,6 +230,7 @@ pub async fn create_benchmark_jobs(
     tx.conn()
         .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
         .await?;
+    tx.commit().await?;
     Ok(())
 }
 
