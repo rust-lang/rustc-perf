@@ -334,11 +334,7 @@ impl Benchmark {
             return Ok(());
         }
 
-        eprintln!(
-            "Preparing {} (test cases: {})",
-            self.name,
-            benchmark_dirs.len()
-        );
+        eprintln!("Preparing {}", self.name);
 
         // In parallel (but with a limit to the number of CPUs), prepare all
         // profiles. This is done in parallel vs. sequentially because:
@@ -456,7 +452,7 @@ impl Benchmark {
 
                 // Rustdoc does not support incremental compilation
                 if !profile.is_doc() {
-                    // An incremental  from scratch (slowest incremental case).
+                    // An incremental build from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
                     if scenarios.iter().any(|s| s.is_incr()) {
                         self.mk_cargo_process(toolchain, cwd, profile, backend, target)
@@ -529,21 +525,9 @@ impl Benchmark {
         }
 
         let benchmark = database::Benchmark::from(self.name.0.as_str());
-        let profile = match profile {
-            Profile::Check => database::Profile::Check,
-            Profile::Debug => database::Profile::Debug,
-            Profile::Doc => database::Profile::Doc,
-            Profile::DocJson => database::Profile::DocJson,
-            Profile::Opt => database::Profile::Opt,
-            Profile::Clippy => database::Profile::Clippy,
-        };
-        let backend = match backend {
-            CodegenBackend::Llvm => database::CodegenBackend::Llvm,
-            CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
-        };
-        let target = match target {
-            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
-        };
+        let profile: database::Profile = (*profile).into();
+        let backend: database::CodegenBackend = (*backend).into();
+        let target: database::Target = (*target).into();
 
         match scenario {
             // For these scenarios, we can simply check if they were benchmarked or not
