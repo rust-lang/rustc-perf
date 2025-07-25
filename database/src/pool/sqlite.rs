@@ -1296,6 +1296,17 @@ impl Connection for SqliteConnection {
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
+
+    async fn enqueue_benchmark_job(
+        &self,
+        _request_tag: &str,
+        _target: &Target,
+        _backend: &CodegenBackend,
+        _profile: &Profile,
+        _benchmark_set: u32,
+    ) -> anyhow::Result<()> {
+        no_queue_implementation_abort!()
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {

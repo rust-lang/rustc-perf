@@ -227,6 +227,11 @@ impl Profile {
             Profile::Clippy => "clippy",
         }
     }
+
+    /// Set of default profiles that should be benchmarked for a master/try artifact.
+    pub fn default_profiles() -> Vec<Self> {
+        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
+    }
 }
 
 impl std::str::FromStr for Profile {
@@ -364,6 +369,10 @@ impl Target {
         match self {
             Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
         }
+    }
+
+    pub fn all() -> Vec<Self> {
+        vec![Self::X86_64UnknownLinuxGnu]
     }
 }
 
@@ -988,6 +997,35 @@ impl BenchmarkRequest {
     pub fn is_release(&self) -> bool {
         matches!(self.commit_type, BenchmarkRequestType::Release { .. })
     }
+
+    /// Get the codegen backends for the request
+    pub fn backends(&self) -> anyhow::Result<Vec<CodegenBackend>> {
+        // Empty string; default to LLVM.
+        if self.backends.trim().is_empty() {
+            return Ok(vec![CodegenBackend::Llvm]);
+        }
+
+        self.backends
+            .split(',')
+            .map(|s| {
+                CodegenBackend::from_str(s).map_err(|_| anyhow::anyhow!("Invalid backend: {s}"))
+            })
+            .collect()
+    }
+
+    /// Get the profiles for the request
+    pub fn profiles(&self) -> anyhow::Result<Vec<Profile>> {
+        // No profile string; fall back to the library defaults.
+        if self.profiles.trim().is_empty() {
+            return Ok(Profile::default_profiles());
+        }
+
+        self.profiles
+            .split(',')
+            .map(Profile::from_str)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow::anyhow!("Invalid backend: {e}"))
+    }
 }
 
 /// Cached information about benchmark requests in the DB
@@ -1009,4 +1047,65 @@ impl BenchmarkRequestIndex {
     pub fn completed_requests(&self) -> &HashSet<String> {
         &self.completed
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchmarkJobStatus {
+    Queued,
+    InProgress {
+        started_at: DateTime<Utc>,
+    },
+    Completed {
+        started_at: DateTime<Utc>,
+        completed_at: DateTime<Utc>,
+        success: bool,
+    },
+}
+
+const BENCHMARK_JOB_STATUS_QUEUED_STR: &str = "queued";
+const BENCHMARK_JOB_STATUS_IN_PROGRESS_STR: &str = "in_progress";
+const BENCHMARK_JOB_STATUS_SUCCESS_STR: &str = "success";
+const BENCHMARK_JOB_STATUS_FAILURE_STR: &str = "failure";
+
+impl BenchmarkJobStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            BenchmarkJobStatus::Queued => BENCHMARK_JOB_STATUS_QUEUED_STR,
+            BenchmarkJobStatus::InProgress { .. } => BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+            BenchmarkJobStatus::Completed { success, .. } => {
+                if *success {
+                    BENCHMARK_JOB_STATUS_SUCCESS_STR
+                } else {
+                    BENCHMARK_JOB_STATUS_FAILURE_STR
+                }
+            }
+        }
+    }
+}
+
+impl fmt::Display for BenchmarkJobStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BenchmarkSet(u32);
+
+/// A single unit of work generated from a benchmark request. Split by profiles
+/// and backends
+///
+/// Each request is split into several `BenchmarkJob`s. Collectors poll the
+/// queue and claim a job only when its `benchmark_set` matches one of the sets
+/// they are responsible for.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BenchmarkJob {
+    target: Target,
+    backend: CodegenBackend,
+    profile: Profile,
+    request_tag: String,
+    benchmark_set: BenchmarkSet,
+    created_at: DateTime<Utc>,
+    status: BenchmarkJobStatus,
+    retry: u32,
 }

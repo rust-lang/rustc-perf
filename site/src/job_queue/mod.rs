@@ -5,7 +5,8 @@ use std::{str::FromStr, sync::Arc};
 use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
-use database::{BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus};
+use collector::benchmark_set::benchmark_set_count;
+use database::{BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, Target};
 use hashbrown::HashSet;
 use parking_lot::RwLock;
 use tokio::time::{self, Duration};
@@ -26,7 +27,7 @@ async fn create_benchmark_request_master_commits(
 ) -> anyhow::Result<()> {
     let master_commits = &ctxt.get_master_commits().commits;
     // TODO; delete at some point in the future
-    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-06-01T00:00:00.000Z")?;
+    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-07-24T00:00:00.000Z")?;
 
     for master_commit in master_commits {
         // We don't want to add masses of obsolete data
@@ -38,6 +39,7 @@ async fn create_benchmark_request_master_commits(
                 pr,
                 master_commit.time,
             );
+            log::info!("Inserting master benchmark request {benchmark:?}");
             if let Err(error) = conn.insert_benchmark_request(&benchmark).await {
                 log::error!("Failed to insert master benchmark request: {error:?}");
             }
@@ -69,6 +71,7 @@ async fn create_benchmark_request_releases(
     for (name, date_time) in releases {
         if date_time >= cutoff && !index.contains_tag(&name) {
             let release_request = BenchmarkRequest::create_release(&name, date_time);
+            log::info!("Inserting release benchmark request {release_request:?}");
             if let Err(error) = conn.insert_benchmark_request(&release_request).await {
                 log::error!("Failed to insert release benchmark request: {error}");
             }
@@ -103,9 +106,9 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
         // just won't have a parent result available.
         if level_len == 0 {
             if cfg!(test) {
-                panic!("No commit is ready for benchmarking");
+                panic!("No master/try commit is ready for benchmarking");
             } else {
-                log::warn!("No commit is ready for benchmarking");
+                log::warn!("No master/try commit is ready for benchmarking");
                 return;
             }
         }
@@ -174,24 +177,105 @@ pub async fn build_queue(
     Ok(queue)
 }
 
-/// Enqueue the job into the job_queue
-async fn enqueue_next_job(
-    conn: &dyn database::pool::Connection,
+/// Create all necessary jobs for the given benchmark request
+/// and mark it as being in progress.
+/// This is performed atomically, in a transaction.
+pub async fn enqueue_benchmark_request(
+    conn: &mut dyn database::pool::Connection,
+    benchmark_request: &BenchmarkRequest,
+) -> anyhow::Result<()> {
+    let mut tx = conn.transaction().await;
+
+    let Some(request_tag) = benchmark_request.tag() else {
+        panic!("Benchmark request {benchmark_request:?} has no tag");
+    };
+
+    log::info!("Enqueuing jobs for request {benchmark_request:?}");
+
+    let backends = benchmark_request.backends()?;
+    let profiles = benchmark_request.profiles()?;
+
+    // Target x benchmark_set x backend x profile -> BenchmarkJob
+    for target in Target::all() {
+        for benchmark_set in 0..benchmark_set_count(
+            collector::compile::benchmark::target::Target::from_db_target(&target),
+        ) {
+            for backend in backends.iter() {
+                for profile in profiles.iter() {
+                    tx.conn()
+                        .enqueue_benchmark_job(
+                            request_tag,
+                            &target,
+                            backend,
+                            profile,
+                            benchmark_set as u32,
+                        )
+                        .await?;
+                    // If there is a parent, we create a job for it too. The
+                    // database will ignore it if there is already a job there.
+                    // If the parent job has been deleted from the database
+                    // but was already benchmarked then the collector will ignore
+                    // it as it will see it already has results.
+                    if let Some(parent_sha) = benchmark_request.parent_sha() {
+                        tx.conn()
+                            .enqueue_benchmark_job(
+                                parent_sha,
+                                &target,
+                                backend,
+                                profile,
+                                benchmark_set as u32,
+                            )
+                            .await?;
+                    }
+                }
+            }
+        }
+    }
+
+    tx.conn()
+        .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Try to find a benchmark request that should be enqueue next, and if such request is found,
+/// enqueue it.
+async fn try_enqueue_next_benchmark_request(
+    conn: &mut dyn database::pool::Connection,
     index: &mut BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
-    let _queue = build_queue(conn, index).await?;
+    let queue = build_queue(conn, index).await?;
+
+    #[allow(clippy::never_loop)]
+    for request in queue {
+        match request.status() {
+            BenchmarkRequestStatus::ArtifactsReady => {
+                enqueue_benchmark_request(conn, &request).await?;
+                break;
+            }
+            BenchmarkRequestStatus::InProgress => {
+                // TODO: Try to mark as completed
+                break;
+            }
+            BenchmarkRequestStatus::WaitingForArtifacts
+            | BenchmarkRequestStatus::Completed { .. } => {
+                unreachable!("Unexpected request {request:?} found in request queue");
+            }
+        }
+    }
     Ok(())
 }
 
 /// For queueing jobs, add the jobs you want to queue to this function
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
-    let conn = site_ctxt.conn().await;
+    let mut conn = site_ctxt.conn().await;
     let mut index = conn.load_benchmark_request_index().await?;
     // Put the master commits into the `benchmark_requests` queue
     create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
     create_benchmark_request_releases(&*conn, &index).await?;
-    enqueue_next_job(&*conn, &mut index).await?;
+    try_enqueue_next_benchmark_request(&mut *conn, &mut index).await?;
     Ok(())
 }
 
@@ -208,8 +292,8 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
             guard.as_ref().cloned()
         } {
             match cron_enqueue_jobs(&ctxt_clone).await {
-                Ok(_) => log::info!("Cron job executed at: {:?}", std::time::SystemTime::now()),
-                Err(e) => log::error!("Cron job failed to execute {}", e),
+                Ok(_) => log::info!("Cron job finished"),
+                Err(e) => log::error!("Cron job failed to execute: {e:?}"),
             }
         }
     }

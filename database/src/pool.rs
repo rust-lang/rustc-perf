@@ -210,6 +210,16 @@ pub trait Connection: Send + Sync {
         sha: &str,
         parent_sha: &str,
     ) -> anyhow::Result<()>;
+
+    /// Add a benchmark job to the job queue.
+    async fn enqueue_benchmark_job(
+        &self,
+        request_tag: &str,
+        target: &Target,
+        backend: &CodegenBackend,
+        profile: &Profile,
+        benchmark_set: u32,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -579,6 +589,37 @@ mod tests {
             assert_eq!(req_db.tag().as_deref(), Some("sha1"));
             assert_eq!(req_db.parent_sha().as_deref(), Some("sha-parent-1"));
             assert_eq!(req_db.pr(), Some(&42));
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn enqueue_benchmark_job() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client();
+            let db = db.connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let benchmark_request =
+                BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+
+            // Insert the request so we don't violate the foreign key
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+
+            // Now we can insert the job
+            let result = db
+                .enqueue_benchmark_job(
+                    benchmark_request.tag().unwrap(),
+                    &Target::X86_64UnknownLinuxGnu,
+                    &CodegenBackend::Llvm,
+                    &Profile::Opt,
+                    0u32,
+                )
+                .await;
+            assert!(result.is_ok());
 
             Ok(ctx)
         })
