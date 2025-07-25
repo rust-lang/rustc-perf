@@ -523,6 +523,11 @@ impl Benchmark {
         target: &Target,
         already_computed: &hashbrown::HashSet<CompileTestCase>,
     ) -> bool {
+        // Keep this in sync with the logic in `Benchmark::measure`.
+        if scenario.is_incr() && profile.is_doc() {
+            return false;
+        }
+
         let benchmark = database::Benchmark::from(self.name.0.as_str());
         let profile = match profile {
             Profile::Check => database::Profile::Check,
