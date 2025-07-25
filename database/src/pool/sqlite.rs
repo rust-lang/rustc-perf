@@ -1054,7 +1054,7 @@ impl Connection for SqliteConnection {
         self.raw_ref()
             .execute(
                 "update collector_progress set start = strftime('%s','now') \
-                where aid = ? and step = ? and end is null;",
+                where aid = ? and step = ? and start is null and end is null;",
                 params![&aid.0, &step],
             )
             .unwrap()

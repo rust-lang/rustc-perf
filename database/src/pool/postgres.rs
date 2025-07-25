@@ -1168,7 +1168,7 @@ where
         self.conn()
             .execute(
                 "update collector_progress set start_time = statement_timestamp() \
-                where aid = $1 and step = $2 and end_time is null;",
+                where aid = $1 and step = $2 and start_time is null and end_time is null;",
                 &[&(aid.0 as i32), &step],
             )
             .await
