@@ -1,4 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJobStatus,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
@@ -442,6 +443,7 @@ pub struct CachedStatements {
     record_artifact_size: Statement,
     get_artifact_size: Statement,
     load_benchmark_request_index: Statement,
+    get_compile_test_cases_with_measurements: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -628,6 +630,15 @@ impl PostgresConnection {
                     SELECT tag, status
                     FROM benchmark_request
                     WHERE tag IS NOT NULL
+                ").await.unwrap(),
+                get_compile_test_cases_with_measurements: conn.prepare("
+                    SELECT DISTINCT crate, profile, scenario, backend, target
+                    FROM pstat_series
+                    WHERE id IN (
+                        SELECT DISTINCT series
+                        FROM pstat
+                        WHERE aid = $1
+                    )
                 ").await.unwrap(),
             }),
             conn,
@@ -1157,7 +1168,7 @@ where
         self.conn()
             .execute(
                 "update collector_progress set start_time = statement_timestamp() \
-                where aid = $1 and step = $2 and end_time is null;",
+                where aid = $1 and step = $2 and start_time is null and end_time is null;",
                 &[&(aid.0 as i32), &step],
             )
             .await
@@ -1165,19 +1176,14 @@ where
             == 1
     }
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        let did_modify = self
-            .conn()
+        self.conn()
             .execute(
                 "update collector_progress set end_time = statement_timestamp() \
-                where aid = $1 and step = $2 and start_time is not null and end_time is null;",
+                where aid = $1 and step = $2 and start_time is not null;",
                 &[&(aid.0 as i32), &step],
             )
             .await
-            .unwrap()
-            == 1;
-        if !did_modify {
-            log::error!("did not end {} for {:?}", step, aid);
-        }
+            .unwrap();
     }
     async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.conn()
@@ -1679,6 +1685,30 @@ where
             .await
             .context("failed to insert benchmark_job")?;
         Ok(())
+    }
+
+    async fn get_compile_test_cases_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<CompileTestCase>> {
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_compile_test_cases_with_measurements,
+                &[&(artifact_row_id.0 as i32)],
+            )
+            .await
+            .context("cannot query compile-time test cases with measurements")?;
+        Ok(rows
+            .into_iter()
+            .map(|row| CompileTestCase {
+                benchmark: Benchmark::from(row.get::<_, &str>(0)),
+                profile: Profile::from_str(row.get::<_, &str>(1)).unwrap(),
+                scenario: row.get::<_, &str>(2).parse().unwrap(),
+                backend: CodegenBackend::from_str(row.get::<_, &str>(3)).unwrap(),
+                target: Target::from_str(row.get::<_, &str>(4)).unwrap(),
+            })
+            .collect())
     }
 }
 

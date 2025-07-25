@@ -10,3 +10,12 @@ impl CodegenBackend {
         vec![CodegenBackend::Llvm, CodegenBackend::Cranelift]
     }
 }
+
+impl From<CodegenBackend> for database::CodegenBackend {
+    fn from(value: CodegenBackend) -> Self {
+        match value {
+            CodegenBackend::Llvm => database::CodegenBackend::Llvm,
+            CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
+        }
+    }
+}

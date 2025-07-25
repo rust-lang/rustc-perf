@@ -41,3 +41,16 @@ impl Profile {
         }
     }
 }
+
+impl From<Profile> for database::Profile {
+    fn from(value: Profile) -> Self {
+        match value {
+            Profile::Check => database::Profile::Check,
+            Profile::Debug => database::Profile::Debug,
+            Profile::Doc => database::Profile::Doc,
+            Profile::DocJson => database::Profile::DocJson,
+            Profile::Opt => database::Profile::Opt,
+            Profile::Clippy => database::Profile::Clippy,
+        }
+    }
+}

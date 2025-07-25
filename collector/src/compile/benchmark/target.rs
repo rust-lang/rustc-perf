@@ -19,10 +19,20 @@ impl Target {
     pub fn all() -> Vec<Self> {
         vec![Self::X86_64UnknownLinuxGnu]
     }
+}
 
-    pub fn from_db_target(target: &database::Target) -> Target {
-        match target {
+impl From<database::Target> for Target {
+    fn from(value: database::Target) -> Self {
+        match value {
             database::Target::X86_64UnknownLinuxGnu => Self::X86_64UnknownLinuxGnu,
+        }
+    }
+}
+
+impl From<Target> for database::Target {
+    fn from(value: Target) -> Self {
+        match value {
+            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
         }
     }
 }
