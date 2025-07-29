@@ -1112,7 +1112,38 @@ pub struct BenchmarkJob {
     retry: u32,
 }
 
+impl BenchmarkJob {
+    pub fn target(&self) -> &Target {
+        &self.target
+    }
+
+    pub fn backend(&self) -> &CodegenBackend {
+        &self.backend
+    }
+
+    pub fn profile(&self) -> &Profile {
+        &self.profile
+    }
+
+    pub fn request_tag(&self) -> &str {
+        &self.request_tag
+    }
+
+    pub fn benchmark_set(&self) -> &BenchmarkSet {
+        &self.benchmark_set
+    }
+
+    pub fn collector_name(&self) -> Option<&str> {
+        match &self.status {
+            BenchmarkJobStatus::Queued => None,
+            BenchmarkJobStatus::InProgress { collector_name, .. }
+            | BenchmarkJobStatus::Completed { collector_name, .. } => Some(collector_name),
+        }
+    }
+}
+
 /// The configuration for a collector
+#[derive(Debug, PartialEq)]
 pub struct CollectorConfig {
     name: String,
     target: Target,

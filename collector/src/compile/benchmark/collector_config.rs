@@ -3,6 +3,7 @@ use database::BenchmarkSet;
 
 use super::target::Target;
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct CollectorConfig {
     name: String,
     target: Target,

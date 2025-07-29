@@ -1725,6 +1725,56 @@ where
             .collect())
     }
 
+    async fn add_collector_config(
+        &self,
+        collector_name: &str,
+        target: &Target,
+        benchmark_set: u32,
+        is_active: bool,
+    ) -> anyhow::Result<CollectorConfig> {
+        let row = self
+            .conn()
+            .query_one(
+                "INSERT INTO collector_config(
+                     name,
+                     target,
+                     date_added,
+                     last_heartbeat_at,
+                     benchmark_set,
+                     is_active
+                 ) VALUES (
+                     $1,
+                     $2,
+                     NOW(),
+                     NOW(),
+                     $3,
+                     $4
+                 )
+                RETURNING
+                    last_heartbeat_at,
+                    date_added
+                ",
+                &[
+                    &collector_name,
+                    &target,
+                    &(benchmark_set as i32),
+                    &is_active,
+                ],
+            )
+            .await
+            .context("failed to create collector config")?;
+
+        let collector_config = CollectorConfig {
+            name: collector_name.into(),
+            target: *target,
+            benchmark_set: BenchmarkSet(benchmark_set),
+            is_active,
+            last_heartbeat_at: row.get::<_, DateTime<Utc>>(0),
+            date_added: row.get::<_, DateTime<Utc>>(1),
+        };
+        Ok(collector_config)
+    }
+
     async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig> {
         let row = self
             .conn()
@@ -1735,11 +1785,10 @@ where
                     is_active,
                     last_heartbeat_at,
                     date_added
-                   
                 FROM
                     collector_config
                 WHERE
-                    collector_name = $1;",
+                    name = $1;",
                 &[&collector_name],
             )
             .await?;

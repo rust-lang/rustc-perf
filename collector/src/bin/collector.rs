@@ -12,6 +12,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::Command;
+use std::str::FromStr;
 use std::time::Duration;
 use std::{str, time::Instant};
 
@@ -668,6 +669,24 @@ enum Commands {
         modified: Option<String>,
     },
 
+    /// Registers a collector in the database
+    AddCollector {
+        #[command(flatten)]
+        db: DbOption,
+
+        #[arg(long)]
+        collector_name: String,
+
+        #[arg(long)]
+        target: String,
+
+        #[arg(long)]
+        is_active: bool,
+
+        #[arg(long)]
+        benchmark_set: u32,
+    },
+
     /// Polls the job queue for work to benchmark
     DequeueJob {
         /// The unique identifier for the collector
@@ -1278,6 +1297,27 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
             rt.block_on(compare_artifacts(conn, metric, base, modified))?;
+            Ok(0)
+        }
+
+        Commands::AddCollector {
+            db,
+            collector_name,
+            target,
+            is_active,
+            benchmark_set,
+        } => {
+            let pool = Pool::open(&db.db);
+            let rt = build_async_runtime();
+            let conn = rt.block_on(pool.connection());
+
+            let target = database::Target::from_str(&target).map_err(|e| anyhow::anyhow!(e))?;
+            rt.block_on(conn.add_collector_config(
+                &collector_name,
+                &target,
+                benchmark_set,
+                is_active,
+            ))?;
             Ok(0)
         }
 

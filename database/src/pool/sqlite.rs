@@ -1343,6 +1343,16 @@ impl Connection for SqliteConnection {
     ) -> anyhow::Result<Option<BenchmarkJob>> {
         no_queue_implementation_abort!()
     }
+
+    async fn add_collector_config(
+        &self,
+        _collector_name: &str,
+        _target: &Target,
+        _benchmark_set: u32,
+        _is_active: bool,
+    ) -> anyhow::Result<CollectorConfig> {
+        no_queue_implementation_abort!()
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {
