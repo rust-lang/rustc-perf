@@ -197,9 +197,7 @@ pub async fn enqueue_benchmark_request(
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
-        for benchmark_set in 0..benchmark_set_count(
-            collector::compile::benchmark::target::Target::from_db_target(&target),
-        ) {
+        for benchmark_set in 0..benchmark_set_count(target.into()) {
             for backend in backends.iter() {
                 for profile in profiles.iter() {
                     tx.conn()
