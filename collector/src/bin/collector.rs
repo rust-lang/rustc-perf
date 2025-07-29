@@ -35,6 +35,7 @@ use collector::artifact_stats::{
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
+use collector::compile::benchmark::collector_config::CollectorConfig;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::target::Target;
@@ -666,6 +667,19 @@ enum Commands {
         /// The name of the modified artifact to be compared.
         modified: Option<String>,
     },
+
+    /// Polls the job queue for work to benchmark
+    DequeueJob {
+        /// The unique identifier for the collector
+        #[arg(long)]
+        collector_name: String,
+
+        #[arg(long)]
+        target: String,
+
+        #[command(flatten)]
+        db: DbOption,
+    },
 }
 
 #[derive(Debug, clap::Parser)]
@@ -1264,6 +1278,44 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
             rt.block_on(compare_artifacts(conn, metric, base, modified))?;
+            Ok(0)
+        }
+
+        Commands::DequeueJob {
+            collector_name,
+            db,
+            target,
+        } => {
+            let pool = Pool::open(&db.db);
+            let rt = build_async_runtime();
+            let conn = rt.block_on(pool.connection());
+
+            // Obtain the configuration and validate that it matches the
+            // collector's setup
+            let collector_config: CollectorConfig = rt
+                .block_on(conn.get_collector_config(&collector_name))?
+                .into();
+
+            let collector_target = collector_config.target();
+            if collector_target.as_str() != target {
+                panic!(
+                    "Mismatching target for collector expected `{}` got `{}`",
+                    collector_target, target
+                );
+            }
+
+            // Dequeue a job
+            let benchmark_job = rt.block_on(conn.dequeue_benchmark_job(
+                &collector_name,
+                &collector_config.target().to_db_target(),
+                collector_config.benchmark_set(),
+            ))?;
+
+            if let Some(benchmark_job) = benchmark_job {
+                // TODO; process the job
+                println!("{:?}", benchmark_job);
+            }
+
             Ok(0)
         }
     }

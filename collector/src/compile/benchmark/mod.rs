@@ -19,6 +19,7 @@ use tempfile::TempDir;
 
 pub mod category;
 pub mod codegen_backend;
+pub mod collector_config;
 pub(crate) mod patch;
 pub mod profile;
 pub mod scenario;

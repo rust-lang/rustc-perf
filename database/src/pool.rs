@@ -1,7 +1,8 @@
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend, CollectorConfig,
+    CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -232,6 +233,17 @@ pub trait Connection: Send + Sync {
         &self,
         artifact_row_id: &ArtifactIdNumber,
     ) -> anyhow::Result<HashSet<CompileTestCase>>;
+
+    /// Get the confiuguration for a collector by the name of the collector
+    async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig>;
+
+    /// Get the confiuguration for a collector by the name of the collector
+    async fn dequeue_benchmark_job(
+        &self,
+        collector_name: &str,
+        target: &Target,
+        benchmark_set: &BenchmarkSet,
+    ) -> anyhow::Result<Option<BenchmarkJob>>;
 }
 
 #[async_trait::async_trait]
@@ -690,6 +702,39 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty());
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    async fn get_collector_config_error_if_not_exist() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+
+            let collector_config_result = db.get_collector_config("collector-1").await;
+
+            assert!(collector_config_result.is_err());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn dequeue_benchmark_job_empty_queue() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+
+            let benchmark_job_result = db
+                .dequeue_benchmark_job(
+                    "collector-1",
+                    &Target::X86_64UnknownLinuxGnu,
+                    &BenchmarkSet(420),
+                )
+                .await;
+
+            assert!(benchmark_job_result.is_ok());
+            assert!(benchmark_job_result.unwrap().is_none());
 
             Ok(ctx)
         })
