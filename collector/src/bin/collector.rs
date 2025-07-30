@@ -36,7 +36,6 @@ use collector::artifact_stats::{
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
-use collector::compile::benchmark::collector_config::CollectorConfig;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::target::Target;
@@ -1332,22 +1331,20 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 
             // Obtain the configuration and validate that it matches the
             // collector's setup
-            let collector_config: CollectorConfig = rt
-                .block_on(conn.get_collector_config(&collector_name))?
-                .into();
+            let collector_config: database::CollectorConfig =
+                rt.block_on(conn.get_collector_config(&collector_name))?;
 
             let collector_target = collector_config.target();
             if collector_target.as_str() != target {
                 panic!(
-                    "Mismatching target for collector expected `{}` got `{}`",
-                    collector_target, target
+                    "Mismatching target for collector expected `{collector_target}` got `{target}`"
                 );
             }
 
             // Dequeue a job
             let benchmark_job = rt.block_on(conn.dequeue_benchmark_job(
                 &collector_name,
-                &collector_config.target().to_db_target(),
+                collector_config.target(),
                 collector_config.benchmark_set(),
             ))?;
 

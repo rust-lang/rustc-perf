@@ -39,30 +39,18 @@ impl Target {
     }
 }
 
-impl From<database::Target> for Target {
-    fn from(value: database::Target) -> Self {
-        match value {
-            database::Target::X86_64UnknownLinuxGnu => Self::X86_64UnknownLinuxGnu,
-        }
-    }
-}
-
 impl Target {
     pub fn as_str(self) -> &'static str {
         match self {
             Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
         }
     }
+}
 
-    pub fn from_db_target(target: &database::Target) -> Target {
-        match target {
+impl From<database::Target> for Target {
+    fn from(value: database::Target) -> Self {
+        match value {
             database::Target::X86_64UnknownLinuxGnu => Self::X86_64UnknownLinuxGnu,
-        }
-    }
-
-    pub fn to_db_target(&self) -> database::Target {
-        match self {
-            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
         }
     }
 }
