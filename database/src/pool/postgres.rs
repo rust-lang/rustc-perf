@@ -368,13 +368,14 @@ static MIGRATIONS: &[&str] = &[
     // to use as we do not expose the `collector_id` in the code
     r#"
     ALTER TABLE job_queue DROP CONSTRAINT IF EXISTS job_queue_collector;
-    ALTER TABLE job_queue ADD COLUMN collector_name TEXT;
+    ALTER TABLE job_queue ADD COLUMN IF NOT EXISTS collector_name TEXT;
     ALTER TABLE job_queue
         ADD CONSTRAINT job_queue_collector
             FOREIGN KEY (collector_name)
             REFERENCES collector_config(name)
             ON DELETE CASCADE;
-    ALTER TABLE job_queue DROP COLUMN collector_id;
+    ALTER TABLE job_queue DROP COLUMN IF EXISTS collector_id;
+    CREATE INDEX IF NOT EXISTS job_queue_status_target_benchmark_set_idx ON job_queue (status, target, benchmark_set);
     "#,
 ];
 
