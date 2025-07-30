@@ -5,10 +5,10 @@ use crate::{
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
     BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType,
     CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
-    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_MASTER_STR,
-    BENCHMARK_REQUEST_RELEASE_STR, BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR,
-    BENCHMARK_REQUEST_STATUS_COMPLETED_STR, BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR,
-    BENCHMARK_REQUEST_TRY_STR,
+    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
+    BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_TRY_STR,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -1841,36 +1841,23 @@ where
                     WHERE
                         job_queue.id = picked.id
                     RETURNING
-                        job_queue.target,
                         job_queue.backend,
                         job_queue.profile,
                         job_queue.request_tag,
-                        job_queue.benchmark_set,
                         job_queue.created_at,
-                        job_queue.status,
                         job_queue.started_at,
                         job_queue.retry
-                ), updated_request AS (
-                    UPDATE
-                        benchmark_request
-                    SET
-                        status = $6
-                    FROM
-                        updated_queue
-                    WHERE
-                        updated_queue.request_tag = benchmark_request.tag
                 )
                 SELECT
                     *
                 FROM
                     updated_queue;",
                 &[
-                    &BenchmarkJobStatus::Queued,
+                    &BENCHMARK_JOB_STATUS_QUEUED_STR,
                     &target,
                     &(benchmark_set.0 as i32),
                     &collector_name,
                     &BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
-                    &BenchmarkRequestStatus::InProgress,
                 ],
             )
             .await?;
@@ -1879,21 +1866,20 @@ where
             None => Ok(None),
             Some(row) => {
                 let job = BenchmarkJob {
-                    target: Target::from_str(&row.get::<_, String>(0))
+                    target: *target,
+                    backend: CodegenBackend::from_str(&row.get::<_, String>(0))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    backend: CodegenBackend::from_str(&row.get::<_, String>(1))
+                    profile: Profile::from_str(&row.get::<_, String>(1))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    profile: Profile::from_str(&row.get::<_, String>(2))
-                        .map_err(|e| anyhow::anyhow!(e))?,
-                    request_tag: row.get::<_, String>(3),
-                    benchmark_set: BenchmarkSet(row.get::<_, i32>(4) as u32),
-                    created_at: row.get::<_, DateTime<Utc>>(5),
+                    request_tag: row.get::<_, String>(2),
+                    benchmark_set: benchmark_set.clone(),
+                    created_at: row.get::<_, DateTime<Utc>>(3),
                     // The job is now in an in_progress state
                     status: BenchmarkJobStatus::InProgress {
-                        started_at: row.get::<_, DateTime<Utc>>(7),
+                        started_at: row.get::<_, DateTime<Utc>>(4),
                         collector_name: collector_name.into(),
                     },
-                    retry: row.get::<_, i32>(8) as u32,
+                    retry: row.get::<_, i32>(5) as u32,
                 };
                 Ok(Some(job))
             }

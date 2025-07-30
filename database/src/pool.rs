@@ -716,6 +716,7 @@ mod tests {
         .await;
     }
 
+    #[tokio::test]
     async fn get_collector_config_error_if_not_exist() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
