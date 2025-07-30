@@ -8,7 +8,8 @@ use crate::{
     BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
     BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
-    BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_TRY_STR,
+    BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
+    BENCHMARK_REQUEST_TRY_STR,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -1491,7 +1492,7 @@ where
                     &benchmark_request.parent_sha(),
                     &benchmark_request.pr().map(|it| *it as i32),
                     &benchmark_request.commit_type,
-                    &benchmark_request.status,
+                    &benchmark_request.status.as_str(),
                     &benchmark_request.created_at,
                     &benchmark_request.backends,
                     &benchmark_request.profiles,
@@ -1572,9 +1573,9 @@ where
                 &[
                     &sha,
                     &parent_sha,
-                    &BenchmarkRequestStatus::ArtifactsReady,
+                    &BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR,
                     &(pr as i32),
-                    &BenchmarkRequestStatus::WaitingForArtifacts,
+                    &BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
                 ],
             )
             .await
@@ -1693,7 +1694,7 @@ where
                     &backend,
                     &profile,
                     &(benchmark_set as i32),
-                    &BenchmarkJobStatus::Queued,
+                    &BENCHMARK_JOB_STATUS_QUEUED_STR,
                 ],
             )
             .await
@@ -1929,11 +1930,9 @@ macro_rules! impl_to_postgresql_via_to_string {
 }
 
 impl_to_postgresql_via_to_string!(BenchmarkRequestType);
-impl_to_postgresql_via_to_string!(BenchmarkRequestStatus);
 impl_to_postgresql_via_to_string!(Target);
 impl_to_postgresql_via_to_string!(CodegenBackend);
 impl_to_postgresql_via_to_string!(Profile);
-impl_to_postgresql_via_to_string!(BenchmarkJobStatus);
 
 #[cfg(test)]
 mod tests {
