@@ -246,14 +246,20 @@ async fn try_enqueue_next_benchmark_request(
     let queue = build_queue(conn, index).await?;
 
     #[allow(clippy::never_loop)]
-    for request in queue {
+    for mut request in queue {
         match request.status() {
             BenchmarkRequestStatus::ArtifactsReady => {
                 enqueue_benchmark_request(conn, &request).await?;
                 break;
             }
             BenchmarkRequestStatus::InProgress => {
-                // TODO: Try to mark as completed
+                if conn
+                    .mark_benchmark_request_as_completed(&mut request)
+                    .await?
+                {
+                    index.add_tag(request.tag().unwrap());
+                    continue;
+                }
                 break;
             }
             BenchmarkRequestStatus::WaitingForArtifacts

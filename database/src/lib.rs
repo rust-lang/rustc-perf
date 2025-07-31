@@ -1026,6 +1026,10 @@ impl BenchmarkRequest {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| anyhow::anyhow!("Invalid backend: {e}"))
     }
+
+    pub fn is_completed(&self) -> bool {
+        matches!(self.status, BenchmarkRequestStatus::Completed { .. })
+    }
 }
 
 /// Cached information about benchmark requests in the DB
@@ -1046,6 +1050,11 @@ impl BenchmarkRequestIndex {
     /// Return tags of already completed benchmark requests.
     pub fn completed_requests(&self) -> &HashSet<String> {
         &self.completed
+    }
+
+    pub fn add_tag(&mut self, tag: &str) {
+        self.all.insert(tag.to_string());
+        self.completed.insert(tag.to_string());
     }
 }
 
