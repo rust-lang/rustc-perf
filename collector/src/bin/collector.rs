@@ -766,14 +766,15 @@ fn main_result() -> anyhow::Result<i32> {
         runtime: &runtime_benchmark_dir,
     };
 
-    // XXX: This doesn't necessarily work for all archs
-    let target_triple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
+    // This clearly won't work for all architectures, but should be good enough for x64 Linux
+    // and ARM 64-bit Linux.
+    let host_target_tuple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
 
     match args.command {
         Commands::BinaryStats { mode, symbols } => {
             match mode {
                 BinaryStatsMode::Compile(args) => {
-                    binary_stats_compile(args, symbols, &target_triple)?;
+                    binary_stats_compile(args, symbols, &host_target_tuple)?;
                 }
                 BinaryStatsMode::Local(args) => {
                     binary_stats_local(args, symbols)?;
@@ -792,7 +793,7 @@ fn main_result() -> anyhow::Result<i32> {
             purge,
         } => {
             log_db(&db);
-            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &target_triple)?;
+            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &host_target_tuple)?;
             let pool = Pool::open(&db.db);
 
             let isolation_mode = if no_isolate {
@@ -846,7 +847,7 @@ fn main_result() -> anyhow::Result<i32> {
                     rustc,
                     ToolchainConfig::default(),
                     id,
-                    target_triple.clone(),
+                    host_target_tuple.clone(),
                 )?;
                 let suite = prepare_runtime_benchmark_suite(
                     &toolchain,
@@ -903,7 +904,7 @@ fn main_result() -> anyhow::Result<i32> {
                     rustc,
                     ToolchainConfig::default(),
                     id,
-                    target_triple.clone(),
+                    host_target_tuple.clone(),
                 )?;
                 Ok::<_, anyhow::Error>(toolchain)
             };
@@ -946,7 +947,7 @@ fn main_result() -> anyhow::Result<i32> {
                     .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                     .id(local.id.as_deref()),
                 "",
-                target_triple,
+                host_target_tuple,
             )?;
 
             let mut benchmarks = get_compile_benchmarks(&compile_benchmark_dir, (&local).into())?;
@@ -1015,7 +1016,7 @@ fn main_result() -> anyhow::Result<i32> {
                 match next {
                     NextArtifact::Release(tag) => {
                         let toolchain =
-                            create_toolchain_from_published_version(&tag, &target_triple)?;
+                            create_toolchain_from_published_version(&tag, &host_target_tuple)?;
                         let conn = rt.block_on(pool.connection());
                         rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))
                     }
@@ -1056,7 +1057,7 @@ fn main_result() -> anyhow::Result<i32> {
                         };
                         let sha = commit.sha.to_string();
                         let sysroot = rt
-                            .block_on(Sysroot::install(sha.clone(), &target_triple, &backends))
+                            .block_on(Sysroot::install(sha.clone(), &host_target_tuple, &backends))
                             .with_context(|| {
                                 format!("failed to install sysroot for {:?}", commit)
                             })?;
@@ -1135,7 +1136,8 @@ fn main_result() -> anyhow::Result<i32> {
             let pool = database::Pool::open(&db.db);
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
-            let toolchain = create_toolchain_from_published_version(&toolchain, &target_triple)?;
+            let toolchain =
+                create_toolchain_from_published_version(&toolchain, &host_target_tuple)?;
             rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))?;
             Ok(0)
         }
@@ -1183,7 +1185,7 @@ fn main_result() -> anyhow::Result<i32> {
                             .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                             .id(local.id.as_deref()),
                         suffix,
-                        target_triple.clone(),
+                        host_target_tuple.clone(),
                     )?;
                     let id = toolchain.id.clone();
                     profile_compile(
@@ -1250,7 +1252,7 @@ fn main_result() -> anyhow::Result<i32> {
             let rt = build_async_runtime();
             let mut sysroot = rt.block_on(Sysroot::install(
                 commit.sha,
-                &target_triple,
+                &host_target_tuple,
                 &codegen_backends.0,
             ))?;
             sysroot.preserve(); // don't delete it
