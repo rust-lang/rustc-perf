@@ -411,7 +411,7 @@ struct DbOption {
     /// Database output file
     // This would be better as a `PathBuf`, but it's used in various ways that
     // make that tricky without adjusting several points in the code.
-    #[arg(long, default_value = "results.db")]
+    #[arg(long, default_value = "results.db", env = "DATABASE_URL")]
     db: String,
 }
 
