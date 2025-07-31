@@ -253,6 +253,13 @@ pub trait Connection: Send + Sync {
         target: &Target,
         benchmark_set: &BenchmarkSet,
     ) -> anyhow::Result<Option<BenchmarkJob>>;
+
+    /// Try and mark the benchmark_request as completed. Will return `true` if
+    /// it has been marked as completed else `false` meaning there was no change
+    async fn mark_benchmark_request_as_completed(
+        &self,
+        benchmark_request: &mut BenchmarkRequest,
+    ) -> anyhow::Result<bool>;
 }
 
 #[async_trait::async_trait]
