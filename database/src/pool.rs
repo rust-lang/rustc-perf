@@ -1,7 +1,8 @@
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, CodegenBackend, CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend, CollectorConfig,
+    CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -232,6 +233,26 @@ pub trait Connection: Send + Sync {
         &self,
         artifact_row_id: &ArtifactIdNumber,
     ) -> anyhow::Result<HashSet<CompileTestCase>>;
+
+    /// Add the confiuguration for a collector
+    async fn add_collector_config(
+        &self,
+        collector_name: &str,
+        target: &Target,
+        benchmark_set: u32,
+        is_active: bool,
+    ) -> anyhow::Result<CollectorConfig>;
+
+    /// Get the confiuguration for a collector by the name of the collector
+    async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig>;
+
+    /// Get the confiuguration for a collector by the name of the collector
+    async fn dequeue_benchmark_job(
+        &self,
+        collector_name: &str,
+        target: &Target,
+        benchmark_set: &BenchmarkSet,
+    ) -> anyhow::Result<Option<BenchmarkJob>>;
 }
 
 #[async_trait::async_trait]
@@ -690,6 +711,127 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty());
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_collector_config_error_if_not_exist() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+
+            let collector_config_result = db.get_collector_config("collector-1").await;
+
+            assert!(collector_config_result.is_err());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn add_collector_config() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+
+            let insert_config_result = db
+                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .await;
+            assert!(insert_config_result.is_ok());
+
+            let get_config_result = db.get_collector_config("collector-1").await;
+            assert!(get_config_result.is_ok());
+
+            // What we entered into the database should be identical to what is
+            // returned from the database
+            assert_eq!(insert_config_result.unwrap(), get_config_result.unwrap());
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn dequeue_benchmark_job_empty_queue() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+
+            let benchmark_job_result = db
+                .dequeue_benchmark_job(
+                    "collector-1",
+                    &Target::X86_64UnknownLinuxGnu,
+                    &BenchmarkSet(420),
+                )
+                .await;
+
+            assert!(benchmark_job_result.is_ok());
+            assert!(benchmark_job_result.unwrap().is_none());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn dequeue_benchmark_job() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+
+            let insert_result = db
+                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .await;
+            assert!(insert_result.is_ok());
+
+            let collector_config = insert_result.unwrap();
+
+            let benchmark_request =
+                BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+
+            // Insert the request so we don't violate the foreign key
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+
+            // Now we can insert the job
+            let enqueue_result = db
+                .enqueue_benchmark_job(
+                    benchmark_request.tag().unwrap(),
+                    &Target::X86_64UnknownLinuxGnu,
+                    &CodegenBackend::Llvm,
+                    &Profile::Opt,
+                    1u32,
+                )
+                .await;
+            assert!(enqueue_result.is_ok());
+
+            let benchmark_job = db
+                .dequeue_benchmark_job(
+                    collector_config.name(),
+                    collector_config.target(),
+                    collector_config.benchmark_set(),
+                )
+                .await;
+            assert!(benchmark_job.is_ok());
+
+            let benchmark_job = benchmark_job.unwrap();
+            assert!(benchmark_job.is_some());
+
+            // Ensure the properties of the job match both the request and the
+            // collector configuration
+            let benchmark_job = benchmark_job.unwrap();
+            assert_eq!(
+                benchmark_job.request_tag(),
+                benchmark_request.tag().unwrap()
+            );
+            assert_eq!(
+                benchmark_job.benchmark_set(),
+                collector_config.benchmark_set()
+            );
+            assert_eq!(
+                benchmark_job.collector_name().unwrap(),
+                collector_config.name(),
+            );
 
             Ok(ctx)
         })

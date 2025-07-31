@@ -1,9 +1,9 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark,
-    Date, Profile, Target,
+    ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend, CollectionId,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -1329,6 +1329,29 @@ impl Connection for SqliteConnection {
                 })
             })?
             .collect::<Result<_, _>>()?)
+    }
+
+    async fn get_collector_config(&self, _collector_name: &str) -> anyhow::Result<CollectorConfig> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn dequeue_benchmark_job(
+        &self,
+        _collector_name: &str,
+        _target: &Target,
+        _benchmark_set: &BenchmarkSet,
+    ) -> anyhow::Result<Option<BenchmarkJob>> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn add_collector_config(
+        &self,
+        _collector_name: &str,
+        _target: &Target,
+        _benchmark_set: u32,
+        _is_active: bool,
+    ) -> anyhow::Result<CollectorConfig> {
+        no_queue_implementation_abort!()
     }
 }
 

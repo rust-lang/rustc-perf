@@ -1054,10 +1054,12 @@ pub enum BenchmarkJobStatus {
     Queued,
     InProgress {
         started_at: DateTime<Utc>,
+        collector_name: String,
     },
     Completed {
         started_at: DateTime<Utc>,
         completed_at: DateTime<Utc>,
+        collector_name: String,
         success: bool,
     },
 }
@@ -1108,4 +1110,71 @@ pub struct BenchmarkJob {
     created_at: DateTime<Utc>,
     status: BenchmarkJobStatus,
     retry: u32,
+}
+
+impl BenchmarkJob {
+    pub fn target(&self) -> &Target {
+        &self.target
+    }
+
+    pub fn backend(&self) -> &CodegenBackend {
+        &self.backend
+    }
+
+    pub fn profile(&self) -> &Profile {
+        &self.profile
+    }
+
+    pub fn request_tag(&self) -> &str {
+        &self.request_tag
+    }
+
+    pub fn benchmark_set(&self) -> &BenchmarkSet {
+        &self.benchmark_set
+    }
+
+    pub fn collector_name(&self) -> Option<&str> {
+        match &self.status {
+            BenchmarkJobStatus::Queued => None,
+            BenchmarkJobStatus::InProgress { collector_name, .. }
+            | BenchmarkJobStatus::Completed { collector_name, .. } => Some(collector_name),
+        }
+    }
+}
+
+/// The configuration for a collector
+#[derive(Debug, PartialEq)]
+pub struct CollectorConfig {
+    name: String,
+    target: Target,
+    benchmark_set: BenchmarkSet,
+    is_active: bool,
+    last_heartbeat_at: DateTime<Utc>,
+    date_added: DateTime<Utc>,
+}
+
+impl CollectorConfig {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn target(&self) -> &Target {
+        &self.target
+    }
+
+    pub fn benchmark_set(&self) -> &BenchmarkSet {
+        &self.benchmark_set
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.is_active
+    }
+
+    pub fn last_heartbeat_at(&self) -> DateTime<Utc> {
+        self.last_heartbeat_at
+    }
+
+    pub fn date_added(&self) -> DateTime<Utc> {
+        self.date_added
+    }
 }

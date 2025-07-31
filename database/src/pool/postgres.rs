@@ -1,12 +1,15 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJobStatus,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
-    CodegenBackend, CollectionId, Commit, CommitType, CompileBenchmark, Date, Index, Profile,
-    QueuedCommit, Scenario, Target, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType,
+    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
+    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
-    BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_TRY_STR,
+    BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
+    BENCHMARK_REQUEST_TRY_STR,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -360,6 +363,19 @@ static MIGRATIONS: &[&str] = &[
         )
     );
     CREATE INDEX IF NOT EXISTS job_queue_request_tag_idx ON job_queue (request_tag);
+    "#,
+    // The name is unique and not null in the collector config and is simpler
+    // to use as we do not expose the `collector_id` in the code
+    r#"
+    ALTER TABLE job_queue DROP CONSTRAINT IF EXISTS job_queue_collector;
+    ALTER TABLE job_queue ADD COLUMN collector_name TEXT;
+    ALTER TABLE job_queue
+        ADD CONSTRAINT job_queue_collector
+            FOREIGN KEY (collector_name)
+            REFERENCES collector_config(name)
+            ON DELETE CASCADE;
+    ALTER TABLE job_queue DROP COLUMN IF EXISTS collector_id;
+    CREATE INDEX IF NOT EXISTS job_queue_status_target_benchmark_set_idx ON job_queue (status, target, benchmark_set);
     "#,
 ];
 
@@ -1477,7 +1493,7 @@ where
                     &benchmark_request.parent_sha(),
                     &benchmark_request.pr().map(|it| *it as i32),
                     &benchmark_request.commit_type,
-                    &benchmark_request.status,
+                    &benchmark_request.status.as_str(),
                     &benchmark_request.created_at,
                     &benchmark_request.backends,
                     &benchmark_request.profiles,
@@ -1558,9 +1574,9 @@ where
                 &[
                     &sha,
                     &parent_sha,
-                    &BenchmarkRequestStatus::ArtifactsReady,
+                    &BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR,
                     &(pr as i32),
-                    &BenchmarkRequestStatus::WaitingForArtifacts,
+                    &BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
                 ],
             )
             .await
@@ -1679,7 +1695,7 @@ where
                     &backend,
                     &profile,
                     &(benchmark_set as i32),
-                    &BenchmarkJobStatus::Queued,
+                    &BENCHMARK_JOB_STATUS_QUEUED_STR,
                 ],
             )
             .await
@@ -1709,6 +1725,167 @@ where
                 target: Target::from_str(row.get::<_, &str>(4)).unwrap(),
             })
             .collect())
+    }
+
+    async fn add_collector_config(
+        &self,
+        collector_name: &str,
+        target: &Target,
+        benchmark_set: u32,
+        is_active: bool,
+    ) -> anyhow::Result<CollectorConfig> {
+        let row = self
+            .conn()
+            .query_one(
+                "INSERT INTO collector_config(
+                     name,
+                     target,
+                     date_added,
+                     last_heartbeat_at,
+                     benchmark_set,
+                     is_active
+                 ) VALUES (
+                     $1,
+                     $2,
+                     NOW(),
+                     NOW(),
+                     $3,
+                     $4
+                 )
+                RETURNING
+                    last_heartbeat_at,
+                    date_added
+                ",
+                &[
+                    &collector_name,
+                    &target,
+                    &(benchmark_set as i32),
+                    &is_active,
+                ],
+            )
+            .await
+            .context("failed to create collector config")?;
+
+        let collector_config = CollectorConfig {
+            name: collector_name.into(),
+            target: *target,
+            benchmark_set: BenchmarkSet(benchmark_set),
+            is_active,
+            last_heartbeat_at: row.get::<_, DateTime<Utc>>(0),
+            date_added: row.get::<_, DateTime<Utc>>(1),
+        };
+        Ok(collector_config)
+    }
+
+    async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig> {
+        let row = self
+            .conn()
+            .query_one(
+                "SELECT
+                    target,
+                    benchmark_set,
+                    is_active,
+                    last_heartbeat_at,
+                    date_added
+                FROM
+                    collector_config
+                WHERE
+                    name = $1;",
+                &[&collector_name],
+            )
+            .await?;
+
+        let collector_config = CollectorConfig {
+            name: collector_name.into(),
+            target: Target::from_str(&row.get::<_, String>(0)).map_err(|e| anyhow::anyhow!(e))?,
+            benchmark_set: BenchmarkSet(row.get::<_, i32>(1) as u32),
+            is_active: row.get::<_, bool>(2),
+            last_heartbeat_at: row.get::<_, DateTime<Utc>>(3),
+            date_added: row.get::<_, DateTime<Utc>>(4),
+        };
+        Ok(collector_config)
+    }
+
+    async fn dequeue_benchmark_job(
+        &self,
+        collector_name: &str,
+        target: &Target,
+        benchmark_set: &BenchmarkSet,
+    ) -> anyhow::Result<Option<BenchmarkJob>> {
+        // We take the oldest job from the job_queue matching the benchmark_set,
+        // target and status of 'queued'
+        let row_opt = self
+            .conn()
+            .query_opt(
+                "
+                WITH picked AS (
+                    SELECT
+                        id
+                    FROM
+                        job_queue
+                    WHERE
+                        status = $1
+                        AND target = $2
+                        AND benchmark_set = $3
+                    ORDER
+                        BY created_at
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                ), updated_queue AS (
+                    UPDATE
+                        job_queue
+                    SET
+                        collector_name = $4,
+                        started_at = NOW(),
+                        status = $5
+                    FROM
+                        picked
+                    WHERE
+                        job_queue.id = picked.id
+                    RETURNING
+                        job_queue.backend,
+                        job_queue.profile,
+                        job_queue.request_tag,
+                        job_queue.created_at,
+                        job_queue.started_at,
+                        job_queue.retry
+                )
+                SELECT
+                    *
+                FROM
+                    updated_queue;",
+                &[
+                    &BENCHMARK_JOB_STATUS_QUEUED_STR,
+                    &target,
+                    &(benchmark_set.0 as i32),
+                    &collector_name,
+                    &BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+                ],
+            )
+            .await?;
+
+        match row_opt {
+            None => Ok(None),
+            Some(row) => {
+                let job = BenchmarkJob {
+                    target: *target,
+                    backend: CodegenBackend::from_str(&row.get::<_, String>(0))
+                        .map_err(|e| anyhow::anyhow!(e))?,
+                    profile: Profile::from_str(&row.get::<_, String>(1))
+                        .map_err(|e| anyhow::anyhow!(e))?,
+                    request_tag: row.get::<_, String>(2),
+                    benchmark_set: benchmark_set.clone(),
+                    created_at: row.get::<_, DateTime<Utc>>(3),
+                    // The job is now in an in_progress state
+                    status: BenchmarkJobStatus::InProgress {
+                        started_at: row.get::<_, DateTime<Utc>>(4),
+                        collector_name: collector_name.into(),
+                    },
+                    retry: row.get::<_, i32>(5) as u32,
+                };
+                Ok(Some(job))
+            }
+        }
     }
 }
 
@@ -1754,11 +1931,9 @@ macro_rules! impl_to_postgresql_via_to_string {
 }
 
 impl_to_postgresql_via_to_string!(BenchmarkRequestType);
-impl_to_postgresql_via_to_string!(BenchmarkRequestStatus);
 impl_to_postgresql_via_to_string!(Target);
 impl_to_postgresql_via_to_string!(CodegenBackend);
 impl_to_postgresql_via_to_string!(Profile);
-impl_to_postgresql_via_to_string!(BenchmarkJobStatus);
 
 #[cfg(test)]
 mod tests {
