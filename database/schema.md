@@ -323,26 +323,24 @@ what master parent jobs we need to backfill when handling try builds.
 
 Columns:
 
-- **id** (`bigint` / `serial`): Primary-key identifier for the job row;
-  auto-increments with each new job.
-- **request_id** (`bigint`): References the parent benchmark request that
+* **id** (`bigint` / `serial`): Primary*key identifier for the job row;
+  auto*increments with each new job.
+* **request_tag** (`text`): References the parent benchmark request that
   spawned this job.
-- **target** (`text NOT NULL`): Hardware/ISA the benchmarks must run on
+* **target** (`text NOT NULL`): Hardware/ISA the benchmarks must run on
   (e.g. AArch64, x86_64).
-- **backend** (`text NOT NULL`): Code generation backend the collector should
+* **backend** (`text NOT NULL`): Code generation backend the collector should
   test (e.g. llvm, cranelift).
-- **benchmark_set** (`int NOT NULL`): ID of the predefined benchmark suite to
+* **benchmark_set** (`int NOT NULL`): ID of the predefined benchmark suite to
   execute.
-- **collector_id** (`text`): Id of the collector that claimed the job
+* **collector_name** (`text`): Name of the collector that claimed the job
   (populated once the job is started).
-- **created_at** (`timestamptz NOT NULL`): Datetime when the job was queued.
-- **started_at** (`timestamptz`): Datetime when the collector actually began
+* **created_at** (`timestamptz NOT NULL`): Datetime when the job was queued.
+* **started_at** (`timestamptz`): Datetime when the collector actually began
   running the benchmarks; NULL until the job is claimed.
-- **completed_at** (`timestampt`): Datetime when the collector finished
+* **completed_at** (`timestampt`): Datetime when the collector finished
   (successfully or otherwise); used to purge rows after ~30 days.
-- **status** (`text NOT NULL`): Current job state. `queued`, `in_progress`,
+* **status** (`text NOT NULL`): Current job state. `queued`, `in_progress`,
   `success`, or `failure`.
-- **retry** (`int NOT NULL`): Number of times the job has been re-queued after
+* **retry** (`int NOT NULL`): Number of times the job has been re*queued after
   a failure; 0 on the first attempt.
-- **error** (`text`): Optional error message or stack trace from the last
-  failed run; NULL when the job succeeded.
