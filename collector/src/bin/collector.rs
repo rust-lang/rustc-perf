@@ -1055,7 +1055,8 @@ fn main_result() -> anyhow::Result<i32> {
                             }
                         };
                         let sha = commit.sha.to_string();
-                        let sysroot = Sysroot::install(sha.clone(), &target_triple, &backends)
+                        let sysroot = rt
+                            .block_on(Sysroot::install(sha.clone(), &target_triple, &backends))
                             .with_context(|| {
                                 format!("failed to install sysroot for {:?}", commit)
                             })?;
@@ -1245,7 +1246,13 @@ fn main_result() -> anyhow::Result<i32> {
             let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
             let commit = get_commit_or_fake_it(last_sha).expect("success");
-            let mut sysroot = Sysroot::install(commit.sha, &target_triple, &codegen_backends.0)?;
+
+            let rt = build_async_runtime();
+            let mut sysroot = rt.block_on(Sysroot::install(
+                commit.sha,
+                &target_triple,
+                &codegen_backends.0,
+            ))?;
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.
