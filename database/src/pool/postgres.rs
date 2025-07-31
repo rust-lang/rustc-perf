@@ -5,7 +5,8 @@ use crate::{
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
     BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType,
     CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
-    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
     BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
@@ -1885,6 +1886,82 @@ where
                 };
                 Ok(Some(job))
             }
+        }
+    }
+
+    async fn mark_benchmark_request_as_completed(
+        &self,
+        benchmark_request: &mut BenchmarkRequest,
+    ) -> anyhow::Result<bool> {
+        anyhow::ensure!(
+            benchmark_request.tag().is_some(),
+            "Benchmark request has no tag"
+        );
+        anyhow::ensure!(
+            benchmark_request.status == BenchmarkRequestStatus::InProgress,
+            "Can only mark benchmark request whos status is in_progress as complete"
+        );
+
+        // Find if the benchmark is completed and update it's status to completed
+        // in one SQL block
+        let row = self
+            .conn()
+            .query_opt(
+                "
+                UPDATE
+                    benchmark_request
+                SET
+                    status = $1,
+                    completed_at = NOW()
+                WHERE
+                    banchmark_request.tag = $2
+                    AND benchmark_request.status != $1
+                    AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            job_queue
+                        WHERE
+                            request_tag = benchmark_request.tag
+                            AND status NOT IN ($3, $4)
+                    )
+                    AND (
+                        benchmark_request.parent_sha IS NULL
+                        OR NOT EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                job_queue
+                            JOIN
+                                benchmark_request AS parent_request 
+                            ON
+                                parent_request.tag = benchmark_request.parent_tag
+                            WHERE
+                                job_queue.request_tag = parent_request.tag
+                                AND job_queue.status NOT IN ($3, $4)
+                       )
+                )
+                RETURNING
+                    benchmark_request.completed_at;
+                ",
+                &[
+                    &BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
+                    &benchmark_request.tag(),
+                    &BENCHMARK_JOB_STATUS_SUCCESS_STR,
+                    &BENCHMARK_JOB_STATUS_FAILURE_STR,
+                ],
+            )
+            .await
+            .context("Failed to mark benchmark_request as completed")?;
+        // The affected id is returned by the query thus we can use the row's
+        // presence to determine if the request was marked as completed
+        if let Some(row) = row {
+            let completed_at = row.get::<_, DateTime<Utc>>(0);
+            // Also mutate our object
+            benchmark_request.status = BenchmarkRequestStatus::Completed { completed_at };
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 }

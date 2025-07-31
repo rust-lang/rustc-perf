@@ -1353,6 +1353,13 @@ impl Connection for SqliteConnection {
     ) -> anyhow::Result<CollectorConfig> {
         no_queue_implementation_abort!()
     }
+
+    async fn mark_benchmark_request_as_completed(
+        &self,
+        _benchmark_request: &mut BenchmarkRequest,
+    ) -> anyhow::Result<bool> {
+        no_queue_implementation_abort!()
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {
