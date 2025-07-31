@@ -368,7 +368,7 @@ static MIGRATIONS: &[&str] = &[
     // to use as we do not expose the `collector_id` in the code
     r#"
     ALTER TABLE job_queue DROP CONSTRAINT IF EXISTS job_queue_collector;
-    ALTER TABLE job_queue ADD COLUMN IF NOT EXISTS collector_name TEXT;
+    ALTER TABLE job_queue ADD COLUMN collector_name TEXT;
     ALTER TABLE job_queue
         ADD CONSTRAINT job_queue_collector
             FOREIGN KEY (collector_name)
