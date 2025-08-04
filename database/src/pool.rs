@@ -1,6 +1,6 @@
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobStatus,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
     CollectorConfig, CompileBenchmark, Target,
 };
@@ -262,10 +262,8 @@ pub trait Connection: Send + Sync {
     /// depending on the enum's completed state being a success
     async fn mark_benchmark_job_as_completed(
         &self,
-        request_tag: &str,
-        benchmark_set: u32,
-        target: &Target,
-        status: &BenchmarkJobStatus,
+        id: u32,
+        benchmark_job_conculsion: &BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
 }
 
@@ -409,7 +407,6 @@ mod tests {
         benchmark_set: u32,
         target: &Target,
     ) {
-        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
         /* Create job for the request */
         db.enqueue_benchmark_job(
             request_tag,
@@ -430,19 +427,9 @@ mod tests {
         assert_eq!(job.request_tag(), request_tag);
 
         /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(
-            request_tag,
-            benchmark_set,
-            &target,
-            &BenchmarkJobStatus::Completed {
-                started_at: time,
-                completed_at: time,
-                collector_name: collector_name.into(),
-                success: true,
-            },
-        )
-        .await
-        .unwrap();
+        db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+            .await
+            .unwrap();
 
         db.mark_benchmark_request_as_completed(request_tag)
             .await
@@ -968,19 +955,9 @@ mod tests {
             assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
 
             /* Mark the job as complete */
-            db.mark_benchmark_job_as_completed(
-                tag,
-                benchmark_set.0,
-                &target,
-                &BenchmarkJobStatus::Completed {
-                    started_at: time,
-                    completed_at: time,
-                    collector_name: collector_name.into(),
-                    success: false,
-                },
-            )
-            .await
-            .unwrap();
+            db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+                .await
+                .unwrap();
 
             db.mark_benchmark_request_as_completed(tag).await.unwrap();
 

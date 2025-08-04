@@ -1,11 +1,11 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
-    BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType,
-    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
-    BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
+    BenchmarkJobConclusion, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
+    BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkSet, CodegenBackend, CollectionId,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
+    Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
     BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
     BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -1849,6 +1849,7 @@ where
                     WHERE
                         job_queue.id = picked.id
                     RETURNING
+                        job_queue.id,
                         job_queue.backend,
                         job_queue.profile,
                         job_queue.request_tag,
@@ -1874,20 +1875,21 @@ where
             None => Ok(None),
             Some(row) => {
                 let job = BenchmarkJob {
+                    id: row.get::<_, i32>(0) as u32,
                     target: *target,
-                    backend: CodegenBackend::from_str(&row.get::<_, String>(0))
+                    backend: CodegenBackend::from_str(&row.get::<_, String>(1))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    profile: Profile::from_str(&row.get::<_, String>(1))
+                    profile: Profile::from_str(&row.get::<_, String>(2))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    request_tag: row.get::<_, String>(2),
+                    request_tag: row.get::<_, String>(3),
                     benchmark_set: benchmark_set.clone(),
-                    created_at: row.get::<_, DateTime<Utc>>(3),
+                    created_at: row.get::<_, DateTime<Utc>>(4),
                     // The job is now in an in_progress state
                     status: BenchmarkJobStatus::InProgress {
-                        started_at: row.get::<_, DateTime<Utc>>(4),
+                        started_at: row.get::<_, DateTime<Utc>>(5),
                         collector_name: collector_name.into(),
                     },
-                    retry: row.get::<_, i32>(5) as u32,
+                    retry: row.get::<_, i32>(6) as u32,
                 };
                 Ok(Some(job))
             }
@@ -1949,40 +1951,24 @@ where
 
     async fn mark_benchmark_job_as_completed(
         &self,
-        request_tag: &str,
-        benchmark_set: u32,
-        target: &Target,
-        status: &BenchmarkJobStatus,
+        id: u32,
+        benchmark_job_conclusion: &BenchmarkJobConclusion,
     ) -> anyhow::Result<()> {
-        match status {
-            BenchmarkJobStatus::Queued | BenchmarkJobStatus::InProgress { .. } => {
-                panic!("Can only mark a job as complete")
-            }
-            BenchmarkJobStatus::Completed { success, .. } => {
-                let status = if *success {
-                    BENCHMARK_JOB_STATUS_SUCCESS_STR
-                } else {
-                    BENCHMARK_JOB_STATUS_FAILURE_STR
-                };
-                self.conn()
-                    .execute(
-                        "
-                        UPDATE
-                            job_queue 
-                        SET
-                            status = $1,
-                            completed_at = NOW()
-                        WHERE
-                            request_tag = $2
-                            AND benchmark_set = $3
-                            AND target = $4",
-                        &[&status, &request_tag, &(benchmark_set as i32), &target],
-                    )
-                    .await
-                    .context("Failed to mark benchmark job as completed")?;
-                Ok(())
-            }
-        }
+        self.conn()
+            .execute(
+                "
+                UPDATE
+                    job_queue 
+                SET
+                    status = $1,
+                    completed_at = NOW()
+                WHERE
+                    id = $2",
+                &[&benchmark_job_conclusion.as_str(), &(id as i32)],
+            )
+            .await
+            .context("Failed to mark benchmark job as completed")?;
+        Ok(())
     }
 }
 

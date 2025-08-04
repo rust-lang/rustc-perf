@@ -1104,6 +1104,7 @@ pub struct BenchmarkSet(pub u32);
 /// they are responsible for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkJob {
+    id: u32,
     target: Target,
     backend: CodegenBackend,
     profile: Profile,
@@ -1115,6 +1116,10 @@ pub struct BenchmarkJob {
 }
 
 impl BenchmarkJob {
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
     pub fn target(&self) -> &Target {
         &self.target
     }
@@ -1140,6 +1145,22 @@ impl BenchmarkJob {
             BenchmarkJobStatus::Queued => None,
             BenchmarkJobStatus::InProgress { collector_name, .. }
             | BenchmarkJobStatus::Completed { collector_name, .. } => Some(collector_name),
+        }
+    }
+}
+
+/// Describes the final state of a job
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchmarkJobConclusion {
+    Failure,
+    Success,
+}
+
+impl BenchmarkJobConclusion {
+    pub fn as_str(&self) -> &str {
+        match self {
+            BenchmarkJobConclusion::Failure => BENCHMARK_JOB_STATUS_FAILURE_STR,
+            BenchmarkJobConclusion::Success => BENCHMARK_JOB_STATUS_SUCCESS_STR,
         }
     }
 }

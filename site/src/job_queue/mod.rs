@@ -308,7 +308,7 @@ mod tests {
     use super::*;
     use chrono::{Datelike, Duration, TimeZone, Utc};
     use database::{
-        tests::run_postgres_test, BenchmarkJobStatus, BenchmarkSet, CodegenBackend, Profile,
+        tests::run_postgres_test, BenchmarkJobConclusion, BenchmarkSet, CodegenBackend, Profile,
     };
 
     fn days_ago(day_str: &str) -> chrono::DateTime<Utc> {
@@ -360,7 +360,6 @@ mod tests {
         benchmark_set: u32,
         target: &Target,
     ) {
-        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
         /* Create job for the request */
         db.enqueue_benchmark_job(
             request_tag,
@@ -381,19 +380,9 @@ mod tests {
         assert_eq!(job.request_tag(), request_tag);
 
         /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(
-            request_tag,
-            benchmark_set,
-            &target,
-            &BenchmarkJobStatus::Completed {
-                started_at: time,
-                completed_at: time,
-                collector_name: collector_name.into(),
-                success: true,
-            },
-        )
-        .await
-        .unwrap();
+        db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+            .await
+            .unwrap();
 
         db.mark_benchmark_request_as_completed(request_tag)
             .await
