@@ -1942,13 +1942,9 @@ where
             )
             .await
             .context("Failed to mark benchmark_request as completed")?;
-        // The affected id is returned by the query thus we can use the row's
+        // The affected tag is returned by the query thus we can use the row's
         // presence to determine if the request was marked as completed
-        if row.is_some() {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        Ok(row.is_some())
     }
 
     async fn mark_benchmark_job_as_completed(
