@@ -258,7 +258,7 @@ pub trait Connection: Send + Sync {
     /// it has been marked as completed else `false` meaning there was no change
     async fn mark_benchmark_request_as_completed(
         &self,
-        benchmark_request: &mut BenchmarkRequest,
+        benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<bool>;
 }
 

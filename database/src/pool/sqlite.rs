@@ -1356,7 +1356,7 @@ impl Connection for SqliteConnection {
 
     async fn mark_benchmark_request_as_completed(
         &self,
-        _benchmark_request: &mut BenchmarkRequest,
+        _benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<bool> {
         no_queue_implementation_abort!()
     }

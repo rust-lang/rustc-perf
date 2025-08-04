@@ -1891,7 +1891,7 @@ where
 
     async fn mark_benchmark_request_as_completed(
         &self,
-        benchmark_request: &mut BenchmarkRequest,
+        benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<bool> {
         anyhow::ensure!(
             benchmark_request.tag().is_some(),
@@ -1914,7 +1914,7 @@ where
                     status = $1,
                     completed_at = NOW()
                 WHERE
-                    banchmark_request.tag = $2
+                    benchmark_request.tag = $2
                     AND benchmark_request.status != $1
                     AND NOT EXISTS (
                         SELECT
@@ -1957,8 +1957,6 @@ where
         // presence to determine if the request was marked as completed
         if let Some(row) = row {
             let completed_at = row.get::<_, DateTime<Utc>>(0);
-            // Also mutate our object
-            benchmark_request.status = BenchmarkRequestStatus::Completed { completed_at };
             Ok(true)
         } else {
             Ok(false)
