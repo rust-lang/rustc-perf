@@ -1340,8 +1340,9 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 
             // Obtain the configuration and validate that it matches the
             // collector's setup
-            let collector_config: database::CollectorConfig =
-                rt.block_on(conn.get_collector_config(&collector_name))?;
+            let collector_config: database::CollectorConfig = rt
+                .block_on(conn.get_collector_config(&collector_name))?
+                .unwrap();
 
             let collector_target = collector_config.target();
             if collector_target.as_str() != target {

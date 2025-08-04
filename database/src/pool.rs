@@ -243,10 +243,13 @@ pub trait Connection: Send + Sync {
         is_active: bool,
     ) -> anyhow::Result<CollectorConfig>;
 
-    /// Get the confiuguration for a collector by the name of the collector
-    async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig>;
+    /// Get the configuration for a collector by its name.
+    async fn get_collector_config(
+        &self,
+        collector_name: &str,
+    ) -> anyhow::Result<Option<CollectorConfig>>;
 
-    /// Dequeue benchmark job
+    /// Dequeues a single job for the given collector, target and benchmark set.
     async fn dequeue_benchmark_job(
         &self,
         collector_name: &str,
@@ -775,9 +778,9 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
 
-            let collector_config_result = db.get_collector_config("collector-1").await;
+            let collector_config_result = db.get_collector_config("collector-1").await.unwrap();
 
-            assert!(collector_config_result.is_err());
+            assert!(collector_config_result.is_none());
 
             Ok(ctx)
         })
@@ -789,17 +792,20 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
 
-            let insert_config_result = db
+            let inserted_config = db
                 .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
-                .await;
-            assert!(insert_config_result.is_ok());
+                .await
+                .unwrap();
 
-            let get_config_result = db.get_collector_config("collector-1").await;
-            assert!(get_config_result.is_ok());
+            let config = db
+                .get_collector_config("collector-1")
+                .await
+                .unwrap()
+                .expect("collector config not found");
 
             // What we entered into the database should be identical to what is
             // returned from the database
-            assert_eq!(insert_config_result.unwrap(), get_config_result.unwrap());
+            assert_eq!(inserted_config, config);
             Ok(ctx)
         })
         .await;
@@ -880,7 +886,7 @@ mod tests {
             );
             assert_eq!(
                 benchmark_job.benchmark_set(),
-                collector_config.benchmark_set()
+                *collector_config.benchmark_set()
             );
             assert_eq!(
                 benchmark_job.collector_name().unwrap(),

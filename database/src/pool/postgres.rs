@@ -1783,10 +1783,13 @@ where
         Ok(collector_config)
     }
 
-    async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig> {
+    async fn get_collector_config(
+        &self,
+        collector_name: &str,
+    ) -> anyhow::Result<Option<CollectorConfig>> {
         let row = self
             .conn()
-            .query_one(
+            .query_opt(
                 "SELECT
                     target,
                     benchmark_set,
@@ -1801,15 +1804,19 @@ where
             )
             .await?;
 
-        let collector_config = CollectorConfig {
-            name: collector_name.into(),
-            target: Target::from_str(&row.get::<_, String>(0)).map_err(|e| anyhow::anyhow!(e))?,
-            benchmark_set: BenchmarkSet(row.get::<_, i32>(1) as u32),
-            is_active: row.get::<_, bool>(2),
-            last_heartbeat_at: row.get::<_, DateTime<Utc>>(3),
-            date_added: row.get::<_, DateTime<Utc>>(4),
-        };
-        Ok(collector_config)
+        Ok(row
+            .map(|row| {
+                anyhow::Ok(CollectorConfig {
+                    name: collector_name.into(),
+                    target: Target::from_str(row.get::<_, &str>(0))
+                        .map_err(|e| anyhow::anyhow!(e))?,
+                    benchmark_set: BenchmarkSet(row.get::<_, i32>(1) as u32),
+                    is_active: row.get::<_, bool>(2),
+                    last_heartbeat_at: row.get::<_, DateTime<Utc>>(3),
+                    date_added: row.get::<_, DateTime<Utc>>(4),
+                })
+            })
+            .transpose()?)
     }
 
     async fn dequeue_benchmark_job(

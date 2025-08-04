@@ -1331,7 +1331,10 @@ impl Connection for SqliteConnection {
             .collect::<Result<_, _>>()?)
     }
 
-    async fn get_collector_config(&self, _collector_name: &str) -> anyhow::Result<CollectorConfig> {
+    async fn get_collector_config(
+        &self,
+        _collector_name: &str,
+    ) -> anyhow::Result<Option<CollectorConfig>> {
         no_queue_implementation_abort!()
     }
 
