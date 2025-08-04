@@ -1531,16 +1531,21 @@ where
         tag: &str,
         status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()> {
+        // We cannot use this function to mark requests as complete, as
+        // we need to know if all jobs are complete first.
+        if matches!(status, BenchmarkRequestStatus::Completed { .. }) {
+            panic!("Please use `mark_benchmark_request_as_completed(...)` to complete benchmark_requests");
+        }
+
         let status_str = status.as_str();
-        let completed_at = status.completed_at();
         let modified_rows = self
             .conn()
             .execute(
                 r#"
                 UPDATE benchmark_request
-                SET status = $1, completed_at = $2
-                WHERE tag = $3;"#,
-                &[&status_str, &completed_at, &tag],
+                SET status = $1
+                WHERE tag = $2;"#,
+                &[&status_str, &tag],
             )
             .await
             .context("failed to update benchmark request status")?;
@@ -1889,19 +1894,7 @@ where
         }
     }
 
-    async fn mark_benchmark_request_as_completed(
-        &self,
-        benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<bool> {
-        anyhow::ensure!(
-            benchmark_request.tag().is_some(),
-            "Benchmark request has no tag"
-        );
-        anyhow::ensure!(
-            benchmark_request.status == BenchmarkRequestStatus::InProgress,
-            "Can only mark benchmark request whos status is in_progress as complete"
-        );
-
+    async fn mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool> {
         // Find if the benchmark is completed and update it's status to completed
         // in one SQL block
         let row = self
@@ -1942,7 +1935,7 @@ where
                 ",
                 &[
                     &BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
-                    &benchmark_request.tag(),
+                    &tag,
                     &BENCHMARK_JOB_STATUS_SUCCESS_STR,
                     &BENCHMARK_JOB_STATUS_FAILURE_STR,
                 ],
@@ -1955,6 +1948,44 @@ where
             Ok(true)
         } else {
             Ok(false)
+        }
+    }
+
+    async fn mark_benchmark_job_as_completed(
+        &self,
+        request_tag: &str,
+        benchmark_set: u32,
+        target: &Target,
+        status: &BenchmarkJobStatus,
+    ) -> anyhow::Result<()> {
+        match status {
+            BenchmarkJobStatus::Queued | BenchmarkJobStatus::InProgress { .. } => {
+                panic!("Can only mark a job as complete")
+            }
+            BenchmarkJobStatus::Completed { success, .. } => {
+                let status = if *success {
+                    BENCHMARK_JOB_STATUS_SUCCESS_STR
+                } else {
+                    BENCHMARK_JOB_STATUS_FAILURE_STR
+                };
+                self.conn()
+                    .execute(
+                        "
+                        UPDATE
+                            job_queue 
+                        SET
+                            status = $1,
+                            completed_at = NOW()
+                        WHERE
+                            request_tag = $2
+                            AND benchmark_set = $3
+                            AND target = $4",
+                        &[&status, &request_tag, &(benchmark_set as i32), &target],
+                    )
+                    .await
+                    .context("Failed to mark benchmark job as completed")?;
+                Ok(())
+            }
         }
     }
 }

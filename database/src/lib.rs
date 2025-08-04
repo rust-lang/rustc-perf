@@ -846,13 +846,6 @@ impl BenchmarkRequestStatus {
             _ => Err(anyhow!("Unknown BenchmarkRequestStatus `{text}`")),
         }
     }
-
-    pub(crate) fn completed_at(&self) -> Option<DateTime<Utc>> {
-        match self {
-            Self::Completed { completed_at } => Some(*completed_at),
-            _ => None,
-        }
-    }
 }
 
 impl fmt::Display for BenchmarkRequestStatus {
@@ -1101,7 +1094,7 @@ impl fmt::Display for BenchmarkJobStatus {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BenchmarkSet(u32);
+pub struct BenchmarkSet(pub u32);
 
 /// A single unit of work generated from a benchmark request. Split by profiles
 /// and backends

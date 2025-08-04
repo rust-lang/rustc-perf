@@ -253,7 +253,10 @@ async fn try_enqueue_next_benchmark_request(
                 break;
             }
             BenchmarkRequestStatus::InProgress => {
-                if conn.mark_benchmark_request_as_completed(&request).await? {
+                if conn
+                    .mark_benchmark_request_as_completed(request.tag().unwrap())
+                    .await?
+                {
                     index.add_tag(request.tag().unwrap());
                     continue;
                 }
@@ -304,7 +307,9 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
 mod tests {
     use super::*;
     use chrono::{Datelike, Duration, TimeZone, Utc};
-    use database::tests::run_postgres_test;
+    use database::{
+        tests::run_postgres_test, BenchmarkJobStatus, BenchmarkSet, CodegenBackend, Profile,
+    };
 
     fn days_ago(day_str: &str) -> chrono::DateTime<Utc> {
         // Walk backwards until the first non-digit, then slice
@@ -348,15 +353,62 @@ mod tests {
         }
     }
 
-    async fn mark_as_completed(conn: &dyn database::pool::Connection, shas: &[&str]) {
-        let completed_at = Utc::now();
-        for sha in shas {
-            conn.update_benchmark_request_status(
-                sha,
-                BenchmarkRequestStatus::Completed { completed_at },
-            )
+    async fn complete_request(
+        db: &dyn database::pool::Connection,
+        request_tag: &str,
+        collector_name: &str,
+        benchmark_set: u32,
+        target: &Target,
+    ) {
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        /* Create job for the request */
+        db.enqueue_benchmark_job(
+            request_tag,
+            &target,
+            &CodegenBackend::Llvm,
+            &Profile::Opt,
+            benchmark_set,
+        )
+        .await
+        .unwrap();
+
+        let job = db
+            .dequeue_benchmark_job(collector_name, &target, &BenchmarkSet(benchmark_set))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(job.request_tag(), request_tag);
+
+        /* Mark the job as complete */
+        db.mark_benchmark_job_as_completed(
+            request_tag,
+            benchmark_set,
+            &target,
+            &BenchmarkJobStatus::Completed {
+                started_at: time,
+                completed_at: time,
+                collector_name: collector_name.into(),
+                success: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        db.mark_benchmark_request_as_completed(request_tag)
             .await
             .unwrap();
+    }
+
+    async fn mark_as_completed(
+        conn: &dyn database::pool::Connection,
+        shas: &[&str],
+        collector_name: &str,
+        benchmark_set: u32,
+        target: &database::Target,
+    ) {
+        for sha in shas {
+            complete_request(conn, sha, collector_name, benchmark_set, target).await;
         }
     }
 
@@ -371,6 +423,14 @@ mod tests {
     #[tokio::test]
     async fn queue_ordering() {
         run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+            let target = &Target::X86_64UnknownLinuxGnu;
+            let collector_name = "collector-1";
+            let benchmark_set = 1;
+
+            db.add_collector_config(collector_name, &target, benchmark_set, true)
+                .await
+                .unwrap();
             /* Key:
              * +---------------------+
              * | m - master          |
@@ -429,8 +489,6 @@ mod tests {
              *           | t "baz" R pr17 | 6: a try with a low PR, blocked by parent
              *           +----------------+
              **/
-
-            let db = ctx.db_client().connection().await;
             let requests = vec![
                 create_master("bar", "parent1", 10, "days2"),
                 create_master("345", "parent2", 11, "days2"),
@@ -455,7 +513,14 @@ mod tests {
                 .await
                 .unwrap();
 
-            mark_as_completed(&*db, &["bar", "345", "aaa", "rrr"]).await;
+            mark_as_completed(
+                &*db,
+                &["bar", "345", "aaa", "rrr"],
+                collector_name,
+                benchmark_set,
+                &target,
+            )
+            .await;
 
             let index = db.load_benchmark_request_index().await.unwrap();
 

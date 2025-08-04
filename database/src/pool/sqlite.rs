@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkRequest,
+    ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobStatus, BenchmarkRequest,
     BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend, CollectionId,
     CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Profile, Target,
 };
@@ -1354,10 +1354,17 @@ impl Connection for SqliteConnection {
         no_queue_implementation_abort!()
     }
 
-    async fn mark_benchmark_request_as_completed(
+    async fn mark_benchmark_request_as_completed(&self, _tag: &str) -> anyhow::Result<bool> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn mark_benchmark_job_as_completed(
         &self,
-        _benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<bool> {
+        _request_tag: &str,
+        _benchmark_set: u32,
+        _target: &Target,
+        _status: &BenchmarkJobStatus,
+    ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
 }
