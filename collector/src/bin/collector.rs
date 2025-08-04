@@ -668,20 +668,26 @@ enum Commands {
         modified: Option<String>,
     },
 
-    /// Registers a collector in the database
+    /// Registers a new collector in the database.
+    /// Use `--is_active` to immediately mark the collector as active.
     AddCollector {
         #[command(flatten)]
         db: DbOption,
 
+        /// Name of the collector.
         #[arg(long)]
         collector_name: String,
 
+        /// Target tuple which will the collector be benchmarking.
         #[arg(long)]
         target: String,
 
+        /// Should the collector be marked as active immediately?
+        /// Only active collectors will receive jobs.
         #[arg(long)]
         is_active: bool,
 
+        /// The benchmark set index that the collector will be benchmarking.
         #[arg(long)]
         benchmark_set: u32,
     },
