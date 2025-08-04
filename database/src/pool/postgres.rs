@@ -1932,17 +1932,13 @@ where
                                 1
                             FROM
                                 job_queue
-                            JOIN
-                                benchmark_request AS parent_request 
-                            ON
-                                parent_request.tag = benchmark_request.parent_tag
                             WHERE
-                                job_queue.request_tag = parent_request.tag
+                                request_tag = benchmark_request.parent_sha
                                 AND job_queue.status NOT IN ($3, $4)
                        )
                 )
                 RETURNING
-                    benchmark_request.completed_at;
+                    benchmark_request.tag;
                 ",
                 &[
                     &BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -1955,8 +1951,7 @@ where
             .context("Failed to mark benchmark_request as completed")?;
         // The affected id is returned by the query thus we can use the row's
         // presence to determine if the request was marked as completed
-        if let Some(row) = row {
-            let completed_at = row.get::<_, DateTime<Utc>>(0);
+        if row.is_some() {
             Ok(true)
         } else {
             Ok(false)
