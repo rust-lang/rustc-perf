@@ -1328,7 +1328,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             let target = database::Target::from_str(&target).map_err(|e| anyhow::anyhow!(e))?;
             rt.block_on(conn.add_collector_config(
                 &collector_name,
-                &target,
+                target,
                 benchmark_set,
                 is_active,
             ))?;

@@ -1676,9 +1676,9 @@ where
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
-        target: &Target,
-        backend: &CodegenBackend,
-        profile: &Profile,
+        target: Target,
+        backend: CodegenBackend,
+        profile: Profile,
         benchmark_set: u32,
     ) -> anyhow::Result<()> {
         self.conn()
@@ -1736,7 +1736,7 @@ where
     async fn add_collector_config(
         &self,
         collector_name: &str,
-        target: &Target,
+        target: Target,
         benchmark_set: u32,
         is_active: bool,
     ) -> anyhow::Result<CollectorConfig> {
@@ -1774,7 +1774,7 @@ where
 
         let collector_config = CollectorConfig {
             name: collector_name.into(),
-            target: *target,
+            target,
             benchmark_set: BenchmarkSet(benchmark_set),
             is_active,
             last_heartbeat_at: row.get::<_, DateTime<Utc>>(0),
@@ -1822,8 +1822,8 @@ where
     async fn dequeue_benchmark_job(
         &self,
         collector_name: &str,
-        target: &Target,
-        benchmark_set: &BenchmarkSet,
+        target: Target,
+        benchmark_set: BenchmarkSet,
     ) -> anyhow::Result<Option<BenchmarkJob>> {
         // We take the oldest job from the job_queue matching the benchmark_set,
         // target and status of 'queued'
@@ -1883,10 +1883,10 @@ where
             Some(row) => {
                 let job = BenchmarkJob {
                     id: row.get::<_, i32>(0) as u32,
-                    target: *target,
-                    backend: CodegenBackend::from_str(&row.get::<_, String>(1))
+                    target,
+                    backend: CodegenBackend::from_str(&row.get::<_, &str>(1))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    profile: Profile::from_str(&row.get::<_, String>(2))
+                    profile: Profile::from_str(&row.get::<_, &str>(2))
                         .map_err(|e| anyhow::anyhow!(e))?,
                     request_tag: row.get::<_, String>(3),
                     benchmark_set: benchmark_set.clone(),
@@ -1965,7 +1965,7 @@ where
             .execute(
                 "
                 UPDATE
-                    job_queue 
+                    job_queue
                 SET
                     status = $1,
                     completed_at = NOW()

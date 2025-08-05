@@ -1181,12 +1181,12 @@ impl CollectorConfig {
         &self.name
     }
 
-    pub fn target(&self) -> &Target {
-        &self.target
+    pub fn target(&self) -> Target {
+        self.target
     }
 
-    pub fn benchmark_set(&self) -> &BenchmarkSet {
-        &self.benchmark_set
+    pub fn benchmark_set(&self) -> BenchmarkSet {
+        self.benchmark_set
     }
 
     pub fn is_active(&self) -> bool {

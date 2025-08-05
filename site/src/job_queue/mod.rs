@@ -198,12 +198,12 @@ pub async fn enqueue_benchmark_request(
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
         for benchmark_set in 0..benchmark_set_count(target.into()) {
-            for backend in backends.iter() {
-                for profile in profiles.iter() {
+            for &backend in backends.iter() {
+                for &profile in profiles.iter() {
                     tx.conn()
                         .enqueue_benchmark_job(
                             request_tag,
-                            &target,
+                            target,
                             backend,
                             profile,
                             benchmark_set as u32,
@@ -218,7 +218,7 @@ pub async fn enqueue_benchmark_request(
                         tx.conn()
                             .enqueue_benchmark_job(
                                 parent_sha,
-                                &target,
+                                target,
                                 backend,
                                 profile,
                                 benchmark_set as u32,

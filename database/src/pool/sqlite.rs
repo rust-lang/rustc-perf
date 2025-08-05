@@ -1296,9 +1296,9 @@ impl Connection for SqliteConnection {
     async fn enqueue_benchmark_job(
         &self,
         _request_tag: &str,
-        _target: &Target,
-        _backend: &CodegenBackend,
-        _profile: &Profile,
+        _target: Target,
+        _backend: CodegenBackend,
+        _profile: Profile,
         _benchmark_set: u32,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
@@ -1341,8 +1341,8 @@ impl Connection for SqliteConnection {
     async fn dequeue_benchmark_job(
         &self,
         _collector_name: &str,
-        _target: &Target,
-        _benchmark_set: &BenchmarkSet,
+        _target: Target,
+        _benchmark_set: BenchmarkSet,
     ) -> anyhow::Result<Option<BenchmarkJob>> {
         no_queue_implementation_abort!()
     }
@@ -1350,7 +1350,7 @@ impl Connection for SqliteConnection {
     async fn add_collector_config(
         &self,
         _collector_name: &str,
-        _target: &Target,
+        _target: Target,
         _benchmark_set: u32,
         _is_active: bool,
     ) -> anyhow::Result<CollectorConfig> {

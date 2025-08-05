@@ -217,9 +217,9 @@ pub trait Connection: Send + Sync {
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
-        target: &Target,
-        backend: &CodegenBackend,
-        profile: &Profile,
+        target: Target,
+        backend: CodegenBackend,
+        profile: Profile,
         benchmark_set: u32,
     ) -> anyhow::Result<()>;
 
@@ -238,7 +238,7 @@ pub trait Connection: Send + Sync {
     async fn add_collector_config(
         &self,
         collector_name: &str,
-        target: &Target,
+        target: Target,
         benchmark_set: u32,
         is_active: bool,
     ) -> anyhow::Result<CollectorConfig>;
@@ -253,8 +253,8 @@ pub trait Connection: Send + Sync {
     async fn dequeue_benchmark_job(
         &self,
         collector_name: &str,
-        target: &Target,
-        benchmark_set: &BenchmarkSet,
+        target: Target,
+        benchmark_set: BenchmarkSet,
     ) -> anyhow::Result<Option<BenchmarkJob>>;
 
     /// Try and mark the benchmark_request as completed. Will return `true` if
@@ -701,9 +701,9 @@ mod tests {
             let result = db
                 .enqueue_benchmark_job(
                     benchmark_request.tag().unwrap(),
-                    &Target::X86_64UnknownLinuxGnu,
-                    &CodegenBackend::Llvm,
-                    &Profile::Opt,
+                    Target::X86_64UnknownLinuxGnu,
+                    CodegenBackend::Llvm,
+                    Profile::Opt,
                     0u32,
                 )
                 .await;
@@ -793,7 +793,7 @@ mod tests {
             let db = ctx.db_client().connection().await;
 
             let inserted_config = db
-                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
                 .await
                 .unwrap();
 
@@ -819,8 +819,8 @@ mod tests {
             let benchmark_job_result = db
                 .dequeue_benchmark_job(
                     "collector-1",
-                    &Target::X86_64UnknownLinuxGnu,
-                    &BenchmarkSet(420),
+                    Target::X86_64UnknownLinuxGnu,
+                    BenchmarkSet(420),
                 )
                 .await;
 
@@ -839,7 +839,7 @@ mod tests {
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let insert_result = db
-                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
                 .await;
             assert!(insert_result.is_ok());
 
@@ -857,9 +857,9 @@ mod tests {
             let enqueue_result = db
                 .enqueue_benchmark_job(
                     benchmark_request.tag().unwrap(),
-                    &Target::X86_64UnknownLinuxGnu,
-                    &CodegenBackend::Llvm,
-                    &Profile::Opt,
+                    Target::X86_64UnknownLinuxGnu,
+                    CodegenBackend::Llvm,
+                    Profile::Opt,
                     1u32,
                 )
                 .await;
@@ -886,7 +886,7 @@ mod tests {
             );
             assert_eq!(
                 benchmark_job.benchmark_set(),
-                *collector_config.benchmark_set()
+                collector_config.benchmark_set()
             );
             assert_eq!(
                 benchmark_job.collector_name().unwrap(),
