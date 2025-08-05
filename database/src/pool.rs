@@ -269,7 +269,7 @@ pub trait Connection: Send + Sync {
     async fn mark_benchmark_job_as_completed(
         &self,
         id: u32,
-        benchmark_job_conculsion: &BenchmarkJobConclusion,
+        benchmark_job_conculsion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
 }
 
@@ -411,21 +411,21 @@ mod tests {
         request_tag: &str,
         collector_name: &str,
         benchmark_set: u32,
-        target: &Target,
+        target: Target,
     ) {
         /* Create job for the request */
         db.enqueue_benchmark_job(
             request_tag,
-            &target,
-            &CodegenBackend::Llvm,
-            &Profile::Opt,
+            target,
+            CodegenBackend::Llvm,
+            Profile::Opt,
             benchmark_set,
         )
         .await
         .unwrap();
 
-        let job = db
-            .dequeue_benchmark_job(collector_name, &target, &BenchmarkSet(benchmark_set))
+        let (job, _) = db
+            .dequeue_benchmark_job(collector_name, target, BenchmarkSet(benchmark_set))
             .await
             .unwrap()
             .unwrap();
@@ -433,7 +433,7 @@ mod tests {
         assert_eq!(job.request_tag(), request_tag);
 
         /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+        db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
             .await
             .unwrap();
 
@@ -533,18 +533,18 @@ mod tests {
     async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
-            let target = &Target::X86_64UnknownLinuxGnu;
+            let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, &target, benchmark_set, true)
+            db.add_collector_config(collector_name, target, benchmark_set, true)
                 .await
                 .unwrap();
 
             // Complete parent
             let parent = BenchmarkRequest::create_release("sha-parent-1", Utc::now());
             // Complete
-            let req_a = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            let req_a = BenchmarkRequest::create_try_without_artifacts(42, "", "");
             // WaitingForArtifacts
             let req_b = BenchmarkRequest::create_try_without_artifacts(42, "", "");
             let req_c = BenchmarkRequest::create_try_without_artifacts(42, "", "");
@@ -555,8 +555,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            complete_request(&*db, "sha-parent-1", collector_name, benchmark_set, &target).await;
-            complete_request(&*db, "sha1", collector_name, benchmark_set, &target).await;
+            complete_request(&*db, "sha-parent-1", collector_name, benchmark_set, target).await;
+            complete_request(&*db, "sha1", collector_name, benchmark_set, target).await;
 
             // This should be fine, req_a was completed
             db.insert_benchmark_request(&req_b).await.unwrap();
@@ -605,11 +605,11 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let target = &Target::X86_64UnknownLinuxGnu;
+            let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, &target, benchmark_set, true)
+            db.add_collector_config(collector_name, target, benchmark_set, true)
                 .await
                 .unwrap();
 
@@ -628,7 +628,7 @@ mod tests {
                 db.insert_benchmark_request(req).await.unwrap();
             }
 
-            complete_request(&*db, "1.79.0", collector_name, benchmark_set, &target).await;
+            complete_request(&*db, "1.79.0", collector_name, benchmark_set, target).await;
 
             db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
                 .await
@@ -911,7 +911,7 @@ mod tests {
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let insert_result = db
-                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
                 .await;
             assert!(insert_result.is_ok());
 
@@ -942,7 +942,7 @@ mod tests {
             let target = Target::X86_64UnknownLinuxGnu;
 
             let insert_result = db
-                .add_collector_config(collector_name, &target, 1, true)
+                .add_collector_config(collector_name, target, 1, true)
                 .await;
             assert!(insert_result.is_ok());
 
@@ -955,16 +955,16 @@ mod tests {
             /* Create job for the request */
             db.enqueue_benchmark_job(
                 benchmark_request.tag().unwrap(),
-                &target,
-                &CodegenBackend::Llvm,
-                &Profile::Opt,
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
                 benchmark_set.0,
             )
             .await
             .unwrap();
 
-            let job = db
-                .dequeue_benchmark_job(collector_name, &target, &benchmark_set)
+            let (job, _) = db
+                .dequeue_benchmark_job(collector_name, target, benchmark_set)
                 .await
                 .unwrap()
                 .unwrap();
@@ -972,7 +972,7 @@ mod tests {
             assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
 
             /* Mark the job as complete */
-            db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+            db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
                 .await
                 .unwrap();
 

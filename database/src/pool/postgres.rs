@@ -1870,7 +1870,7 @@ where
                         picked
                     WHERE
                         job_queue.id = picked.id
-                    RETURNING *
+                    RETURNING job_queue.*
                 )
                 SELECT
                     updated.id,
@@ -1912,7 +1912,7 @@ where
                         started_at: row.get::<_, DateTime<Utc>>(5),
                         collector_name: collector_name.into(),
                     },
-                    retry: row.get::<_, i32>(6) as u32,
+                    deque_counter: row.get::<_, i32>(6) as u32,
                 };
                 let commit_type = row.get::<_, &str>(7);
                 let commit_date = row.get::<_, Option<DateTime<Utc>>>(8);
@@ -1999,7 +1999,7 @@ where
     async fn mark_benchmark_job_as_completed(
         &self,
         id: u32,
-        benchmark_job_conclusion: &BenchmarkJobConclusion,
+        conclusion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()> {
         self.conn()
             .execute(
@@ -2011,7 +2011,7 @@ where
                     completed_at = NOW()
                 WHERE
                     id = $2",
-                &[&benchmark_job_conclusion.as_str(), &(id as i32)],
+                &[&conclusion.as_str(), &(id as i32)],
             )
             .await
             .context("Failed to mark benchmark job as completed")?;

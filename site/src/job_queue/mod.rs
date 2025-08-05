@@ -308,7 +308,10 @@ mod tests {
     use crate::job_queue::build_queue;
     use chrono::Utc;
     use database::tests::run_postgres_test;
-    use database::{BenchmarkRequest, BenchmarkRequestStatus};
+    use database::{
+        BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
+        CodegenBackend, Profile, Target,
+    };
 
     fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
         BenchmarkRequest::create_master(sha, parent, pr, Utc::now())
@@ -336,21 +339,21 @@ mod tests {
         request_tag: &str,
         collector_name: &str,
         benchmark_set: u32,
-        target: &Target,
+        target: Target,
     ) {
         /* Create job for the request */
         db.enqueue_benchmark_job(
             request_tag,
-            &target,
-            &CodegenBackend::Llvm,
-            &Profile::Opt,
+            target,
+            CodegenBackend::Llvm,
+            Profile::Opt,
             benchmark_set,
         )
         .await
         .unwrap();
 
-        let job = db
-            .dequeue_benchmark_job(collector_name, &target, &BenchmarkSet(benchmark_set))
+        let (job, _) = db
+            .dequeue_benchmark_job(collector_name, target, BenchmarkSet::new(benchmark_set))
             .await
             .unwrap()
             .unwrap();
@@ -358,7 +361,7 @@ mod tests {
         assert_eq!(job.request_tag(), request_tag);
 
         /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+        db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
             .await
             .unwrap();
 
@@ -375,7 +378,7 @@ mod tests {
         shas: &[&str],
         collector_name: &str,
         benchmark_set: u32,
-        target: &database::Target,
+        target: database::Target,
     ) {
         for sha in shas {
             complete_request(conn, sha, collector_name, benchmark_set, target).await;
@@ -394,11 +397,11 @@ mod tests {
     async fn queue_ordering() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
-            let target = &Target::X86_64UnknownLinuxGnu;
+            let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, &target, benchmark_set, true)
+            db.add_collector_config(collector_name, target, benchmark_set, true)
                 .await
                 .unwrap();
             /* Key:
@@ -488,7 +491,7 @@ mod tests {
                 &["bar", "345", "aaa", "rrr"],
                 collector_name,
                 benchmark_set,
-                &target,
+                target,
             )
             .await;
 

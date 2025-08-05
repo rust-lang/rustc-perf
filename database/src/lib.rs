@@ -1096,6 +1096,12 @@ impl fmt::Display for BenchmarkJobStatus {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct BenchmarkSet(u32);
 
+impl BenchmarkSet {
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+}
+
 /// A single unit of work generated from a benchmark request. Split by profiles
 /// and backends
 ///

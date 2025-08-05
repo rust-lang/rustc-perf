@@ -1365,7 +1365,7 @@ impl Connection for SqliteConnection {
     async fn mark_benchmark_job_as_completed(
         &self,
         _id: u32,
-        _benchmark_job_conculsion: &BenchmarkJobConclusion,
+        _benchmark_job_conculsion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
