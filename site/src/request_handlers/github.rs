@@ -84,8 +84,7 @@ async fn record_try_benchmark_request_without_artifacts(
 ) {
     // We only want to run this if the new system is running
     if run_new_queue() {
-        let try_request =
-            BenchmarkRequest::create_try_without_artifacts(pr, chrono::Utc::now(), backends, "");
+        let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, "");
         log::info!("Inserting try benchmark request {try_request:?}");
         if let Err(e) = conn.insert_benchmark_request(&try_request).await {
             log::error!("Failed to insert try benchmark request: {}", e);

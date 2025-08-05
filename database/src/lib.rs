@@ -889,6 +889,8 @@ impl fmt::Display for BenchmarkRequestType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkRequest {
     commit_type: BenchmarkRequestType,
+    // When was the compiler artifact created
+    commit_date: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     status: BenchmarkRequestStatus,
     backends: String,
@@ -897,12 +899,13 @@ pub struct BenchmarkRequest {
 
 impl BenchmarkRequest {
     /// Create a release benchmark request that is in the `ArtifactsReady` status.
-    pub fn create_release(tag: &str, created_at: DateTime<Utc>) -> Self {
+    pub fn create_release(tag: &str, commit_date: DateTime<Utc>) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Release {
                 tag: tag.to_string(),
             },
-            created_at,
+            commit_date: Some(commit_date),
+            created_at: Utc::now(),
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
@@ -910,19 +913,15 @@ impl BenchmarkRequest {
     }
 
     /// Create a try request that is in the `WaitingForArtifacts` status.
-    pub fn create_try_without_artifacts(
-        pr: u32,
-        created_at: DateTime<Utc>,
-        backends: &str,
-        profiles: &str,
-    ) -> Self {
+    pub fn create_try_without_artifacts(pr: u32, backends: &str, profiles: &str) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Try {
                 pr,
                 sha: None,
                 parent_sha: None,
             },
-            created_at,
+            commit_date: None,
+            created_at: Utc::now(),
             status: BenchmarkRequestStatus::WaitingForArtifacts,
             backends: backends.to_string(),
             profiles: profiles.to_string(),
@@ -930,14 +929,15 @@ impl BenchmarkRequest {
     }
 
     /// Create a master benchmark request that is in the `ArtifactsReady` status.
-    pub fn create_master(sha: &str, parent_sha: &str, pr: u32, created_at: DateTime<Utc>) -> Self {
+    pub fn create_master(sha: &str, parent_sha: &str, pr: u32, commit_date: DateTime<Utc>) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Master {
                 pr,
                 sha: sha.to_string(),
                 parent_sha: parent_sha.to_string(),
             },
-            created_at,
+            commit_date: Some(commit_date),
+            created_at: Utc::now(),
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),

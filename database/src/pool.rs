@@ -211,6 +211,7 @@ pub trait Connection: Send + Sync {
         pr: u32,
         sha: &str,
         parent_sha: &str,
+        commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()>;
 
     /// Add a benchmark job to the job queue.
@@ -543,12 +544,12 @@ mod tests {
             // Complete
             let req_a = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
             // WaitingForArtifacts
-            let req_b = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
-            let req_c = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            let req_b = BenchmarkRequest::create_try_without_artifacts(42, "", "");
+            let req_c = BenchmarkRequest::create_try_without_artifacts(42, "", "");
 
             db.insert_benchmark_request(&parent).await.unwrap();
             db.insert_benchmark_request(&req_a).await.unwrap();
-            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1")
+            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
                 .await
                 .unwrap();
 
@@ -615,7 +616,7 @@ mod tests {
             // ArtifactsReady
             let req_b = BenchmarkRequest::create_release("1.80.0", time);
             // WaitingForArtifacts
-            let req_c = BenchmarkRequest::create_try_without_artifacts(50, time, "", "");
+            let req_c = BenchmarkRequest::create_try_without_artifacts(50, "", "");
             // InProgress
             let req_d = BenchmarkRequest::create_master("sha-2", "parent-sha-2", 51, time);
             // Completed
@@ -649,10 +650,10 @@ mod tests {
             let db = ctx.db_client();
             let db = db.connection().await;
 
-            let req = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            let req = BenchmarkRequest::create_try_without_artifacts(42, "", "");
 
             db.insert_benchmark_request(&req).await.unwrap();
-            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1")
+            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
                 .await
                 .unwrap();
 

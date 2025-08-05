@@ -378,6 +378,9 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE job_queue DROP COLUMN IF EXISTS collector_id;
     CREATE INDEX IF NOT EXISTS job_queue_status_target_benchmark_set_idx ON job_queue (status, target, benchmark_set);
     "#,
+    r#"
+    ALTER TABLE benchmark_request ADD COLUMN commit_date TIMESTAMPTZ NULL;
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -1485,9 +1488,10 @@ where
                     status,
                     created_at,
                     backends,
-                    profiles
+                    profiles,
+                    commit_date
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
             "#,
                 &[
                     &benchmark_request.tag(),
@@ -1498,6 +1502,7 @@ where
                     &benchmark_request.created_at,
                     &benchmark_request.backends,
                     &benchmark_request.profiles,
+                    &benchmark_request.commit_date,
                 ],
             )
             .await
@@ -1563,6 +1568,7 @@ where
         pr: u32,
         sha: &str,
         parent_sha: &str,
+        commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         self.conn()
             .execute(
@@ -1571,7 +1577,8 @@ where
             SET
                 tag = $1,
                 parent_sha = $2,
-                status = $3
+                status = $3,
+                commit_date = $6
             WHERE
                 pr = $4
                 AND commit_type = 'try'
@@ -1583,6 +1590,7 @@ where
                     &BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR,
                     &(pr as i32),
                     &BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
+                    &commit_date,
                 ],
             )
             .await
@@ -1603,7 +1611,8 @@ where
                     created_at,
                     completed_at,
                     backends,
-                    profiles
+                    profiles,
+                    commit_date
                 FROM benchmark_request
                 WHERE status IN('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')"#
         );
@@ -1626,6 +1635,7 @@ where
                 let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
                 let backends = row.get::<_, String>(7);
                 let profiles = row.get::<_, String>(8);
+                let commit_date = row.get::<_, Option<DateTime<Utc>>>(9);
 
                 let pr = pr.map(|v| v as u32);
 
@@ -1640,6 +1650,7 @@ where
                             parent_sha,
                             pr: pr.expect("Try commit in the DB without a PR"),
                         },
+                        commit_date,
                         created_at,
                         status,
                         backends,
@@ -1652,6 +1663,7 @@ where
                                 .expect("Master commit in the DB without a parent SHA"),
                             pr: pr.expect("Master commit in the DB without a PR"),
                         },
+                        commit_date,
                         created_at,
                         status,
                         backends,
@@ -1661,6 +1673,7 @@ where
                         commit_type: BenchmarkRequestType::Release {
                             tag: tag.expect("Release commit in the DB without a SHA"),
                         },
+                        commit_date,
                         created_at,
                         status,
                         backends,

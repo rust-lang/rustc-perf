@@ -4,10 +4,10 @@ pub mod comparison_summary;
 use crate::api::github::Commit;
 use crate::job_queue::run_new_queue;
 use crate::load::{MissingReason, SiteCtxt, TryCommit};
+use chrono::{DateTime, Utc};
+use serde::Deserialize;
 use std::sync::LazyLock;
 use std::time::Duration;
-
-use serde::Deserialize;
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -236,13 +236,18 @@ pub async fn rollup_pr_number(
 
 async fn attach_shas_to_try_benchmark_request(
     conn: &dyn database::pool::Connection,
-    pr: u32,
-    sha: &str,
-    parent_sha: &str,
+    pr_number: u32,
+    commit: &TryCommit,
+    commit_date: DateTime<Utc>,
 ) {
     if run_new_queue() {
         if let Err(e) = conn
-            .attach_shas_to_try_benchmark_request(pr, sha, parent_sha)
+            .attach_shas_to_try_benchmark_request(
+                pr_number,
+                &commit.sha,
+                &commit.parent_sha,
+                commit_date,
+            )
             .await
         {
             log::error!("Failed to add shas to try commit {}", e);
@@ -279,8 +284,8 @@ pub async fn enqueue_shas(
         attach_shas_to_try_benchmark_request(
             &*conn,
             pr_number,
-            &try_commit.sha,
-            &try_commit.parent_sha,
+            &try_commit,
+            commit_response.commit.committer.date,
         )
         .await;
 

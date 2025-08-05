@@ -68,9 +68,9 @@ async fn create_benchmark_request_releases(
         .take(20)
         .collect();
 
-    for (name, date_time) in releases {
-        if date_time >= cutoff && !index.contains_tag(&name) {
-            let release_request = BenchmarkRequest::create_release(&name, date_time);
+    for (name, commit_date) in releases {
+        if commit_date >= cutoff && !index.contains_tag(&name) {
+            let release_request = BenchmarkRequest::create_release(&name, commit_date);
             log::info!("Inserting release benchmark request {release_request:?}");
             if let Err(error) = conn.insert_benchmark_request(&release_request).await {
                 log::error!("Failed to insert release benchmark request: {error}");
@@ -305,43 +305,21 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::{Datelike, Duration, TimeZone, Utc};
-    use database::{
-        tests::run_postgres_test, BenchmarkJobConclusion, BenchmarkSet, CodegenBackend, Profile,
-    };
+    use crate::job_queue::build_queue;
+    use chrono::Utc;
+    use database::tests::run_postgres_test;
+    use database::{BenchmarkRequest, BenchmarkRequestStatus};
 
-    fn days_ago(day_str: &str) -> chrono::DateTime<Utc> {
-        // Walk backwards until the first non-digit, then slice
-        let days = day_str
-            .strip_prefix("days")
-            .unwrap()
-            .parse::<i64>()
-            .unwrap();
-
-        let timestamp = Utc::now() - Duration::days(days);
-        // zero out the seconds
-        Utc.with_ymd_and_hms(
-            timestamp.year(),
-            timestamp.month(),
-            timestamp.day(),
-            0,
-            0,
-            0,
-        )
-        .unwrap()
+    fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
+        BenchmarkRequest::create_master(sha, parent, pr, Utc::now())
     }
 
-    fn create_master(sha: &str, parent: &str, pr: u32, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_master(sha, parent, pr, days_ago(age_days))
+    fn create_try(pr: u32) -> BenchmarkRequest {
+        BenchmarkRequest::create_try_without_artifacts(pr, "", "")
     }
 
-    fn create_try(pr: u32, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_try_without_artifacts(pr, days_ago(age_days), "", "")
-    }
-
-    fn create_release(tag: &str, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_release(tag, days_ago(age_days))
+    fn create_release(tag: &str) -> BenchmarkRequest {
+        BenchmarkRequest::create_release(tag, Utc::now())
     }
 
     async fn db_insert_requests(
@@ -482,26 +460,26 @@ mod tests {
              *           +----------------+
              **/
             let requests = vec![
-                create_master("bar", "parent1", 10, "days2"),
-                create_master("345", "parent2", 11, "days2"),
-                create_master("aaa", "parent3", 12, "days2"),
-                create_master("rrr", "parent4", 13, "days2"),
-                create_master("123", "bar", 14, "days2"),
-                create_master("foo", "345", 15, "days2"),
-                create_try(16, "days1"),
-                create_release("v1.2.3", "days2"),
-                create_try(17, "days1"),
-                create_master("mmm", "aaa", 18, "days2"),
+                create_master("bar", "parent1", 10),
+                create_master("345", "parent2", 11),
+                create_master("aaa", "parent3", 12),
+                create_master("rrr", "parent4", 13),
+                create_master("123", "bar", 14),
+                create_master("foo", "345", 15),
+                create_try(16),
+                create_release("v1.2.3"),
+                create_try(17),
+                create_master("mmm", "aaa", 18),
             ];
 
             db_insert_requests(&*db, &requests).await;
-            db.attach_shas_to_try_benchmark_request(16, "try1", "rrr")
+            db.attach_shas_to_try_benchmark_request(16, "try1", "rrr", Utc::now())
                 .await
                 .unwrap();
             db.update_benchmark_request_status("try1", BenchmarkRequestStatus::InProgress)
                 .await
                 .unwrap();
-            db.attach_shas_to_try_benchmark_request(17, "baz", "foo")
+            db.attach_shas_to_try_benchmark_request(17, "baz", "foo", Utc::now())
                 .await
                 .unwrap();
 
