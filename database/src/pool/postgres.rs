@@ -1837,7 +1837,7 @@ where
         collector_name: &str,
         target: Target,
         benchmark_set: BenchmarkSet,
-    ) -> anyhow::Result<Option<BenchmarkJob>> {
+    ) -> anyhow::Result<Option<(BenchmarkJob, ArtifactId)>> {
         // We take the oldest job from the job_queue matching the benchmark_set,
         // target and status of 'queued'
         let row_opt = self
@@ -1857,7 +1857,7 @@ where
                         BY created_at
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
-                ), updated_queue AS (
+                ), updated AS (
                     UPDATE
                         job_queue
                     SET
@@ -1868,19 +1868,20 @@ where
                         picked
                     WHERE
                         job_queue.id = picked.id
-                    RETURNING
-                        job_queue.id,
-                        job_queue.backend,
-                        job_queue.profile,
-                        job_queue.request_tag,
-                        job_queue.created_at,
-                        job_queue.started_at,
-                        job_queue.retry
+                    RETURNING *
                 )
                 SELECT
-                    *
-                FROM
-                    updated_queue;",
+                    updated.id,
+                    updated.backend,
+                    updated.profile,
+                    updated.request_tag,
+                    updated.created_at,
+                    updated.started_at,
+                    updated.retry,
+                    br.commit_type,
+                    br.commit_date
+                FROM updated
+                JOIN benchmark_request as br ON br.tag = updated.request_tag;",
                 &[
                     &BENCHMARK_JOB_STATUS_QUEUED_STR,
                     &target,
@@ -1911,7 +1912,31 @@ where
                     },
                     retry: row.get::<_, i32>(6) as u32,
                 };
-                Ok(Some(job))
+                let commit_type = row.get::<_, &str>(7);
+                let commit_date = row.get::<_, Option<DateTime<Utc>>>(8);
+
+                let commit_date = Date(commit_date.ok_or_else(|| {
+                    anyhow::anyhow!("Dequeuing job for a benchmark request without commit date")
+                })?);
+                let artifact_id = match commit_type {
+                    BENCHMARK_REQUEST_TRY_STR => ArtifactId::Commit(Commit {
+                        sha: job.request_tag.clone(),
+                        date: commit_date,
+                        r#type: CommitType::Try,
+                    }),
+                    BENCHMARK_REQUEST_MASTER_STR => ArtifactId::Commit(Commit {
+                        sha: job.request_tag.clone(),
+                        date: commit_date,
+                        r#type: CommitType::Master,
+                    }),
+                    BENCHMARK_REQUEST_RELEASE_STR => ArtifactId::Tag(job.request_tag.clone()),
+                    _ => panic!(
+                        "Invalid commit type {commit_type} for benchmark request {}",
+                        job.request_tag
+                    ),
+                };
+
+                Ok(Some((job, artifact_id)))
             }
         }
     }

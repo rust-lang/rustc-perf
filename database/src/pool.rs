@@ -251,12 +251,14 @@ pub trait Connection: Send + Sync {
     ) -> anyhow::Result<Option<CollectorConfig>>;
 
     /// Dequeues a single job for the given collector, target and benchmark set.
+    /// Also returns detailed information about the compiler artifact that should be benchmarked
+    /// in the job.
     async fn dequeue_benchmark_job(
         &self,
         collector_name: &str,
         target: Target,
         benchmark_set: BenchmarkSet,
-    ) -> anyhow::Result<Option<BenchmarkJob>>;
+    ) -> anyhow::Result<Option<(BenchmarkJob, ArtifactId)>>;
 
     /// Try and mark the benchmark_request as completed. Will return `true` if
     /// it has been marked as completed else `false` meaning there was no change
@@ -839,12 +841,10 @@ mod tests {
             let db = ctx.db_client().connection().await;
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
-            let insert_result = db
+            let collector_config = db
                 .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
-                .await;
-            assert!(insert_result.is_ok());
-
-            let collector_config = insert_result.unwrap();
+                .await
+                .unwrap();
 
             let benchmark_request =
                 BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
@@ -855,32 +855,28 @@ mod tests {
                 .unwrap();
 
             // Now we can insert the job
-            let enqueue_result = db
-                .enqueue_benchmark_job(
-                    benchmark_request.tag().unwrap(),
-                    Target::X86_64UnknownLinuxGnu,
-                    CodegenBackend::Llvm,
-                    Profile::Opt,
-                    1u32,
-                )
-                .await;
-            assert!(enqueue_result.is_ok());
+            db.enqueue_benchmark_job(
+                benchmark_request.tag().unwrap(),
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                1u32,
+            )
+            .await
+            .unwrap();
 
-            let benchmark_job = db
+            let (benchmark_job, artifact_id) = db
                 .dequeue_benchmark_job(
                     collector_config.name(),
                     collector_config.target(),
                     collector_config.benchmark_set(),
                 )
-                .await;
-            assert!(benchmark_job.is_ok());
-
-            let benchmark_job = benchmark_job.unwrap();
-            assert!(benchmark_job.is_some());
+                .await
+                .unwrap()
+                .unwrap();
 
             // Ensure the properties of the job match both the request and the
             // collector configuration
-            let benchmark_job = benchmark_job.unwrap();
             assert_eq!(
                 benchmark_job.request_tag(),
                 benchmark_request.tag().unwrap()
@@ -892,6 +888,15 @@ mod tests {
             assert_eq!(
                 benchmark_job.collector_name().unwrap(),
                 collector_config.name(),
+            );
+
+            assert_eq!(
+                artifact_id,
+                ArtifactId::Commit(Commit {
+                    sha: "sha-1".to_string(),
+                    date: Date(time),
+                    r#type: CommitType::Master,
+                })
             );
 
             Ok(ctx)

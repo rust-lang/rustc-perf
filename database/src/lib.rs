@@ -1120,16 +1120,16 @@ impl BenchmarkJob {
         self.id
     }
 
-    pub fn target(&self) -> &Target {
-        &self.target
+    pub fn target(&self) -> Target {
+        self.target
     }
 
-    pub fn backend(&self) -> &CodegenBackend {
-        &self.backend
+    pub fn backend(&self) -> CodegenBackend {
+        self.backend
     }
 
-    pub fn profile(&self) -> &Profile {
-        &self.profile
+    pub fn profile(&self) -> Profile {
+        self.profile
     }
 
     pub fn request_tag(&self) -> &str {

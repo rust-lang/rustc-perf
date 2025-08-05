@@ -1344,7 +1344,7 @@ impl Connection for SqliteConnection {
         _collector_name: &str,
         _target: Target,
         _benchmark_set: BenchmarkSet,
-    ) -> anyhow::Result<Option<BenchmarkJob>> {
+    ) -> anyhow::Result<Option<(BenchmarkJob, ArtifactId)>> {
         no_queue_implementation_abort!()
     }
 
