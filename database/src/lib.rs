@@ -1093,8 +1093,8 @@ impl fmt::Display for BenchmarkJobStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct BenchmarkSet(pub u32);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct BenchmarkSet(u32);
 
 /// A single unit of work generated from a benchmark request. Split by profiles
 /// and backends
@@ -1136,8 +1136,8 @@ impl BenchmarkJob {
         &self.request_tag
     }
 
-    pub fn benchmark_set(&self) -> &BenchmarkSet {
-        &self.benchmark_set
+    pub fn benchmark_set(&self) -> BenchmarkSet {
+        self.benchmark_set
     }
 
     pub fn collector_name(&self) -> Option<&str> {
