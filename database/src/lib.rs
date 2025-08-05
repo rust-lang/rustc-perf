@@ -846,13 +846,6 @@ impl BenchmarkRequestStatus {
             _ => Err(anyhow!("Unknown BenchmarkRequestStatus `{text}`")),
         }
     }
-
-    pub(crate) fn completed_at(&self) -> Option<DateTime<Utc>> {
-        match self {
-            Self::Completed { completed_at } => Some(*completed_at),
-            _ => None,
-        }
-    }
 }
 
 impl fmt::Display for BenchmarkRequestStatus {
@@ -1026,6 +1019,10 @@ impl BenchmarkRequest {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| anyhow::anyhow!("Invalid backend: {e}"))
     }
+
+    pub fn is_completed(&self) -> bool {
+        matches!(self.status, BenchmarkRequestStatus::Completed { .. })
+    }
 }
 
 /// Cached information about benchmark requests in the DB
@@ -1046,6 +1043,11 @@ impl BenchmarkRequestIndex {
     /// Return tags of already completed benchmark requests.
     pub fn completed_requests(&self) -> &HashSet<String> {
         &self.completed
+    }
+
+    pub fn add_tag(&mut self, tag: &str) {
+        self.all.insert(tag.to_string());
+        self.completed.insert(tag.to_string());
     }
 }
 
@@ -1092,7 +1094,7 @@ impl fmt::Display for BenchmarkJobStatus {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BenchmarkSet(u32);
+pub struct BenchmarkSet(pub u32);
 
 /// A single unit of work generated from a benchmark request. Split by profiles
 /// and backends
@@ -1102,6 +1104,7 @@ pub struct BenchmarkSet(u32);
 /// they are responsible for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkJob {
+    id: u32,
     target: Target,
     backend: CodegenBackend,
     profile: Profile,
@@ -1113,6 +1116,10 @@ pub struct BenchmarkJob {
 }
 
 impl BenchmarkJob {
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
     pub fn target(&self) -> &Target {
         &self.target
     }
@@ -1138,6 +1145,22 @@ impl BenchmarkJob {
             BenchmarkJobStatus::Queued => None,
             BenchmarkJobStatus::InProgress { collector_name, .. }
             | BenchmarkJobStatus::Completed { collector_name, .. } => Some(collector_name),
+        }
+    }
+}
+
+/// Describes the final state of a job
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchmarkJobConclusion {
+    Failure,
+    Success,
+}
+
+impl BenchmarkJobConclusion {
+    pub fn as_str(&self) -> &str {
+        match self {
+            BenchmarkJobConclusion::Failure => BENCHMARK_JOB_STATUS_FAILURE_STR,
+            BenchmarkJobConclusion::Success => BENCHMARK_JOB_STATUS_SUCCESS_STR,
         }
     }
 }

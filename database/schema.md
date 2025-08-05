@@ -313,3 +313,34 @@ Columns:
   execute.
 * **is_active** (`boolean NOT NULL`): For controlling whether the collector is
   active for use. Useful for adding/removing collectors.
+
+### job_queue
+
+This table stores ephemeral benchmark jobs, which specifically tell the
+collector which benchmarks it should execute. The jobs will be kept in the
+table for ~30 days after being completed, so that we can quickly figure out
+what master parent jobs we need to backfill when handling try builds.
+
+Columns:
+
+* **id** (`bigint` / `serial`): Primary*key identifier for the job row;
+  auto*increments with each new job.
+* **request_tag** (`text`): References the parent benchmark request that
+  spawned this job.
+* **target** (`text NOT NULL`): Hardware/ISA the benchmarks must run on
+  (e.g. AArch64, x86_64).
+* **backend** (`text NOT NULL`): Code generation backend the collector should
+  test (e.g. llvm, cranelift).
+* **benchmark_set** (`int NOT NULL`): ID of the predefined benchmark suite to
+  execute.
+* **collector_name** (`text`): Name of the collector that claimed the job
+  (populated once the job is started).
+* **created_at** (`timestamptz NOT NULL`): Datetime when the job was queued.
+* **started_at** (`timestamptz`): Datetime when the collector actually began
+  running the benchmarks; NULL until the job is claimed.
+* **completed_at** (`timestampt`): Datetime when the collector finished
+  (successfully or otherwise); used to purge rows after ~30 days.
+* **status** (`text NOT NULL`): Current job state. `queued`, `in_progress`,
+  `success`, or `failure`.
+* **retry** (`int NOT NULL`): Number of times the job has been re*queued after
+  a failure; 0 on the first attempt.

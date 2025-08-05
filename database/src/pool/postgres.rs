@@ -1,11 +1,12 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobStatus,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
-    BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType,
-    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario, Target,
-    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
+    BenchmarkJobConclusion, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
+    BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkSet, CodegenBackend, CollectionId,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
+    Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
     BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
@@ -1530,16 +1531,21 @@ where
         tag: &str,
         status: BenchmarkRequestStatus,
     ) -> anyhow::Result<()> {
+        // We cannot use this function to mark requests as complete, as
+        // we need to know if all jobs are complete first.
+        if matches!(status, BenchmarkRequestStatus::Completed { .. }) {
+            panic!("Please use `mark_benchmark_request_as_completed(...)` to complete benchmark_requests");
+        }
+
         let status_str = status.as_str();
-        let completed_at = status.completed_at();
         let modified_rows = self
             .conn()
             .execute(
                 r#"
                 UPDATE benchmark_request
-                SET status = $1, completed_at = $2
-                WHERE tag = $3;"#,
-                &[&status_str, &completed_at, &tag],
+                SET status = $1
+                WHERE tag = $2;"#,
+                &[&status_str, &tag],
             )
             .await
             .context("failed to update benchmark request status")?;
@@ -1843,6 +1849,7 @@ where
                     WHERE
                         job_queue.id = picked.id
                     RETURNING
+                        job_queue.id,
                         job_queue.backend,
                         job_queue.profile,
                         job_queue.request_tag,
@@ -1868,24 +1875,100 @@ where
             None => Ok(None),
             Some(row) => {
                 let job = BenchmarkJob {
+                    id: row.get::<_, i32>(0) as u32,
                     target: *target,
-                    backend: CodegenBackend::from_str(&row.get::<_, String>(0))
+                    backend: CodegenBackend::from_str(&row.get::<_, String>(1))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    profile: Profile::from_str(&row.get::<_, String>(1))
+                    profile: Profile::from_str(&row.get::<_, String>(2))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    request_tag: row.get::<_, String>(2),
+                    request_tag: row.get::<_, String>(3),
                     benchmark_set: benchmark_set.clone(),
-                    created_at: row.get::<_, DateTime<Utc>>(3),
+                    created_at: row.get::<_, DateTime<Utc>>(4),
                     // The job is now in an in_progress state
                     status: BenchmarkJobStatus::InProgress {
-                        started_at: row.get::<_, DateTime<Utc>>(4),
+                        started_at: row.get::<_, DateTime<Utc>>(5),
                         collector_name: collector_name.into(),
                     },
-                    retry: row.get::<_, i32>(5) as u32,
+                    retry: row.get::<_, i32>(6) as u32,
                 };
                 Ok(Some(job))
             }
         }
+    }
+
+    async fn mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool> {
+        // Find if the benchmark is completed and update it's status to completed
+        // in one SQL block
+        let row = self
+            .conn()
+            .query_opt(
+                "
+                UPDATE
+                    benchmark_request
+                SET
+                    status = $1,
+                    completed_at = NOW()
+                WHERE
+                    benchmark_request.tag = $2
+                    AND benchmark_request.status != $1
+                    AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            job_queue
+                        WHERE
+                            job_queue.request_tag = benchmark_request.tag
+                            AND job_queue.status NOT IN ($3, $4)
+                    )
+                    AND (
+                        benchmark_request.parent_sha IS NULL
+                        OR NOT EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                job_queue
+                            WHERE
+                                job_queue.request_tag = benchmark_request.parent_sha
+                                AND job_queue.status NOT IN ($3, $4)
+                       )
+                )
+                RETURNING
+                    benchmark_request.tag;
+                ",
+                &[
+                    &BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
+                    &tag,
+                    &BENCHMARK_JOB_STATUS_SUCCESS_STR,
+                    &BENCHMARK_JOB_STATUS_FAILURE_STR,
+                ],
+            )
+            .await
+            .context("Failed to mark benchmark_request as completed")?;
+        // The affected tag is returned by the query thus we can use the row's
+        // presence to determine if the request was marked as completed
+        Ok(row.is_some())
+    }
+
+    async fn mark_benchmark_job_as_completed(
+        &self,
+        id: u32,
+        benchmark_job_conclusion: &BenchmarkJobConclusion,
+    ) -> anyhow::Result<()> {
+        self.conn()
+            .execute(
+                "
+                UPDATE
+                    job_queue 
+                SET
+                    status = $1,
+                    completed_at = NOW()
+                WHERE
+                    id = $2",
+                &[&benchmark_job_conclusion.as_str(), &(id as i32)],
+            )
+            .await
+            .context("Failed to mark benchmark job as completed")?;
+        Ok(())
     }
 }
 

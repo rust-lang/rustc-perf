@@ -1,8 +1,8 @@
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkRequest,
-    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend, CollectorConfig,
-    CompileBenchmark, Target,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
+    CollectorConfig, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -246,13 +246,25 @@ pub trait Connection: Send + Sync {
     /// Get the confiuguration for a collector by the name of the collector
     async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig>;
 
-    /// Get the confiuguration for a collector by the name of the collector
+    /// Dequeue benchmark job
     async fn dequeue_benchmark_job(
         &self,
         collector_name: &str,
         target: &Target,
         benchmark_set: &BenchmarkSet,
     ) -> anyhow::Result<Option<BenchmarkJob>>;
+
+    /// Try and mark the benchmark_request as completed. Will return `true` if
+    /// it has been marked as completed else `false` meaning there was no change
+    async fn mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool>;
+
+    /// Mark the job as completed. Sets the status to 'failed' or 'success'
+    /// depending on the enum's completed state being a success
+    async fn mark_benchmark_job_as_completed(
+        &self,
+        id: u32,
+        benchmark_job_conculsion: &BenchmarkJobConclusion,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -388,6 +400,45 @@ mod tests {
         }
     }
 
+    async fn complete_request(
+        db: &dyn Connection,
+        request_tag: &str,
+        collector_name: &str,
+        benchmark_set: u32,
+        target: &Target,
+    ) {
+        /* Create job for the request */
+        db.enqueue_benchmark_job(
+            request_tag,
+            &target,
+            &CodegenBackend::Llvm,
+            &Profile::Opt,
+            benchmark_set,
+        )
+        .await
+        .unwrap();
+
+        let job = db
+            .dequeue_benchmark_job(collector_name, &target, &BenchmarkSet(benchmark_set))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(job.request_tag(), request_tag);
+
+        /* Mark the job as complete */
+        db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            db.mark_benchmark_request_as_completed(request_tag)
+                .await
+                .unwrap(),
+            true
+        );
+    }
+
     #[tokio::test]
     async fn pstat_returns_empty_vector_when_empty() {
         run_db_test(|ctx| async {
@@ -475,28 +526,31 @@ mod tests {
     #[tokio::test]
     async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
-            let db = db.connection().await;
+            let db = ctx.db_client().connection().await;
+            let target = &Target::X86_64UnknownLinuxGnu;
+            let collector_name = "collector-1";
+            let benchmark_set = 1;
 
-            // Completed
+            db.add_collector_config(collector_name, &target, benchmark_set, true)
+                .await
+                .unwrap();
+
+            // Complete parent
+            let parent = BenchmarkRequest::create_release("sha-parent-1", Utc::now());
+            // Complete
             let req_a = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
             // WaitingForArtifacts
             let req_b = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
             let req_c = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
 
+            db.insert_benchmark_request(&parent).await.unwrap();
             db.insert_benchmark_request(&req_a).await.unwrap();
             db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1")
                 .await
                 .unwrap();
 
-            db.update_benchmark_request_status(
-                "sha1",
-                BenchmarkRequestStatus::Completed {
-                    completed_at: Utc::now(),
-                },
-            )
-            .await
-            .unwrap();
+            complete_request(&*db, "sha-parent-1", collector_name, benchmark_set, &target).await;
+            complete_request(&*db, "sha1", collector_name, benchmark_set, &target).await;
 
             // This should be fine, req_a was completed
             db.insert_benchmark_request(&req_b).await.unwrap();
@@ -543,8 +597,15 @@ mod tests {
     #[tokio::test]
     async fn load_pending_benchmark_requests() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
+            let db = ctx.db_client().connection().await;
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let target = &Target::X86_64UnknownLinuxGnu;
+            let collector_name = "collector-1";
+            let benchmark_set = 1;
+
+            db.add_collector_config(collector_name, &target, benchmark_set, true)
+                .await
+                .unwrap();
 
             // ArtifactsReady
             let req_a = BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
@@ -555,24 +616,17 @@ mod tests {
             // InProgress
             let req_d = BenchmarkRequest::create_master("sha-2", "parent-sha-2", 51, time);
             // Completed
-            let req_e = BenchmarkRequest::create_master("sha-3", "parent-sha-3", 52, time);
+            let req_e = BenchmarkRequest::create_release("1.79.0", time);
 
-            let db = db.connection().await;
             for &req in &[&req_a, &req_b, &req_c, &req_d, &req_e] {
                 db.insert_benchmark_request(req).await.unwrap();
             }
 
+            complete_request(&*db, "1.79.0", collector_name, benchmark_set, &target).await;
+
             db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
                 .await
                 .unwrap();
-            db.update_benchmark_request_status(
-                "sha-3",
-                BenchmarkRequestStatus::Completed {
-                    completed_at: Utc::now(),
-                },
-            )
-            .await
-            .unwrap();
 
             let requests = db.load_pending_benchmark_requests().await.unwrap();
 
@@ -832,6 +886,89 @@ mod tests {
                 benchmark_job.collector_name().unwrap(),
                 collector_config.name(),
             );
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn mark_request_as_complete_empty() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+
+            let insert_result = db
+                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .await;
+            assert!(insert_result.is_ok());
+
+            let benchmark_request =
+                BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+            assert_eq!(
+                db.mark_benchmark_request_as_completed("sha-1")
+                    .await
+                    .unwrap(),
+                true
+            );
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn mark_request_as_complete() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let benchmark_set = BenchmarkSet(0u32);
+            let tag = "sha-1";
+            let collector_name = "collector-1";
+            let target = Target::X86_64UnknownLinuxGnu;
+
+            let insert_result = db
+                .add_collector_config(collector_name, &target, 1, true)
+                .await;
+            assert!(insert_result.is_ok());
+
+            /* Create the request */
+            let benchmark_request = BenchmarkRequest::create_release(tag, time);
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+
+            /* Create job for the request */
+            db.enqueue_benchmark_job(
+                benchmark_request.tag().unwrap(),
+                &target,
+                &CodegenBackend::Llvm,
+                &Profile::Opt,
+                benchmark_set.0,
+            )
+            .await
+            .unwrap();
+
+            let job = db
+                .dequeue_benchmark_job(collector_name, &target, &benchmark_set)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
+
+            /* Mark the job as complete */
+            db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+                .await
+                .unwrap();
+
+            db.mark_benchmark_request_as_completed(tag).await.unwrap();
+
+            let completed = db.load_benchmark_request_index().await.unwrap();
+
+            assert!(completed.contains_tag("sha-1"));
 
             Ok(ctx)
         })
