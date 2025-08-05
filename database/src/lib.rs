@@ -1112,7 +1112,7 @@ pub struct BenchmarkJob {
     benchmark_set: BenchmarkSet,
     created_at: DateTime<Utc>,
     status: BenchmarkJobStatus,
-    retry: u32,
+    deque_counter: u32,
 }
 
 impl BenchmarkJob {
@@ -1146,6 +1146,11 @@ impl BenchmarkJob {
             BenchmarkJobStatus::InProgress { collector_name, .. }
             | BenchmarkJobStatus::Completed { collector_name, .. } => Some(collector_name),
         }
+    }
+
+    /// How many times was the job already dequed?
+    pub fn deque_count(&self) -> u32 {
+        self.deque_counter
     }
 }
 

@@ -1840,6 +1840,7 @@ where
     ) -> anyhow::Result<Option<(BenchmarkJob, ArtifactId)>> {
         // We take the oldest job from the job_queue matching the benchmark_set,
         // target and status of 'queued'
+        // If a job was dequeued, we increment its retry (dequeue) count
         let row_opt = self
             .conn()
             .query_opt(
@@ -1863,7 +1864,8 @@ where
                     SET
                         collector_name = $4,
                         started_at = NOW(),
-                        status = $5
+                        status = $5,
+                        retry = retry + 1
                     FROM
                         picked
                     WHERE
