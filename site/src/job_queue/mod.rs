@@ -384,9 +384,12 @@ mod tests {
             .await
             .unwrap();
 
-        db.mark_benchmark_request_as_completed(request_tag)
-            .await
-            .unwrap();
+        assert_eq!(
+            db.mark_benchmark_request_as_completed(request_tag)
+                .await
+                .unwrap(),
+            true
+        );
     }
 
     async fn mark_as_completed(

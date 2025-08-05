@@ -1917,8 +1917,8 @@ where
                         FROM
                             job_queue
                         WHERE
-                            request_tag = benchmark_request.tag
-                            AND status NOT IN ($3, $4)
+                            job_queue.request_tag = benchmark_request.tag
+                            AND job_queue.status NOT IN ($3, $4)
                     )
                     AND (
                         benchmark_request.parent_sha IS NULL
@@ -1928,7 +1928,7 @@ where
                             FROM
                                 job_queue
                             WHERE
-                                request_tag = benchmark_request.parent_sha
+                                job_queue.request_tag = benchmark_request.parent_sha
                                 AND job_queue.status NOT IN ($3, $4)
                        )
                 )
