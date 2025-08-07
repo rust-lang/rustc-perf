@@ -1957,15 +1957,57 @@ where
 
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData> {
         let max_completed_requests = 7;
-        let in_progress_requests_query = format!(
+
+        // Returns in progress requests along with their associated jobs
+        let in_progress_query = format!(
             "
-            SELECT {BENCHMARK_REQUEST_COLUMNS}
-            FROM benchmark_request
-            WHERE status = '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}'
+            WITH in_progress_requests AS (
+                SELECT
+                    {BENCHMARK_REQUEST_COLUMNS}
+                FROM
+                    benchmark_request
+                WHERE
+                    status = '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}'
+                ORDER BY
+                    completed_at
+            ), in_progress_jobs AS (
+                SELECT
+                    request_tag AS tag,
+                    ARRAY_AGG(
+                        ROW(
+                            job_queue.id,
+                            job_queue.request_tag,
+                            job_queue.target,
+                            job_queue.backend,
+                            job_queue.profile,
+                            job_queue.benchmark_set,
+                            job_queue.status,
+                            job_queue.created_at,
+                            job_queue.started_at,
+                            job_queue.completed_at,
+                            job_queue.retry,
+                            job_queue.collector_name
+                        )::TEXT
+                    ) AS jobs
+                FROM
+                    job_queue
+                LEFT JOIN in_progress_requests ON job_queue.request_tag = in_progress_requests.tag
+                GROUP BY
+                    job_queue.request_tag
+            )
+            SELECT
+                in_progress_requests.*,
+                in_progress_jobs.jobs
+            FROM
+                in_progress_requests
+            LEFT JOIN
+                in_progress_jobs ON in_progress_requests.tag = in_progress_jobs.tag;
         "
         );
+
         // Gets requests along with how long the request took (latest job finish
-        // - earliest job start) and associated errors with the request
+        // - earliest job start) and associated errors with the request if they
+        // exist
         let completed_requests_query = format!(
             "
             WITH completed AS (
@@ -2023,12 +2065,20 @@ where
         "
         );
 
-        let in_progress_requests: Vec<BenchmarkRequest> = self
+        let in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)> = self
             .conn()
-            .query(&in_progress_requests_query, &[])
+            .query(&in_progress_query, &[])
             .await?
             .iter()
-            .map(row_to_benchmark_request)
+            .map(|it| {
+                let benchmark_request = row_to_benchmark_request(it);
+                let jobs: Vec<BenchmarkJob> = it
+                    .get::<_, Vec<String>>("jobs")
+                    .iter()
+                    .map(|it| benchmark_job_str_to_type(it).unwrap())
+                    .collect();
+                (benchmark_request, jobs)
+            })
             .collect();
 
         let completed_requests: Vec<(BenchmarkRequest, String, Vec<String>)> = self
@@ -2039,7 +2089,10 @@ where
             .map(|it| {
                 (
                     row_to_benchmark_request(it),
+                    // Duration being a string feels odd, but we don't need to
+                    // perform any computations on it
                     it.get::<_, String>(9),
+                    // The errors, if there are none this will be an empty vector
                     it.get::<_, Vec<String>>(10),
                 )
             })
@@ -2115,10 +2168,10 @@ where
             in_progress_jobs.push(job);
         }
 
+
         Ok(PartialStatusPageData {
             completed_requests,
-            in_progress_jobs,
-            in_progress_requests,
+            in_progress,
         })
     }
 }
@@ -2177,6 +2230,96 @@ fn row_to_benchmark_request(row: &Row) -> BenchmarkRequest {
         },
         _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
     }
+}
+
+fn parse_timestamp(cell: &str) -> anyhow::Result<Option<DateTime<Utc>>> {
+    if cell.is_empty() {
+        Ok(None)
+    } else {
+        // Massage postgres date string into something we can parse in Rust
+        // to a date
+        let raw_date = cell.trim_matches('"').replace(' ', "T") + ":00";
+        Ok(Some(
+            DateTime::parse_from_rfc3339(&raw_date)?.with_timezone(&Utc),
+        ))
+    }
+}
+
+fn benchmark_job_str_to_type(src: &str) -> anyhow::Result<BenchmarkJob> {
+    let line = src.trim_start_matches('(').trim_end_matches(')');
+
+    let mut col = line.split(',');
+
+    let id: u32 = col.next().ok_or_else(|| anyhow::anyhow!("id"))?.parse()?;
+    let request_tag = col
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("request_tag"))?
+        .to_owned();
+    let target = col
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("target"))?
+        .parse::<Target>()
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let backend = col
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("backend"))?
+        .parse::<CodegenBackend>()
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let profile = col
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("profile"))?
+        .parse::<Profile>()
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let benchmark_set = BenchmarkSet(
+        col.next()
+            .ok_or_else(|| anyhow::anyhow!("benchmark_set"))?
+            .parse()?,
+    );
+
+    let status_str = col.next().ok_or_else(|| anyhow::anyhow!("status"))?;
+    let created_at = parse_timestamp(col.next().ok_or_else(|| anyhow::anyhow!("created_at"))?)?
+        .ok_or_else(|| anyhow::anyhow!("created_at missing"))?;
+
+    let started_at = parse_timestamp(col.next().unwrap_or(""))?;
+    let completed_at = parse_timestamp(col.next().unwrap_or(""))?;
+    let retry: u32 = col
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("retry"))?
+        .parse()?;
+    let collector_name_raw = col.next().unwrap_or("").to_owned();
+
+    let status = match status_str {
+        BENCHMARK_JOB_STATUS_QUEUED_STR => BenchmarkJobStatus::Queued,
+
+        BENCHMARK_JOB_STATUS_IN_PROGRESS_STR => BenchmarkJobStatus::InProgress {
+            started_at: started_at.ok_or_else(|| anyhow::anyhow!("started_at missing"))?,
+            collector_name: collector_name_raw,
+        },
+
+        BENCHMARK_JOB_STATUS_SUCCESS_STR | BENCHMARK_JOB_STATUS_FAILURE_STR => {
+            BenchmarkJobStatus::Completed {
+                started_at: started_at.ok_or_else(|| anyhow::anyhow!("started_at missing"))?,
+                completed_at: completed_at
+                    .ok_or_else(|| anyhow::anyhow!("completed_at missing"))?,
+                collector_name: collector_name_raw,
+                success: status_str == BENCHMARK_JOB_STATUS_SUCCESS_STR,
+            }
+        }
+
+        _ => anyhow::bail!("unknown status `{status_str}`"),
+    };
+
+    Ok(BenchmarkJob {
+        id,
+        target,
+        backend,
+        profile,
+        request_tag,
+        benchmark_set,
+        created_at,
+        status,
+        deque_counter: retry,
+    })
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
