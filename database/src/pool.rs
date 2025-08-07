@@ -984,12 +984,62 @@ mod tests {
         .await;
     }
 
+    #[tokio::test]
     async fn get_status_page_data() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
-            db.add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+            let benchmark_set = BenchmarkSet(0u32);
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let tag = "sha-1";
+            let collector_name = "collector-1";
+            let target = Target::X86_64UnknownLinuxGnu;
+
+            db.add_collector_config(collector_name, &target, benchmark_set.0, true)
                 .await
                 .unwrap();
+
+            let benchmark_request = BenchmarkRequest::create_release(tag, time);
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+
+            /* Create job for the request */
+            db.enqueue_benchmark_job(
+                benchmark_request.tag().unwrap(),
+                &target,
+                &CodegenBackend::Llvm,
+                &Profile::Opt,
+                benchmark_set.0,
+            )
+            .await
+            .unwrap();
+
+            let job = db
+                .dequeue_benchmark_job(collector_name, &target, &benchmark_set)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
+
+            /* Mark the job as complete */
+            db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+                .await
+                .unwrap();
+
+            // record a couple of errors against the tag
+            let artifact_id = db.artifact_id(&ArtifactId::Tag(tag.to_string())).await;
+
+            db.record_error(artifact_id, "example-1", "This is an error")
+                .await;
+            db.record_error(artifact_id, "example-2", "This is another error")
+                .await;
+
+            db.mark_benchmark_request_as_completed(tag).await.unwrap();
+
+            let status_page_data = db.get_status_page_data().await.unwrap();
+
+            dbg!("{:?}", status_page_data);
 
             Ok(ctx)
         })

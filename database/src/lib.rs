@@ -1217,7 +1217,7 @@ impl CollectorConfig {
 /// status page
 #[derive(Debug, PartialEq)]
 pub struct PartialStatusPageData {
-    pub completed_requests: Vec<(BenchmarkRequest, u64, Vec<String>)>,
+    pub completed_requests: Vec<(BenchmarkRequest, String, Vec<String>)>,
     pub in_progress_jobs: Vec<BenchmarkJob>,
     pub in_progress_requests: Vec<BenchmarkRequest>,
 }
