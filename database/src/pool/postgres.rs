@@ -1918,7 +1918,7 @@ where
         let in_progress_requests_query = format!(
             "
             SELECT {BENCHMARK_REQUEST_COLUMNS}
-            FROM benchmark_requests
+            FROM benchmark_request
             WHERE status = '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}'
         "
         );
@@ -1972,7 +1972,7 @@ where
             )
             SELECT
                 completed.*,
-                stats.*,
+                stats.duration::TEXT,
                 errors.errors AS errors
             FROM
                 completed
@@ -1989,7 +1989,7 @@ where
             .map(row_to_benchmark_request)
             .collect();
 
-        let completed_requests: Vec<(BenchmarkRequest, u64, Vec<String>)> = self
+        let completed_requests: Vec<(BenchmarkRequest, String, Vec<String>)> = self
             .conn()
             .query(&completed_requests_query, &[])
             .await?
@@ -1997,7 +1997,7 @@ where
             .map(|it| {
                 (
                     row_to_benchmark_request(it),
-                    it.get::<_, i64>(9) as u64,
+                    it.get::<_, String>(9),
                     it.get::<_, Vec<String>>(10),
                 )
             })
@@ -2007,6 +2007,8 @@ where
             .iter()
             .map(|it| it.tag().unwrap())
             .collect();
+
+        let in_progress_tags: String = in_progress_tags.join(",");
 
         // We don't do a status check on the jobs as we want to return all jobs,
         // irrespective of status, that are attached to an inprogress
@@ -2028,7 +2030,7 @@ where
                     completed_at,
                     retry
                 FROM
-                    job_queue WHERE job_queue.tag IN ($1);",
+                    job_queue WHERE job_queue.request_tag IN ($1);",
                 &[&in_progress_tags],
             )
             .await?;
