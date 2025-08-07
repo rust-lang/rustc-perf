@@ -2,7 +2,7 @@ use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
-    CollectorConfig, CompileBenchmark, Target,
+    CollectorConfig, CompileBenchmark, PartialStatusPageData, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -271,6 +271,8 @@ pub trait Connection: Send + Sync {
         id: u32,
         benchmark_job_conculsion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
+
+    async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;
 }
 
 #[async_trait::async_trait]
@@ -977,6 +979,17 @@ mod tests {
             let completed = db.load_benchmark_request_index().await.unwrap();
 
             assert!(completed.contains_tag("sha-1"));
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    async fn get_status_page_data() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+            db.add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .await
+                .unwrap();
 
             Ok(ctx)
         })

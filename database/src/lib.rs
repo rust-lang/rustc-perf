@@ -1212,3 +1212,12 @@ impl CollectorConfig {
         self.date_added
     }
 }
+
+/// The data that can be retrived from the database directly to populate the
+/// status page
+#[derive(Debug, PartialEq)]
+pub struct PartialStatusPageData {
+    pub completed_requests: Vec<(BenchmarkRequest, u64, Vec<String>)>,
+    pub in_progress_jobs: Vec<BenchmarkJob>,
+    pub in_progress_requests: Vec<BenchmarkRequest>,
+}

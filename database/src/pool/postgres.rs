@@ -4,10 +4,10 @@ use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
     BenchmarkJobConclusion, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
     BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkSet, CodegenBackend, CollectionId,
-    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Index, Profile, QueuedCommit,
-    Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
-    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
-    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Index, PartialStatusPageData,
+    Profile, QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
     BENCHMARK_REQUEST_TRY_STR,
@@ -21,8 +21,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
+use tokio_postgres::{GenericClient, Row};
 
 pub struct Postgres(String, std::sync::Once);
 
@@ -665,6 +665,9 @@ impl PostgresConnection {
         }
     }
 }
+
+const BENCHMARK_REQUEST_COLUMNS: &str =
+    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date";
 
 #[async_trait::async_trait]
 impl<P> Connection for P
@@ -1602,17 +1605,7 @@ where
     async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>> {
         let query = format!(
             r#"
-                SELECT
-                    tag,
-                    parent_sha,
-                    pr,
-                    commit_type,
-                    status,
-                    created_at,
-                    completed_at,
-                    backends,
-                    profiles,
-                    commit_date
+                SELECT {BENCHMARK_REQUEST_COLUMNS}
                 FROM benchmark_request
                 WHERE status IN('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')"#
         );
@@ -1625,63 +1618,7 @@ where
 
         let requests = rows
             .into_iter()
-            .map(|row| {
-                let tag = row.get::<_, Option<String>>(0);
-                let parent_sha = row.get::<_, Option<String>>(1);
-                let pr = row.get::<_, Option<i32>>(2);
-                let commit_type = row.get::<_, &str>(3);
-                let status = row.get::<_, &str>(4);
-                let created_at = row.get::<_, DateTime<Utc>>(5);
-                let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
-                let backends = row.get::<_, String>(7);
-                let profiles = row.get::<_, String>(8);
-                let commit_date = row.get::<_, Option<DateTime<Utc>>>(9);
-
-                let pr = pr.map(|v| v as u32);
-
-                let status =
-                    BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at)
-                        .expect("Invalid BenchmarkRequestStatus data in the database");
-
-                match commit_type {
-                    BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {
-                        commit_type: BenchmarkRequestType::Try {
-                            sha: tag,
-                            parent_sha,
-                            pr: pr.expect("Try commit in the DB without a PR"),
-                        },
-                        commit_date,
-                        created_at,
-                        status,
-                        backends,
-                        profiles,
-                    },
-                    BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
-                        commit_type: BenchmarkRequestType::Master {
-                            sha: tag.expect("Master commit in the DB without a SHA"),
-                            parent_sha: parent_sha
-                                .expect("Master commit in the DB without a parent SHA"),
-                            pr: pr.expect("Master commit in the DB without a PR"),
-                        },
-                        commit_date,
-                        created_at,
-                        status,
-                        backends,
-                        profiles,
-                    },
-                    BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
-                        commit_type: BenchmarkRequestType::Release {
-                            tag: tag.expect("Release commit in the DB without a SHA"),
-                        },
-                        commit_date,
-                        created_at,
-                        status,
-                        backends,
-                        profiles,
-                    },
-                    _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
-                }
-            })
+            .map(|it| row_to_benchmark_request(&it))
             .collect();
         Ok(requests)
     }
@@ -2016,6 +1953,227 @@ where
             .await
             .context("Failed to mark benchmark job as completed")?;
         Ok(())
+    }
+
+    async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData> {
+        let max_completed_requests = 7;
+        let in_progress_requests_query = format!(
+            "
+            SELECT {BENCHMARK_REQUEST_COLUMNS}
+            FROM benchmark_requests
+            WHERE status = '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}'
+        "
+        );
+        // Gets requests along with how long the request took (latest job finish
+        // - earliest job start) and associated errors with the request
+        let completed_requests_query = format!(
+            "
+            WITH completed AS (
+                SELECT
+                    {BENCHMARK_REQUEST_COLUMNS}
+                FROM
+                    benchmark_request
+                WHERE
+                    status = '{BENCHMARK_REQUEST_STATUS_COMPLETED_STR}'
+                ORDER BY
+                    completed_at
+                DESC LIMIT {max_completed_requests}
+            ), jobs AS (
+                SELECT
+                    completed.tag,
+                    job_queue.started_at,
+                    job_queue.completed_at
+                FROM
+                    job_queue
+                LEFT JOIN completed ON job_queue.request_tag = completed.tag
+            ), stats AS (
+                SELECT
+                    tag,
+                    MAX(jobs.completed_at - jobs.started_at) AS duration
+                FROM
+                    jobs
+                GROUP BY
+                    tag
+            ), artifacts AS (
+                SELECT
+                    artifact.id,
+                    \"name\"
+                FROM
+                    artifact
+                LEFT JOIN completed ON artifact.name = completed.tag
+            ), errors AS (
+                SELECT
+                    artifacts.name AS tag,
+                    ARRAY_AGG(error) AS errors
+                FROM
+                    error
+                LEFT JOIN
+                    artifacts ON error.aid = artifacts.id
+                GROUP BY
+                    tag
+            )
+            SELECT
+                completed.*,
+                stats.*,
+                errors.errors AS errors
+            FROM
+                completed
+            LEFT JOIN stats ON stats.tag = completed.tag
+            LEFT JOIN errors ON errors.tag = completed.tag;
+        "
+        );
+
+        let in_progress_requests: Vec<BenchmarkRequest> = self
+            .conn()
+            .query(&in_progress_requests_query, &[])
+            .await?
+            .iter()
+            .map(row_to_benchmark_request)
+            .collect();
+
+        let completed_requests: Vec<(BenchmarkRequest, u64, Vec<String>)> = self
+            .conn()
+            .query(&completed_requests_query, &[])
+            .await?
+            .iter()
+            .map(|it| {
+                (
+                    row_to_benchmark_request(it),
+                    it.get::<_, i64>(9) as u64,
+                    it.get::<_, Vec<String>>(10),
+                )
+            })
+            .collect();
+
+        let in_progress_tags: Vec<&str> = in_progress_requests
+            .iter()
+            .map(|it| it.tag().unwrap())
+            .collect();
+
+        // We don't do a status check on the jobs as we want to return all jobs,
+        // irrespective of status, that are attached to an inprogress
+        // benchmark_request
+        let rows = self
+            .conn()
+            .query(
+                "SELECT
+                    id,
+                    target,
+                    backend,
+                    profile,
+                    request_tag,
+                    benchmark_set,
+                    created_at,
+                    status,
+                    started_at,
+                    collector_name,
+                    completed_at,
+                    retry
+                FROM
+                    job_queue WHERE job_queue.tag IN ($1);",
+                &[&in_progress_tags],
+            )
+            .await?;
+
+        let mut in_progress_jobs = vec![];
+        for row in rows {
+            let status_str = row.get::<_, &str>(7);
+            let status = match status_str {
+                BENCHMARK_JOB_STATUS_QUEUED_STR => BenchmarkJobStatus::Queued,
+                BENCHMARK_JOB_STATUS_IN_PROGRESS_STR => BenchmarkJobStatus::InProgress {
+                    started_at: row.get::<_, DateTime<Utc>>(8),
+                    collector_name: row.get::<_, String>(9),
+                },
+                BENCHMARK_JOB_STATUS_SUCCESS_STR | BENCHMARK_JOB_STATUS_FAILURE_STR => {
+                    BenchmarkJobStatus::Completed {
+                        started_at: row.get::<_, DateTime<Utc>>(8),
+                        collector_name: row.get::<_, String>(9),
+                        success: status_str == BENCHMARK_JOB_STATUS_SUCCESS_STR,
+                        completed_at: row.get::<_, DateTime<Utc>>(10),
+                    }
+                }
+                _ => panic!("Invalid benchmark job status: {status_str}"),
+            };
+
+            let job = BenchmarkJob {
+                id: row.get::<_, i32>(0) as u32,
+                target: Target::from_str(row.get::<_, &str>(1)).map_err(|e| anyhow::anyhow!(e))?,
+                backend: CodegenBackend::from_str(row.get::<_, &str>(2))
+                    .map_err(|e| anyhow::anyhow!(e))?,
+                profile: Profile::from_str(row.get::<_, &str>(3))
+                    .map_err(|e| anyhow::anyhow!(e))?,
+                request_tag: row.get::<_, String>(4),
+                benchmark_set: BenchmarkSet(row.get::<_, i32>(5) as u32),
+                created_at: row.get::<_, DateTime<Utc>>(6),
+                // The job is now in an in_progress state
+                status,
+                deque_counter: row.get::<_, i32>(11) as u32,
+            };
+
+            in_progress_jobs.push(job);
+        }
+
+        Ok(PartialStatusPageData {
+            completed_requests,
+            in_progress_jobs,
+            in_progress_requests,
+        })
+    }
+}
+
+fn row_to_benchmark_request(row: &Row) -> BenchmarkRequest {
+    let tag = row.get::<_, Option<String>>(0);
+    let parent_sha = row.get::<_, Option<String>>(1);
+    let pr = row.get::<_, Option<i32>>(2);
+    let commit_type = row.get::<_, &str>(3);
+    let status = row.get::<_, &str>(4);
+    let created_at = row.get::<_, DateTime<Utc>>(5);
+    let completed_at = row.get::<_, Option<DateTime<Utc>>>(6);
+    let backends = row.get::<_, String>(7);
+    let profiles = row.get::<_, String>(8);
+    let commit_date = row.get::<_, Option<DateTime<Utc>>>(9);
+
+    let pr = pr.map(|v| v as u32);
+
+    let status = BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at)
+        .expect("Invalid BenchmarkRequestStatus data in the database");
+
+    match commit_type {
+        BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {
+            commit_type: BenchmarkRequestType::Try {
+                sha: tag,
+                parent_sha,
+                pr: pr.expect("Try commit in the DB without a PR"),
+            },
+            commit_date,
+            created_at,
+            status,
+            backends,
+            profiles,
+        },
+        BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
+            commit_type: BenchmarkRequestType::Master {
+                sha: tag.expect("Master commit in the DB without a SHA"),
+                parent_sha: parent_sha.expect("Master commit in the DB without a parent SHA"),
+                pr: pr.expect("Master commit in the DB without a PR"),
+            },
+            commit_date,
+            created_at,
+            status,
+            backends,
+            profiles,
+        },
+        BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
+            commit_type: BenchmarkRequestType::Release {
+                tag: tag.expect("Release commit in the DB without a SHA"),
+            },
+            commit_date,
+            created_at,
+            status,
+            backends,
+            profiles,
+        },
+        _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
     }
 }
 
