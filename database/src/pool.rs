@@ -437,11 +437,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
+        assert!(
             db.mark_benchmark_request_as_completed(request_tag)
                 .await
-                .unwrap(),
-            true
+                .unwrap()
         );
     }
 
@@ -452,7 +451,7 @@ mod tests {
             // wired up correctly. Though makes sense that there should be
             // an empty vector returned if there are no pstats.
             let db = ctx.db_client();
-            let result = db.connection().await.get_pstats(&vec![], &vec![]).await;
+            let result = db.connection().await.get_pstats(&[], &[]).await;
             let expected: Vec<Vec<Option<f64>>> = vec![];
 
             assert_eq!(result, expected);
@@ -677,8 +676,8 @@ mod tests {
                 BenchmarkRequestType::Try { .. }
             ));
 
-            assert_eq!(req_db.tag().as_deref(), Some("sha1"));
-            assert_eq!(req_db.parent_sha().as_deref(), Some("sha-parent-1"));
+            assert_eq!(req_db.tag(), Some("sha1"));
+            assert_eq!(req_db.parent_sha(), Some("sha-parent-1"));
             assert_eq!(req_db.pr(), Some(&42));
 
             Ok(ctx)
@@ -920,11 +919,10 @@ mod tests {
             db.insert_benchmark_request(&benchmark_request)
                 .await
                 .unwrap();
-            assert_eq!(
+            assert!(
                 db.mark_benchmark_request_as_completed("sha-1")
                     .await
-                    .unwrap(),
-                true
+                    .unwrap()
             );
             Ok(ctx)
         })

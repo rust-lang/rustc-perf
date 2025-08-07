@@ -51,7 +51,7 @@ pub async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client>
         };
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("database connection error: {}", e);
+                eprintln!("database connection error: {e}");
             }
         });
 
@@ -67,7 +67,7 @@ pub async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client>
             };
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("database connection error: {}", e);
+                eprintln!("database connection error: {e}");
             }
         });
 
@@ -1900,12 +1900,12 @@ where
                 let job = BenchmarkJob {
                     id: row.get::<_, i32>(0) as u32,
                     target,
-                    backend: CodegenBackend::from_str(&row.get::<_, &str>(1))
+                    backend: CodegenBackend::from_str(row.get::<_, &str>(1))
                         .map_err(|e| anyhow::anyhow!(e))?,
-                    profile: Profile::from_str(&row.get::<_, &str>(2))
+                    profile: Profile::from_str(row.get::<_, &str>(2))
                         .map_err(|e| anyhow::anyhow!(e))?,
                     request_tag: row.get::<_, String>(3),
-                    benchmark_set: benchmark_set.clone(),
+                    benchmark_set,
                     created_at: row.get::<_, DateTime<Utc>>(4),
                     // The job is now in an in_progress state
                     status: BenchmarkJobStatus::InProgress {
@@ -2034,7 +2034,7 @@ fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> Artifa
             r#type: CommitType::Try,
         }),
         "release" => ArtifactId::Tag(sha.to_owned()),
-        _ => panic!("unknown artifact type: {:?}", ty),
+        _ => panic!("unknown artifact type: {ty:?}"),
     }
 }
 

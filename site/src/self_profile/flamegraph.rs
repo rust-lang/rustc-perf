@@ -11,7 +11,7 @@ pub fn generate(title: &str, self_profile_data: Vec<u8>, _: Opt) -> anyhow::Resu
 
     let recorded_stacks = collapse_stacks(&profiling_data)
         .iter()
-        .map(|(unique_stack, count)| format!("{} {}", unique_stack, count))
+        .map(|(unique_stack, count)| format!("{unique_stack} {count}"))
         .collect::<Vec<_>>();
 
     let mut file = Vec::new();

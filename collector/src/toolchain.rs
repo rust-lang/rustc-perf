@@ -103,7 +103,7 @@ impl Component {
         let suffix = if *self == Component::RustSrc {
             String::new()
         } else {
-            format!("-{}", triple)
+            format!("-{triple}")
         };
         format!(
             "{base}/{sha}/{module}-{channel}{suffix}.tar.xz",
@@ -446,7 +446,7 @@ pub fn get_local_toolchain(
     } else {
         let rustc = PathBuf::from(rustc)
             .canonicalize()
-            .with_context(|| format!("failed to canonicalize rustc executable {:?}", rustc))?;
+            .with_context(|| format!("failed to canonicalize rustc executable {rustc:?}"))?;
 
         // When specifying rustc via a path, the suffix is always added to the
         // id.
@@ -463,7 +463,7 @@ pub fn get_local_toolchain(
     let rustdoc =
         if let Some(rustdoc) = &toolchain_config.rustdoc {
             Some(rustdoc.canonicalize().with_context(|| {
-                format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
+                format!("failed to canonicalize rustdoc executable {rustdoc:?}")
             })?)
         } else if profiles.iter().any(|p| p.is_doc()) {
             // We need a `rustdoc`. Look for one next to `rustc`.
@@ -484,7 +484,7 @@ pub fn get_local_toolchain(
     let clippy = if let Some(clippy) = &toolchain_config.clippy {
         Some(
             clippy.canonicalize().with_context(|| {
-                format!("failed to canonicalize clippy executable {:?}", clippy)
+                format!("failed to canonicalize clippy executable {clippy:?}")
             })?,
         )
     } else if profiles.contains(&Profile::Clippy) {
@@ -505,7 +505,7 @@ pub fn get_local_toolchain(
     let cargo = if let Some(cargo) = &toolchain_config.cargo {
         cargo
             .canonicalize()
-            .with_context(|| format!("failed to canonicalize cargo executable {:?}", cargo))?
+            .with_context(|| format!("failed to canonicalize cargo executable {cargo:?}"))?
     } else {
         // Use the nightly cargo from `rustup`.
         let output = Command::new("rustup")

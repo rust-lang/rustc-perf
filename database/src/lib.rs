@@ -148,7 +148,7 @@ impl FromStr for CommitType {
         match ty {
             "try" => Ok(CommitType::Try),
             "master" => Ok(CommitType::Master),
-            _ => Err(format!("Wrong commit type {}", ty)),
+            _ => Err(format!("Wrong commit type {ty}")),
         }
     }
 }
@@ -244,7 +244,7 @@ impl std::str::FromStr for Profile {
             "doc-json" => Profile::DocJson,
             "opt" => Profile::Opt,
             "clippy" => Profile::Clippy,
-            _ => return Err(format!("{} is not a profile", s)),
+            _ => return Err(format!("{s} is not a profile")),
         })
     }
 }
@@ -285,7 +285,7 @@ impl std::str::FromStr for Scenario {
                 if let Some(stripped) = s.strip_prefix("incr-patched: ") {
                     Scenario::IncrementalPatch(PatchName::from(stripped))
                 } else {
-                    return Err(format!("{} is not a scenario", s));
+                    return Err(format!("{s} is not a scenario"));
                 }
             }
         })
@@ -298,7 +298,7 @@ impl fmt::Display for Scenario {
             Scenario::Empty => write!(f, "full"),
             Scenario::IncrementalEmpty => write!(f, "incr-full"),
             Scenario::IncrementalFresh => write!(f, "incr-unchanged"),
-            Scenario::IncrementalPatch(name) => write!(f, "incr-patched: {}", name),
+            Scenario::IncrementalPatch(name) => write!(f, "incr-patched: {name}"),
         }
     }
 }
@@ -309,7 +309,7 @@ impl Scenario {
             Scenario::Empty => "full".to_string(),
             Scenario::IncrementalEmpty => "incr-full".to_string(),
             Scenario::IncrementalFresh => "incr-unchanged".to_string(),
-            Scenario::IncrementalPatch(name) => format!("incr-patched-{}", name),
+            Scenario::IncrementalPatch(name) => format!("incr-patched-{name}"),
         }
     }
 }
@@ -381,7 +381,7 @@ impl FromStr for Target {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.to_ascii_lowercase().as_str() {
             "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
-            _ => return Err(format!("{} is not a valid target", s)),
+            _ => return Err(format!("{s} is not a valid target")),
         })
     }
 }
@@ -418,7 +418,7 @@ impl FromStr for CodegenBackend {
         Ok(match s.to_ascii_lowercase().as_str() {
             "llvm" => CodegenBackend::Llvm,
             "cranelift" => CodegenBackend::Cranelift,
-            _ => return Err(format!("{} is not a codegen backend", s)),
+            _ => return Err(format!("{s} is not a codegen backend")),
         })
     }
 }
@@ -442,7 +442,7 @@ impl fmt::Display for ArtifactId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ArtifactId::Commit(c) => write!(f, "{} ({})", c.sha, c.date),
-            ArtifactId::Tag(id) => write!(f, "{}", id),
+            ArtifactId::Tag(id) => write!(f, "{id}"),
         }
     }
 }

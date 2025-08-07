@@ -35,7 +35,7 @@ pub async fn unroll_rollup(
     let commit_link = |sha: &str| format!("https://github.com/rust-lang/rust/commit/{sha}");
 
     let format_commit = |s: &str, truncate: bool| {
-        let display = truncate.then(|| s.split_at(10).0).unwrap_or(s);
+        let display = if truncate { s.split_at(10).0 } else { s };
         format!("[{display}]({})", commit_link(s))
     };
 
@@ -440,7 +440,7 @@ pub(crate) async fn untriaged_perf_regressions() -> Result<Vec<PullRequest>, Box
 
 /// Get the title of a PR with the given number
 pub(crate) async fn pr_title(pr: u32) -> String {
-    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{}", pr);
+    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{pr}");
     let request = github_request(&url);
 
     async fn send(request: reqwest::RequestBuilder) -> Result<String, BoxedError> {
@@ -452,7 +452,7 @@ pub(crate) async fn pr_title(pr: u32) -> String {
             .ok_or_else(malformed_json_error)?
             .to_owned())
     }
-    let request_dbg = format!("{:?}", request);
+    let request_dbg = format!("{request:?}");
     match send(request).await {
         Ok(t) => t,
         Err(e) => {
@@ -470,7 +470,7 @@ fn github_request(url: &str) -> reqwest::RequestBuilder {
         .header("User-Agent", "rustc-perf");
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
         let mut value =
-            reqwest::header::HeaderValue::from_str(&format!("token {}", token)).unwrap();
+            reqwest::header::HeaderValue::from_str(&format!("token {token}")).unwrap();
         value.set_sensitive(true);
         request = request.header("Authorization", value);
     }

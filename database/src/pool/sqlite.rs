@@ -165,13 +165,12 @@ impl Migration {
                     let foreign_col: String = row.get_unwrap(4);
                     panic!(
                         "Foreign key violation encountered during migration\n\
-                            table: {},\n\
-                            column: {},\n\
-                            row_id: {:?},\n\
-                            foreign table: {},\n\
-                            foreign column: {}\n\
-                            migration ID: {}\n",
-                        table, col, row_id, foreign_table, foreign_col, migration_id,
+                            table: {table},\n\
+                            column: {col},\n\
+                            row_id: {row_id:?},\n\
+                            foreign table: {foreign_table},\n\
+                            foreign column: {foreign_col}\n\
+                            migration ID: {migration_id}\n",
                     );
                 },
             )
@@ -888,7 +887,7 @@ impl Connection for SqliteConnection {
                             query
                                 .query_row(params![&sid, &aid.0], |row| row.get(0))
                                 .unwrap_or_else(|e| {
-                                    panic!("{:?}: series={:?}, aid={:?}", e, sid, aid);
+                                    panic!("{e:?}: series={sid:?}, aid={aid:?}");
                                 })
                         })
                     })
@@ -920,7 +919,7 @@ impl Connection for SqliteConnection {
                             query
                                 .query_row(params![&sid, &aid.0], |row| row.get(0))
                                 .unwrap_or_else(|e| {
-                                    panic!("{:?}: series={:?}, aid={:?}", e, sid, aid);
+                                    panic!("{e:?}: series={sid:?}, aid={aid:?}");
                                 })
                         })
                     })
@@ -1389,6 +1388,6 @@ fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {
             r#type: CommitType::Try,
         }),
         "release" => ArtifactId::Tag(sha.to_owned()),
-        _ => panic!("unknown artifact type: {:?}", ty),
+        _ => panic!("unknown artifact type: {ty:?}"),
     }
 }

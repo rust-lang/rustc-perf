@@ -308,12 +308,12 @@ pub async fn get_authorized_users() -> Result<Vec<u64>, String> {
         .get(&url)
         .send()
         .await
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
+        .map_err(|err| format!("failed to fetch authorized users: {err}"))?
         .error_for_status()
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
+        .map_err(|err| format!("failed to fetch authorized users: {err}"))?
         .json::<rust_team_data::v1::Permission>()
         .await
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))
+        .map_err(|err| format!("failed to fetch authorized users: {err}"))
         .map(|perms| perms.github_ids)
 }
 

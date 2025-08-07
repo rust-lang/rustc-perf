@@ -118,7 +118,7 @@ pub async fn handle_self_profile_processed_download(
             Ok(c) => c,
             Err(e) => {
                 log::error!("Failed to generate json {:?}", e);
-                let mut resp = http::Response::new(format!("{:?}", e).into());
+                let mut resp = http::Response::new(format!("{e:?}").into());
                 *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                 return resp;
             }
@@ -290,7 +290,7 @@ pub async fn handle_self_profile_raw_download(
     let resp = match reqwest::get(&url).await {
         Ok(r) => r,
         Err(e) => {
-            let mut resp = http::Response::new(format!("{:?}", e).into());
+            let mut resp = http::Response::new(format!("{e:?}").into());
             *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             return resp;
         }
@@ -371,7 +371,7 @@ pub async fn handle_self_profile_raw(
     let scenario = body
         .scenario
         .parse::<database::Scenario>()
-        .map_err(|e| format!("invalid run name: {:?}", e))?;
+        .map_err(|e| format!("invalid run name: {e:?}"))?;
 
     let conn = ctxt.conn().await;
 
@@ -397,7 +397,7 @@ pub async fn handle_self_profile_raw(
             if aids_and_cids.iter().any(|(_, v)| *v == cid) {
                 cid
             } else {
-                return Err(format!("{} is not a collection ID at this artifact", cid));
+                return Err(format!("{cid} is not a collection ID at this artifact"));
             }
         }
         _ => first_cid,
@@ -417,9 +417,9 @@ pub async fn handle_self_profile_raw(
         cid,
     );
 
-    return match fetch(&cids, cid, format!("{}.mm_profdata.sz", url_prefix)).await {
+    return match fetch(&cids, cid, format!("{url_prefix}.mm_profdata.sz")).await {
         Ok(fetched) => Ok(fetched),
-        Err(new_error) => Err(format!("mm_profdata download failed: {:?}", new_error,)),
+        Err(new_error) => Err(format!("mm_profdata download failed: {new_error:?}",)),
     };
 
     async fn fetch(
@@ -431,7 +431,7 @@ pub async fn handle_self_profile_raw(
             .head(&url)
             .send()
             .await
-            .map_err(|e| format!("fetching artifact: {:?}", e))?;
+            .map_err(|e| format!("fetching artifact: {e:?}"))?;
         if !resp.status().is_success() {
             return Err(format!(
                 "Artifact did not resolve successfully: {:?} received",
@@ -458,7 +458,7 @@ pub async fn handle_self_profile(
     let scenario = body
         .scenario
         .parse::<database::Scenario>()
-        .map_err(|e| format!("invalid run name: {:?}", e))?;
+        .map_err(|e| format!("invalid run name: {e:?}"))?;
     let index = ctxt.index.load();
 
     let query = selector::CompileBenchmarkQuery::default()
@@ -471,7 +471,7 @@ pub async fn handle_self_profile(
     let find_aid = |commit: &str| {
         index
             .artifact_id_for_commit(commit)
-            .ok_or(format!("could not find artifact {}", commit))
+            .ok_or(format!("could not find artifact {commit}"))
     };
 
     let mut commits = vec![find_aid(&body.commit)?];

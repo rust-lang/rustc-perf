@@ -176,7 +176,7 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .with_context(|| format!("failed to spawn process for cmd: {:?}", cmd))?;
+        .with_context(|| format!("failed to spawn process for cmd: {cmd:?}"))?;
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -239,7 +239,7 @@ pub async fn async_command_output(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .with_context(|| format!("failed to spawn process for cmd: {:?}", cmd))?;
+        .with_context(|| format!("failed to spawn process for cmd: {cmd:?}"))?;
     let output = child.wait_with_output().await?;
     log::trace!("command {cmd:?} took {} ms", start.elapsed().as_millis());
 
@@ -385,5 +385,5 @@ impl CollectorCtx {
 }
 
 pub fn runtime_group_step_name(benchmark_name: &str) -> String {
-    format!("runtime:{}", benchmark_name)
+    format!("runtime:{benchmark_name}")
 }

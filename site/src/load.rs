@@ -745,7 +745,7 @@ mod tests {
             all_commits,
             time,
         );
-        assert_eq!(expected, found, "{:#?} != {:#?}", expected, found);
+        assert_eq!(expected, found, "{expected:#?} != {found:#?}");
     }
 
     #[test]

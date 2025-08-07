@@ -42,17 +42,17 @@ pub async fn handle_triage(
 
     let start_artifact = ctxt
         .artifact_id_for_bound(start.clone(), true)
-        .ok_or(format!("could not find start commit for bound {:?}", start))?;
+        .ok_or(format!("could not find start commit for bound {start:?}"))?;
     let end_artifact = ctxt
         .artifact_id_for_bound(end.clone(), false)
-        .ok_or(format!("could not find end commit for bound {:?}", end))?;
+        .ok_or(format!("could not find end commit for bound {end:?}"))?;
     // This gives a better error, but is still not great -- the common case here
     // is that we've had a 422 error and as such had a fork. It's possible we
     // could diagnose that and give a nicer error here telling the user which
     // commit to use.
     let mut next = next_commit(&start_artifact, master_commits)
         .map(|c| Bound::Commit(c.sha.clone()))
-        .ok_or(format!("no next commit for {:?}", start_artifact))?;
+        .ok_or(format!("no next commit for {start_artifact:?}"))?;
 
     let mut report = HashMap::new();
     let mut before = start.clone();
@@ -65,7 +65,7 @@ pub async fn handle_triage(
         let comparison =
             match compare_given_commits(before.clone(), next.clone(), metric, ctxt, master_commits)
                 .await
-                .map_err(|e| format!("error comparing commits: {}", e))?
+                .map_err(|e| format!("error comparing commits: {e}"))?
             {
                 Some(c) => c,
                 None => {
@@ -108,7 +108,7 @@ pub async fn handle_triage(
     let summary =
         match compare_given_commits(start.clone(), end.clone(), metric, ctxt, master_commits)
             .await
-            .map_err(|e| format!("error comparing beginning and ending commits: {}", e))?
+            .map_err(|e| format!("error comparing beginning and ending commits: {e}"))?
         {
             Some(summary_comparison) => {
                 let (primary, secondary) =
@@ -135,8 +135,8 @@ pub async fn handle_compare(
     let comparison =
         compare_given_commits(body.start, end.clone(), body.stat, ctxt, master_commits)
             .await
-            .map_err(|e| format!("error comparing commits: {}", e))?
-            .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
+            .map_err(|e| format!("error comparing commits: {e}"))?
+            .ok_or_else(|| format!("could not find end commit for bound {end:?}"))?;
 
     let conn = ctxt.conn().await;
     let prev = comparison.prev(master_commits);
@@ -505,8 +505,7 @@ async fn write_triage_summary(
     let mut result = if let Some(pr) = comparison.b.pr {
         let title = github::pr_title(pr).await;
         format!(
-            "{} [#{}](https://github.com/rust-lang/rust/pull/{})",
-            title, pr, pr
+            "{title} [#{pr}](https://github.com/rust-lang/rust/pull/{pr})"
         )
     } else {
         String::from("<Unknown Change>")
@@ -514,7 +513,7 @@ async fn write_triage_summary(
     let start = &comparison.a.artifact;
     let end = &comparison.b.artifact;
     let link = &compare_link(start, end);
-    write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
+    write!(&mut result, " [(Comparison Link)]({link})\n\n").unwrap();
 
     write_summary_table(primary, secondary, true, &mut result);
 
@@ -725,7 +724,7 @@ async fn compare_given_commits(
     let idx = ctxt.index.load();
     let a = ctxt
         .artifact_id_for_bound(start.clone(), true)
-        .ok_or(format!("could not find start commit for bound {:?}", start))?;
+        .ok_or(format!("could not find start commit for bound {start:?}"))?;
     let b = match ctxt.artifact_id_for_bound(end.clone(), false) {
         Some(b) => b,
         None => return Ok(None),
@@ -1449,15 +1448,13 @@ async fn generate_report(
             .iter()
             .map(|github::PullRequest { title, number }| {
                 format!(
-                    "- [#{} {}](https://github.com/rust-lang/rust/pull/{})",
-                    number, title, number
+                    "- [#{number} {title}](https://github.com/rust-lang/rust/pull/{number})"
                 )
             })
             .collect::<Vec<_>>()
             .join("\n"),
         Err(e) => format!(
-            "An **error** occurred when finding the untriaged PRs: {}",
-            e
+            "An **error** occurred when finding the untriaged PRs: {e}"
         ),
     };
     let num_regressions = regressions.len();
@@ -1532,8 +1529,7 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
         ArtifactId::Commit(c) => &c.sha,
     };
     format!(
-        "https://perf.rust-lang.org/compare.html?start={}&end={}&stat=instructions:u",
-        start, end
+        "https://perf.rust-lang.org/compare.html?start={start}&end={end}&stat=instructions:u"
     )
 }
 
@@ -1758,8 +1754,7 @@ mod tests {
         // making the tables hard to read when printed.
         if result != expected {
             panic!(
-                "output mismatch:\nexpected:\n{}actual:\n{}",
-                expected, result
+                "output mismatch:\nexpected:\n{expected}actual:\n{result}"
             );
         }
     }

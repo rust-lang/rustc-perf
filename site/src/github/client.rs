@@ -226,7 +226,7 @@ impl Client {
         let resp = self.send(req).await;
 
         if let Err(e) = resp {
-            eprintln!("failed to post comment: {:?}", e);
+            eprintln!("failed to post comment: {e:?}");
         }
     }
 
@@ -263,7 +263,7 @@ impl GraphQLClient {
         headers.insert(USER_AGENT, header::HeaderValue::from_static(BOT_USER_AGENT));
         headers.insert(
             header::AUTHORIZATION,
-            header::HeaderValue::from_str(&format!("token {}", token)).unwrap(),
+            header::HeaderValue::from_str(&format!("token {token}")).unwrap(),
         );
 
         let client = reqwest::ClientBuilder::new()

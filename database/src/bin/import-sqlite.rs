@@ -21,7 +21,7 @@ async fn main() {
     let sqlite_idx = sqlite_conn.load_index().await;
 
     let cid_name = format!("imported-{}", chrono::Utc::now().timestamp());
-    println!("Collection ID for import is {}", cid_name);
+    println!("Collection ID for import is {cid_name}");
     let cid = postgres_conn.collection_id(&cid_name).await;
 
     let mut benchmarks = HashSet::new();
@@ -39,7 +39,7 @@ async fn main() {
             .artifact_by_name(&artifact)
             .await
             .unwrap_or_else(|| {
-                panic!("{} not found in sqlite db", artifact);
+                panic!("{artifact} not found in sqlite db");
             });
 
         let sqlite_aid = sqlite_conn.artifact_id(&aid).await;

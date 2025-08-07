@@ -62,7 +62,7 @@ use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Poo
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
-    format!("{} normal benchmark{} remaining", n, suffix)
+    format!("{n} normal benchmark{suffix} remaining")
 }
 
 struct BenchmarkErrors(usize);
@@ -160,7 +160,7 @@ fn generate_diffs(
                         vec![format!("{:?}", scenario)]
                     }
                     Scenario::IncrPatched => (0..benchmark.patches.len())
-                        .map(|i| format!("{:?}{}", scenario, i))
+                        .map(|i| format!("{scenario:?}{i}"))
                         .collect::<Vec<_>>(),
                 }
             }) {
@@ -175,7 +175,7 @@ fn generate_diffs(
                         profiler.postfix()
                     )
                 };
-                let id_diff = format!("{}-{}", id1, id2);
+                let id_diff = format!("{id1}-{id2}");
                 let prefix = profiler.prefix();
                 let left = out_dir.join(filename(prefix, id1));
                 let right = out_dir.join(filename(prefix, id2));
@@ -183,7 +183,7 @@ fn generate_diffs(
 
                 if let Err(e) = profiler.diff(&left, &right, &output) {
                     errors.incr();
-                    eprintln!("collector error: {:?}", e);
+                    eprintln!("collector error: {e:?}");
                     continue;
                 }
 
@@ -249,7 +249,7 @@ fn main() {
     match main_result() {
         Ok(code) => process::exit(code),
         Err(err) => {
-            eprintln!("collector error: {:?}", err);
+            eprintln!("collector error: {err:?}");
             process::exit(1);
         }
     }
@@ -998,7 +998,7 @@ fn main_result() -> anyhow::Result<i32> {
             println!("processing artifacts");
             let client = reqwest::blocking::Client::new();
             let response: collector::api::next_artifact::Response = client
-                .get(format!("{}/perf/next_artifact", site_url))
+                .get(format!("{site_url}/perf/next_artifact"))
                 .send()?
                 .json()?;
             let next = if let Some(c) = response.artifact {
@@ -1065,7 +1065,7 @@ fn main_result() -> anyhow::Result<i32> {
                         let sysroot = rt
                             .block_on(Sysroot::install(sha.clone(), &host_target_tuple, &backends))
                             .with_context(|| {
-                                format!("failed to install sysroot for {:?}", commit)
+                                format!("failed to install sysroot for {commit:?}")
                             })?;
 
                         let mut benchmarks = get_compile_benchmarks(
@@ -1126,7 +1126,7 @@ fn main_result() -> anyhow::Result<i32> {
                 }
             });
             // We need to send a message to this endpoint even if the collector panics
-            client.post(format!("{}/perf/onpush", site_url)).send()?;
+            client.post(format!("{site_url}/perf/onpush")).send()?;
 
             match res {
                 Ok(res) => res?,
@@ -1366,7 +1366,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 
             if let Some(benchmark_job) = benchmark_job {
                 // TODO; process the job
-                println!("{:?}", benchmark_job);
+                println!("{benchmark_job:?}");
             }
 
             Ok(0)
@@ -1658,7 +1658,7 @@ fn print_binary_stats(
                 .corner_top_right('│'),
         ),
     );
-    println!("{}", table);
+    println!("{table}");
 }
 
 fn get_local_toolchain_for_runtime_benchmarks(
@@ -1929,15 +1929,14 @@ async fn bench_compile(
         let result = measure(&mut processor).await;
         if let Err(s) = result {
             eprintln!(
-                "collector error: Failed to benchmark '{}', recorded: {:#}",
-                benchmark_name, s
+                "collector error: Failed to benchmark '{benchmark_name}', recorded: {s:#}"
             );
             errors.incr();
             tx.conn()
                 .record_error(
                     collector.artifact_row_id,
                     &benchmark_name.0,
-                    &format!("{:?}", s),
+                    &format!("{s:?}"),
                 )
                 .await;
         };
