@@ -1147,6 +1147,10 @@ impl BenchmarkJob {
             | BenchmarkJobStatus::Completed { collector_name, .. } => Some(collector_name),
         }
     }
+
+    pub fn status(&self) -> &BenchmarkJobStatus {
+        &self.status
+    }
 }
 
 /// Describes the final state of a job
@@ -1207,6 +1211,5 @@ impl CollectorConfig {
 #[derive(Debug, PartialEq)]
 pub struct PartialStatusPageData {
     pub completed_requests: Vec<(BenchmarkRequest, String, Vec<String>)>,
-    pub in_progress_jobs: Vec<BenchmarkJob>,
-    pub in_progress_requests: Vec<BenchmarkRequest>,
+    pub in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)>,
 }
