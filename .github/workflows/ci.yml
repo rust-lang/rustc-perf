@@ -333,12 +333,12 @@ jobs:
       - name: Connect to PostgreSQL
         run: |
           timeout 5s ./target/debug/site 'postgresql://postgres:postgres@localhost:5432/postgres' 2>&1 | tee -a log || true
-          grep -Fxq "Loading complete but no data identified; exiting." log
+          grep -Fxq "Warning: loading complete but no data identified." log
 
       - name: Connect to SQLite
         run: |
           timeout 5s ./target/debug/site 2>&1 | tee -a log || true
-          grep -Fxq "Loading complete but no data identified; exiting." log
+          grep -Fxq "Warning: loading complete but no data identified." log
 
       - name: Build Postgres to SQLite exporter
         run: cargo build --bin postgres-to-sqlite

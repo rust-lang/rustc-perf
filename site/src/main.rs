@@ -42,8 +42,7 @@ async fn main() {
             let commits = res.index.load().commits().len();
             let artifacts = res.index.load().artifacts().count();
             if commits + artifacts == 0 {
-                eprintln!("Loading complete but no data identified; exiting.");
-                std::process::exit(1);
+                eprintln!("Warning: loading complete but no data identified.");
             }
             eprintln!("Loading complete; found {} artifacts", commits + artifacts);
             eprintln!(
