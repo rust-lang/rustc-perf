@@ -203,7 +203,7 @@ fn write_diff<W: Write>(writer: &mut W, use_color: bool, diff: &CodegenDiff) -> 
                 style.apply_to(change)
             )?;
         } else {
-            write!(writer, "{}{}", sign, change)?;
+            write!(writer, "{sign}{change}")?;
         }
     }
     writeln!(writer, "-----------------------------")?;
@@ -227,7 +227,7 @@ fn get_codegen(
         }
         CodegenType::LLVM | CodegenType::MIR => {}
     }
-    cmd.arg(format!("{}", function_index));
+    cmd.arg(format!("{function_index}"));
 
     Ok(String::from_utf8(command_output(&mut cmd)?.stdout)?)
 }

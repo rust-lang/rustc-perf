@@ -165,13 +165,12 @@ impl Migration {
                     let foreign_col: String = row.get_unwrap(4);
                     panic!(
                         "Foreign key violation encountered during migration\n\
-                            table: {},\n\
-                            column: {},\n\
-                            row_id: {:?},\n\
-                            foreign table: {},\n\
-                            foreign column: {}\n\
-                            migration ID: {}\n",
-                        table, col, row_id, foreign_table, foreign_col, migration_id,
+                            table: {table},\n\
+                            column: {col},\n\
+                            row_id: {row_id:?},\n\
+                            foreign table: {foreign_table},\n\
+                            foreign column: {foreign_col}\n\
+                            migration ID: {migration_id}\n",
                     );
                 },
             )
@@ -888,7 +887,7 @@ impl Connection for SqliteConnection {
                             query
                                 .query_row(params![&sid, &aid.0], |row| row.get(0))
                                 .unwrap_or_else(|e| {
-                                    panic!("{:?}: series={:?}, aid={:?}", e, sid, aid);
+                                    panic!("{e:?}: series={sid:?}, aid={aid:?}");
                                 })
                         })
                     })
@@ -920,7 +919,7 @@ impl Connection for SqliteConnection {
                             query
                                 .query_row(params![&sid, &aid.0], |row| row.get(0))
                                 .unwrap_or_else(|e| {
-                                    panic!("{:?}: series={:?}, aid={:?}", e, sid, aid);
+                                    panic!("{e:?}: series={sid:?}, aid={aid:?}");
                                 })
                         })
                     })
@@ -1289,6 +1288,7 @@ impl Connection for SqliteConnection {
         _pr: u32,
         _sha: &str,
         _parent_sha: &str,
+        _commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
@@ -1296,9 +1296,9 @@ impl Connection for SqliteConnection {
     async fn enqueue_benchmark_job(
         &self,
         _request_tag: &str,
-        _target: &Target,
-        _backend: &CodegenBackend,
-        _profile: &Profile,
+        _target: Target,
+        _backend: CodegenBackend,
+        _profile: Profile,
         _benchmark_set: u32,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
@@ -1331,23 +1331,26 @@ impl Connection for SqliteConnection {
             .collect::<Result<_, _>>()?)
     }
 
-    async fn get_collector_config(&self, _collector_name: &str) -> anyhow::Result<CollectorConfig> {
+    async fn get_collector_config(
+        &self,
+        _collector_name: &str,
+    ) -> anyhow::Result<Option<CollectorConfig>> {
         no_queue_implementation_abort!()
     }
 
     async fn dequeue_benchmark_job(
         &self,
         _collector_name: &str,
-        _target: &Target,
-        _benchmark_set: &BenchmarkSet,
-    ) -> anyhow::Result<Option<BenchmarkJob>> {
+        _target: Target,
+        _benchmark_set: BenchmarkSet,
+    ) -> anyhow::Result<Option<(BenchmarkJob, ArtifactId)>> {
         no_queue_implementation_abort!()
     }
 
     async fn add_collector_config(
         &self,
         _collector_name: &str,
-        _target: &Target,
+        _target: Target,
         _benchmark_set: u32,
         _is_active: bool,
     ) -> anyhow::Result<CollectorConfig> {
@@ -1361,7 +1364,7 @@ impl Connection for SqliteConnection {
     async fn mark_benchmark_job_as_completed(
         &self,
         _id: u32,
-        _benchmark_job_conculsion: &BenchmarkJobConclusion,
+        _benchmark_job_conculsion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
@@ -1385,6 +1388,6 @@ fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {
             r#type: CommitType::Try,
         }),
         "release" => ArtifactId::Tag(sha.to_owned()),
-        _ => panic!("unknown artifact type: {:?}", ty),
+        _ => panic!("unknown artifact type: {ty:?}"),
     }
 }

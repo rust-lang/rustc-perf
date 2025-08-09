@@ -141,9 +141,9 @@ impl Benchmark {
         let config: BenchmarkConfig = if config_path.exists() {
             serde_json::from_reader(
                 File::open(&config_path)
-                    .with_context(|| format!("failed to open {:?}", config_path))?,
+                    .with_context(|| format!("failed to open {config_path:?}"))?,
             )
-            .with_context(|| format!("failed to parse {:?}", config_path))?
+            .with_context(|| format!("failed to parse {config_path:?}"))?
         } else {
             bail!("missing a perf-config.json file for `{}`", name);
         };
@@ -207,7 +207,7 @@ impl Benchmark {
             .ok()
             .and_then(|v| v.parse::<u32>().ok())
         {
-            cargo_args.push(format!("-j{}", count));
+            cargo_args.push(format!("-j{count}"));
         }
 
         CargoProcess {
@@ -478,7 +478,7 @@ impl Benchmark {
 
                             // An incremental build with some changes (realistic
                             // incremental case).
-                            let scenario_str = format!("IncrPatched{}", i);
+                            let scenario_str = format!("IncrPatched{i}");
                             self.mk_cargo_process(toolchain, cwd, profile, backend, target)
                                 .incremental(true)
                                 .processor(
@@ -734,8 +734,8 @@ mod tests {
 
         for benchmark in benchmarks {
             let dir = benchmark_dir.join(&benchmark.name.0);
-            let cargo_toml = std::fs::read_to_string(&dir.join("Cargo.toml"))
-                .expect(&format!("Cannot read Cargo.toml of {}", benchmark.name));
+            let cargo_toml = std::fs::read_to_string(dir.join("Cargo.toml"))
+                .unwrap_or_else(|_| panic!("Cannot read Cargo.toml of {}", benchmark.name));
             assert!(
                 cargo_toml.contains("[workspace]"),
                 "{} does not contain [workspace] in its Cargo.toml",

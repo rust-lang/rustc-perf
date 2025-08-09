@@ -22,7 +22,7 @@ impl FromStr for Target {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.to_ascii_lowercase().as_str() {
             "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
-            _ => return Err(format!("{} is not a valid target", s)),
+            _ => return Err(format!("{s} is not a valid target")),
         })
     }
 }

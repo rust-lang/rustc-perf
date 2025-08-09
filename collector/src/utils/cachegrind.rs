@@ -54,7 +54,7 @@ pub fn cachegrind_annotate(
                 continue;
             }
         }
-        writeln!(writer, "{}", line)?;
+        writeln!(writer, "{line}")?;
     }
     writer.flush()?;
 

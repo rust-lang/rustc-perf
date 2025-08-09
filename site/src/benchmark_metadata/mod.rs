@@ -57,8 +57,7 @@ fn load_compile_benchmark_metadata() -> HashMap<String, CompileBenchmarkMetadata
             let perf_config: BenchmarkConfig =
                 serde_json::from_value(perf_config).unwrap_or_else(|error| {
                     panic!(
-                        "Cannot deserialize perf-config.json for benchmark {name}: {:?}",
-                        error
+                        "Cannot deserialize perf-config.json for benchmark {name}: {error:?}"
                     );
                 });
 
