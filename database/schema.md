@@ -284,6 +284,8 @@ Columns:
 * **parent_sha** (`text`): Parent SHA of the benchmarked commit.
   * Can be `NULL` for try requests without compiler artifacts.
 * **commit_type** (`text NOT NULL`): One of `master`, `try` or `release`.
+* **commit_date** (`timestamptz`): Datetime when the compiler artifact commit (not the request) was created.
+  * Can be `NULL` for try requests without compiler artifacts.
 * **pr** (`int`): Pull request number associated with the master/try commit.
   * `NULL` for release requests.
 * **created_at** (`timestamptz NOT NULL`): Datetime when the request was created.

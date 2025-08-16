@@ -120,7 +120,7 @@ fn get_args(full_event: &analyzeme::Event) -> Option<HashMap<String, String>> {
                 .additional_data
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| (format!("arg{}", i), arg.to_string()))
+                .map(|(i, arg)| (format!("arg{i}"), arg.to_string()))
                 .collect(),
         )
     } else {

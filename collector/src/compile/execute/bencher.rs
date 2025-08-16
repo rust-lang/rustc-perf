@@ -244,7 +244,7 @@ impl Processor for BenchProcessor<'_> {
                     | DeserializeStatError::XperfError(..)
                     | DeserializeStatError::IOError(..)),
                 ) => {
-                    panic!("process_perf_stat_output failed: {:?}", e);
+                    panic!("process_perf_stat_output failed: {e:?}");
                 }
             }
         })
@@ -320,7 +320,7 @@ impl SelfProfileS3Upload {
                 data.read_to_end(&mut compressed).expect("compressed");
                 std::fs::write(upload.path(), &compressed).expect("write compressed profile data");
 
-                format!("self-profile-{}.mm_profdata.sz", collection)
+                format!("self-profile-{collection}.mm_profdata.sz")
             }
         };
 
@@ -345,7 +345,7 @@ impl SelfProfileS3Upload {
         let start = std::time::Instant::now();
         let status = self.0.wait().expect("waiting for child");
         if !status.success() {
-            panic!("S3 upload failed: {:?}", status);
+            panic!("S3 upload failed: {status:?}");
         }
 
         log::trace!("uploaded to S3, additional wait: {:?}", start.elapsed());

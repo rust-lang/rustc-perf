@@ -54,7 +54,7 @@ async fn main() {
         })
     })
     .fuse();
-    println!("Starting server with port={:?}", port);
+    println!("Starting server with port={port:?}");
 
     let server = site::server::start(ctxt.clone(), port).fuse();
 

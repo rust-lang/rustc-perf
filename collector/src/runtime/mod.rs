@@ -37,7 +37,7 @@ pub async fn bench_runtime(
     iterations: u32,
 ) -> anyhow::Result<()> {
     let filtered = suite.filtered_benchmark_count(&filter);
-    println!("Executing {} benchmarks\n", filtered);
+    println!("Executing {filtered} benchmarks\n");
 
     let rustc_perf_version = get_rustc_perf_commit();
     let mut benchmark_index = 0;
@@ -87,12 +87,12 @@ pub async fn bench_runtime(
         .with_context(|| format!("Failed to execute runtime benchmark group {}", group.name));
 
         if let Err(error) = result {
-            eprintln!("collector error: {:#}", error);
+            eprintln!("collector error: {error:#}");
             tx.conn()
                 .record_error(
                     collector.artifact_row_id,
                     &step_name,
-                    &format!("{:?}", error),
+                    &format!("{error:?}"),
                 )
                 .await;
         };

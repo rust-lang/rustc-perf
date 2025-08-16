@@ -58,7 +58,7 @@ impl<'a> BenchmarkGroup<'a> {
             profile_fn: Box::new(move || profile_function(constructor2.as_ref())),
         };
         if self.benchmarks.insert(name, benchmark_fns).is_some() {
-            panic!("Benchmark '{}' was registered twice", name);
+            panic!("Benchmark '{name}' was registered twice");
         }
     }
 

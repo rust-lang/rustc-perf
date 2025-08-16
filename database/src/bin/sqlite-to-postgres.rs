@@ -780,8 +780,7 @@ async fn copy<T: Table>(
 
     let copy = postgres
         .prepare(&format!(
-            r#"copy {} ({}) from stdin (encoding utf8, format csv, null '{}')"#,
-            table, attributes, NULL_STRING,
+            r#"copy {table} ({attributes}) from stdin (encoding utf8, format csv, null '{NULL_STRING}')"#,
         ))
         .await
         .unwrap();
@@ -862,9 +861,8 @@ async fn copy<T: Table>(
                     &format!(
                         "select setval(
                             pg_get_serial_sequence($1, $2),
-                            coalesce(max({}) + 1, 1), false)
-                        from {}",
-                        generated_id_attr, table
+                            coalesce(max({generated_id_attr}) + 1, 1), false)
+                        from {table}"
                     ) as &str,
                     &[&table, &generated_id_attr],
                 )
@@ -944,7 +942,7 @@ async fn get_tables(postgres: &tokio_postgres::Transaction<'_>) -> Vec<String> {
 async fn disable_table_triggers(postgres: &tokio_postgres::Transaction<'_>, tables: &[String]) {
     for table in tables {
         postgres
-            .execute(&format!("ALTER TABLE {} DISABLE TRIGGER ALL", table), &[])
+            .execute(&format!("ALTER TABLE {table} DISABLE TRIGGER ALL"), &[])
             .await
             .unwrap();
     }
@@ -954,7 +952,7 @@ async fn disable_table_triggers(postgres: &tokio_postgres::Transaction<'_>, tabl
 async fn enable_table_triggers(postgres: &tokio_postgres::Transaction<'_>, tables: &[String]) {
     for table in tables {
         postgres
-            .execute(&format!("ALTER TABLE {} ENABLE TRIGGER ALL", table), &[])
+            .execute(&format!("ALTER TABLE {table} ENABLE TRIGGER ALL"), &[])
             .await
             .unwrap();
     }

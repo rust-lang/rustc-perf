@@ -221,14 +221,14 @@ async fn download_and_analyze_self_profile(
     let profiling_data =
         match fetch_raw_self_profile_data(*anum, benchmark, profile, scenario, *cid).await {
             Ok(d) => extract_profiling_data(d)
-                .map_err(|e| format!("error extracting self profiling data: {}", e))?,
+                .map_err(|e| format!("error extracting self profiling data: {e}"))?,
             Err(e) => return Err(format!("could not fetch raw profile data: {e:?}")),
         };
 
     let compilation_sections = compute_compilation_sections(&profiling_data);
     let profiling_data = profiling_data.perform_analysis();
     let profile =
-        get_self_profile_data(metric, &profiling_data).map_err(|e| format!("{}: {}", aid, e))?;
+        get_self_profile_data(metric, &profiling_data).map_err(|e| format!("{aid}: {e}"))?;
     Ok(SelfProfileWithAnalysis {
         profile,
         profiling_data,

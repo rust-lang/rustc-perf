@@ -269,8 +269,7 @@ impl Server {
                     .status(StatusCode::OK)
                     .header_typed(ContentType::text_utf8())
                     .body(hyper::Body::from(format!(
-                        "Refreshed too recently ({:?} ago). Please wait.",
-                        elapsed
+                        "Refreshed too recently ({elapsed:?} ago). Please wait."
                     )))
                     .unwrap();
             }
@@ -458,7 +457,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
     let mut body = Vec::new();
     while let Some(chunk) = body_stream.next().await {
-        let chunk = chunk.map_err(|e| ServerError(format!("failed to read chunk: {:?}", e)))?;
+        let chunk = chunk.map_err(|e| ServerError(format!("failed to read chunk: {e:?}")))?;
         body.extend_from_slice(&chunk);
         // More than 10 MB of data
         if body.len() > 1024 * 1024 * 10 {
@@ -511,7 +510,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 )),
                 _ => Ok(http::Response::builder()
                     .status(StatusCode::OK)
-                    .body(hyper::Body::from(format!("unknown event: {}", event)))
+                    .body(hyper::Body::from(format!("unknown event: {event}")))
                     .unwrap()),
             }
         }
@@ -568,8 +567,7 @@ where
                 .header_typed(ContentType::text_utf8())
                 .status(StatusCode::BAD_REQUEST)
                 .body(hyper::Body::from(format!(
-                    "Failed to deserialize request: {:?}",
-                    err
+                    "Failed to deserialize request: {err:?}"
                 )))
                 .unwrap())
         }
@@ -595,8 +593,7 @@ where
             .header_typed(ContentType::text_utf8())
             .status(StatusCode::BAD_REQUEST)
             .body(hyper::Body::from(format!(
-                "Failed to deserialize request {}: {:?}",
-                uri, err,
+                "Failed to deserialize request {uri}: {err:?}",
             )))
             .unwrap()),
     }
@@ -630,7 +627,7 @@ async fn handle_fs_path(
 
     async fn resolve_template(path: &str) -> Vec<u8> {
         TEMPLATES
-            .get_template(&format!("pages/{}", path))
+            .get_template(&format!("pages/{path}"))
             .await
             .unwrap()
     }
@@ -803,7 +800,7 @@ async fn run_server(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) 
     });
     let server = hyper::server::Server::bind(&addr).serve(svc);
     if let Err(e) = server.await {
-        eprintln!("server error: {:?}", e);
+        eprintln!("server error: {e:?}");
     }
 }
 

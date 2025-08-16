@@ -84,7 +84,7 @@ impl StatisticSeriesExt for StatisticSeries {
         ctxt: &SiteCtxt,
         query: Q,
     ) -> Result<Vec<SeriesResponse<Q::TestCase, Self>>, String> {
-        let dumped = format!("{:?}", query);
+        let dumped = format!("{query:?}");
 
         let index = ctxt.index.load();
         let mut conn = ctxt.conn().await;

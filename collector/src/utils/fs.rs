@@ -29,7 +29,7 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<
         // mount points (e.g., if /tmp is in tmpfs instead of on
         // the same disk). We don't want to implement a full recursive solution
         // to copying directories, so just shell out to `mv`.
-        let ctx = format!("mv {:?} {:?}", from, to);
+        let ctx = format!("mv {from:?} {to:?}");
         let status = Command::new("mv")
             .arg(from)
             .arg(to)
@@ -47,7 +47,7 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<
 pub fn touch(path: &Path) -> anyhow::Result<()> {
     let file = File::options().read(true).write(true).open(path)?;
     file.set_modified(SystemTime::now())
-        .with_context(|| format!("touching file {:?}", path))?;
+        .with_context(|| format!("touching file {path:?}"))?;
 
     Ok(())
 }
@@ -80,7 +80,7 @@ pub fn touch_all(path: &Path) -> anyhow::Result<()> {
         // This might be a bit slower but at least things build
         if path.file_name() == Some(OsStr::new("CMakeCache.txt")) {
             fs::remove_file(path)
-                .with_context(|| format!("deleting cmake caches in {:?}", path))?;
+                .with_context(|| format!("deleting cmake caches in {path:?}"))?;
         }
 
         if is_valid(path) {

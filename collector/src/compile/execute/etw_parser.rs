@@ -169,7 +169,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
             .columns
             .iter()
             .position(|c| c == name)
-            .unwrap_or_else(|| panic!("failed to find column {}", name))
+            .unwrap_or_else(|| panic!("failed to find column {name}"))
             + 1
     };
 
@@ -222,7 +222,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
 
         let pid = process_name[l_paren + 1..r_paran].trim();
         pid.parse()
-            .unwrap_or_else(|_| panic!("failed to parse '{}' to pid", pid))
+            .unwrap_or_else(|_| panic!("failed to parse '{pid}' to pid"))
     }
 
     let mut buffer = Vec::new();
