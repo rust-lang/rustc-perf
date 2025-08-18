@@ -2,7 +2,7 @@ use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
-    CollectorConfig, CompileBenchmark, Target,
+    CollectorConfig, CompileBenchmark, PartialStatusPageData, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -271,6 +271,8 @@ pub trait Connection: Send + Sync {
         id: u32,
         benchmark_job_conculsion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
+
+    async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;
 }
 
 #[async_trait::async_trait]
@@ -393,6 +395,7 @@ mod tests {
     use super::*;
     use crate::metric::Metric;
     use crate::tests::run_postgres_test;
+    use crate::BenchmarkJobStatus;
     use crate::{tests::run_db_test, BenchmarkRequestType, Commit, CommitType, Date};
     use chrono::Utc;
     use std::str::FromStr;
@@ -977,6 +980,142 @@ mod tests {
             let completed = db.load_benchmark_request_index().await.unwrap();
 
             assert!(completed.contains_tag("sha-1"));
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_status_page_data() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+            let benchmark_set = BenchmarkSet(0u32);
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let tag = "sha-1";
+            let tag_two = "sha-2";
+            let collector_name = "collector-1";
+            let target = Target::X86_64UnknownLinuxGnu;
+
+            db.add_collector_config(collector_name, target, benchmark_set.0, true)
+                .await
+                .unwrap();
+
+            let benchmark_request = BenchmarkRequest::create_release(tag, time);
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+
+            complete_request(&*db, tag, collector_name, benchmark_set.0, target).await;
+            // record a couple of errors against the tag
+            let artifact_id = db.artifact_id(&ArtifactId::Tag(tag.to_string())).await;
+
+            db.record_error(artifact_id, "example-1", "This is an error")
+                .await;
+            db.record_error(artifact_id, "example-2", "This is another error")
+                .await;
+
+            let benchmark_request_two = BenchmarkRequest::create_release(tag_two, time);
+            db.insert_benchmark_request(&benchmark_request_two)
+                .await
+                .unwrap();
+
+            db.enqueue_benchmark_job(
+                benchmark_request_two.tag().unwrap(),
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                benchmark_set.0,
+            )
+            .await
+            .unwrap();
+            db.enqueue_benchmark_job(
+                benchmark_request_two.tag().unwrap(),
+                target,
+                CodegenBackend::Llvm,
+                Profile::Debug,
+                benchmark_set.0,
+            )
+            .await
+            .unwrap();
+
+            db.update_benchmark_request_status(
+                benchmark_request_two.tag().unwrap(),
+                BenchmarkRequestStatus::InProgress,
+            )
+            .await
+            .unwrap();
+
+            let status_page_data = db.get_status_page_data().await.unwrap();
+
+            assert!(status_page_data.completed_requests.len() == 1);
+            assert_eq!(status_page_data.completed_requests[0].0.tag().unwrap(), tag);
+            assert!(matches!(
+                status_page_data.completed_requests[0].0.status(),
+                BenchmarkRequestStatus::Completed { .. }
+            ));
+            // can't really test duration
+            // ensure errors are correct
+            assert_eq!(
+                status_page_data.completed_requests[0].2[0],
+                "This is an error".to_string()
+            );
+            assert_eq!(
+                status_page_data.completed_requests[0].2[1],
+                "This is another error".to_string()
+            );
+
+            assert!(status_page_data.in_progress.len() == 1);
+            // we should have 2 jobs
+            assert!(status_page_data.in_progress[0].1.len() == 2);
+            // the request should be in progress
+            assert!(matches!(
+                status_page_data.in_progress[0].0.status(),
+                BenchmarkRequestStatus::InProgress
+            ));
+
+            // Test the first job
+            assert!(matches!(
+                status_page_data.in_progress[0].1[0].target(),
+                Target::X86_64UnknownLinuxGnu
+            ));
+            assert!(matches!(
+                status_page_data.in_progress[0].1[0].status(),
+                BenchmarkJobStatus::Queued
+            ));
+            assert!(matches!(
+                status_page_data.in_progress[0].1[0].backend(),
+                CodegenBackend::Llvm
+            ));
+            assert!(matches!(
+                status_page_data.in_progress[0].1[0].profile(),
+                Profile::Opt
+            ));
+            assert_eq!(
+                status_page_data.in_progress[0].1[0].benchmark_set(),
+                benchmark_set
+            );
+
+            // test the second job
+            assert!(matches!(
+                status_page_data.in_progress[0].1[1].target(),
+                Target::X86_64UnknownLinuxGnu
+            ));
+            assert!(matches!(
+                status_page_data.in_progress[0].1[1].status(),
+                BenchmarkJobStatus::Queued
+            ));
+            assert!(matches!(
+                status_page_data.in_progress[0].1[1].backend(),
+                CodegenBackend::Llvm
+            ));
+            assert!(matches!(
+                status_page_data.in_progress[0].1[1].profile(),
+                Profile::Debug
+            ));
+            assert_eq!(
+                status_page_data.in_progress[0].1[1].benchmark_set(),
+                benchmark_set
+            );
 
             Ok(ctx)
         })

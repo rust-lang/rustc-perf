@@ -3,7 +3,8 @@ use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
-    CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Profile, Target,
+    CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date,
+    PartialStatusPageData, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -1366,6 +1367,10 @@ impl Connection for SqliteConnection {
         _id: u32,
         _benchmark_job_conculsion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData> {
         no_queue_implementation_abort!()
     }
 }

@@ -1158,6 +1158,10 @@ impl BenchmarkJob {
     pub fn deque_count(&self) -> u32 {
         self.deque_counter
     }
+
+    pub fn status(&self) -> &BenchmarkJobStatus {
+        &self.status
+    }
 }
 
 /// Describes the final state of a job
@@ -1211,4 +1215,12 @@ impl CollectorConfig {
     pub fn date_added(&self) -> DateTime<Utc> {
         self.date_added
     }
+}
+
+/// The data that can be retrived from the database directly to populate the
+/// status page
+#[derive(Debug, PartialEq)]
+pub struct PartialStatusPageData {
+    pub completed_requests: Vec<(BenchmarkRequest, String, Vec<String>)>,
+    pub in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)>,
 }
