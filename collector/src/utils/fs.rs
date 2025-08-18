@@ -79,8 +79,7 @@ pub fn touch_all(path: &Path) -> anyhow::Result<()> {
         // We also delete the cmake caches to avoid errors when moving directories around.
         // This might be a bit slower but at least things build
         if path.file_name() == Some(OsStr::new("CMakeCache.txt")) {
-            fs::remove_file(path)
-                .with_context(|| format!("deleting cmake caches in {path:?}"))?;
+            fs::remove_file(path).with_context(|| format!("deleting cmake caches in {path:?}"))?;
         }
 
         if is_valid(path) {

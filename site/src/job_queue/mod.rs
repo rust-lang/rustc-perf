@@ -365,11 +365,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(
-            db.mark_benchmark_request_as_completed(request_tag)
-                .await
-                .unwrap()
-        );
+        assert!(db
+            .mark_benchmark_request_as_completed(request_tag)
+            .await
+            .unwrap());
     }
 
     async fn mark_as_completed(
@@ -385,10 +384,7 @@ mod tests {
     }
 
     fn queue_order_matches(queue: &[BenchmarkRequest], expected: &[&str]) {
-        let queue_shas: Vec<&str> = queue
-            .iter()
-            .filter_map(|request| request.tag())
-            .collect();
+        let queue_shas: Vec<&str> = queue.iter().filter_map(|request| request.tag()).collect();
         assert_eq!(queue_shas, expected)
     }
 

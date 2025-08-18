@@ -1064,9 +1064,7 @@ fn main_result() -> anyhow::Result<i32> {
                         let sha = commit.sha.to_string();
                         let sysroot = rt
                             .block_on(Sysroot::install(sha.clone(), &host_target_tuple, &backends))
-                            .with_context(|| {
-                                format!("failed to install sysroot for {commit:?}")
-                            })?;
+                            .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
 
                         let mut benchmarks = get_compile_benchmarks(
                             &compile_benchmark_dir,
@@ -1928,9 +1926,7 @@ async fn bench_compile(
         );
         let result = measure(&mut processor).await;
         if let Err(s) = result {
-            eprintln!(
-                "collector error: Failed to benchmark '{benchmark_name}', recorded: {s:#}"
-            );
+            eprintln!("collector error: Failed to benchmark '{benchmark_name}', recorded: {s:#}");
             errors.incr();
             tx.conn()
                 .record_error(

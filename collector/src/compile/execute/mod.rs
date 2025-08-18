@@ -670,9 +670,7 @@ fn process_stat_output(
             continue;
         }
         if !pct.starts_with("100.") {
-            panic!(
-                "measurement of `{name}` only active for {pct}% of the time"
-            );
+            panic!("measurement of `{name}` only active for {pct}% of the time");
         }
         stats.insert(
             name.to_owned(),

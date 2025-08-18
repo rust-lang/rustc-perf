@@ -483,9 +483,9 @@ pub fn get_local_toolchain(
 
     let clippy = if let Some(clippy) = &toolchain_config.clippy {
         Some(
-            clippy.canonicalize().with_context(|| {
-                format!("failed to canonicalize clippy executable {clippy:?}")
-            })?,
+            clippy
+                .canonicalize()
+                .with_context(|| format!("failed to canonicalize clippy executable {clippy:?}"))?,
         )
     } else if profiles.contains(&Profile::Clippy) {
         // We need a `clippy`. Look for one next to `rustc`.

@@ -469,8 +469,7 @@ fn github_request(url: &str) -> reqwest::RequestBuilder {
         .header("Content-Type", "application/json")
         .header("User-Agent", "rustc-perf");
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-        let mut value =
-            reqwest::header::HeaderValue::from_str(&format!("token {token}")).unwrap();
+        let mut value = reqwest::header::HeaderValue::from_str(&format!("token {token}")).unwrap();
         value.set_sensitive(true);
         request = request.header("Authorization", value);
     }

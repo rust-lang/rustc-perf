@@ -437,11 +437,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(
-            db.mark_benchmark_request_as_completed(request_tag)
-                .await
-                .unwrap()
-        );
+        assert!(db
+            .mark_benchmark_request_as_completed(request_tag)
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
@@ -919,11 +918,10 @@ mod tests {
             db.insert_benchmark_request(&benchmark_request)
                 .await
                 .unwrap();
-            assert!(
-                db.mark_benchmark_request_as_completed("sha-1")
-                    .await
-                    .unwrap()
-            );
+            assert!(db
+                .mark_benchmark_request_as_completed("sha-1")
+                .await
+                .unwrap());
             Ok(ctx)
         })
         .await;

@@ -504,9 +504,7 @@ async fn write_triage_summary(
 ) -> String {
     let mut result = if let Some(pr) = comparison.b.pr {
         let title = github::pr_title(pr).await;
-        format!(
-            "{title} [#{pr}](https://github.com/rust-lang/rust/pull/{pr})"
-        )
+        format!("{title} [#{pr}](https://github.com/rust-lang/rust/pull/{pr})")
     } else {
         String::from("<Unknown Change>")
     };
@@ -1447,15 +1445,11 @@ async fn generate_report(
         Ok(u) => u
             .iter()
             .map(|github::PullRequest { title, number }| {
-                format!(
-                    "- [#{number} {title}](https://github.com/rust-lang/rust/pull/{number})"
-                )
+                format!("- [#{number} {title}](https://github.com/rust-lang/rust/pull/{number})")
             })
             .collect::<Vec<_>>()
             .join("\n"),
-        Err(e) => format!(
-            "An **error** occurred when finding the untriaged PRs: {e}"
-        ),
+        Err(e) => format!("An **error** occurred when finding the untriaged PRs: {e}"),
     };
     let num_regressions = regressions.len();
     let regressions_suffix = if num_regressions == 1 { "" } else { "s" };
@@ -1528,9 +1522,7 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
         ArtifactId::Tag(a) => a,
         ArtifactId::Commit(c) => &c.sha,
     };
-    format!(
-        "https://perf.rust-lang.org/compare.html?start={start}&end={end}&stat=instructions:u"
-    )
+    format!("https://perf.rust-lang.org/compare.html?start={start}&end={end}&stat=instructions:u")
 }
 
 #[cfg(test)]
@@ -1753,9 +1745,7 @@ mod tests {
         // We don't use `assert_eq!` here because it stringifies the arguments,
         // making the tables hard to read when printed.
         if result != expected {
-            panic!(
-                "output mismatch:\nexpected:\n{expected}actual:\n{result}"
-            );
+            panic!("output mismatch:\nexpected:\n{expected}actual:\n{result}");
         }
     }
 }

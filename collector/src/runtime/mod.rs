@@ -89,11 +89,7 @@ pub async fn bench_runtime(
         if let Err(error) = result {
             eprintln!("collector error: {error:#}");
             tx.conn()
-                .record_error(
-                    collector.artifact_row_id,
-                    &step_name,
-                    &format!("{error:?}"),
-                )
+                .record_error(collector.artifact_row_id, &step_name, &format!("{error:?}"))
                 .await;
         };
 

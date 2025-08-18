@@ -398,8 +398,7 @@ impl Processor for ProfileProcessor<'_> {
                     for (cgu, items) in &by_cgu {
                         let cgu_file = filepath(&out_dir, cgu);
                         let mut file = io::BufWriter::new(
-                            fs::File::create(&cgu_file)
-                                .with_context(|| format!("{cgu_file:?}"))?,
+                            fs::File::create(&cgu_file).with_context(|| format!("{cgu_file:?}"))?,
                         );
                         for (name, linkage) in items {
                             writeln!(&mut file, "{name} {linkage}")?;
