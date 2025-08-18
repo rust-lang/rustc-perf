@@ -1900,8 +1900,7 @@ where
                                 MIN(EXTRACT('epoch' FROM job_queue.started_at))) * 1000 AS duration_ms
                         FROM
                             job_queue
-                        LEFT JOIN benchmark_request ON job_queue.request_tag = benchmark_request.tag
-                        WHERE benchmark_request.tag = $2
+                        WHERE job_queue.request_tag = $2
                     )
                 WHERE
                     benchmark_request.tag = $2
