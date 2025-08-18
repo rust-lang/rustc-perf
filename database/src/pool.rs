@@ -980,9 +980,28 @@ mod tests {
 
             db.mark_benchmark_request_as_completed(tag).await.unwrap();
 
-            let completed = db.load_benchmark_request_index().await.unwrap();
+            /* From the status page view we can see that the duration has been
+             * updated. Albeit that it will be a very short duration. */
+            let status_page_view = db.get_status_page_data().await.unwrap();
+            let req = &status_page_view
+                .completed_requests
+                .iter()
+                .find(|it| it.0.tag() == Some(tag))
+                .unwrap()
+                .0;
 
-            assert!(completed.contains_tag("sha-1"));
+            assert!(matches!(
+                req.status(),
+                BenchmarkRequestStatus::Completed { .. }
+            ));
+            let BenchmarkRequestStatus::Completed { duration_ms, .. } = req.status() else {
+                unreachable!();
+            };
+            assert!(duration_ms >= 1);
+
+            let completed_index = db.load_benchmark_request_index().await.unwrap();
+            assert!(completed_index.contains_tag("sha-1"));
+
             Ok(ctx)
         })
         .await;
