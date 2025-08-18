@@ -148,7 +148,7 @@ impl FromStr for CommitType {
         match ty {
             "try" => Ok(CommitType::Try),
             "master" => Ok(CommitType::Master),
-            _ => Err(format!("Wrong commit type {}", ty)),
+            _ => Err(format!("Wrong commit type {ty}")),
         }
     }
 }
@@ -244,7 +244,7 @@ impl std::str::FromStr for Profile {
             "doc-json" => Profile::DocJson,
             "opt" => Profile::Opt,
             "clippy" => Profile::Clippy,
-            _ => return Err(format!("{} is not a profile", s)),
+            _ => return Err(format!("{s} is not a profile")),
         })
     }
 }
@@ -285,7 +285,7 @@ impl std::str::FromStr for Scenario {
                 if let Some(stripped) = s.strip_prefix("incr-patched: ") {
                     Scenario::IncrementalPatch(PatchName::from(stripped))
                 } else {
-                    return Err(format!("{} is not a scenario", s));
+                    return Err(format!("{s} is not a scenario"));
                 }
             }
         })
@@ -298,7 +298,7 @@ impl fmt::Display for Scenario {
             Scenario::Empty => write!(f, "full"),
             Scenario::IncrementalEmpty => write!(f, "incr-full"),
             Scenario::IncrementalFresh => write!(f, "incr-unchanged"),
-            Scenario::IncrementalPatch(name) => write!(f, "incr-patched: {}", name),
+            Scenario::IncrementalPatch(name) => write!(f, "incr-patched: {name}"),
         }
     }
 }
@@ -309,7 +309,7 @@ impl Scenario {
             Scenario::Empty => "full".to_string(),
             Scenario::IncrementalEmpty => "incr-full".to_string(),
             Scenario::IncrementalFresh => "incr-unchanged".to_string(),
-            Scenario::IncrementalPatch(name) => format!("incr-patched-{}", name),
+            Scenario::IncrementalPatch(name) => format!("incr-patched-{name}"),
         }
     }
 }
@@ -381,7 +381,7 @@ impl FromStr for Target {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.to_ascii_lowercase().as_str() {
             "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
-            _ => return Err(format!("{} is not a valid target", s)),
+            _ => return Err(format!("{s} is not a valid target")),
         })
     }
 }
@@ -418,7 +418,7 @@ impl FromStr for CodegenBackend {
         Ok(match s.to_ascii_lowercase().as_str() {
             "llvm" => CodegenBackend::Llvm,
             "cranelift" => CodegenBackend::Cranelift,
-            _ => return Err(format!("{} is not a codegen backend", s)),
+            _ => return Err(format!("{s} is not a codegen backend")),
         })
     }
 }
@@ -442,7 +442,7 @@ impl fmt::Display for ArtifactId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ArtifactId::Commit(c) => write!(f, "{} ({})", c.sha, c.date),
-            ArtifactId::Tag(id) => write!(f, "{}", id),
+            ArtifactId::Tag(id) => write!(f, "{id}"),
         }
     }
 }
@@ -889,6 +889,8 @@ impl fmt::Display for BenchmarkRequestType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkRequest {
     commit_type: BenchmarkRequestType,
+    // When was the compiler artifact created
+    commit_date: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     status: BenchmarkRequestStatus,
     backends: String,
@@ -897,12 +899,13 @@ pub struct BenchmarkRequest {
 
 impl BenchmarkRequest {
     /// Create a release benchmark request that is in the `ArtifactsReady` status.
-    pub fn create_release(tag: &str, created_at: DateTime<Utc>) -> Self {
+    pub fn create_release(tag: &str, commit_date: DateTime<Utc>) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Release {
                 tag: tag.to_string(),
             },
-            created_at,
+            commit_date: Some(commit_date),
+            created_at: Utc::now(),
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
@@ -910,19 +913,15 @@ impl BenchmarkRequest {
     }
 
     /// Create a try request that is in the `WaitingForArtifacts` status.
-    pub fn create_try_without_artifacts(
-        pr: u32,
-        created_at: DateTime<Utc>,
-        backends: &str,
-        profiles: &str,
-    ) -> Self {
+    pub fn create_try_without_artifacts(pr: u32, backends: &str, profiles: &str) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Try {
                 pr,
                 sha: None,
                 parent_sha: None,
             },
-            created_at,
+            commit_date: None,
+            created_at: Utc::now(),
             status: BenchmarkRequestStatus::WaitingForArtifacts,
             backends: backends.to_string(),
             profiles: profiles.to_string(),
@@ -930,14 +929,15 @@ impl BenchmarkRequest {
     }
 
     /// Create a master benchmark request that is in the `ArtifactsReady` status.
-    pub fn create_master(sha: &str, parent_sha: &str, pr: u32, created_at: DateTime<Utc>) -> Self {
+    pub fn create_master(sha: &str, parent_sha: &str, pr: u32, commit_date: DateTime<Utc>) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Master {
                 pr,
                 sha: sha.to_string(),
                 parent_sha: parent_sha.to_string(),
             },
-            created_at,
+            commit_date: Some(commit_date),
+            created_at: Utc::now(),
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
@@ -1093,8 +1093,14 @@ impl fmt::Display for BenchmarkJobStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct BenchmarkSet(pub u32);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct BenchmarkSet(u32);
+
+impl BenchmarkSet {
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+}
 
 /// A single unit of work generated from a benchmark request. Split by profiles
 /// and backends
@@ -1112,7 +1118,7 @@ pub struct BenchmarkJob {
     benchmark_set: BenchmarkSet,
     created_at: DateTime<Utc>,
     status: BenchmarkJobStatus,
-    retry: u32,
+    deque_counter: u32,
 }
 
 impl BenchmarkJob {
@@ -1120,24 +1126,24 @@ impl BenchmarkJob {
         self.id
     }
 
-    pub fn target(&self) -> &Target {
-        &self.target
+    pub fn target(&self) -> Target {
+        self.target
     }
 
-    pub fn backend(&self) -> &CodegenBackend {
-        &self.backend
+    pub fn backend(&self) -> CodegenBackend {
+        self.backend
     }
 
-    pub fn profile(&self) -> &Profile {
-        &self.profile
+    pub fn profile(&self) -> Profile {
+        self.profile
     }
 
     pub fn request_tag(&self) -> &str {
         &self.request_tag
     }
 
-    pub fn benchmark_set(&self) -> &BenchmarkSet {
-        &self.benchmark_set
+    pub fn benchmark_set(&self) -> BenchmarkSet {
+        self.benchmark_set
     }
 
     pub fn collector_name(&self) -> Option<&str> {
@@ -1146,6 +1152,11 @@ impl BenchmarkJob {
             BenchmarkJobStatus::InProgress { collector_name, .. }
             | BenchmarkJobStatus::Completed { collector_name, .. } => Some(collector_name),
         }
+    }
+
+    /// How many times was the job already dequed?
+    pub fn deque_count(&self) -> u32 {
+        self.deque_counter
     }
 }
 
@@ -1181,12 +1192,12 @@ impl CollectorConfig {
         &self.name
     }
 
-    pub fn target(&self) -> &Target {
-        &self.target
+    pub fn target(&self) -> Target {
+        self.target
     }
 
-    pub fn benchmark_set(&self) -> &BenchmarkSet {
-        &self.benchmark_set
+    pub fn benchmark_set(&self) -> BenchmarkSet {
+        self.benchmark_set
     }
 
     pub fn is_active(&self) -> bool {

@@ -20,7 +20,11 @@ pub struct Sysroot {
 }
 
 impl Sysroot {
-    pub fn install(sha: String, triple: &str, backends: &[CodegenBackend]) -> anyhow::Result<Self> {
+    pub async fn install(
+        sha: String,
+        triple: &str,
+        backends: &[CodegenBackend],
+    ) -> anyhow::Result<Self> {
         let unpack_into = "cache";
 
         fs::create_dir_all(unpack_into)?;
@@ -31,12 +35,12 @@ impl Sysroot {
             triple: triple.to_owned(),
         };
 
-        download.get_and_extract(Component::Rustc)?;
-        download.get_and_extract(Component::Std)?;
-        download.get_and_extract(Component::Cargo)?;
-        download.get_and_extract(Component::RustSrc)?;
+        download.get_and_extract(Component::Rustc).await?;
+        download.get_and_extract(Component::Std).await?;
+        download.get_and_extract(Component::Cargo).await?;
+        download.get_and_extract(Component::RustSrc).await?;
         if backends.contains(&CodegenBackend::Cranelift) {
-            download.get_and_extract(Component::Cranelift)?;
+            download.get_and_extract(Component::Cranelift).await?;
         }
 
         let sysroot = download.into_sysroot()?;
@@ -99,7 +103,7 @@ impl Component {
         let suffix = if *self == Component::RustSrc {
             String::new()
         } else {
-            format!("-{}", triple)
+            format!("-{triple}")
         };
         format!(
             "{base}/{sha}/{module}-{channel}{suffix}.tar.xz",
@@ -141,7 +145,7 @@ impl SysrootDownload {
         })
     }
 
-    fn get_and_extract(&self, component: Component) -> anyhow::Result<()> {
+    async fn get_and_extract(&self, component: Component) -> anyhow::Result<()> {
         let archive_path = self.directory.join(format!(
             "{}-{}-{}.tar.xz",
             self.rust_sha, self.triple, component,
@@ -168,10 +172,11 @@ impl SysrootDownload {
         ];
         for url in &urls {
             log::debug!("requesting: {}", url);
-            let resp = reqwest::blocking::get(url)?;
+            let resp = reqwest::get(url).await?;
             log::debug!("{}", resp.status());
             if resp.status().is_success() {
-                let reader = XzDecoder::new(BufReader::new(resp));
+                let bytes: Vec<u8> = resp.bytes().await?.into();
+                let reader = XzDecoder::new(BufReader::new(bytes.as_slice()));
                 match self.extract(component, reader) {
                     Ok(()) => return Ok(()),
                     Err(err) => {
@@ -441,7 +446,7 @@ pub fn get_local_toolchain(
     } else {
         let rustc = PathBuf::from(rustc)
             .canonicalize()
-            .with_context(|| format!("failed to canonicalize rustc executable {:?}", rustc))?;
+            .with_context(|| format!("failed to canonicalize rustc executable {rustc:?}"))?;
 
         // When specifying rustc via a path, the suffix is always added to the
         // id.
@@ -458,7 +463,7 @@ pub fn get_local_toolchain(
     let rustdoc =
         if let Some(rustdoc) = &toolchain_config.rustdoc {
             Some(rustdoc.canonicalize().with_context(|| {
-                format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
+                format!("failed to canonicalize rustdoc executable {rustdoc:?}")
             })?)
         } else if profiles.iter().any(|p| p.is_doc()) {
             // We need a `rustdoc`. Look for one next to `rustc`.
@@ -478,9 +483,9 @@ pub fn get_local_toolchain(
 
     let clippy = if let Some(clippy) = &toolchain_config.clippy {
         Some(
-            clippy.canonicalize().with_context(|| {
-                format!("failed to canonicalize clippy executable {:?}", clippy)
-            })?,
+            clippy
+                .canonicalize()
+                .with_context(|| format!("failed to canonicalize clippy executable {clippy:?}"))?,
         )
     } else if profiles.contains(&Profile::Clippy) {
         // We need a `clippy`. Look for one next to `rustc`.
@@ -500,7 +505,7 @@ pub fn get_local_toolchain(
     let cargo = if let Some(cargo) = &toolchain_config.cargo {
         cargo
             .canonicalize()
-            .with_context(|| format!("failed to canonicalize cargo executable {:?}", cargo))?
+            .with_context(|| format!("failed to canonicalize cargo executable {cargo:?}"))?
     } else {
         // Use the nightly cargo from `rustup`.
         let output = Command::new("rustup")

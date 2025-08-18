@@ -62,7 +62,7 @@ use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Poo
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
-    format!("{} normal benchmark{} remaining", n, suffix)
+    format!("{n} normal benchmark{suffix} remaining")
 }
 
 struct BenchmarkErrors(usize);
@@ -160,7 +160,7 @@ fn generate_diffs(
                         vec![format!("{:?}", scenario)]
                     }
                     Scenario::IncrPatched => (0..benchmark.patches.len())
-                        .map(|i| format!("{:?}{}", scenario, i))
+                        .map(|i| format!("{scenario:?}{i}"))
                         .collect::<Vec<_>>(),
                 }
             }) {
@@ -175,7 +175,7 @@ fn generate_diffs(
                         profiler.postfix()
                     )
                 };
-                let id_diff = format!("{}-{}", id1, id2);
+                let id_diff = format!("{id1}-{id2}");
                 let prefix = profiler.prefix();
                 let left = out_dir.join(filename(prefix, id1));
                 let right = out_dir.join(filename(prefix, id2));
@@ -183,7 +183,7 @@ fn generate_diffs(
 
                 if let Err(e) = profiler.diff(&left, &right, &output) {
                     errors.incr();
-                    eprintln!("collector error: {:?}", e);
+                    eprintln!("collector error: {e:?}");
                     continue;
                 }
 
@@ -249,7 +249,7 @@ fn main() {
     match main_result() {
         Ok(code) => process::exit(code),
         Err(err) => {
-            eprintln!("collector error: {:?}", err);
+            eprintln!("collector error: {err:?}");
             process::exit(1);
         }
     }
@@ -411,7 +411,7 @@ struct DbOption {
     /// Database output file
     // This would be better as a `PathBuf`, but it's used in various ways that
     // make that tricky without adjusting several points in the code.
-    #[arg(long, default_value = "results.db")]
+    #[arg(long, default_value = "results.db", env = "DATABASE_URL")]
     db: String,
 }
 
@@ -668,20 +668,26 @@ enum Commands {
         modified: Option<String>,
     },
 
-    /// Registers a collector in the database
+    /// Registers a new collector in the database.
+    /// Use `--is_active` to immediately mark the collector as active.
     AddCollector {
         #[command(flatten)]
         db: DbOption,
 
+        /// Name of the collector.
         #[arg(long)]
         collector_name: String,
 
+        /// Target tuple which will the collector be benchmarking.
         #[arg(long)]
         target: String,
 
+        /// Should the collector be marked as active immediately?
+        /// Only active collectors will receive jobs.
         #[arg(long)]
         is_active: bool,
 
+        /// The benchmark set index that the collector will be benchmarking.
         #[arg(long)]
         benchmark_set: u32,
     },
@@ -766,14 +772,15 @@ fn main_result() -> anyhow::Result<i32> {
         runtime: &runtime_benchmark_dir,
     };
 
-    // XXX: This doesn't necessarily work for all archs
-    let target_triple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
+    // This clearly won't work for all architectures, but should be good enough for x64 Linux
+    // and ARM 64-bit Linux.
+    let host_target_tuple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
 
     match args.command {
         Commands::BinaryStats { mode, symbols } => {
             match mode {
                 BinaryStatsMode::Compile(args) => {
-                    binary_stats_compile(args, symbols, &target_triple)?;
+                    binary_stats_compile(args, symbols, &host_target_tuple)?;
                 }
                 BinaryStatsMode::Local(args) => {
                     binary_stats_local(args, symbols)?;
@@ -792,7 +799,7 @@ fn main_result() -> anyhow::Result<i32> {
             purge,
         } => {
             log_db(&db);
-            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &target_triple)?;
+            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &host_target_tuple)?;
             let pool = Pool::open(&db.db);
 
             let isolation_mode = if no_isolate {
@@ -846,7 +853,7 @@ fn main_result() -> anyhow::Result<i32> {
                     rustc,
                     ToolchainConfig::default(),
                     id,
-                    target_triple.clone(),
+                    host_target_tuple.clone(),
                 )?;
                 let suite = prepare_runtime_benchmark_suite(
                     &toolchain,
@@ -903,7 +910,7 @@ fn main_result() -> anyhow::Result<i32> {
                     rustc,
                     ToolchainConfig::default(),
                     id,
-                    target_triple.clone(),
+                    host_target_tuple.clone(),
                 )?;
                 Ok::<_, anyhow::Error>(toolchain)
             };
@@ -946,7 +953,7 @@ fn main_result() -> anyhow::Result<i32> {
                     .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                     .id(local.id.as_deref()),
                 "",
-                target_triple,
+                host_target_tuple,
             )?;
 
             let mut benchmarks = get_compile_benchmarks(&compile_benchmark_dir, (&local).into())?;
@@ -991,7 +998,7 @@ fn main_result() -> anyhow::Result<i32> {
             println!("processing artifacts");
             let client = reqwest::blocking::Client::new();
             let response: collector::api::next_artifact::Response = client
-                .get(format!("{}/perf/next_artifact", site_url))
+                .get(format!("{site_url}/perf/next_artifact"))
                 .send()?
                 .json()?;
             let next = if let Some(c) = response.artifact {
@@ -1015,7 +1022,7 @@ fn main_result() -> anyhow::Result<i32> {
                 match next {
                     NextArtifact::Release(tag) => {
                         let toolchain =
-                            create_toolchain_from_published_version(&tag, &target_triple)?;
+                            create_toolchain_from_published_version(&tag, &host_target_tuple)?;
                         let conn = rt.block_on(pool.connection());
                         rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))
                     }
@@ -1055,10 +1062,9 @@ fn main_result() -> anyhow::Result<i32> {
                             }
                         };
                         let sha = commit.sha.to_string();
-                        let sysroot = Sysroot::install(sha.clone(), &target_triple, &backends)
-                            .with_context(|| {
-                                format!("failed to install sysroot for {:?}", commit)
-                            })?;
+                        let sysroot = rt
+                            .block_on(Sysroot::install(sha.clone(), &host_target_tuple, &backends))
+                            .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
 
                         let mut benchmarks = get_compile_benchmarks(
                             &compile_benchmark_dir,
@@ -1118,7 +1124,7 @@ fn main_result() -> anyhow::Result<i32> {
                 }
             });
             // We need to send a message to this endpoint even if the collector panics
-            client.post(format!("{}/perf/onpush", site_url)).send()?;
+            client.post(format!("{site_url}/perf/onpush")).send()?;
 
             match res {
                 Ok(res) => res?,
@@ -1134,7 +1140,8 @@ fn main_result() -> anyhow::Result<i32> {
             let pool = database::Pool::open(&db.db);
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
-            let toolchain = create_toolchain_from_published_version(&toolchain, &target_triple)?;
+            let toolchain =
+                create_toolchain_from_published_version(&toolchain, &host_target_tuple)?;
             rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))?;
             Ok(0)
         }
@@ -1182,7 +1189,7 @@ fn main_result() -> anyhow::Result<i32> {
                             .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                             .id(local.id.as_deref()),
                         suffix,
-                        target_triple.clone(),
+                        host_target_tuple.clone(),
                     )?;
                     let id = toolchain.id.clone();
                     profile_compile(
@@ -1245,7 +1252,13 @@ fn main_result() -> anyhow::Result<i32> {
             let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
             let commit = get_commit_or_fake_it(last_sha).expect("success");
-            let mut sysroot = Sysroot::install(commit.sha, &target_triple, &codegen_backends.0)?;
+
+            let rt = build_async_runtime();
+            let mut sysroot = rt.block_on(Sysroot::install(
+                commit.sha,
+                &host_target_tuple,
+                &codegen_backends.0,
+            ))?;
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.
@@ -1313,7 +1326,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             let target = database::Target::from_str(&target).map_err(|e| anyhow::anyhow!(e))?;
             rt.block_on(conn.add_collector_config(
                 &collector_name,
-                &target,
+                target,
                 benchmark_set,
                 is_active,
             ))?;
@@ -1331,8 +1344,9 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 
             // Obtain the configuration and validate that it matches the
             // collector's setup
-            let collector_config: database::CollectorConfig =
-                rt.block_on(conn.get_collector_config(&collector_name))?;
+            let collector_config: database::CollectorConfig = rt
+                .block_on(conn.get_collector_config(&collector_name))?
+                .unwrap();
 
             let collector_target = collector_config.target();
             if collector_target.as_str() != target {
@@ -1350,7 +1364,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 
             if let Some(benchmark_job) = benchmark_job {
                 // TODO; process the job
-                println!("{:?}", benchmark_job);
+                println!("{benchmark_job:?}");
             }
 
             Ok(0)
@@ -1642,7 +1656,7 @@ fn print_binary_stats(
                 .corner_top_right('│'),
         ),
     );
-    println!("{}", table);
+    println!("{table}");
 }
 
 fn get_local_toolchain_for_runtime_benchmarks(
@@ -1912,16 +1926,13 @@ async fn bench_compile(
         );
         let result = measure(&mut processor).await;
         if let Err(s) = result {
-            eprintln!(
-                "collector error: Failed to benchmark '{}', recorded: {:#}",
-                benchmark_name, s
-            );
+            eprintln!("collector error: Failed to benchmark '{benchmark_name}', recorded: {s:#}");
             errors.incr();
             tx.conn()
                 .record_error(
                     collector.artifact_row_id,
                     &benchmark_name.0,
-                    &format!("{:?}", s),
+                    &format!("{s:?}"),
                 )
                 .await;
         };

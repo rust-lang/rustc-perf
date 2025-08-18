@@ -4,10 +4,10 @@ pub mod comparison_summary;
 use crate::api::github::Commit;
 use crate::job_queue::run_new_queue;
 use crate::load::{MissingReason, SiteCtxt, TryCommit};
+use chrono::{DateTime, Utc};
+use serde::Deserialize;
 use std::sync::LazyLock;
 use std::time::Duration;
-
-use serde::Deserialize;
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -35,7 +35,7 @@ pub async fn unroll_rollup(
     let commit_link = |sha: &str| format!("https://github.com/rust-lang/rust/commit/{sha}");
 
     let format_commit = |s: &str, truncate: bool| {
-        let display = truncate.then(|| s.split_at(10).0).unwrap_or(s);
+        let display = if truncate { s.split_at(10).0 } else { s };
         format!("[{display}]({})", commit_link(s))
     };
 
@@ -236,13 +236,18 @@ pub async fn rollup_pr_number(
 
 async fn attach_shas_to_try_benchmark_request(
     conn: &dyn database::pool::Connection,
-    pr: u32,
-    sha: &str,
-    parent_sha: &str,
+    pr_number: u32,
+    commit: &TryCommit,
+    commit_date: DateTime<Utc>,
 ) {
     if run_new_queue() {
         if let Err(e) = conn
-            .attach_shas_to_try_benchmark_request(pr, sha, parent_sha)
+            .attach_shas_to_try_benchmark_request(
+                pr_number,
+                &commit.sha,
+                &commit.parent_sha,
+                commit_date,
+            )
             .await
         {
             log::error!("Failed to add shas to try commit {}", e);
@@ -279,8 +284,8 @@ pub async fn enqueue_shas(
         attach_shas_to_try_benchmark_request(
             &*conn,
             pr_number,
-            &try_commit.sha,
-            &try_commit.parent_sha,
+            &try_commit,
+            commit_response.commit.committer.date,
         )
         .await;
 
@@ -435,7 +440,7 @@ pub(crate) async fn untriaged_perf_regressions() -> Result<Vec<PullRequest>, Box
 
 /// Get the title of a PR with the given number
 pub(crate) async fn pr_title(pr: u32) -> String {
-    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{}", pr);
+    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{pr}");
     let request = github_request(&url);
 
     async fn send(request: reqwest::RequestBuilder) -> Result<String, BoxedError> {
@@ -447,7 +452,7 @@ pub(crate) async fn pr_title(pr: u32) -> String {
             .ok_or_else(malformed_json_error)?
             .to_owned())
     }
-    let request_dbg = format!("{:?}", request);
+    let request_dbg = format!("{request:?}");
     match send(request).await {
         Ok(t) => t,
         Err(e) => {
@@ -464,8 +469,7 @@ fn github_request(url: &str) -> reqwest::RequestBuilder {
         .header("Content-Type", "application/json")
         .header("User-Agent", "rustc-perf");
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-        let mut value =
-            reqwest::header::HeaderValue::from_str(&format!("token {}", token)).unwrap();
+        let mut value = reqwest::header::HeaderValue::from_str(&format!("token {token}")).unwrap();
         value.set_sensitive(true);
         request = request.header("Authorization", value);
     }

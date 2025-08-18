@@ -38,8 +38,8 @@ pub enum PerfTool {
 impl PerfTool {
     fn name(&self) -> String {
         match self {
-            PerfTool::BenchTool(b) => format!("{:?}", b),
-            PerfTool::ProfileTool(p) => format!("{:?}", p),
+            PerfTool::BenchTool(b) => format!("{b:?}"),
+            PerfTool::ProfileTool(p) => format!("{p:?}"),
         }
     }
 
@@ -265,7 +265,7 @@ impl<'a> CargoProcess<'a> {
         }
 
         let out = command_output(&mut pkgid_cmd)
-            .with_context(|| format!("failed to obtain pkgid in '{:?}'", cwd))?
+            .with_context(|| format!("failed to obtain pkgid in '{cwd:?}'"))?
             .stdout;
         let package_id = str::from_utf8(&out).unwrap();
         Ok(package_id.trim().to_string())
@@ -670,10 +670,7 @@ fn process_stat_output(
             continue;
         }
         if !pct.starts_with("100.") {
-            panic!(
-                "measurement of `{}` only active for {}% of the time",
-                name, pct
-            );
+            panic!("measurement of `{name}` only active for {pct}% of the time");
         }
         stats.insert(
             name.to_owned(),

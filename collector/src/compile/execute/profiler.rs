@@ -173,7 +173,7 @@ impl Processor for ProfileProcessor<'_> {
                         } else if filename_str.ends_with(".mm_profdata") {
                             utils::fs::rename(path, filepath(&zsp_dir, "Zsp.mm_profdata"))?;
                         } else {
-                            panic!("unexpected file {:?}", path);
+                            panic!("unexpected file {path:?}");
                         }
                     }
                     assert!(num_files == 3 || num_files == 1);
@@ -357,7 +357,7 @@ impl Processor for ProfileProcessor<'_> {
                             continue;
                         }
 
-                        writeln!(&mut final_file, "{}", line)?;
+                        writeln!(&mut final_file, "{line}")?;
                     }
                 }
 
@@ -398,11 +398,10 @@ impl Processor for ProfileProcessor<'_> {
                     for (cgu, items) in &by_cgu {
                         let cgu_file = filepath(&out_dir, cgu);
                         let mut file = io::BufWriter::new(
-                            fs::File::create(&cgu_file)
-                                .with_context(|| format!("{:?}", cgu_file))?,
+                            fs::File::create(&cgu_file).with_context(|| format!("{cgu_file:?}"))?,
                         );
                         for (name, linkage) in items {
-                            writeln!(&mut file, "{} {}", name, linkage)?;
+                            writeln!(&mut file, "{name} {linkage}")?;
                         }
                     }
                 }

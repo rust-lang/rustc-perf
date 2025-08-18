@@ -211,15 +211,16 @@ pub trait Connection: Send + Sync {
         pr: u32,
         sha: &str,
         parent_sha: &str,
+        commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()>;
 
     /// Add a benchmark job to the job queue.
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
-        target: &Target,
-        backend: &CodegenBackend,
-        profile: &Profile,
+        target: Target,
+        backend: CodegenBackend,
+        profile: Profile,
         benchmark_set: u32,
     ) -> anyhow::Result<()>;
 
@@ -238,21 +239,26 @@ pub trait Connection: Send + Sync {
     async fn add_collector_config(
         &self,
         collector_name: &str,
-        target: &Target,
+        target: Target,
         benchmark_set: u32,
         is_active: bool,
     ) -> anyhow::Result<CollectorConfig>;
 
-    /// Get the confiuguration for a collector by the name of the collector
-    async fn get_collector_config(&self, collector_name: &str) -> anyhow::Result<CollectorConfig>;
+    /// Get the configuration for a collector by its name.
+    async fn get_collector_config(
+        &self,
+        collector_name: &str,
+    ) -> anyhow::Result<Option<CollectorConfig>>;
 
-    /// Dequeue benchmark job
+    /// Dequeues a single job for the given collector, target and benchmark set.
+    /// Also returns detailed information about the compiler artifact that should be benchmarked
+    /// in the job.
     async fn dequeue_benchmark_job(
         &self,
         collector_name: &str,
-        target: &Target,
-        benchmark_set: &BenchmarkSet,
-    ) -> anyhow::Result<Option<BenchmarkJob>>;
+        target: Target,
+        benchmark_set: BenchmarkSet,
+    ) -> anyhow::Result<Option<(BenchmarkJob, ArtifactId)>>;
 
     /// Try and mark the benchmark_request as completed. Will return `true` if
     /// it has been marked as completed else `false` meaning there was no change
@@ -263,7 +269,7 @@ pub trait Connection: Send + Sync {
     async fn mark_benchmark_job_as_completed(
         &self,
         id: u32,
-        benchmark_job_conculsion: &BenchmarkJobConclusion,
+        benchmark_job_conculsion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
 }
 
@@ -405,21 +411,21 @@ mod tests {
         request_tag: &str,
         collector_name: &str,
         benchmark_set: u32,
-        target: &Target,
+        target: Target,
     ) {
         /* Create job for the request */
         db.enqueue_benchmark_job(
             request_tag,
-            &target,
-            &CodegenBackend::Llvm,
-            &Profile::Opt,
+            target,
+            CodegenBackend::Llvm,
+            Profile::Opt,
             benchmark_set,
         )
         .await
         .unwrap();
 
-        let job = db
-            .dequeue_benchmark_job(collector_name, &target, &BenchmarkSet(benchmark_set))
+        let (job, _) = db
+            .dequeue_benchmark_job(collector_name, target, BenchmarkSet(benchmark_set))
             .await
             .unwrap()
             .unwrap();
@@ -427,16 +433,14 @@ mod tests {
         assert_eq!(job.request_tag(), request_tag);
 
         /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+        db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
             .await
             .unwrap();
 
-        assert_eq!(
-            db.mark_benchmark_request_as_completed(request_tag)
-                .await
-                .unwrap(),
-            true
-        );
+        assert!(db
+            .mark_benchmark_request_as_completed(request_tag)
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
@@ -446,7 +450,7 @@ mod tests {
             // wired up correctly. Though makes sense that there should be
             // an empty vector returned if there are no pstats.
             let db = ctx.db_client();
-            let result = db.connection().await.get_pstats(&vec![], &vec![]).await;
+            let result = db.connection().await.get_pstats(&[], &[]).await;
             let expected: Vec<Vec<Option<f64>>> = vec![];
 
             assert_eq!(result, expected);
@@ -527,30 +531,30 @@ mod tests {
     async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
-            let target = &Target::X86_64UnknownLinuxGnu;
+            let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, &target, benchmark_set, true)
+            db.add_collector_config(collector_name, target, benchmark_set, true)
                 .await
                 .unwrap();
 
             // Complete parent
             let parent = BenchmarkRequest::create_release("sha-parent-1", Utc::now());
             // Complete
-            let req_a = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            let req_a = BenchmarkRequest::create_try_without_artifacts(42, "", "");
             // WaitingForArtifacts
-            let req_b = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
-            let req_c = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            let req_b = BenchmarkRequest::create_try_without_artifacts(42, "", "");
+            let req_c = BenchmarkRequest::create_try_without_artifacts(42, "", "");
 
             db.insert_benchmark_request(&parent).await.unwrap();
             db.insert_benchmark_request(&req_a).await.unwrap();
-            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1")
+            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
                 .await
                 .unwrap();
 
-            complete_request(&*db, "sha-parent-1", collector_name, benchmark_set, &target).await;
-            complete_request(&*db, "sha1", collector_name, benchmark_set, &target).await;
+            complete_request(&*db, "sha-parent-1", collector_name, benchmark_set, target).await;
+            complete_request(&*db, "sha1", collector_name, benchmark_set, target).await;
 
             // This should be fine, req_a was completed
             db.insert_benchmark_request(&req_b).await.unwrap();
@@ -599,11 +603,11 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let target = &Target::X86_64UnknownLinuxGnu;
+            let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, &target, benchmark_set, true)
+            db.add_collector_config(collector_name, target, benchmark_set, true)
                 .await
                 .unwrap();
 
@@ -612,7 +616,7 @@ mod tests {
             // ArtifactsReady
             let req_b = BenchmarkRequest::create_release("1.80.0", time);
             // WaitingForArtifacts
-            let req_c = BenchmarkRequest::create_try_without_artifacts(50, time, "", "");
+            let req_c = BenchmarkRequest::create_try_without_artifacts(50, "", "");
             // InProgress
             let req_d = BenchmarkRequest::create_master("sha-2", "parent-sha-2", 51, time);
             // Completed
@@ -622,7 +626,7 @@ mod tests {
                 db.insert_benchmark_request(req).await.unwrap();
             }
 
-            complete_request(&*db, "1.79.0", collector_name, benchmark_set, &target).await;
+            complete_request(&*db, "1.79.0", collector_name, benchmark_set, target).await;
 
             db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
                 .await
@@ -646,10 +650,10 @@ mod tests {
             let db = ctx.db_client();
             let db = db.connection().await;
 
-            let req = BenchmarkRequest::create_try_without_artifacts(42, Utc::now(), "", "");
+            let req = BenchmarkRequest::create_try_without_artifacts(42, "", "");
 
             db.insert_benchmark_request(&req).await.unwrap();
-            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1")
+            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
                 .await
                 .unwrap();
 
@@ -671,8 +675,8 @@ mod tests {
                 BenchmarkRequestType::Try { .. }
             ));
 
-            assert_eq!(req_db.tag().as_deref(), Some("sha1"));
-            assert_eq!(req_db.parent_sha().as_deref(), Some("sha-parent-1"));
+            assert_eq!(req_db.tag(), Some("sha1"));
+            assert_eq!(req_db.parent_sha(), Some("sha-parent-1"));
             assert_eq!(req_db.pr(), Some(&42));
 
             Ok(ctx)
@@ -698,9 +702,9 @@ mod tests {
             let result = db
                 .enqueue_benchmark_job(
                     benchmark_request.tag().unwrap(),
-                    &Target::X86_64UnknownLinuxGnu,
-                    &CodegenBackend::Llvm,
-                    &Profile::Opt,
+                    Target::X86_64UnknownLinuxGnu,
+                    CodegenBackend::Llvm,
+                    Profile::Opt,
                     0u32,
                 )
                 .await;
@@ -775,9 +779,9 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
 
-            let collector_config_result = db.get_collector_config("collector-1").await;
+            let collector_config_result = db.get_collector_config("collector-1").await.unwrap();
 
-            assert!(collector_config_result.is_err());
+            assert!(collector_config_result.is_none());
 
             Ok(ctx)
         })
@@ -789,17 +793,20 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
 
-            let insert_config_result = db
-                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
-                .await;
-            assert!(insert_config_result.is_ok());
+            let inserted_config = db
+                .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
+                .await
+                .unwrap();
 
-            let get_config_result = db.get_collector_config("collector-1").await;
-            assert!(get_config_result.is_ok());
+            let config = db
+                .get_collector_config("collector-1")
+                .await
+                .unwrap()
+                .expect("collector config not found");
 
             // What we entered into the database should be identical to what is
             // returned from the database
-            assert_eq!(insert_config_result.unwrap(), get_config_result.unwrap());
+            assert_eq!(inserted_config, config);
             Ok(ctx)
         })
         .await;
@@ -813,8 +820,8 @@ mod tests {
             let benchmark_job_result = db
                 .dequeue_benchmark_job(
                     "collector-1",
-                    &Target::X86_64UnknownLinuxGnu,
-                    &BenchmarkSet(420),
+                    Target::X86_64UnknownLinuxGnu,
+                    BenchmarkSet(420),
                 )
                 .await;
 
@@ -832,12 +839,10 @@ mod tests {
             let db = ctx.db_client().connection().await;
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
-            let insert_result = db
-                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
-                .await;
-            assert!(insert_result.is_ok());
-
-            let collector_config = insert_result.unwrap();
+            let collector_config = db
+                .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
+                .await
+                .unwrap();
 
             let benchmark_request =
                 BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
@@ -848,32 +853,28 @@ mod tests {
                 .unwrap();
 
             // Now we can insert the job
-            let enqueue_result = db
-                .enqueue_benchmark_job(
-                    benchmark_request.tag().unwrap(),
-                    &Target::X86_64UnknownLinuxGnu,
-                    &CodegenBackend::Llvm,
-                    &Profile::Opt,
-                    1u32,
-                )
-                .await;
-            assert!(enqueue_result.is_ok());
+            db.enqueue_benchmark_job(
+                benchmark_request.tag().unwrap(),
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                1u32,
+            )
+            .await
+            .unwrap();
 
-            let benchmark_job = db
+            let (benchmark_job, artifact_id) = db
                 .dequeue_benchmark_job(
                     collector_config.name(),
                     collector_config.target(),
                     collector_config.benchmark_set(),
                 )
-                .await;
-            assert!(benchmark_job.is_ok());
-
-            let benchmark_job = benchmark_job.unwrap();
-            assert!(benchmark_job.is_some());
+                .await
+                .unwrap()
+                .unwrap();
 
             // Ensure the properties of the job match both the request and the
             // collector configuration
-            let benchmark_job = benchmark_job.unwrap();
             assert_eq!(
                 benchmark_job.request_tag(),
                 benchmark_request.tag().unwrap()
@@ -885,6 +886,15 @@ mod tests {
             assert_eq!(
                 benchmark_job.collector_name().unwrap(),
                 collector_config.name(),
+            );
+
+            assert_eq!(
+                artifact_id,
+                ArtifactId::Commit(Commit {
+                    sha: "sha-1".to_string(),
+                    date: Date(time),
+                    r#type: CommitType::Master,
+                })
             );
 
             Ok(ctx)
@@ -899,7 +909,7 @@ mod tests {
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let insert_result = db
-                .add_collector_config("collector-1", &Target::X86_64UnknownLinuxGnu, 1, true)
+                .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
                 .await;
             assert!(insert_result.is_ok());
 
@@ -908,12 +918,10 @@ mod tests {
             db.insert_benchmark_request(&benchmark_request)
                 .await
                 .unwrap();
-            assert_eq!(
-                db.mark_benchmark_request_as_completed("sha-1")
-                    .await
-                    .unwrap(),
-                true
-            );
+            assert!(db
+                .mark_benchmark_request_as_completed("sha-1")
+                .await
+                .unwrap());
             Ok(ctx)
         })
         .await;
@@ -930,7 +938,7 @@ mod tests {
             let target = Target::X86_64UnknownLinuxGnu;
 
             let insert_result = db
-                .add_collector_config(collector_name, &target, 1, true)
+                .add_collector_config(collector_name, target, 1, true)
                 .await;
             assert!(insert_result.is_ok());
 
@@ -943,16 +951,16 @@ mod tests {
             /* Create job for the request */
             db.enqueue_benchmark_job(
                 benchmark_request.tag().unwrap(),
-                &target,
-                &CodegenBackend::Llvm,
-                &Profile::Opt,
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
                 benchmark_set.0,
             )
             .await
             .unwrap();
 
-            let job = db
-                .dequeue_benchmark_job(collector_name, &target, &benchmark_set)
+            let (job, _) = db
+                .dequeue_benchmark_job(collector_name, target, benchmark_set)
                 .await
                 .unwrap()
                 .unwrap();
@@ -960,7 +968,7 @@ mod tests {
             assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
 
             /* Mark the job as complete */
-            db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+            db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
                 .await
                 .unwrap();
 

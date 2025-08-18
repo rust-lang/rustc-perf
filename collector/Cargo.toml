@@ -9,7 +9,7 @@ rust-version = "1.85.0"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
-clap = { workspace = true, features = ["derive"] }
+clap = { workspace = true, features = ["derive", "env"] }
 env_logger = { workspace = true }
 hashbrown = { workspace = true }
 log = { workspace = true }

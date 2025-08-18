@@ -84,8 +84,7 @@ async fn record_try_benchmark_request_without_artifacts(
 ) {
     // We only want to run this if the new system is running
     if run_new_queue() {
-        let try_request =
-            BenchmarkRequest::create_try_without_artifacts(pr, chrono::Utc::now(), backends, "");
+        let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, "");
         log::info!("Inserting try benchmark request {try_request:?}");
         if let Err(e) = conn.insert_benchmark_request(&try_request).await {
             log::error!("Failed to insert try benchmark request: {}", e);
@@ -309,12 +308,12 @@ pub async fn get_authorized_users() -> Result<Vec<u64>, String> {
         .get(&url)
         .send()
         .await
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
+        .map_err(|err| format!("failed to fetch authorized users: {err}"))?
         .error_for_status()
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
+        .map_err(|err| format!("failed to fetch authorized users: {err}"))?
         .json::<rust_team_data::v1::Permission>()
         .await
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))
+        .map_err(|err| format!("failed to fetch authorized users: {err}"))
         .map(|perms| perms.github_ids)
 }
 

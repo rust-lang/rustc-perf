@@ -20,7 +20,7 @@ pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Respons
     let next_commit = ctxt.missing_commits().await.into_iter().next();
 
     let next_commit = if let Some((commit, missing_reason)) = next_commit {
-        let missing_reason_dbg = format!("{:?}", missing_reason);
+        let missing_reason_dbg = format!("{missing_reason:?}");
         // If we're going to run a master commit next, make sure
         // it's been enqueued in the pull_request_build table
         if let MissingReason::Master {

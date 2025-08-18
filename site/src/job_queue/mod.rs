@@ -68,9 +68,9 @@ async fn create_benchmark_request_releases(
         .take(20)
         .collect();
 
-    for (name, date_time) in releases {
-        if date_time >= cutoff && !index.contains_tag(&name) {
-            let release_request = BenchmarkRequest::create_release(&name, date_time);
+    for (name, commit_date) in releases {
+        if commit_date >= cutoff && !index.contains_tag(&name) {
+            let release_request = BenchmarkRequest::create_release(&name, commit_date);
             log::info!("Inserting release benchmark request {release_request:?}");
             if let Err(error) = conn.insert_benchmark_request(&release_request).await {
                 log::error!("Failed to insert release benchmark request: {error}");
@@ -198,12 +198,12 @@ pub async fn enqueue_benchmark_request(
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
         for benchmark_set in 0..benchmark_set_count(target.into()) {
-            for backend in backends.iter() {
-                for profile in profiles.iter() {
+            for &backend in backends.iter() {
+                for &profile in profiles.iter() {
                     tx.conn()
                         .enqueue_benchmark_job(
                             request_tag,
-                            &target,
+                            target,
                             backend,
                             profile,
                             benchmark_set as u32,
@@ -218,7 +218,7 @@ pub async fn enqueue_benchmark_request(
                         tx.conn()
                             .enqueue_benchmark_job(
                                 parent_sha,
-                                &target,
+                                target,
                                 backend,
                                 profile,
                                 benchmark_set as u32,
@@ -305,43 +305,24 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::{Datelike, Duration, TimeZone, Utc};
+    use crate::job_queue::build_queue;
+    use chrono::Utc;
+    use database::tests::run_postgres_test;
     use database::{
-        tests::run_postgres_test, BenchmarkJobConclusion, BenchmarkSet, CodegenBackend, Profile,
+        BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
+        CodegenBackend, Profile, Target,
     };
 
-    fn days_ago(day_str: &str) -> chrono::DateTime<Utc> {
-        // Walk backwards until the first non-digit, then slice
-        let days = day_str
-            .strip_prefix("days")
-            .unwrap()
-            .parse::<i64>()
-            .unwrap();
-
-        let timestamp = Utc::now() - Duration::days(days);
-        // zero out the seconds
-        Utc.with_ymd_and_hms(
-            timestamp.year(),
-            timestamp.month(),
-            timestamp.day(),
-            0,
-            0,
-            0,
-        )
-        .unwrap()
+    fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
+        BenchmarkRequest::create_master(sha, parent, pr, Utc::now())
     }
 
-    fn create_master(sha: &str, parent: &str, pr: u32, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_master(sha, parent, pr, days_ago(age_days))
+    fn create_try(pr: u32) -> BenchmarkRequest {
+        BenchmarkRequest::create_try_without_artifacts(pr, "", "")
     }
 
-    fn create_try(pr: u32, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_try_without_artifacts(pr, days_ago(age_days), "", "")
-    }
-
-    fn create_release(tag: &str, age_days: &str) -> BenchmarkRequest {
-        BenchmarkRequest::create_release(tag, days_ago(age_days))
+    fn create_release(tag: &str) -> BenchmarkRequest {
+        BenchmarkRequest::create_release(tag, Utc::now())
     }
 
     async fn db_insert_requests(
@@ -349,7 +330,7 @@ mod tests {
         requests: &[BenchmarkRequest],
     ) {
         for request in requests {
-            conn.insert_benchmark_request(&request).await.unwrap();
+            conn.insert_benchmark_request(request).await.unwrap();
         }
     }
 
@@ -358,21 +339,21 @@ mod tests {
         request_tag: &str,
         collector_name: &str,
         benchmark_set: u32,
-        target: &Target,
+        target: Target,
     ) {
         /* Create job for the request */
         db.enqueue_benchmark_job(
             request_tag,
-            &target,
-            &CodegenBackend::Llvm,
-            &Profile::Opt,
+            target,
+            CodegenBackend::Llvm,
+            Profile::Opt,
             benchmark_set,
         )
         .await
         .unwrap();
 
-        let job = db
-            .dequeue_benchmark_job(collector_name, &target, &BenchmarkSet(benchmark_set))
+        let (job, _) = db
+            .dequeue_benchmark_job(collector_name, target, BenchmarkSet::new(benchmark_set))
             .await
             .unwrap()
             .unwrap();
@@ -380,16 +361,14 @@ mod tests {
         assert_eq!(job.request_tag(), request_tag);
 
         /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(job.id(), &BenchmarkJobConclusion::Success)
+        db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
             .await
             .unwrap();
 
-        assert_eq!(
-            db.mark_benchmark_request_as_completed(request_tag)
-                .await
-                .unwrap(),
-            true
-        );
+        assert!(db
+            .mark_benchmark_request_as_completed(request_tag)
+            .await
+            .unwrap());
     }
 
     async fn mark_as_completed(
@@ -397,7 +376,7 @@ mod tests {
         shas: &[&str],
         collector_name: &str,
         benchmark_set: u32,
-        target: &database::Target,
+        target: database::Target,
     ) {
         for sha in shas {
             complete_request(conn, sha, collector_name, benchmark_set, target).await;
@@ -405,10 +384,7 @@ mod tests {
     }
 
     fn queue_order_matches(queue: &[BenchmarkRequest], expected: &[&str]) {
-        let queue_shas: Vec<&str> = queue
-            .iter()
-            .filter_map(|request| request.tag().map(|tag| tag))
-            .collect();
+        let queue_shas: Vec<&str> = queue.iter().filter_map(|request| request.tag()).collect();
         assert_eq!(queue_shas, expected)
     }
 
@@ -416,11 +392,11 @@ mod tests {
     async fn queue_ordering() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
-            let target = &Target::X86_64UnknownLinuxGnu;
+            let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, &target, benchmark_set, true)
+            db.add_collector_config(collector_name, target, benchmark_set, true)
                 .await
                 .unwrap();
             /* Key:
@@ -482,26 +458,26 @@ mod tests {
              *           +----------------+
              **/
             let requests = vec![
-                create_master("bar", "parent1", 10, "days2"),
-                create_master("345", "parent2", 11, "days2"),
-                create_master("aaa", "parent3", 12, "days2"),
-                create_master("rrr", "parent4", 13, "days2"),
-                create_master("123", "bar", 14, "days2"),
-                create_master("foo", "345", 15, "days2"),
-                create_try(16, "days1"),
-                create_release("v1.2.3", "days2"),
-                create_try(17, "days1"),
-                create_master("mmm", "aaa", 18, "days2"),
+                create_master("bar", "parent1", 10),
+                create_master("345", "parent2", 11),
+                create_master("aaa", "parent3", 12),
+                create_master("rrr", "parent4", 13),
+                create_master("123", "bar", 14),
+                create_master("foo", "345", 15),
+                create_try(16),
+                create_release("v1.2.3"),
+                create_try(17),
+                create_master("mmm", "aaa", 18),
             ];
 
             db_insert_requests(&*db, &requests).await;
-            db.attach_shas_to_try_benchmark_request(16, "try1", "rrr")
+            db.attach_shas_to_try_benchmark_request(16, "try1", "rrr", Utc::now())
                 .await
                 .unwrap();
             db.update_benchmark_request_status("try1", BenchmarkRequestStatus::InProgress)
                 .await
                 .unwrap();
-            db.attach_shas_to_try_benchmark_request(17, "baz", "foo")
+            db.attach_shas_to_try_benchmark_request(17, "baz", "foo", Utc::now())
                 .await
                 .unwrap();
 
@@ -510,7 +486,7 @@ mod tests {
                 &["bar", "345", "aaa", "rrr"],
                 collector_name,
                 benchmark_set,
-                &target,
+                target,
             )
             .await;
 
