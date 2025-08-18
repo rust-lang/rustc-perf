@@ -2082,8 +2082,7 @@ where
                 (
                     row_to_benchmark_request(it),
                     // The errors, if there are none this will be an empty vector
-                    it.get::<_, Option<Vec<String>>>(11)
-                        .unwrap_or_else(|| vec![]),
+                    it.get::<_, Option<Vec<String>>>(11).unwrap_or_default(),
                 )
             })
             .collect();
