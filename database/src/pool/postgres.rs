@@ -2039,7 +2039,7 @@ where
             ), artifacts AS (
                 SELECT
                     artifact.id,
-                    \"name\"
+                    name
                 FROM
                     artifact
                 LEFT JOIN completed ON artifact.name = completed.tag
