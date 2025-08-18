@@ -1373,6 +1373,10 @@ impl Connection for SqliteConnection {
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData> {
         no_queue_implementation_abort!()
     }
+
+    async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>> {
+        no_queue_implementation_abort!()
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {
