@@ -2172,7 +2172,7 @@ where
         })
     }
 
-    async fn get_collectors_config(&self) -> anyhow::Result<Vec<CollectorConfig>> {
+    async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>> {
         let rows = self
             .conn()
             .query(

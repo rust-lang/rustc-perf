@@ -1374,7 +1374,7 @@ impl Connection for SqliteConnection {
         no_queue_implementation_abort!()
     }
 
-    async fn get_collectors_config(&self) -> anyhow::Result<Vec<CollectorConfig>> {
+    async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>> {
         no_queue_implementation_abort!()
     }
 }

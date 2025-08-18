@@ -275,7 +275,7 @@ pub trait Connection: Send + Sync {
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;
 
     /// Get all of the configuration for all of the collectors
-    async fn get_collectors_config(&self) -> anyhow::Result<Vec<CollectorConfig>>;
+    async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>>;
 }
 
 #[async_trait::async_trait]
@@ -1126,7 +1126,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_collectors_config() {
+    async fn get_collector_configs() {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
             let target = Target::X86_64UnknownLinuxGnu;
@@ -1143,7 +1143,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let collector_configs = db.get_collectors_config().await;
+            let collector_configs = db.get_collector_configs().await;
             assert!(collector_configs.is_ok());
             let collector_configs = collector_configs.unwrap();
 
