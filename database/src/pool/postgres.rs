@@ -2197,7 +2197,7 @@ where
                 benchmark_set: BenchmarkSet(row.get::<_, i32>(2) as u32),
                 is_active: row.get::<_, bool>(3),
                 last_heartbeat_at: row.get::<_, DateTime<Utc>>(4),
-                date_added: row.get::<_, DateTime<Utc>>(4),
+                date_added: row.get::<_, DateTime<Utc>>(5),
             };
             configs.push(config);
         }
