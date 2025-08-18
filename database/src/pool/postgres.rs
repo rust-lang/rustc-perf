@@ -381,6 +381,9 @@ static MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE benchmark_request ADD COLUMN commit_date TIMESTAMPTZ NULL;
     "#,
+    r#"
+    ALTER TABLE benchmark_request ADD COLUMN duration_ms INTEGER NULL;
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -667,7 +670,7 @@ impl PostgresConnection {
 }
 
 const BENCHMARK_REQUEST_COLUMNS: &str =
-    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date";
+    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms";
 
 #[async_trait::async_trait]
 impl<P> Connection for P
@@ -1891,7 +1894,14 @@ where
                     benchmark_request
                 SET
                     status = $1,
-                    completed_at = NOW()
+                    completed_at = NOW(),
+                    duration_ms = (
+                        SELECT (MAX(EXTRACT('epoch' FROM job_queue.completed_at)) -
+                                MIN(EXTRACT('epoch' FROM job_queue.started_at))) * 1000 AS duration_ms
+                        FROM
+                            job_queue
+                        LEFT JOIN benchmark_request ON job_queue.request_tag = benchmark_request.tag
+                    )
                 WHERE
                     benchmark_request.tag = $2
                     AND benchmark_request.status != $1
@@ -2020,22 +2030,6 @@ where
                 ORDER BY
                     completed_at
                 DESC LIMIT {max_completed_requests}
-            ), jobs AS (
-                SELECT
-                    completed.tag,
-                    job_queue.started_at,
-                    job_queue.completed_at
-                FROM
-                    job_queue
-                LEFT JOIN completed ON job_queue.request_tag = completed.tag
-            ), stats AS (
-                SELECT
-                    tag,
-                    MAX(jobs.completed_at - jobs.started_at) AS duration
-                FROM
-                    jobs
-                GROUP BY
-                    tag
             ), artifacts AS (
                 SELECT
                     artifact.id,
@@ -2056,11 +2050,9 @@ where
             )
             SELECT
                 completed.*,
-                stats.duration::TEXT,
                 errors.errors AS errors
             FROM
                 completed
-            LEFT JOIN stats ON stats.tag = completed.tag
             LEFT JOIN errors ON errors.tag = completed.tag;
         "
         );
@@ -2081,7 +2073,7 @@ where
             })
             .collect();
 
-        let completed_requests: Vec<(BenchmarkRequest, String, Vec<String>)> = self
+        let completed_requests: Vec<(BenchmarkRequest, Vec<String>)> = self
             .conn()
             .query(&completed_requests_query, &[])
             .await?
@@ -2089,9 +2081,6 @@ where
             .map(|it| {
                 (
                     row_to_benchmark_request(it),
-                    // Duration being a string feels odd, but we don't need to
-                    // perform any computations on it
-                    it.get::<_, String>(10),
                     // The errors, if there are none this will be an empty vector
                     it.get::<_, Vec<String>>(11),
                 )
@@ -2217,11 +2206,13 @@ fn row_to_benchmark_request(row: &Row) -> BenchmarkRequest {
     let backends = row.get::<_, String>(7);
     let profiles = row.get::<_, String>(8);
     let commit_date = row.get::<_, Option<DateTime<Utc>>>(9);
+    let duration_ms = row.get::<_, Option<i32>>(10);
 
     let pr = pr.map(|v| v as u32);
 
-    let status = BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at)
-        .expect("Invalid BenchmarkRequestStatus data in the database");
+    let status =
+        BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at, duration_ms)
+            .expect("Invalid BenchmarkRequestStatus data in the database");
 
     match commit_type {
         BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {

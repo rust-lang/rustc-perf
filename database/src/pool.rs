@@ -1059,11 +1059,11 @@ mod tests {
             // can't really test duration
             // ensure errors are correct
             assert_eq!(
-                status_page_data.completed_requests[0].2[0],
+                status_page_data.completed_requests[0].1[0],
                 "This is an error".to_string()
             );
             assert_eq!(
-                status_page_data.completed_requests[0].2[1],
+                status_page_data.completed_requests[0].1[1],
                 "This is another error".to_string()
             );
 
