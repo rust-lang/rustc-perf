@@ -1159,7 +1159,7 @@ impl BenchmarkJob {
         self.deque_counter
     }
 
-    pub fn status(&self) -> BenchmarkJobStatus {
+    pub fn status(&self) -> &BenchmarkJobStatus {
         &self.status
     }
 }

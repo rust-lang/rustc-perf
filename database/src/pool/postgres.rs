@@ -2091,17 +2091,15 @@ where
                     row_to_benchmark_request(it),
                     // Duration being a string feels odd, but we don't need to
                     // perform any computations on it
-                    it.get::<_, String>(9),
+                    it.get::<_, String>(10),
                     // The errors, if there are none this will be an empty vector
-                    it.get::<_, Vec<String>>(10),
+                    it.get::<_, Vec<String>>(11),
                 )
             })
             .collect();
 
-        let in_progress_tags: Vec<&str> = in_progress_requests
-            .iter()
-            .map(|it| it.tag().unwrap())
-            .collect();
+        let in_progress_tags: Vec<&str> =
+            in_progress.iter().map(|it| it.0.tag().unwrap()).collect();
 
         let in_progress_tags: String = in_progress_tags.join(",");
 
@@ -2167,7 +2165,6 @@ where
 
             in_progress_jobs.push(job);
         }
-
 
         Ok(PartialStatusPageData {
             completed_requests,

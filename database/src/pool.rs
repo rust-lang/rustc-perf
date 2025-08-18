@@ -996,7 +996,7 @@ mod tests {
             let collector_name = "collector-1";
             let target = Target::X86_64UnknownLinuxGnu;
 
-            db.add_collector_config(collector_name, &target, benchmark_set.0, true)
+            db.add_collector_config(collector_name, target, benchmark_set.0, true)
                 .await
                 .unwrap();
 
@@ -1005,7 +1005,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            complete_request(&*db, tag, collector_name, benchmark_set.0, &target).await;
+            complete_request(&*db, tag, collector_name, benchmark_set.0, target).await;
             // record a couple of errors against the tag
             let artifact_id = db.artifact_id(&ArtifactId::Tag(tag.to_string())).await;
 
@@ -1021,18 +1021,18 @@ mod tests {
 
             db.enqueue_benchmark_job(
                 benchmark_request_two.tag().unwrap(),
-                &target,
-                &CodegenBackend::Llvm,
-                &Profile::Opt,
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
                 benchmark_set.0,
             )
             .await
             .unwrap();
             db.enqueue_benchmark_job(
                 benchmark_request_two.tag().unwrap(),
-                &target,
-                &CodegenBackend::Llvm,
-                &Profile::Debug,
+                target,
+                CodegenBackend::Llvm,
+                Profile::Debug,
                 benchmark_set.0,
             )
             .await
@@ -1092,7 +1092,7 @@ mod tests {
             ));
             assert_eq!(
                 status_page_data.in_progress[0].1[0].benchmark_set(),
-                &benchmark_set
+                benchmark_set
             );
 
             // test the second job
@@ -1114,7 +1114,7 @@ mod tests {
             ));
             assert_eq!(
                 status_page_data.in_progress[0].1[1].benchmark_set(),
-                &benchmark_set
+                benchmark_set
             );
 
             Ok(ctx)
