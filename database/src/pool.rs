@@ -273,6 +273,9 @@ pub trait Connection: Send + Sync {
     ) -> anyhow::Result<()>;
 
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;
+
+    /// Get all of the configuration for all of the collectors
+    async fn get_collectors_config(&self) -> anyhow::Result<Vec<CollectorConfig>>;
 }
 
 #[async_trait::async_trait]
@@ -1116,6 +1119,41 @@ mod tests {
                 status_page_data.in_progress[0].1[1].benchmark_set(),
                 benchmark_set
             );
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_collectors_config() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db_client().connection().await;
+            let target = Target::X86_64UnknownLinuxGnu;
+
+            let benchmark_set_one = BenchmarkSet(0u32);
+            let collector_name_one = "collector-1";
+            db.add_collector_config(collector_name_one, target, benchmark_set_one.0, true)
+                .await
+                .unwrap();
+
+            let benchmark_set_two = BenchmarkSet(1u32);
+            let collector_name_two = "collector-2";
+            db.add_collector_config(collector_name_two, target, benchmark_set_two.0, true)
+                .await
+                .unwrap();
+
+            let collector_configs = db.get_collectors_config().await;
+            assert!(collector_configs.is_ok());
+            let collector_configs = collector_configs.unwrap();
+
+            assert_eq!(collector_configs[0].name(), collector_name_one);
+            assert_eq!(collector_configs[0].benchmark_set(), benchmark_set_one);
+            assert_eq!(collector_configs[0].is_active(), true);
+
+            assert_eq!(collector_configs[1].name(), collector_name_two);
+            assert_eq!(collector_configs[1].benchmark_set(), benchmark_set_two);
+            assert_eq!(collector_configs[1].is_active(), true);
 
             Ok(ctx)
         })

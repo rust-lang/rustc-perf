@@ -2171,6 +2171,39 @@ where
             in_progress,
         })
     }
+
+    async fn get_collectors_config(&self) -> anyhow::Result<Vec<CollectorConfig>> {
+        let rows = self
+            .conn()
+            .query(
+                "SELECT
+                    name,
+                    target,
+                    benchmark_set,
+                    is_active,
+                    last_heartbeat_at,
+                    date_added
+                FROM
+                    collector_config;",
+                &[],
+            )
+            .await?;
+
+        let mut configs = vec![];
+        for row in rows {
+            let config = CollectorConfig {
+                name: row.get::<_, String>(0),
+                target: Target::from_str(row.get::<_, &str>(1)).map_err(|e| anyhow::anyhow!(e))?,
+                benchmark_set: BenchmarkSet(row.get::<_, i32>(2) as u32),
+                is_active: row.get::<_, bool>(3),
+                last_heartbeat_at: row.get::<_, DateTime<Utc>>(4),
+                date_added: row.get::<_, DateTime<Utc>>(4),
+            };
+            configs.push(config);
+        }
+
+        Ok(configs)
+    }
 }
 
 fn row_to_benchmark_request(row: &Row) -> BenchmarkRequest {
