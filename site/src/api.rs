@@ -391,6 +391,21 @@ pub mod status {
     }
 }
 
+pub mod status_new {
+    use database::{BenchmarkJob, BenchmarkRequest, CollectorConfig};
+    use serde::Serialize;
+
+    #[derive(Serialize, Debug)]
+    pub struct Response {
+        /// Completed requests alongside any errors
+        pub completed: Vec<(BenchmarkRequest, Vec<String>)>,
+        /// In progress requests alongside the jobs associated with the request
+        pub in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)>,
+        /// Configuration for all collectors including ones that are inactive
+        pub collector_configs: Vec<CollectorConfig>,
+    }
+}
+
 pub mod self_profile_raw {
     use serde::{Deserialize, Serialize};
 

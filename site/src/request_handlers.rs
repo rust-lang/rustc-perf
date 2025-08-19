@@ -5,6 +5,7 @@ mod graph;
 mod next_artifact;
 mod self_profile;
 mod status_page;
+mod status_page_new;
 
 pub use bootstrap::handle_bootstrap;
 pub use dashboard::handle_dashboard;
@@ -19,6 +20,7 @@ pub use self_profile::{
     handle_self_profile_raw_download,
 };
 pub use status_page::handle_status_page;
+pub use status_page_new::handle_status_page_new;
 
 use crate::api::{info, ServerResult};
 use crate::load::SiteCtxt;

@@ -807,7 +807,7 @@ pub struct ArtifactCollection {
     pub end_time: DateTime<Utc>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     ArtifactsReady,
@@ -865,7 +865,7 @@ const BENCHMARK_REQUEST_TRY_STR: &str = "try";
 const BENCHMARK_REQUEST_MASTER_STR: &str = "master";
 const BENCHMARK_REQUEST_RELEASE_STR: &str = "release";
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum BenchmarkRequestType {
     /// A Try commit
     Try {
@@ -893,7 +893,7 @@ impl fmt::Display for BenchmarkRequestType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct BenchmarkRequest {
     commit_type: BenchmarkRequestType,
     // When was the compiler artifact created
@@ -1058,7 +1058,7 @@ impl BenchmarkRequestIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum BenchmarkJobStatus {
     Queued,
     InProgress {
@@ -1100,7 +1100,7 @@ impl fmt::Display for BenchmarkJobStatus {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct BenchmarkSet(u32);
 
 impl BenchmarkSet {
@@ -1115,7 +1115,7 @@ impl BenchmarkSet {
 /// Each request is split into several `BenchmarkJob`s. Collectors poll the
 /// queue and claim a job only when its `benchmark_set` matches one of the sets
 /// they are responsible for.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct BenchmarkJob {
     id: u32,
     target: Target,
@@ -1188,7 +1188,7 @@ impl BenchmarkJobConclusion {
 }
 
 /// The configuration for a collector
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct CollectorConfig {
     name: String,
     target: Target,
@@ -1226,7 +1226,7 @@ impl CollectorConfig {
 
 /// The data that can be retrived from the database directly to populate the
 /// status page
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct PartialStatusPageData {
     /// A Vector of; completed requests with any associated errors
     pub completed_requests: Vec<(BenchmarkRequest, Vec<String>)>,
