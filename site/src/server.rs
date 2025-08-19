@@ -731,18 +731,14 @@ fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
     Some(false)
 }
 
-fn to_response_with_content_type<S>(
-    result: ServerResult<S>,
-    content_type: ContentType,
-    compression: &Option<BrotliEncoderParams>,
-) -> Response
+fn to_response<S>(result: ServerResult<S>, compression: &Option<BrotliEncoderParams>) -> Response
 where
     S: Serialize,
 {
     match result {
         Ok(result) => {
             let response = http::Response::builder()
-                .header_typed(content_type)
+                .header_typed(ContentType::octet_stream())
                 .header_typed(CacheControl::new().with_no_cache().with_no_store());
             let body = rmp_serde::to_vec_named(&result).unwrap();
             maybe_compressed_response(response, body, compression)
@@ -754,13 +750,6 @@ where
             .body(hyper::Body::from(err))
             .unwrap(),
     }
-}
-
-fn to_response<S>(result: ServerResult<S>, compression: &Option<BrotliEncoderParams>) -> Response
-where
-    S: Serialize,
-{
-    to_response_with_content_type(result, ContentType::octet_stream(), compression)
 }
 
 pub fn maybe_compressed_response(
