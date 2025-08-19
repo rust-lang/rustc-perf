@@ -46,6 +46,22 @@ export type BenchmarkRequestInProgress = {
   profiles: string;
 };
 
+export type BenchmarkRequestArtifactsReady = {
+  commit_type: {
+    [K in CommitTypeString]: CommitType;
+  };
+  commit_date: string | null;
+  created_at: string | null;
+  status: "ArtifactsReady";
+  backends: string;
+  profiles: string;
+};
+
+type BenchmarkRequest =
+  | BenchmarkRequestComplete
+  | BenchmarkRequestInProgress
+  | BenchmarkRequestArtifactsReady;
+
 export function isMasterBenchmarkRequest(
   commitType: Object
 ): commitType is {["Master"]: CommitTypeMaster} {
@@ -62,6 +78,24 @@ export function isTryBenchmarkRequest(
   commitType: Object
 ): commitType is {["Try"]: CommitTypeTry} {
   return "Try" in commitType;
+}
+
+export function isArtifactsReadyBenchmarkRequest(
+  req: BenchmarkRequest
+): req is BenchmarkRequestArtifactsReady {
+  return isString(req.status) && req.status === "ArtifactsReady";
+}
+
+export function isInProgressBenchmarkRequest(
+  req: BenchmarkRequest
+): req is BenchmarkRequestInProgress {
+  return isString(req.status) && req.status === "InProgress";
+}
+
+export function isCompleteBenchmarkRequest(
+  req: BenchmarkRequest
+): req is BenchmarkRequestComplete {
+  return isObject(req.status) && "Completed" in req.status;
 }
 
 export type BenchmarkJobStatusInProgress = {
@@ -127,4 +161,5 @@ export type StatusResponse = {
   completed: [BenchmarkRequestComplete, string[]][];
   in_progress: [BenchmarkRequestInProgress, BenchmarkJob[]][];
   collector_configs: CollectorConfig[];
+  queue: BenchmarkRequest[];
 };

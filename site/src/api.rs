@@ -403,6 +403,8 @@ pub mod status_new {
         pub in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)>,
         /// Configuration for all collectors including ones that are inactive
         pub collector_configs: Vec<CollectorConfig>,
+        /// The current queue
+        pub queue: Vec<BenchmarkRequest>,
     }
 }
 
