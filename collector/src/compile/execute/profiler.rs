@@ -250,11 +250,13 @@ impl Processor for ProfileProcessor<'_> {
                 }
 
                 // Samply produces (via rustc-fake) a data file called
-                // `profile.json`. We copy it from the temp dir to the output dir,
-                // giving it a new name in the process.
+                // `profile.json.gz`. We copy it from the temp dir to the output dir,
+                // giving it a new name in the process. The new name must end
+                // in `.gz` for `samply load` to handle it.
                 Profiler::Samply => {
-                    let tmp_samply_file = filepath(data.cwd, "profile.json");
-                    let samply_file = filepath(self.output_dir, &out_file("samply"));
+                    let tmp_samply_file = filepath(data.cwd, "profile.json.gz");
+                    let samply_file =
+                        filepath(self.output_dir, &format!("{}.gz", out_file("samply")));
 
                     fs::copy(tmp_samply_file, samply_file)?;
                 }
