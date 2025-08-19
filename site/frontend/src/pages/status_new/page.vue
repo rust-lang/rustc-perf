@@ -3,8 +3,7 @@ import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
 import {ref, Ref} from "vue";
-import {StatusResponseNew} from "./data";
-import {useExpandedStore} from "./expansion";
+import {StatusResponse, CollectorConfig} from "./data";
 
 async function loadStatusNew(loading: Ref<boolean>) {
   dataNew.value = await withLoading(loading, () =>
@@ -15,12 +14,7 @@ async function loadStatusNew(loading: Ref<boolean>) {
 const loading = ref(true);
 const dataNew: Ref<StatusResponse | null> = ref(null);
 
-function statusLabel(c) {
-  if (!c.is_active) return "Inactive";
-  return this.isStale(c) ? "Stale" : "Active";
-}
-
-function statusClass(c) {
+function statusClass(c: CollectorConfig): string {
   return c.is_active ? "active" : "inactive";
 }
 

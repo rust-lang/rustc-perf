@@ -1,4 +1,4 @@
-import {getTypeString} from "../../utils/getType";
+import {isObject, isString} from "../../utils/getType";
 
 type CommitTypeMaster = {
   sha: string;
@@ -99,19 +99,19 @@ export type BenchmarkJob = {
 export function isQueuedBenchmarkJob(
   status: unknown
 ): status is BenchmarkJobStatusQueued {
-  return getTypeString(status) === "string";
+  return isString(status) && status === "Queued";
 }
 
 export function isInProgressBenchmarkJob(
   status: unknown
 ): status is {["InProgress"]: BenchmarkJobStatusInProgress} {
-  return getTypeString(status) === "object" && "InProgress" in status;
+  return isObject(status) && "InProgress" in status;
 }
 
 export function isCompletedBenchmarkJob(
   status: unknown
 ): status is {["Completed"]: BenchmarkJobStatusCompleted} {
-  return getTypeString(status) === "object" && "Completed" in status;
+  return isObject(status) && "Completed" in status;
 }
 
 export type CollectorConfig = {
