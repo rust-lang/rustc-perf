@@ -1395,6 +1395,8 @@ async fn run_job_queue_benchmarks(
     all_compile_benchmarks: Vec<Benchmark>,
     host_target_tuple: &str,
 ) -> anyhow::Result<()> {
+    conn.update_collector_heartbeat(collector.name()).await?;
+
     // TODO: reconnect to the DB if there was an error with the previous job
     while let Some((benchmark_job, artifact_id)) = conn
         .dequeue_benchmark_job(
@@ -1478,6 +1480,8 @@ async fn run_job_queue_benchmarks(
                 tokio::time::sleep(Duration::from_secs(30)).await;
             }
         }
+
+        conn.update_collector_heartbeat(collector.name()).await?;
     }
     log::info!("No job found, exiting");
     Ok(())

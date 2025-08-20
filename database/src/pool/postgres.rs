@@ -2212,6 +2212,20 @@ where
 
         Ok(configs)
     }
+
+    async fn update_collector_heartbeat(&self, collector_name: &str) -> anyhow::Result<()> {
+        self.conn()
+            .query(
+                r#"
+                UPDATE collector_config
+                SET last_heartbeat_at = NOW()
+                WHERE name = $1
+                "#,
+                &[&collector_name],
+            )
+            .await?;
+        Ok(())
+    }
 }
 
 fn row_to_benchmark_request(row: &Row) -> BenchmarkRequest {

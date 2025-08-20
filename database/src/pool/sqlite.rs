@@ -1377,6 +1377,10 @@ impl Connection for SqliteConnection {
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>> {
         no_queue_implementation_abort!()
     }
+
+    async fn update_collector_heartbeat(&self, _collector_name: &str) -> anyhow::Result<()> {
+        no_queue_implementation_abort!()
+    }
 }
 
 fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {

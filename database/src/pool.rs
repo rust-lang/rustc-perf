@@ -276,6 +276,9 @@ pub trait Connection: Send + Sync {
 
     /// Get all of the configuration for all of the collectors
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>>;
+
+    /// Updates the last known heartbeat of a collector to the current time.
+    async fn update_collector_heartbeat(&self, collector_name: &str) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
