@@ -1776,7 +1776,7 @@ where
         benchmark_set: BenchmarkSet,
     ) -> anyhow::Result<Option<(BenchmarkJob, ArtifactId)>> {
         // We take the oldest job from the job_queue matching the benchmark_set,
-        // target and status of 'queued'
+        // target and status of 'queued' or 'in-progress'
         // If a job was dequeued, we increment its retry (dequeue) count
         let row_opt = self
             .conn()
@@ -1788,11 +1788,19 @@ where
                     FROM
                         job_queue
                     WHERE
-                        status = $1
+                        -- Take queued or in-progress jobs
+                        (status = $1 OR status = $5)
                         AND target = $2
                         AND benchmark_set = $3
-                    ORDER
-                        BY created_at
+                    ORDER BY
+                        -- Prefer in-progress jobs that have not been finished previously, so that
+                        -- we can finish them.
+                        CASE
+                            WHEN status = $5 THEN 0
+                            WHEN status = $1 THEN 1
+                            ELSE 2
+                        END,
+                        created_at
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 ), updated AS (

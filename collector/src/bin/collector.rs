@@ -21,6 +21,7 @@ use chrono::Utc;
 use clap::builder::TypedValueParser;
 use clap::{Arg, Parser};
 use collector::compare::compare_artifacts;
+use hashbrown::HashSet;
 use humansize::{format_size, BINARY};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tabled::builder::Builder;
@@ -33,6 +34,7 @@ use collector::api::next_artifact::NextArtifact;
 use collector::artifact_stats::{
     compile_and_get_stats, ArtifactStats, ArtifactWithStats, CargoProfile,
 };
+use collector::benchmark_set::{expand_benchmark_set, BenchmarkSetId, BenchmarkSetMember};
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
@@ -58,7 +60,10 @@ use collector::toolchain::{
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
 use collector::{utils, CollectorCtx, CollectorStepBuilder};
-use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Pool};
+use database::{
+    ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, CollectorConfig, Commit,
+    CommitType, Connection, Pool,
+};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -124,6 +129,7 @@ impl RuntimeBenchmarkConfig {
 struct SharedBenchmarkConfig {
     artifact_id: ArtifactId,
     toolchain: Toolchain,
+    record_duration: bool,
 }
 
 fn check_measureme_installed() -> Result<(), String> {
@@ -692,14 +698,13 @@ enum Commands {
         benchmark_set: u32,
     },
 
-    /// Polls the job queue for work to benchmark
-    DequeueJob {
-        /// The unique identifier for the collector
+    /// Benchmark test cases pulled from the job queue.
+    BenchmarkJobQueue {
+        /// The unique identifier for the collector.
+        /// It has to exist in the database; you can create new collectors using the `add_collector`
+        /// command.
         #[arg(long)]
         collector_name: String,
-
-        #[arg(long)]
-        target: String,
 
         #[command(flatten)]
         db: DbOption,
@@ -830,13 +835,14 @@ fn main_result() -> anyhow::Result<i32> {
             let shared = SharedBenchmarkConfig {
                 artifact_id,
                 toolchain,
+                record_duration: true,
             };
             let config = RuntimeBenchmarkConfig::new(
                 runtime_suite,
                 RuntimeBenchmarkFilter::new(local.exclude, local.include),
                 iterations,
             );
-            rt.block_on(run_benchmarks(conn, shared, None, Some(config)))?;
+            rt.block_on(run_benchmarks(conn.as_mut(), shared, None, Some(config)))?;
             Ok(0)
         }
         Commands::ProfileRuntime {
@@ -972,6 +978,7 @@ fn main_result() -> anyhow::Result<i32> {
             let shared = SharedBenchmarkConfig {
                 toolchain,
                 artifact_id,
+                record_duration: true,
             };
             let config = CompileBenchmarkConfig {
                 benchmarks,
@@ -984,7 +991,7 @@ fn main_result() -> anyhow::Result<i32> {
                 targets: vec![Target::default()],
             };
 
-            rt.block_on(run_benchmarks(conn, shared, Some(config), None))?;
+            rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
             Ok(0)
         }
 
@@ -1112,10 +1119,11 @@ fn main_result() -> anyhow::Result<i32> {
                         let shared = SharedBenchmarkConfig {
                             artifact_id,
                             toolchain,
+                            record_duration: true,
                         };
 
                         rt.block_on(run_benchmarks(
-                            conn,
+                            conn.as_mut(),
                             shared,
                             Some(compile_config),
                             Some(runtime_config),
@@ -1333,43 +1341,203 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             Ok(0)
         }
 
-        Commands::DequeueJob {
-            collector_name,
-            db,
-            target,
-        } => {
+        Commands::BenchmarkJobQueue { collector_name, db } => {
+            log_db(&db);
+
             let pool = Pool::open(&db.db);
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
 
             // Obtain the configuration and validate that it matches the
-            // collector's setup
-            let collector_config: database::CollectorConfig = rt
+            // collector's host target
+            let collector_config = rt
                 .block_on(conn.get_collector_config(&collector_name))?
-                .unwrap();
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Collector with name `{collector_name}` not found")
+                })?;
 
-            let collector_target = collector_config.target();
-            if collector_target.as_str() != target {
-                panic!(
-                    "Mismatching target for collector expected `{collector_target}` got `{target}`"
-                );
+            if collector_config.target().as_str() != host_target_tuple {
+                return Err(anyhow::anyhow!(
+                    "The collector `{collector_name}` is configured for target `{}`, but the current host target seems to be `{host_target_tuple}`",
+                    collector_config.target()
+                ));
             }
 
-            // Dequeue a job
-            let benchmark_job = rt.block_on(conn.dequeue_benchmark_job(
-                &collector_name,
-                collector_config.target(),
-                collector_config.benchmark_set(),
+            let benchmarks =
+                get_compile_benchmarks(&compile_benchmark_dir, CompileBenchmarkFilter::All)?;
+
+            rt.block_on(run_job_queue_benchmarks(
+                conn,
+                &collector_config,
+                benchmarks,
+                &host_target_tuple,
             ))?;
-
-            if let Some(benchmark_job) = benchmark_job {
-                // TODO; process the job
-                println!("{benchmark_job:?}");
-            }
 
             Ok(0)
         }
     }
+}
+
+/// Maximum number of failures before a job will be marked as failed.
+const MAX_JOB_FAILS: u32 = 3;
+
+async fn run_job_queue_benchmarks(
+    mut conn: Box<dyn Connection>,
+    collector: &CollectorConfig,
+    all_compile_benchmarks: Vec<Benchmark>,
+    host_target_tuple: &str,
+) -> anyhow::Result<()> {
+    // We want to cache sysroots between individual jobs, because downloading the same sysroot
+    // for multiple jobs of the same benchmark request/compiler artifact is wasteful.
+    // But we want to avoid caching them indefinitely, as we could run out of disk space.
+    // So we keep the `Sysroot` structs in memory until this function ends, and we periodically make
+    // sure that we reset the collector (which is also needed to self-update it from git).
+    let mut sysroots: HashMap<String, (database::CodegenBackend, Sysroot)> = HashMap::new();
+
+    // TODO: reconnect to the DB if there was an error with the previous job
+    while let Some((benchmark_job, artifact_id)) = conn
+        .dequeue_benchmark_job(
+            collector.name(),
+            collector.target(),
+            collector.benchmark_set(),
+        )
+        .await?
+    {
+        log::info!("Dequeued job {benchmark_job:?}, artifact_id {artifact_id:?}");
+
+        // Fail the job if it has been dequeued too many times
+        if benchmark_job.deque_count() > MAX_JOB_FAILS {
+            // TODO: store some error into the DB
+            conn.as_mut()
+                .mark_benchmark_job_as_completed(
+                    benchmark_job.id(),
+                    BenchmarkJobConclusion::Failure,
+                )
+                .await?;
+            continue;
+        }
+
+        log::info!("Downloading sysroot");
+        // TODO: if there is an error with downloading the toolchain, we need to mark the job as
+        // failed
+        let toolchain = match &artifact_id {
+            ArtifactId::Commit(commit) => {
+                // We have an existing sysroot with the right codegen backend, reuse it
+                if let Some((_, sysroot)) = sysroots
+                    .get(&commit.sha)
+                    .filter(|(backend, _)| *backend == benchmark_job.backend())
+                {
+                    Toolchain::from_sysroot(sysroot, commit.sha.clone())
+                } else {
+                    // TODO: optimize this to avoid thrashing the cache when multiple codegen
+                    // backends are used.
+                    // We don't have a sysroot or the codegen backend was different, download it
+                    // from scratch and overwrite the cache.
+                    let sysroot = Sysroot::install(
+                        commit.sha.clone(),
+                        benchmark_job.target().as_str(),
+                        &[benchmark_job.backend().into()],
+                    )
+                    .await
+                    .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
+                    let toolchain = Toolchain::from_sysroot(&sysroot, commit.sha.clone());
+                    sysroots.insert(commit.sha.clone(), (benchmark_job.backend(), sysroot));
+                    toolchain
+                }
+            }
+            ArtifactId::Tag(tag) => {
+                create_toolchain_from_published_version(&tag, &host_target_tuple)?
+            }
+        };
+        log::info!("Sysroot download finished");
+
+        let (compile_config, runtime_config) =
+            create_benchmark_configs(&benchmark_job, &all_compile_benchmarks).await?;
+
+        let shared = SharedBenchmarkConfig {
+            artifact_id,
+            toolchain,
+            record_duration: false,
+        };
+
+        // TODO: distinguish transient and permanent errors
+        let job_result =
+            run_benchmarks(conn.as_mut(), shared, compile_config, runtime_config).await;
+        match job_result {
+            Ok(_) => {
+                log::info!("Job finished sucessfully");
+                conn.as_mut()
+                    .mark_benchmark_job_as_completed(
+                        benchmark_job.id(),
+                        BenchmarkJobConclusion::Success,
+                    )
+                    .await?;
+            }
+            Err(error) => {
+                // TODO: record the error *somewhere*
+                log::error!("Job finished with error: {error:?}. Retrying after 30s...");
+                tokio::time::sleep(Duration::from_secs(30)).await;
+            }
+        }
+    }
+    log::info!("No job found, exiting");
+    Ok(())
+}
+
+async fn create_benchmark_configs(
+    job: &BenchmarkJob,
+    all_compile_benchmarks: &[Benchmark],
+) -> anyhow::Result<(
+    Option<CompileBenchmarkConfig>,
+    Option<RuntimeBenchmarkConfig>,
+)> {
+    // Expand the benchmark set and figure out which benchmarks should be executed
+    let benchmark_set = BenchmarkSetId::new(job.target().into(), job.benchmark_set().get_id());
+    let benchmark_set_members = expand_benchmark_set(benchmark_set);
+    let mut bench_rustc = false;
+    let mut bench_runtime = false;
+    let mut bench_compile_benchmarks = HashSet::new();
+    for member in benchmark_set_members {
+        match member {
+            BenchmarkSetMember::CompileBenchmark(benchmark) => {
+                bench_compile_benchmarks.insert(benchmark);
+            }
+            BenchmarkSetMember::RuntimeBenchmarks => bench_runtime = true,
+            BenchmarkSetMember::Rustc => bench_rustc = true,
+        }
+    }
+
+    let compile_config = if bench_rustc || !bench_compile_benchmarks.is_empty() {
+        Some(CompileBenchmarkConfig {
+            benchmarks: all_compile_benchmarks
+                .into_iter()
+                .filter(|b| bench_compile_benchmarks.contains(&b.name))
+                .cloned()
+                .collect(),
+            profiles: vec![job.profile().into()],
+            scenarios: Scenario::all(),
+            backends: vec![job.backend().into()],
+            iterations: None,
+            is_self_profile: true,
+            bench_rustc,
+            targets: vec![job.target().into()],
+        })
+    } else {
+        None
+    };
+    // TODO
+    // let runtime_suite = load_runtime_benchmarks(
+    //     conn.as_mut(),
+    //     runtime_benchmark_dir(),
+    //     CargoIsolationMode::Isolated,
+    //     None,
+    //     &toolchain,
+    //     &artifact_id,
+    // )
+    // .await?;
+    let runtime_config = None;
+
+    Ok((compile_config, runtime_config))
 }
 
 fn binary_stats_local(args: BinaryStatsLocal, symbols: bool) -> anyhow::Result<()> {
@@ -1759,26 +1927,20 @@ async fn init_collection(
 
 /// Execute all benchmarks specified by the given configurations.
 async fn run_benchmarks(
-    mut connection: Box<dyn Connection>,
+    connection: &mut dyn Connection,
     shared: SharedBenchmarkConfig,
     compile: Option<CompileBenchmarkConfig>,
     runtime: Option<RuntimeBenchmarkConfig>,
 ) -> anyhow::Result<()> {
-    record_toolchain_sizes(connection.as_mut(), &shared.artifact_id, &shared.toolchain).await;
+    record_toolchain_sizes(connection, &shared.artifact_id, &shared.toolchain).await;
 
-    let collector = init_collection(
-        connection.as_mut(),
-        &shared,
-        compile.as_ref(),
-        runtime.as_ref(),
-    )
-    .await;
+    let collector = init_collection(connection, &shared, compile.as_ref(), runtime.as_ref()).await;
 
     let start = Instant::now();
 
     // Compile benchmarks
     let compile_result = if let Some(compile) = compile {
-        let errors = bench_compile(connection.as_mut(), &shared, compile, &collector).await;
+        let errors = bench_compile(connection, &shared, compile, &collector).await;
         errors
             .fail_if_nonzero()
             .context("Compile benchmarks failed")
@@ -1789,7 +1951,7 @@ async fn run_benchmarks(
     // Runtime benchmarks
     let runtime_result = if let Some(runtime) = runtime {
         bench_runtime(
-            connection.as_mut(),
+            connection,
             runtime.runtime_suite,
             &collector,
             runtime.filter,
@@ -1801,10 +1963,12 @@ async fn run_benchmarks(
         Ok(())
     };
 
-    let end = start.elapsed();
-    connection
-        .record_duration(collector.artifact_row_id, end)
-        .await;
+    if shared.record_duration {
+        let end = start.elapsed();
+        connection
+            .record_duration(collector.artifact_row_id, end)
+            .await;
+    }
 
     compile_result.and(runtime_result)
 }
@@ -1845,9 +2009,10 @@ async fn bench_published_artifact(
     let shared = SharedBenchmarkConfig {
         artifact_id,
         toolchain,
+        record_duration: true,
     };
     run_benchmarks(
-        connection,
+        connection.as_mut(),
         shared,
         Some(CompileBenchmarkConfig {
             benchmarks: compile_benchmarks,

@@ -1100,6 +1100,10 @@ impl BenchmarkSet {
     pub fn new(id: u32) -> Self {
         Self(id)
     }
+
+    pub fn get_id(&self) -> u32 {
+        self.0
+    }
 }
 
 /// A single unit of work generated from a benchmark request. Split by profiles

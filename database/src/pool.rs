@@ -269,7 +269,7 @@ pub trait Connection: Send + Sync {
     async fn mark_benchmark_job_as_completed(
         &self,
         id: u32,
-        benchmark_job_conculsion: BenchmarkJobConclusion,
+        conclusion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
 
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;

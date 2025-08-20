@@ -114,6 +114,7 @@ impl std::fmt::Display for BenchmarkName {
     }
 }
 
+#[derive(Clone)]
 pub struct Benchmark {
     pub name: BenchmarkName,
     pub path: PathBuf,
