@@ -1378,6 +1378,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
                 get_compile_benchmarks(&compile_benchmark_dir, CompileBenchmarkFilter::All)?;
 
             rt.block_on(run_job_queue_benchmarks(
+                pool,
                 conn,
                 &collector_config,
                 benchmarks,
@@ -1392,15 +1393,14 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 const MAX_JOB_FAILS: u32 = 3;
 
 async fn run_job_queue_benchmarks(
+    pool: Pool,
     mut conn: Box<dyn Connection>,
     collector: &CollectorConfig,
     all_compile_benchmarks: Vec<Benchmark>,
 ) -> anyhow::Result<()> {
-    let conn = conn.as_mut();
     conn.update_collector_heartbeat(collector.name()).await?;
 
     // TODO: check collector SHA vs site SHA
-    // TODO: reconnect to the DB if there was an error with the previous job
     while let Some((benchmark_job, artifact_id)) = conn
         .dequeue_benchmark_job(
             collector.name(),
@@ -1411,7 +1411,7 @@ async fn run_job_queue_benchmarks(
     {
         log::info!("Dequeued job {benchmark_job:?}, artifact_id {artifact_id:?}");
         let result = run_benchmark_job(
-            conn,
+            conn.as_mut(),
             &benchmark_job,
             artifact_id.clone(),
             &all_compile_benchmarks,
@@ -1457,8 +1457,10 @@ async fn run_job_queue_benchmarks(
                         // There was some transient (i.e. I/O, network or database) error.
                         // Let's retry the job later, with some sleep
                         log::info!("Retrying after 30s...");
-                        tokio::time::sleep(Duration::from_secs(3)).await;
                         tokio::time::sleep(Duration::from_secs(30)).await;
+
+                        // Maybe there was a DB issue. Try to reconnect to the database.
+                        conn = pool.connection().await;
                     }
                 }
             }
