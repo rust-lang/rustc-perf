@@ -973,6 +973,9 @@ mod tests {
 
             assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
 
+            /* Make the job take some amount of time */
+            std::thread::sleep(Duration::from_millis(1000));
+
             /* Mark the job as complete */
             db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
                 .await
@@ -994,10 +997,10 @@ mod tests {
                 req.status(),
                 BenchmarkRequestStatus::Completed { .. }
             ));
-            let BenchmarkRequestStatus::Completed { duration_ms, .. } = req.status() else {
+            let BenchmarkRequestStatus::Completed { duration, .. } = req.status() else {
                 unreachable!();
             };
-            assert!(duration_ms >= 1);
+            assert!(duration >= Duration::from_millis(1000));
 
             let completed_index = db.load_benchmark_request_index().await.unwrap();
             assert!(completed_index.contains_tag("sha-1"));

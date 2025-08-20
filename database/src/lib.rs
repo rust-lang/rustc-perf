@@ -814,7 +814,7 @@ pub enum BenchmarkRequestStatus {
     InProgress,
     Completed {
         completed_at: DateTime<Utc>,
-        duration_ms: u32,
+        duration: Duration,
     },
 }
 
@@ -846,9 +846,9 @@ impl BenchmarkRequestStatus {
                 completed_at: completion_date.ok_or_else(|| {
                     anyhow!("No completion date for a completed BenchmarkRequestStatus")
                 })?,
-                duration_ms: duration_ms.ok_or_else(|| {
+                duration: Duration::from_millis(duration_ms.ok_or_else(|| {
                     anyhow!("No completion duration for a completed BenchmarkRequestStatus")
-                })? as u32,
+                })? as u64),
             }),
             _ => Err(anyhow!("Unknown BenchmarkRequestStatus `{text}`")),
         }
