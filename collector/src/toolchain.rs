@@ -3,7 +3,7 @@ use crate::compile::benchmark::profile::Profile;
 use anyhow::{anyhow, Context};
 use log::debug;
 use std::ffi::OsStr;
-use std::fs::{self, File};
+use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -146,23 +146,6 @@ impl SysrootDownload {
     }
 
     async fn get_and_extract(&self, component: Component) -> anyhow::Result<()> {
-        let archive_path = self.directory.join(format!(
-            "{}-{}-{}.tar.xz",
-            self.rust_sha, self.triple, component,
-        ));
-        if archive_path.exists() {
-            let reader = BufReader::new(File::open(&archive_path)?);
-            let decompress = XzDecoder::new(reader);
-            let extract = self.extract(component, decompress);
-            match extract {
-                Ok(()) => return Ok(()),
-                Err(err) => {
-                    log::warn!("extracting {} failed: {:?}", archive_path.display(), err);
-                    fs::remove_file(&archive_path).context("removing archive_path")?;
-                }
-            }
-        }
-
         // We usually have nightlies but we want to avoid breaking down if we
         // accidentally end up with a beta or stable commit.
         let urls = [
@@ -617,6 +600,7 @@ fn get_lib_dir_from_rustc(rustc: &Path) -> anyhow::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
 
     #[test]
     fn fill_libraries() {
