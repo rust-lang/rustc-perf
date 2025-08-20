@@ -223,7 +223,7 @@ impl SysrootDownload {
         ];
 
         // Did we see any other error than 404?
-        let mut non_404_error = false;
+        let mut found_error_that_is_not_404 = false;
         for url in &urls {
             log::debug!("requesting: {}", url);
             let resp = reqwest::get(url)
@@ -243,16 +243,17 @@ impl SysrootDownload {
                         Ok(()) => return Ok(()),
                         Err(err) => {
                             log::warn!("extracting {url} failed: {err:?}");
-                            non_404_error = true;
+                            found_error_that_is_not_404 = true;
                         }
                     }
                 }
                 StatusCode::NOT_FOUND => {}
-                _ => non_404_error = true,
+                _ => found_error_that_is_not_404 = true,
             }
         }
 
-        if !non_404_error {
+        if !found_error_that_is_not_404 {
+            // The only errors we saw were 404, so we assume that the toolchain is simply not on CI
             Err(SysrootDownloadError::SysrootShaNotFound)
         } else {
             Err(SysrootDownloadError::IO(anyhow!(
