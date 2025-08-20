@@ -1361,7 +1361,6 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 
             // Obtain the configuration and validate that it matches the
             // collector's host target
-            // TODO: update heartbeat
             let collector_config = rt
                 .block_on(conn.get_collector_config(&collector_name))?
                 .ok_or_else(|| {
@@ -1382,7 +1381,6 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
                 conn,
                 &collector_config,
                 benchmarks,
-                &host_target_tuple,
             ))?;
 
             Ok(0)
@@ -1397,7 +1395,6 @@ async fn run_job_queue_benchmarks(
     mut conn: Box<dyn Connection>,
     collector: &CollectorConfig,
     all_compile_benchmarks: Vec<Benchmark>,
-    host_target_tuple: &str,
 ) -> anyhow::Result<()> {
     let conn = conn.as_mut();
     conn.update_collector_heartbeat(collector.name()).await?;
@@ -1418,7 +1415,6 @@ async fn run_job_queue_benchmarks(
             &benchmark_job,
             artifact_id.clone(),
             &all_compile_benchmarks,
-            host_target_tuple,
         )
         .await;
         match result {
@@ -1462,6 +1458,7 @@ async fn run_job_queue_benchmarks(
                         // Let's retry the job later, with some sleep
                         log::info!("Retrying after 30s...");
                         tokio::time::sleep(Duration::from_secs(3)).await;
+                        tokio::time::sleep(Duration::from_secs(30)).await;
                     }
                 }
             }
@@ -1482,7 +1479,7 @@ enum BenchmarkJobError {
 }
 
 impl From<anyhow::Error> for BenchmarkJobError {
-    fn from(error: Error) -> Self {
+    fn from(error: anyhow::Error) -> Self {
         Self::Transient(error)
     }
 }
@@ -1492,7 +1489,6 @@ async fn run_benchmark_job(
     job: &BenchmarkJob,
     artifact_id: ArtifactId,
     all_compile_benchmarks: &[Benchmark],
-    host_target_tuple: &str,
 ) -> Result<(), BenchmarkJobError> {
     // Fail the job if it has been dequeued too many times
     if job.deque_count() > MAX_JOB_FAILS {
@@ -1529,7 +1525,9 @@ async fn run_benchmark_job(
             sysroot.preserve();
             Toolchain::from_sysroot(&sysroot, commit.sha.clone())
         }
-        ArtifactId::Tag(tag) => create_toolchain_from_published_version(&tag, &host_target_tuple)?,
+        ArtifactId::Tag(tag) => {
+            create_toolchain_from_published_version(&tag, job.target().as_str())?
+        }
     };
     log::info!("Sysroot download finished");
 

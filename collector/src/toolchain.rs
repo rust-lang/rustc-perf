@@ -30,10 +30,10 @@ impl SysrootDownloadError {
 
 /// Sysroot downloaded from CI.
 pub struct Sysroot {
-    pub sha: String,
+    sha: String,
     pub components: ToolchainComponents,
-    pub triple: String,
-    pub preserve: bool,
+    triple: String,
+    preserve: bool,
 }
 
 impl Sysroot {
