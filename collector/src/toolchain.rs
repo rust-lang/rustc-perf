@@ -2,6 +2,7 @@ use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use anyhow::{anyhow, Context};
 use log::debug;
+use reqwest::StatusCode;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{BufReader, Read};
@@ -10,6 +11,22 @@ use std::process::Command;
 use std::{fmt, str};
 use tar::Archive;
 use xz2::bufread::XzDecoder;
+
+pub enum SysrootDownloadError {
+    SysrootShaNotFound,
+    IO(anyhow::Error),
+}
+
+impl SysrootDownloadError {
+    pub fn as_anyhow_error(self) -> anyhow::Error {
+        match self {
+            SysrootDownloadError::SysrootShaNotFound => {
+                anyhow::anyhow!("Sysroot was not found on CI")
+            }
+            SysrootDownloadError::IO(error) => error,
+        }
+    }
+}
 
 /// Sysroot downloaded from CI.
 pub struct Sysroot {
@@ -25,9 +42,9 @@ impl Sysroot {
         sha: String,
         triple: &str,
         backends: &[CodegenBackend],
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, SysrootDownloadError> {
         let cache_directory = cache_directory.join(triple).join(&sha);
-        fs::create_dir_all(&cache_directory)?;
+        fs::create_dir_all(&cache_directory).map_err(|e| SysrootDownloadError::IO(e.into()))?;
 
         let download = SysrootDownload {
             cache_directory: cache_directory.clone(),
@@ -67,9 +84,11 @@ impl Sysroot {
         let stamp = SysrootStamp {
             cranelift: requires_cranelift,
         };
-        stamp.store_to_dir(&cache_directory)?;
+        stamp
+            .store_to_dir(&cache_directory)
+            .map_err(SysrootDownloadError::IO)?;
 
-        let sysroot = download.into_sysroot()?;
+        let sysroot = download.into_sysroot().map_err(SysrootDownloadError::IO)?;
 
         Ok(sysroot)
     }
@@ -194,7 +213,7 @@ impl SysrootDownload {
         })
     }
 
-    async fn get_and_extract(&self, component: Component) -> anyhow::Result<()> {
+    async fn get_and_extract(&self, component: Component) -> Result<(), SysrootDownloadError> {
         // We usually have nightlies but we want to avoid breaking down if we
         // accidentally end up with a beta or stable commit.
         let urls = [
@@ -202,29 +221,46 @@ impl SysrootDownload {
             component.url("beta", self, &self.triple),
             component.url("stable", self, &self.triple),
         ];
+
+        // Did we see any other error than 404?
+        let mut non_404_error = false;
         for url in &urls {
             log::debug!("requesting: {}", url);
-            let resp = reqwest::get(url).await?;
+            let resp = reqwest::get(url)
+                .await
+                .map_err(|e| SysrootDownloadError::IO(e.into()))?;
             log::debug!("{}", resp.status());
-            if resp.status().is_success() {
-                let bytes: Vec<u8> = resp.bytes().await?.into();
-                let reader = XzDecoder::new(BufReader::new(bytes.as_slice()));
-                match self.extract(component, reader) {
-                    Ok(()) => return Ok(()),
-                    Err(err) => {
-                        log::warn!("extracting {} failed: {:?}", url, err);
+
+            match resp.status() {
+                s if s.is_success() => {
+                    let bytes: Vec<u8> = resp
+                        .bytes()
+                        .await
+                        .map_err(|e| SysrootDownloadError::IO(e.into()))?
+                        .into();
+                    let reader = XzDecoder::new(BufReader::new(bytes.as_slice()));
+                    match self.extract(component, reader) {
+                        Ok(()) => return Ok(()),
+                        Err(err) => {
+                            log::warn!("extracting {url} failed: {err:?}");
+                            non_404_error = true;
+                        }
                     }
                 }
+                StatusCode::NOT_FOUND => {}
+                _ => non_404_error = true,
             }
         }
 
-        Err(anyhow!(
-            "unable to download sha {} triple {} module {} from any of {:?}",
-            self.rust_sha,
-            self.triple,
-            component,
-            urls
-        ))
+        if !non_404_error {
+            Err(SysrootDownloadError::SysrootShaNotFound)
+        } else {
+            Err(SysrootDownloadError::IO(anyhow!(
+                "unable to download sha {} triple {} module {component} from any of {urls:?}",
+                self.rust_sha,
+                self.triple,
+            )))
+        }
     }
 
     fn extract<T: Read>(&self, component: Component, reader: T) -> anyhow::Result<()> {

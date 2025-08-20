@@ -54,8 +54,8 @@ use collector::runtime::{
 };
 use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
-    create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
-    ToolchainConfig,
+    create_toolchain_from_published_version, get_local_toolchain, Sysroot, SysrootDownloadError,
+    Toolchain, ToolchainConfig,
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
@@ -1078,6 +1078,7 @@ fn main_result() -> anyhow::Result<i32> {
                                 &host_target_tuple,
                                 &backends,
                             ))
+                            .map_err(SysrootDownloadError::as_anyhow_error)
                             .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
 
                         let mut benchmarks = get_compile_benchmarks(
@@ -1269,12 +1270,14 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = get_commit_or_fake_it(last_sha).expect("success");
 
             let rt = build_async_runtime();
-            let mut sysroot = rt.block_on(Sysroot::install(
-                Path::new(TOOLCHAIN_CACHE_DIRECTORY),
-                commit.sha,
-                &host_target_tuple,
-                &codegen_backends.0,
-            ))?;
+            let mut sysroot = rt
+                .block_on(Sysroot::install(
+                    Path::new(TOOLCHAIN_CACHE_DIRECTORY),
+                    commit.sha,
+                    &host_target_tuple,
+                    &codegen_backends.0,
+                ))
+                .map_err(SysrootDownloadError::as_anyhow_error)?;
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.
@@ -1358,6 +1361,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
 
             // Obtain the configuration and validate that it matches the
             // collector's host target
+            // TODO: update heartbeat
             let collector_config = rt
                 .block_on(conn.get_collector_config(&collector_name))?
                 .ok_or_else(|| {
@@ -1395,8 +1399,10 @@ async fn run_job_queue_benchmarks(
     all_compile_benchmarks: Vec<Benchmark>,
     host_target_tuple: &str,
 ) -> anyhow::Result<()> {
+    let conn = conn.as_mut();
     conn.update_collector_heartbeat(collector.name()).await?;
 
+    // TODO: check collector SHA vs site SHA
     // TODO: reconnect to the DB if there was an error with the previous job
     while let Some((benchmark_job, artifact_id)) = conn
         .dequeue_benchmark_job(
@@ -1407,83 +1413,153 @@ async fn run_job_queue_benchmarks(
         .await?
     {
         log::info!("Dequeued job {benchmark_job:?}, artifact_id {artifact_id:?}");
-
-        // Fail the job if it has been dequeued too many times
-        if benchmark_job.deque_count() > MAX_JOB_FAILS {
-            // TODO: store some error into the DB
-            conn.as_mut()
-                .mark_benchmark_job_as_completed(
-                    benchmark_job.id(),
-                    BenchmarkJobConclusion::Failure,
-                )
-                .await?;
-            continue;
-        }
-
-        log::info!("Downloading sysroot");
-        // TODO: if there is an error with downloading the toolchain, we need to mark the job as
-        // failed
-        let toolchain = match &artifact_id {
-            ArtifactId::Commit(commit) => {
-                let mut sysroot = Sysroot::install(
-                    Path::new(TOOLCHAIN_CACHE_DIRECTORY),
-                    commit.sha.clone(),
-                    benchmark_job.target().as_str(),
-                    &[benchmark_job.backend().into()],
-                )
-                .await
-                .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
-                // Avoid redownloading the same sysroot multiple times for different jobs, even
-                // across collector restarts.
-
-                // TODO: Periodically clear the cache directory to avoid running out of disk space.
-                sysroot.preserve();
-                Toolchain::from_sysroot(&sysroot, commit.sha.clone())
-            }
-            ArtifactId::Tag(tag) => {
-                create_toolchain_from_published_version(&tag, &host_target_tuple)?
-            }
-        };
-        log::info!("Sysroot download finished");
-
-        let (compile_config, runtime_config) = create_benchmark_configs(
-            conn.as_mut(),
-            &toolchain,
-            &artifact_id,
+        let result = run_benchmark_job(
+            conn,
             &benchmark_job,
+            artifact_id.clone(),
             &all_compile_benchmarks,
+            host_target_tuple,
         )
-        .await?;
-
-        let shared = SharedBenchmarkConfig {
-            artifact_id,
-            toolchain,
-            record_duration: false,
-        };
-
-        // TODO: distinguish transient and permanent errors
-        let job_result =
-            run_benchmarks(conn.as_mut(), shared, compile_config, runtime_config).await;
-        match job_result {
+        .await;
+        match result {
             Ok(_) => {
                 log::info!("Job finished sucessfully");
-                conn.as_mut()
-                    .mark_benchmark_job_as_completed(
-                        benchmark_job.id(),
-                        BenchmarkJobConclusion::Success,
-                    )
-                    .await?;
+                conn.mark_benchmark_job_as_completed(
+                    benchmark_job.id(),
+                    BenchmarkJobConclusion::Success,
+                )
+                .await?;
             }
             Err(error) => {
-                // TODO: record the error *somewhere*
-                log::error!("Job finished with error: {error:?}. Retrying after 30s...");
-                tokio::time::sleep(Duration::from_secs(30)).await;
+                match error {
+                    BenchmarkJobError::Permanent(error) => {
+                        log::error!("Job finished with permanent error: {error:?}");
+
+                        // Store the error to the database
+                        let artifact_row_id = conn.artifact_id(&artifact_id).await;
+                        // Use a <job> placeholder to say that the error is associated with a job,
+                        // not with a benchmark.
+                        conn.record_error(
+                            artifact_row_id,
+                            &format!("job:{}", benchmark_job.id()),
+                            &format!("Error while benchmarking job {benchmark_job:?}: {error:?}"),
+                        )
+                        .await;
+
+                        // Something bad that probably cannot be retried has happened.
+                        // Immediately mark the job as failed and continue with other jobs
+                        log::info!("Marking the job as failed");
+                        conn.mark_benchmark_job_as_completed(
+                            benchmark_job.id(),
+                            BenchmarkJobConclusion::Failure,
+                        )
+                        .await?;
+                    }
+                    BenchmarkJobError::Transient(error) => {
+                        log::error!("Job finished with transient error: {error:?}");
+
+                        // There was some transient (i.e. I/O, network or database) error.
+                        // Let's retry the job later, with some sleep
+                        log::info!("Retrying after 30s...");
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                    }
+                }
             }
         }
 
         conn.update_collector_heartbeat(collector.name()).await?;
     }
     log::info!("No job found, exiting");
+    Ok(())
+}
+
+/// Error that happened during benchmarking of a job.
+enum BenchmarkJobError {
+    /// The error is non-recoverable.
+    /// For example, a rustc toolchain does not exist on CI
+    Permanent(anyhow::Error),
+    Transient(anyhow::Error),
+}
+
+impl From<anyhow::Error> for BenchmarkJobError {
+    fn from(error: Error) -> Self {
+        Self::Transient(error)
+    }
+}
+
+async fn run_benchmark_job(
+    conn: &mut dyn Connection,
+    job: &BenchmarkJob,
+    artifact_id: ArtifactId,
+    all_compile_benchmarks: &[Benchmark],
+    host_target_tuple: &str,
+) -> Result<(), BenchmarkJobError> {
+    // Fail the job if it has been dequeued too many times
+    if job.deque_count() > MAX_JOB_FAILS {
+        return Err(BenchmarkJobError::Permanent(anyhow::anyhow!(
+            "Job failed after being dequeued for {MAX_JOB_FAILS} times"
+        )));
+    }
+
+    log::info!("Downloading sysroot");
+    let toolchain = match &artifact_id {
+        ArtifactId::Commit(commit) => {
+            let mut sysroot = match Sysroot::install(
+                Path::new(TOOLCHAIN_CACHE_DIRECTORY),
+                commit.sha.clone(),
+                job.target().as_str(),
+                &[job.backend().into()],
+            )
+            .await
+            {
+                Ok(sysroot) => sysroot,
+                Err(SysrootDownloadError::SysrootShaNotFound) => {
+                    return Err(BenchmarkJobError::Permanent(anyhow::anyhow!(
+                        "Artifacts for SHA {} and target {} were not found on CI servers",
+                        commit.sha,
+                        job.target().as_str()
+                    )))
+                }
+                Err(SysrootDownloadError::IO(error)) => return Err(error.into()),
+            };
+            // Avoid redownloading the same sysroot multiple times for different jobs, even
+            // across collector restarts.
+
+            // TODO: Periodically clear the cache directory to avoid running out of disk space.
+            sysroot.preserve();
+            Toolchain::from_sysroot(&sysroot, commit.sha.clone())
+        }
+        ArtifactId::Tag(tag) => create_toolchain_from_published_version(&tag, &host_target_tuple)?,
+    };
+    log::info!("Sysroot download finished");
+
+    let (compile_config, runtime_config) = create_benchmark_configs(
+        conn,
+        &toolchain,
+        &artifact_id,
+        &job,
+        &all_compile_benchmarks,
+    )
+    .await
+    .map_err(|error| {
+        BenchmarkJobError::Permanent(anyhow::anyhow!(
+            "Cannot prepare benchmark configs: {error:?}"
+        ))
+    })?;
+
+    let shared = SharedBenchmarkConfig {
+        artifact_id,
+        toolchain,
+        record_duration: false,
+    };
+
+    // A failure here means that it was not possible to compile something, that likely won't resolve
+    // itself automatically.
+    run_benchmarks(conn, shared, compile_config, runtime_config)
+        .await
+        .map_err(|error| {
+            BenchmarkJobError::Permanent(anyhow::anyhow!("Cannot run benchmarks: {error:?}"))
+        })?;
     Ok(())
 }
 
