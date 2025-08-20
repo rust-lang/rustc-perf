@@ -21,27 +21,53 @@ pub struct Sysroot {
 
 impl Sysroot {
     pub async fn install(
+        cache_directory: &Path,
         sha: String,
         triple: &str,
         backends: &[CodegenBackend],
     ) -> anyhow::Result<Self> {
-        let unpack_into = "cache";
-
-        fs::create_dir_all(unpack_into)?;
+        let cache_directory = cache_directory.join(triple).join(&sha);
+        fs::create_dir_all(&cache_directory)?;
 
         let download = SysrootDownload {
-            directory: unpack_into.into(),
-            rust_sha: sha,
+            cache_directory: cache_directory.clone(),
+            rust_sha: sha.clone(),
             triple: triple.to_owned(),
         };
 
-        download.get_and_extract(Component::Rustc).await?;
-        download.get_and_extract(Component::Std).await?;
-        download.get_and_extract(Component::Cargo).await?;
-        download.get_and_extract(Component::RustSrc).await?;
-        if backends.contains(&CodegenBackend::Cranelift) {
-            download.get_and_extract(Component::Cranelift).await?;
+        let requires_cranelift = backends.contains(&CodegenBackend::Cranelift);
+
+        let stamp = SysrootStamp::load_from_dir(&cache_directory);
+        match stamp {
+            Ok(stamp) => {
+                log::debug!("Found existing stamp for {sha}/{triple}: {stamp:?}");
+                // We should already have a complete sysroot present on disk, check if we need to
+                // download optional components
+                if requires_cranelift && !stamp.cranelift {
+                    download.get_and_extract(Component::Cranelift).await?;
+                }
+            }
+            Err(_) => {
+                log::debug!(
+                    "No existing stamp found for {sha}/{triple}, downloading a fresh sysroot"
+                );
+
+                // There is no stamp, download everything
+                download.get_and_extract(Component::Rustc).await?;
+                download.get_and_extract(Component::Std).await?;
+                download.get_and_extract(Component::Cargo).await?;
+                download.get_and_extract(Component::RustSrc).await?;
+                if requires_cranelift {
+                    download.get_and_extract(Component::Cranelift).await?;
+                }
+            }
         }
+
+        // Update the stamp
+        let stamp = SysrootStamp {
+            cranelift: requires_cranelift,
+        };
+        stamp.store_to_dir(&cache_directory)?;
 
         let sysroot = download.into_sysroot()?;
 
@@ -68,9 +94,32 @@ impl Drop for Sysroot {
     }
 }
 
+const SYSROOT_STAMP_FILENAME: &str = ".sysroot-stamp.json";
+
+/// Stores a proof on disk that we have downloaded a complete sysroot.
+/// It is used to avoid redownloading a sysroot if it already exists on disk.
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+struct SysrootStamp {
+    /// Was Cranelift downloaded as a part of the sysroot?
+    cranelift: bool,
+}
+
+impl SysrootStamp {
+    fn load_from_dir(dir: &Path) -> anyhow::Result<Self> {
+        let data = std::fs::read(dir.join(SYSROOT_STAMP_FILENAME))?;
+        let stamp: SysrootStamp = serde_json::from_slice(&data)?;
+        Ok(stamp)
+    }
+
+    fn store_to_dir(&self, dir: &Path) -> anyhow::Result<()> {
+        let file = std::fs::File::create(dir.join(SYSROOT_STAMP_FILENAME))?;
+        Ok(serde_json::to_writer(file, self)?)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SysrootDownload {
-    directory: PathBuf,
+    cache_directory: PathBuf,
     rust_sha: String,
     triple: String,
 }
@@ -118,7 +167,7 @@ impl Component {
 
 impl SysrootDownload {
     fn into_sysroot(self) -> anyhow::Result<Sysroot> {
-        let sysroot_bin_dir = self.directory.join(&self.rust_sha).join("bin");
+        let sysroot_bin_dir = self.cache_directory.join("bin");
         let sysroot_bin = |name| {
             let path = sysroot_bin_dir.join(name);
             path.canonicalize().with_context(|| {
@@ -134,7 +183,7 @@ impl SysrootDownload {
             Some(sysroot_bin("rustdoc")?),
             sysroot_bin("clippy-driver").ok(),
             sysroot_bin("cargo")?,
-            &self.directory.join(&self.rust_sha).join("lib"),
+            &self.cache_directory.join("lib"),
         )?;
 
         Ok(Sysroot {
@@ -186,7 +235,7 @@ impl SysrootDownload {
             _ => component.to_string(),
         };
 
-        let unpack_into = self.directory.join(&self.rust_sha);
+        let unpack_into = &self.cache_directory;
 
         for entry in archive.entries()? {
             let mut entry = entry?;

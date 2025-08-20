@@ -65,6 +65,8 @@ use database::{
     CommitType, Connection, Pool,
 };
 
+const TOOLCHAIN_CACHE_DIRECTORY: &str = "cache";
+
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
     format!("{n} normal benchmark{suffix} remaining")
@@ -1070,7 +1072,12 @@ fn main_result() -> anyhow::Result<i32> {
                         };
                         let sha = commit.sha.to_string();
                         let sysroot = rt
-                            .block_on(Sysroot::install(sha.clone(), &host_target_tuple, &backends))
+                            .block_on(Sysroot::install(
+                                Path::new(TOOLCHAIN_CACHE_DIRECTORY),
+                                sha.clone(),
+                                &host_target_tuple,
+                                &backends,
+                            ))
                             .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
 
                         let mut benchmarks = get_compile_benchmarks(
@@ -1263,6 +1270,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let rt = build_async_runtime();
             let mut sysroot = rt.block_on(Sysroot::install(
+                Path::new(TOOLCHAIN_CACHE_DIRECTORY),
                 commit.sha,
                 &host_target_tuple,
                 &codegen_backends.0,
@@ -1387,13 +1395,6 @@ async fn run_job_queue_benchmarks(
     all_compile_benchmarks: Vec<Benchmark>,
     host_target_tuple: &str,
 ) -> anyhow::Result<()> {
-    // We want to cache sysroots between individual jobs, because downloading the same sysroot
-    // for multiple jobs of the same benchmark request/compiler artifact is wasteful.
-    // But we want to avoid caching them indefinitely, as we could run out of disk space.
-    // So we keep the `Sysroot` structs in memory until this function ends, and we periodically make
-    // sure that we reset the collector (which is also needed to self-update it from git).
-    let mut sysroots: HashMap<String, (database::CodegenBackend, Sysroot)> = HashMap::new();
-
     // TODO: reconnect to the DB if there was an error with the previous job
     while let Some((benchmark_job, artifact_id)) = conn
         .dequeue_benchmark_job(
@@ -1422,28 +1423,20 @@ async fn run_job_queue_benchmarks(
         // failed
         let toolchain = match &artifact_id {
             ArtifactId::Commit(commit) => {
-                // We have an existing sysroot with the right codegen backend, reuse it
-                if let Some((_, sysroot)) = sysroots
-                    .get(&commit.sha)
-                    .filter(|(backend, _)| *backend == benchmark_job.backend())
-                {
-                    Toolchain::from_sysroot(sysroot, commit.sha.clone())
-                } else {
-                    // TODO: optimize this to avoid thrashing the cache when multiple codegen
-                    // backends are used.
-                    // We don't have a sysroot or the codegen backend was different, download it
-                    // from scratch and overwrite the cache.
-                    let sysroot = Sysroot::install(
-                        commit.sha.clone(),
-                        benchmark_job.target().as_str(),
-                        &[benchmark_job.backend().into()],
-                    )
-                    .await
-                    .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
-                    let toolchain = Toolchain::from_sysroot(&sysroot, commit.sha.clone());
-                    sysroots.insert(commit.sha.clone(), (benchmark_job.backend(), sysroot));
-                    toolchain
-                }
+                let mut sysroot = Sysroot::install(
+                    Path::new(TOOLCHAIN_CACHE_DIRECTORY),
+                    commit.sha.clone(),
+                    benchmark_job.target().as_str(),
+                    &[benchmark_job.backend().into()],
+                )
+                .await
+                .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
+                // Avoid redownloading the same sysroot multiple times for different jobs, even
+                // across collector restarts.
+
+                // TODO: Periodically clear the cache directory to avoid running out of disk space.
+                sysroot.preserve();
+                Toolchain::from_sysroot(&sysroot, commit.sha.clone())
             }
             ArtifactId::Tag(tag) => {
                 create_toolchain_from_published_version(&tag, &host_target_tuple)?
