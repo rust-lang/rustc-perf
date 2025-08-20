@@ -1451,8 +1451,14 @@ async fn run_job_queue_benchmarks(
         };
         log::info!("Sysroot download finished");
 
-        let (compile_config, runtime_config) =
-            create_benchmark_configs(&benchmark_job, &all_compile_benchmarks).await?;
+        let (compile_config, runtime_config) = create_benchmark_configs(
+            conn.as_mut(),
+            &toolchain,
+            &artifact_id,
+            &benchmark_job,
+            &all_compile_benchmarks,
+        )
+        .await?;
 
         let shared = SharedBenchmarkConfig {
             artifact_id,
@@ -1485,6 +1491,9 @@ async fn run_job_queue_benchmarks(
 }
 
 async fn create_benchmark_configs(
+    conn: &mut dyn Connection,
+    toolchain: &Toolchain,
+    artifact_id: &ArtifactId,
     job: &BenchmarkJob,
     all_compile_benchmarks: &[Benchmark],
 ) -> anyhow::Result<(
@@ -1494,6 +1503,8 @@ async fn create_benchmark_configs(
     // Expand the benchmark set and figure out which benchmarks should be executed
     let benchmark_set = BenchmarkSetId::new(job.target().into(), job.benchmark_set().get_id());
     let benchmark_set_members = expand_benchmark_set(benchmark_set);
+    log::debug!("Expanded benchmark set members: {benchmark_set_members:?}");
+
     let mut bench_rustc = false;
     let mut bench_runtime = false;
     let mut bench_compile_benchmarks = HashSet::new();
@@ -1525,17 +1536,25 @@ async fn create_benchmark_configs(
     } else {
         None
     };
-    // TODO
-    // let runtime_suite = load_runtime_benchmarks(
-    //     conn.as_mut(),
-    //     runtime_benchmark_dir(),
-    //     CargoIsolationMode::Isolated,
-    //     None,
-    //     &toolchain,
-    //     &artifact_id,
-    // )
-    // .await?;
-    let runtime_config = None;
+
+    let runtime_config = if bench_runtime {
+        let runtime_suite = load_runtime_benchmarks(
+            conn,
+            &runtime_benchmark_dir(),
+            CargoIsolationMode::Isolated,
+            None,
+            toolchain,
+            artifact_id,
+        )
+        .await?;
+        Some(RuntimeBenchmarkConfig {
+            runtime_suite,
+            filter: RuntimeBenchmarkFilter::keep_all(),
+            iterations: DEFAULT_RUNTIME_ITERATIONS,
+        })
+    } else {
+        None
+    };
 
     Ok((compile_config, runtime_config))
 }
