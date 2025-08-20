@@ -812,7 +812,10 @@ pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     ArtifactsReady,
     InProgress,
-    Completed { completed_at: DateTime<Utc> },
+    Completed {
+        completed_at: DateTime<Utc>,
+        duration: Duration,
+    },
 }
 
 const BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR: &str = "waiting_for_artifacts";
@@ -833,6 +836,7 @@ impl BenchmarkRequestStatus {
     pub(crate) fn from_str_and_completion_date(
         text: &str,
         completion_date: Option<DateTime<Utc>>,
+        duration_ms: Option<i32>,
     ) -> anyhow::Result<Self> {
         match text {
             BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR => Ok(Self::WaitingForArtifacts),
@@ -842,6 +846,9 @@ impl BenchmarkRequestStatus {
                 completed_at: completion_date.ok_or_else(|| {
                     anyhow!("No completion date for a completed BenchmarkRequestStatus")
                 })?,
+                duration: Duration::from_millis(duration_ms.ok_or_else(|| {
+                    anyhow!("No completion duration for a completed BenchmarkRequestStatus")
+                })? as u64),
             }),
             _ => Err(anyhow!("Unknown BenchmarkRequestStatus `{text}`")),
         }
@@ -1221,6 +1228,8 @@ impl CollectorConfig {
 /// status page
 #[derive(Debug, PartialEq)]
 pub struct PartialStatusPageData {
-    pub completed_requests: Vec<(BenchmarkRequest, String, Vec<String>)>,
+    /// A Vector of; completed requests with any associated errors
+    pub completed_requests: Vec<(BenchmarkRequest, Vec<String>)>,
+    /// In progress requests along with their associated jobs
     pub in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)>,
 }

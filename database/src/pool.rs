@@ -973,6 +973,9 @@ mod tests {
 
             assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
 
+            /* Make the job take some amount of time */
+            std::thread::sleep(Duration::from_millis(1000));
+
             /* Mark the job as complete */
             db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
                 .await
@@ -980,9 +983,28 @@ mod tests {
 
             db.mark_benchmark_request_as_completed(tag).await.unwrap();
 
-            let completed = db.load_benchmark_request_index().await.unwrap();
+            /* From the status page view we can see that the duration has been
+             * updated. Albeit that it will be a very short duration. */
+            let status_page_view = db.get_status_page_data().await.unwrap();
+            let req = &status_page_view
+                .completed_requests
+                .iter()
+                .find(|it| it.0.tag() == Some(tag))
+                .unwrap()
+                .0;
 
-            assert!(completed.contains_tag("sha-1"));
+            assert!(matches!(
+                req.status(),
+                BenchmarkRequestStatus::Completed { .. }
+            ));
+            let BenchmarkRequestStatus::Completed { duration, .. } = req.status() else {
+                unreachable!();
+            };
+            assert!(duration >= Duration::from_millis(1000));
+
+            let completed_index = db.load_benchmark_request_index().await.unwrap();
+            assert!(completed_index.contains_tag("sha-1"));
+
             Ok(ctx)
         })
         .await;
@@ -1059,11 +1081,11 @@ mod tests {
             // can't really test duration
             // ensure errors are correct
             assert_eq!(
-                status_page_data.completed_requests[0].2[0],
+                status_page_data.completed_requests[0].1[0],
                 "This is an error".to_string()
             );
             assert_eq!(
-                status_page_data.completed_requests[0].2[1],
+                status_page_data.completed_requests[0].1[1],
                 "This is another error".to_string()
             );
 
