@@ -466,6 +466,7 @@ pub mod status_new {
     }
 
     #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
     pub struct Response {
         /// Completed requests alongside any errors
         pub completed: Vec<BenchmarkRequestUi>,

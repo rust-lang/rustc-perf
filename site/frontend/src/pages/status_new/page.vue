@@ -15,7 +15,7 @@ const loading = ref(true);
 const dataNew: Ref<StatusResponse | null> = ref(null);
 
 function statusClass(c: CollectorConfig): string {
-  return c.is_active ? "active" : "inactive";
+  return c.isActive ? "active" : "inactive";
 }
 
 loadStatusNew(loading);
@@ -34,27 +34,32 @@ loadStatusNew(loading);
 
       <div class="grid">
         <div
-          v-for="c in dataNew.collector_configs"
+          v-for="c in dataNew.collectorConfigs"
           :key="c.name + c.target"
           class="card"
         >
           <div>
             <div class="header">
-              <div class="name">{{ c.name }}:</div>
-              <div class="status" :class="statusClass(c)">
-                {{ c.is_active ? "Active" : "Inactive" }}
+              <div class="name">
+                <strong>{{ c.name }}</strong>
+              </div>
+              <div>
+                <strong>Status:</strong>
+                <span class="status" :class="statusClass(c)">
+                  {{ c.isActive ? "Active" : "Inactive" }}
+                </span>
               </div>
             </div>
             <div class="meta">
               <div><strong>Target:</strong> {{ c.target }}</div>
-              <div><strong>Benchmark Set:</strong> #{{ c.benchmark_set }}</div>
+              <div><strong>Benchmark Set:</strong> #{{ c.benchmarkSet }}</div>
               <div>
                 <strong>Last Heartbeat:</strong>
-                {{ c.last_heartbeat_at }}
+                {{ c.lastHeartbeatAt }}
               </div>
               <div>
                 <strong>Date Added:</strong>
-                {{ c.date_added }}
+                {{ c.dateAdded }}
               </div>
             </div>
           </div>
@@ -103,16 +108,13 @@ loadStatusNew(loading);
 }
 
 .header {
-  display: flex;
-  align-items: center;
 }
 
 .status {
-  padding: 2px 8px;
+  padding: 2px 8px 2px 0px;
   border-radius: 20px;
   font-size: 0.75rem;
   width: 50px;
-  font-weight: bold;
 }
 
 .status.active {
