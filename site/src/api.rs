@@ -392,19 +392,89 @@ pub mod status {
 }
 
 pub mod status_new {
-    use database::{BenchmarkJob, BenchmarkRequest, CollectorConfig};
+    use chrono::{DateTime, Utc};
+    use database::BenchmarkSet;
     use serde::Serialize;
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BenchmarkRequestStatusUi {
+        pub state: String,
+        pub completed_at: Option<DateTime<Utc>>,
+        pub duration: Option<u32>,
+    }
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BenchmarkRequestTypeUi {
+        pub r#type: String,
+        pub tag: Option<String>,
+        pub parent_sha: Option<String>,
+        pub pr: Option<u32>,
+    }
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BenchmarkRequestUi {
+        pub status: BenchmarkRequestStatusUi,
+        pub request_type: BenchmarkRequestTypeUi,
+        pub commit_date: Option<DateTime<Utc>>,
+        pub created_at: DateTime<Utc>,
+        pub backends: Vec<String>,
+        pub profiles: String,
+        pub errors: Vec<String>,
+    }
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BenchmarkJobStatusUi {
+        pub state: String,
+        pub started_at: Option<DateTime<Utc>>,
+        pub completed_at: Option<DateTime<Utc>>,
+        pub collector_name: Option<String>,
+    }
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BenchmarkJobUi {
+        pub target: String,
+        pub backend: String,
+        pub profile: String,
+        pub request_tag: String,
+        pub benchmark_set: BenchmarkSet,
+        pub created_at: DateTime<Utc>,
+        pub status: BenchmarkJobStatusUi,
+        pub deque_counter: u32,
+    }
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BenchmarkInProgressUi {
+        pub request: BenchmarkRequestUi,
+        pub jobs: Vec<BenchmarkJobUi>,
+    }
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct CollectorConfigUi {
+        pub name: String,
+        pub target: String,
+        pub benchmark_set: BenchmarkSet,
+        pub is_active: bool,
+        pub last_heartbeat_at: DateTime<Utc>,
+        pub date_added: DateTime<Utc>,
+    }
 
     #[derive(Serialize, Debug)]
     pub struct Response {
         /// Completed requests alongside any errors
-        pub completed: Vec<(BenchmarkRequest, Vec<String>)>,
+        pub completed: Vec<BenchmarkRequestUi>,
         /// In progress requests alongside the jobs associated with the request
-        pub in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)>,
+        pub in_progress: Vec<BenchmarkInProgressUi>,
         /// Configuration for all collectors including ones that are inactive
-        pub collector_configs: Vec<CollectorConfig>,
+        pub collector_configs: Vec<CollectorConfigUi>,
         /// The current queue
-        pub queue: Vec<BenchmarkRequest>,
+        pub queue: Vec<BenchmarkRequestUi>,
     }
 }
 
