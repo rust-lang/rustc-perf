@@ -1,15 +1,19 @@
+export const BenchmarkRequestComplete = "completed";
+export const BenchmarkRequestInProgress = "in_progress";
+export const BenchmarkRequestArtifactsReady = "artifacts_ready";
+
 type BenchmarkRequestStatusComplete = {
-  state: "completed";
+  state: typeof BenchmarkRequestComplete;
   completedAt: string;
   duration: number; // time in milliseconds
 };
 
 type BenchmarkRequestStatusInProgress = {
-  state: "in_progress";
+  state: typeof BenchmarkRequestInProgress;
 };
 
 type BenchmarkRequestStatusArtifactsReady = {
-  state: "artifacts_ready";
+  state: typeof BenchmarkRequestArtifactsReady;
 };
 
 export type BenchmarkRequestStatus =
@@ -17,26 +21,35 @@ export type BenchmarkRequestStatus =
   | BenchmarkRequestStatusInProgress
   | BenchmarkRequestStatusArtifactsReady;
 
+export const TryCommit = "Try";
+export const MasterCommit = "Master";
+export const ReleaseCommit = "Release";
+
 type BenchmarkRequestTypeTry = {
-  type: "Try";
+  type: typeof TryCommit;
   tag: string | null;
   parent_sha: string | null;
   pr: number;
 };
 
 type BenchmarkRequestTypeMaster = {
-  type: "Master";
+  type: typeof MasterCommit;
   tag: string;
   parent_sha: string;
   pr: number;
 };
 
 type BenchmarkRequestTypeRelease = {
-  type: "Try";
+  type: typeof ReleaseCommit;
   tag: string;
 };
 
-type BenchmarkRequestType =
+export type BenchmarkRequestTypeStr =
+  | typeof ReleaseCommit
+  | typeof MasterCommit
+  | typeof TryCommit;
+
+export type BenchmarkRequestType =
   | BenchmarkRequestTypeTry
   | BenchmarkRequestTypeMaster
   | BenchmarkRequestTypeRelease;
@@ -76,29 +89,40 @@ export type BenchmarkRequest =
   | BenchmarkRequestInProgress
   | BenchmarkRequestArtifactsReady;
 
+export const BenchmarkJobQueued = "queued";
+export const BenchmarkJobInProgress = "in_progres";
+export const BenchmarkJobFailed = "failed";
+export const BenchmarkJobSuccess = "success";
+
 export type BenchmarkJobStatusQueued = {
-  state: "queued";
+  state: typeof BenchmarkJobQueued;
 };
 
 export type BenchmarkJobStatusInProgress = {
-  state: "in_progress";
+  state: typeof BenchmarkJobInProgress;
   startedAt: string;
   collectorName: string;
 };
 
 export type BenchmarkJobStatusFailed = {
-  state: "failed";
+  state: typeof BenchmarkJobFailed;
   startedAt: string;
   completedAt: string;
   collectorName: string;
 };
 
 export type BenchmarkJobStatusSuccess = {
-  state: "success";
+  state: typeof BenchmarkJobSuccess;
   startedAt: string;
   completedAt: string;
   collectorName: string;
 };
+
+export type BenchmarkJobStatusStr =
+  | typeof BenchmarkJobQueued
+  | typeof BenchmarkJobInProgress
+  | typeof BenchmarkJobFailed
+  | typeof BenchmarkJobSuccess;
 
 export type BenchmarkJobStatus =
   | BenchmarkJobStatusSuccess
@@ -137,3 +161,68 @@ export type StatusResponse = {
   collectorConfigs: CollectorConfig[];
   queue: BenchmarkRequest[];
 };
+
+type SimpleJob = {
+  state: BenchmarkJobStatusStr;
+  startedAt: string;
+  backend: string;
+  profile: string;
+  dequeCounter: number;
+};
+
+type SimpleRequest = {
+  type: BenchmarkRequestTypeStr;
+  tag: string;
+  createdAt: string;
+};
+
+export type CollectorConfigAndWork = {
+  jobs: SimpleJob[];
+  config: CollectorConfig;
+  request: SimpleRequest | null;
+};
+
+export type CollectorJobMap = {
+  [key: string]: CollectorConfigAndWork;
+};
+
+/* We might want to let rust do this for us and then render that */
+export function createCollectorJobMap(
+  collectorConfigs: CollectorConfig[],
+  inProgress: StatusResponseInProgress[]
+): CollectorJobMap {
+  const ht: CollectorJobMap = {};
+
+  for (const collectorConfig of collectorConfigs) {
+    ht[collectorConfig.name] = {
+      request: null,
+      jobs: [],
+      config: collectorConfig,
+    };
+  }
+
+  for (const {request, jobs} of inProgress) {
+    const simpleReq: SimpleRequest = {
+      type: request.requestType.type,
+      tag: request.requestType.tag,
+      createdAt: request.createdAt,
+    };
+    for (const j of jobs) {
+      if (j.status.state !== BenchmarkJobQueued) {
+        const simpleJob: SimpleJob = {
+          state: j.status.state,
+          startedAt: j.status.startedAt,
+          profile: j.profile,
+          backend: j.backend,
+          dequeCounter: j.dequeCounter,
+        };
+        if (ht[j.status.collectorName].request == null) {
+          ht[j.status.collectorName].request = simpleReq;
+        }
+        /* There will be one in_progress job and a few success/failures*/
+        ht[j.status.collectorName].jobs.push(simpleJob);
+      }
+    }
+  }
+  return ht;
+}
