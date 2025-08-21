@@ -6,25 +6,27 @@ import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
 import {
   StatusResponse,
-  CollectorConfig,
+  CollectorJobMap,
   BenchmarkRequestType,
   ReleaseCommit,
   createCollectorJobMap,
 } from "./data";
-import Collector from "./collector";
+import Collector from "./collector.vue";
 
 async function loadStatusNew(loading: Ref<boolean>) {
   dataNew.value = await withLoading(loading, async () => {
-    let d = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
+    let d: StatusResponse = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
     return {
       ...d,
-      ht: createCollectorJobMap(d.collectorConfigs, d.inProgress),
+      collectorJobMap: createCollectorJobMap(d.collectorConfigs, d.inProgress),
     };
   });
 }
 
 const loading = ref(true);
-const dataNew: Ref<StatusResponse | null> = ref(null);
+const dataNew: Ref<
+  (StatusResponse & {collectorJobMap: CollectorJobMap}) | null
+> = ref(null);
 
 function pullRequestUrlAsHtml(reqType: BenchmarkRequestType): string {
   if (reqType.type === ReleaseCommit) {
@@ -113,7 +115,7 @@ loadStatusNew(loading);
       </span>
       <h1>Collectors</h1>
       <div class="grid">
-        <div :key="cc[0]" v-for="cc in Object.entries(dataNew.ht)">
+        <div :key="cc[0]" v-for="cc in Object.entries(dataNew.collectorJobMap)">
           <Collector :collector="cc[1]" />
         </div>
       </div>

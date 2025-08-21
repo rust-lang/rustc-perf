@@ -191,10 +191,10 @@ export function createCollectorJobMap(
   collectorConfigs: CollectorConfig[],
   inProgress: StatusResponseInProgress[]
 ): CollectorJobMap {
-  const ht: CollectorJobMap = {};
+  const collectorJobMap: CollectorJobMap = {};
 
   for (const collectorConfig of collectorConfigs) {
-    ht[collectorConfig.name] = {
+    collectorJobMap[collectorConfig.name] = {
       request: null,
       jobs: [],
       config: collectorConfig,
@@ -216,13 +216,13 @@ export function createCollectorJobMap(
           backend: j.backend,
           dequeCounter: j.dequeCounter,
         };
-        if (ht[j.status.collectorName].request == null) {
-          ht[j.status.collectorName].request = simpleReq;
+        if (collectorJobMap[j.status.collectorName].request == null) {
+          collectorJobMap[j.status.collectorName].request = simpleReq;
         }
         /* There will be one in_progress job and a few success/failures*/
-        ht[j.status.collectorName].jobs.push(simpleJob);
+        collectorJobMap[j.status.collectorName].jobs.push(simpleJob);
       }
     }
   }
-  return ht;
+  return collectorJobMap;
 }
