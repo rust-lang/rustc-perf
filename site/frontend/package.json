@@ -38,6 +38,10 @@
       "source": "src/pages/status.ts",
       "distDir": "dist/scripts"
     },
+    "status_new": {
+      "source": "src/pages/status_new.ts",
+      "distDir": "dist/scripts"
+    },
     "bootstrap": {
       "source": "src/pages/bootstrap.ts",
       "distDir": "dist/scripts"

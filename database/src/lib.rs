@@ -199,7 +199,7 @@ impl Ord for Commit {
 
 /// The compilation profile (i.e., how the crate was built)
 #[derive(
-    Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+    Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
 )]
 pub enum Profile {
     /// A checked build (i.e., no codegen)
@@ -356,9 +356,7 @@ impl PartialOrd for Scenario {
 /// https://doc.rust-lang.org/nightly/rustc/platform-support.html
 ///
 /// Presently we only support x86_64
-#[derive(
-    Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Target {
     /// `x86_64-unknown-linux-gnu`
     X86_64UnknownLinuxGnu,
@@ -393,9 +391,7 @@ impl fmt::Display for Target {
 }
 
 /// The codegen backend used for compilation.
-#[derive(
-    Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum CodegenBackend {
     /// The default LLVM backend
     Llvm,
@@ -824,7 +820,7 @@ const BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR: &str = "in_progress";
 const BENCHMARK_REQUEST_STATUS_COMPLETED_STR: &str = "completed";
 
 impl BenchmarkRequestStatus {
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::WaitingForArtifacts => BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
             Self::ArtifactsReady => BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR,
@@ -986,6 +982,10 @@ impl BenchmarkRequest {
         self.created_at
     }
 
+    pub fn commit_date(&self) -> Option<DateTime<Utc>> {
+        self.commit_date
+    }
+
     pub fn is_master(&self) -> bool {
         matches!(self.commit_type, BenchmarkRequestType::Master { .. })
     }
@@ -1100,8 +1100,8 @@ impl fmt::Display for BenchmarkJobStatus {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct BenchmarkSet(u32);
+#[derive(Debug, Copy, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct BenchmarkSet(pub u32);
 
 impl BenchmarkSet {
     pub fn new(id: u32) -> Self {
@@ -1168,6 +1168,10 @@ impl BenchmarkJob {
 
     pub fn status(&self) -> &BenchmarkJobStatus {
         &self.status
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
     }
 }
 
