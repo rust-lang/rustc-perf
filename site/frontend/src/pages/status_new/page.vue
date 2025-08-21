@@ -1,68 +1,120 @@
 <script setup lang="ts">
+import {ref, Ref} from "vue";
+
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {ref, Ref} from "vue";
-import {StatusResponse, CollectorConfig} from "./data";
+import {
+  StatusResponse,
+  CollectorConfig,
+  BenchmarkRequestType,
+  ReleaseCommit,
+  createCollectorJobMap,
+} from "./data";
+import Collector from "./collector";
 
 async function loadStatusNew(loading: Ref<boolean>) {
-  dataNew.value = await withLoading(loading, () =>
-    getJson<StatusResponse>(STATUS_DATA_NEW_URL)
-  );
+  dataNew.value = await withLoading(loading, async () => {
+    let d = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
+    return {
+      ...d,
+      ht: createCollectorJobMap(d.collectorConfigs, d.inProgress),
+    };
+  });
 }
 
 const loading = ref(true);
 const dataNew: Ref<StatusResponse | null> = ref(null);
 
-function statusClass(c: CollectorConfig): string {
-  return c.isActive ? "active" : "inactive";
+function pullRequestUrlAsHtml(reqType: BenchmarkRequestType): string {
+  if (reqType.type === ReleaseCommit) {
+    return "";
+  }
+  return `<a href="https://github.com/rust-lang/rust/pull/${reqType.pr}">#${reqType.pr}</a>`;
+}
+
+function formatDuration(milliseconds: number): string {
+  let seconds = milliseconds / 1000;
+  let secs = seconds % 60;
+  let mins = Math.trunc(seconds / 60);
+  let hours = Math.trunc(mins / 60);
+  mins -= hours * 60;
+
+  let s = "";
+  if (hours > 0) {
+    s = `${hours}h ${mins < 10 ? "0" + mins : mins}m ${
+      secs < 10 ? "0" + secs : secs
+    }s`;
+  } else {
+    s = `${mins < 10 ? " " + mins : mins}m ${secs < 10 ? "0" + secs : secs}s`;
+  }
+  return s;
 }
 
 loadStatusNew(loading);
 </script>
 
 <template>
-  <div v-if="dataNew !== null">
-    <span>
-      <h2>JSON from the database</h2>
-      <code style="white-space: break-spaces">
-        {{ JSON.stringify(dataNew, null, 2) }}
-      </code>
-    </span>
-    <div id="app" class="container">
+  <div id="app" class="container">
+    <div v-if="dataNew !== null">
+      <span>
+        <div class="timeline">
+          <h1>Previous</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Pr</th>
+                <th>Kind</th>
+                <th>Sha / Tag</th>
+                <th>Status</th>
+                <th>Completed At</th>
+                <th>Duration</th>
+                <th>Errors</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="req in dataNew.completed">
+                <tr>
+                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
+                  <td>{{ req.requestType.type }}</td>
+                  <td>{{ req.requestType.tag }}</td>
+                  <td>{{ req.status.state }}</td>
+                  <td>{{ req.status.completedAt }}</td>
+                  <td v-html="formatDuration(req.status.duration)"></td>
+                  <td>{{ req.errors.join("\n") }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <div class="timeline">
+          <h1>Queue</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Pr</th>
+                <th>Kind</th>
+                <th>Sha / Tag</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="req in dataNew.queue">
+                <tr>
+                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
+                  <td>{{ req.requestType.type }}</td>
+                  <td>{{ req.requestType.tag }}</td>
+                  <td>{{ req.status.state }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </span>
       <h1>Collectors</h1>
-
       <div class="grid">
-        <div
-          v-for="c in dataNew.collectorConfigs"
-          :key="c.name + c.target"
-          class="card"
-        >
-          <div>
-            <div class="header">
-              <div class="name">
-                <strong>{{ c.name }}</strong>
-              </div>
-              <div>
-                <strong>Status:</strong>
-                <span class="status" :class="statusClass(c)">
-                  {{ c.isActive ? "Active" : "Inactive" }}
-                </span>
-              </div>
-            </div>
-            <div class="meta">
-              <div><strong>Target:</strong> {{ c.target }}</div>
-              <div><strong>Benchmark Set:</strong> #{{ c.benchmarkSet }}</div>
-              <div>
-                <strong>Last Heartbeat:</strong>
-                {{ c.lastHeartbeatAt }}
-              </div>
-              <div>
-                <strong>Date Added:</strong>
-                {{ c.dateAdded }}
-              </div>
-            </div>
-          </div>
+        <div :key="cc[0]" v-for="cc in Object.entries(dataNew.ht)">
+          <Collector :collector="cc[1]" />
         </div>
       </div>
     </div>
@@ -105,23 +157,6 @@ loadStatusNew(loading);
   @media screen and (min-width: 1440px) {
     width: 100%;
   }
-}
-
-.header {
-}
-
-.status {
-  padding: 2px 8px 2px 0px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  width: 50px;
-}
-
-.status.active {
-  color: green;
-}
-.status.inactive {
-  color: red;
 }
 
 .wrapper {
@@ -172,18 +207,10 @@ loadStatusNew(loading);
   white-space: pre-wrap;
   word-break: break-word;
 }
+
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
   gap: 20px;
-}
-.card {
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: transform 0.2s ease;
 }
 </style>
