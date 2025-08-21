@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import {computed} from "vue";
-import {BenchmarkRequest} from "./data";
+import {CollectorConfigAndWork, CollectorConfig} from "./data";
 
 const props = defineProps<{
   collector: CollectorConfigAndWork;
 }>();
+
+/* trick typescript into thinking props is used. We _have_ to define it else
+ * `collector` in the below code is untyped and thus fails to compile */
+<any>props;
 
 function statusClass(c: CollectorConfig): string {
   return c.isActive ? "active" : "inactive";
