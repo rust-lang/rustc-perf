@@ -129,7 +129,7 @@ pub fn robocopy(
         cmd.arg(arg.as_ref());
     }
 
-    let output = run_command_with_output(&mut cmd)?;
+    let output = run_command_with_output(&mut cmd, false)?;
 
     if output.status.code() >= Some(8) {
         // robocopy returns 0-7 on success
