@@ -1152,11 +1152,11 @@ mod tests {
 
             assert_eq!(collector_configs[0].name(), collector_name_one);
             assert_eq!(collector_configs[0].benchmark_set(), benchmark_set_one);
-            assert_eq!(collector_configs[0].is_active(), true);
+            assert!(collector_configs[0].is_active());
 
             assert_eq!(collector_configs[1].name(), collector_name_two);
             assert_eq!(collector_configs[1].benchmark_set(), benchmark_set_two);
-            assert_eq!(collector_configs[1].is_active(), true);
+            assert!(collector_configs[1].is_active());
 
             Ok(ctx)
         })

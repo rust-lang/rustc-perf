@@ -1528,24 +1528,19 @@ async fn run_benchmark_job(
             Toolchain::from_sysroot(&sysroot, commit.sha.clone())
         }
         ArtifactId::Tag(tag) => {
-            create_toolchain_from_published_version(&tag, job.target().as_str())?
+            create_toolchain_from_published_version(tag, job.target().as_str())?
         }
     };
     log::info!("Sysroot download finished");
 
-    let (compile_config, runtime_config) = create_benchmark_configs(
-        conn,
-        &toolchain,
-        &artifact_id,
-        &job,
-        &all_compile_benchmarks,
-    )
-    .await
-    .map_err(|error| {
-        BenchmarkJobError::Permanent(anyhow::anyhow!(
-            "Cannot prepare benchmark configs: {error:?}"
-        ))
-    })?;
+    let (compile_config, runtime_config) =
+        create_benchmark_configs(conn, &toolchain, &artifact_id, job, all_compile_benchmarks)
+            .await
+            .map_err(|error| {
+                BenchmarkJobError::Permanent(anyhow::anyhow!(
+                    "Cannot prepare benchmark configs: {error:?}"
+                ))
+            })?;
 
     let shared = SharedBenchmarkConfig {
         artifact_id,
@@ -1594,7 +1589,7 @@ async fn create_benchmark_configs(
     let compile_config = if bench_rustc || !bench_compile_benchmarks.is_empty() {
         Some(CompileBenchmarkConfig {
             benchmarks: all_compile_benchmarks
-                .into_iter()
+                .iter()
                 .filter(|b| bench_compile_benchmarks.contains(&b.name))
                 .cloned()
                 .collect(),

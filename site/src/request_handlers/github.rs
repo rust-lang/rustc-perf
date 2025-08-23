@@ -464,7 +464,7 @@ Otherwise LGTM."#),
             @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("foo,bar"), exclude: None, runs: None, backends: None } }))"#);
     }
 
-    fn get_build_commands(body: &str) -> Vec<Result<BuildCommand, String>> {
+    fn get_build_commands(body: &str) -> Vec<Result<BuildCommand<'_>, String>> {
         parse_build_commands(body).collect()
     }
 
