@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="tsx">
 import {ref, Ref} from "vue";
 
 import {getJson} from "../../utils/requests";
@@ -28,11 +28,15 @@ const dataNew: Ref<
   (StatusResponse & {collectorJobMap: CollectorJobMap}) | null
 > = ref(null);
 
-function pullRequestUrlAsHtml(reqType: BenchmarkRequestType): string {
-  if (reqType.type === ReleaseCommit) {
+function PullRequestLink({request}: {request: BenchmarkRequestType}) {
+  if (request.type === ReleaseCommit) {
     return "";
   }
-  return `<a href="https://github.com/rust-lang/rust/pull/${reqType.pr}">#${reqType.pr}</a>`;
+  return (
+    <a href={`https://github.com/rust-lang/rust/pull/${request.pr}`}>
+      #{request.pr}
+    </a>
+  );
 }
 
 function formatDuration(milliseconds: number): string {
@@ -77,7 +81,7 @@ loadStatusNew(loading);
             <tbody>
               <template v-for="req in dataNew.completed">
                 <tr>
-                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
+                  <td><PullRequestLink :request="req.requestType" /></td>
                   <td>{{ req.requestType.type }}</td>
                   <td>{{ req.requestType.tag }}</td>
                   <td>{{ req.status.state }}</td>
@@ -103,7 +107,7 @@ loadStatusNew(loading);
             <tbody>
               <template v-for="req in dataNew.queue">
                 <tr>
-                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
+                  <td><PullRequestLink :request="req.requestType" /></td>
                   <td>{{ req.requestType.type }}</td>
                   <td>{{ req.requestType.tag }}</td>
                   <td>{{ req.status.state }}</td>
