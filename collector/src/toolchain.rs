@@ -2,8 +2,9 @@ use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use anyhow::{anyhow, Context};
 use log::debug;
+use reqwest::StatusCode;
 use std::ffi::OsStr;
-use std::fs::{self, File};
+use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -11,39 +12,83 @@ use std::{fmt, str};
 use tar::Archive;
 use xz2::bufread::XzDecoder;
 
+pub enum SysrootDownloadError {
+    SysrootShaNotFound,
+    IO(anyhow::Error),
+}
+
+impl SysrootDownloadError {
+    pub fn as_anyhow_error(self) -> anyhow::Error {
+        match self {
+            SysrootDownloadError::SysrootShaNotFound => {
+                anyhow::anyhow!("Sysroot was not found on CI")
+            }
+            SysrootDownloadError::IO(error) => error,
+        }
+    }
+}
+
 /// Sysroot downloaded from CI.
 pub struct Sysroot {
-    pub sha: String,
+    sha: String,
     pub components: ToolchainComponents,
-    pub triple: String,
-    pub preserve: bool,
+    triple: String,
+    preserve: bool,
 }
 
 impl Sysroot {
     pub async fn install(
+        cache_directory: &Path,
         sha: String,
         triple: &str,
         backends: &[CodegenBackend],
-    ) -> anyhow::Result<Self> {
-        let unpack_into = "cache";
-
-        fs::create_dir_all(unpack_into)?;
+    ) -> Result<Self, SysrootDownloadError> {
+        let cache_directory = cache_directory.join(triple).join(&sha);
+        fs::create_dir_all(&cache_directory).map_err(|e| SysrootDownloadError::IO(e.into()))?;
 
         let download = SysrootDownload {
-            directory: unpack_into.into(),
-            rust_sha: sha,
+            cache_directory: cache_directory.clone(),
+            rust_sha: sha.clone(),
             triple: triple.to_owned(),
         };
 
-        download.get_and_extract(Component::Rustc).await?;
-        download.get_and_extract(Component::Std).await?;
-        download.get_and_extract(Component::Cargo).await?;
-        download.get_and_extract(Component::RustSrc).await?;
-        if backends.contains(&CodegenBackend::Cranelift) {
-            download.get_and_extract(Component::Cranelift).await?;
+        let requires_cranelift = backends.contains(&CodegenBackend::Cranelift);
+
+        let stamp = SysrootStamp::load_from_dir(&cache_directory);
+        match stamp {
+            Ok(stamp) => {
+                log::debug!("Found existing stamp for {sha}/{triple}: {stamp:?}");
+                // We should already have a complete sysroot present on disk, check if we need to
+                // download optional components
+                if requires_cranelift && !stamp.cranelift {
+                    download.get_and_extract(Component::Cranelift).await?;
+                }
+            }
+            Err(_) => {
+                log::debug!(
+                    "No existing stamp found for {sha}/{triple}, downloading a fresh sysroot"
+                );
+
+                // There is no stamp, download everything
+                download.get_and_extract(Component::Rustc).await?;
+                download.get_and_extract(Component::Std).await?;
+                download.get_and_extract(Component::Cargo).await?;
+                download.get_and_extract(Component::RustSrc).await?;
+                if requires_cranelift {
+                    download.get_and_extract(Component::Cranelift).await?;
+                }
+            }
         }
 
-        let sysroot = download.into_sysroot()?;
+        // Update the stamp
+        let stamp = SysrootStamp {
+            cranelift: requires_cranelift,
+        };
+        stamp
+            .store_to_dir(&cache_directory)
+            .map_err(SysrootDownloadError::IO)?;
+
+        let sysroot = download.into_sysroot().map_err(SysrootDownloadError::IO)?;
 
         Ok(sysroot)
     }
@@ -68,9 +113,32 @@ impl Drop for Sysroot {
     }
 }
 
+const SYSROOT_STAMP_FILENAME: &str = ".sysroot-stamp.json";
+
+/// Stores a proof on disk that we have downloaded a complete sysroot.
+/// It is used to avoid redownloading a sysroot if it already exists on disk.
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+struct SysrootStamp {
+    /// Was Cranelift downloaded as a part of the sysroot?
+    cranelift: bool,
+}
+
+impl SysrootStamp {
+    fn load_from_dir(dir: &Path) -> anyhow::Result<Self> {
+        let data = std::fs::read(dir.join(SYSROOT_STAMP_FILENAME))?;
+        let stamp: SysrootStamp = serde_json::from_slice(&data)?;
+        Ok(stamp)
+    }
+
+    fn store_to_dir(&self, dir: &Path) -> anyhow::Result<()> {
+        let file = std::fs::File::create(dir.join(SYSROOT_STAMP_FILENAME))?;
+        Ok(serde_json::to_writer(file, self)?)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SysrootDownload {
-    directory: PathBuf,
+    cache_directory: PathBuf,
     rust_sha: String,
     triple: String,
 }
@@ -118,7 +186,7 @@ impl Component {
 
 impl SysrootDownload {
     fn into_sysroot(self) -> anyhow::Result<Sysroot> {
-        let sysroot_bin_dir = self.directory.join(&self.rust_sha).join("bin");
+        let sysroot_bin_dir = self.cache_directory.join("bin");
         let sysroot_bin = |name| {
             let path = sysroot_bin_dir.join(name);
             path.canonicalize().with_context(|| {
@@ -134,7 +202,7 @@ impl SysrootDownload {
             Some(sysroot_bin("rustdoc")?),
             sysroot_bin("clippy-driver").ok(),
             sysroot_bin("cargo")?,
-            &self.directory.join(&self.rust_sha).join("lib"),
+            &self.cache_directory.join("lib"),
         )?;
 
         Ok(Sysroot {
@@ -145,24 +213,7 @@ impl SysrootDownload {
         })
     }
 
-    async fn get_and_extract(&self, component: Component) -> anyhow::Result<()> {
-        let archive_path = self.directory.join(format!(
-            "{}-{}-{}.tar.xz",
-            self.rust_sha, self.triple, component,
-        ));
-        if archive_path.exists() {
-            let reader = BufReader::new(File::open(&archive_path)?);
-            let decompress = XzDecoder::new(reader);
-            let extract = self.extract(component, decompress);
-            match extract {
-                Ok(()) => return Ok(()),
-                Err(err) => {
-                    log::warn!("extracting {} failed: {:?}", archive_path.display(), err);
-                    fs::remove_file(&archive_path).context("removing archive_path")?;
-                }
-            }
-        }
-
+    async fn get_and_extract(&self, component: Component) -> Result<(), SysrootDownloadError> {
         // We usually have nightlies but we want to avoid breaking down if we
         // accidentally end up with a beta or stable commit.
         let urls = [
@@ -170,29 +221,50 @@ impl SysrootDownload {
             component.url("beta", self, &self.triple),
             component.url("stable", self, &self.triple),
         ];
+
+        // Did we see any other error than 404?
+        let mut found_error_that_is_not_404 = false;
         for url in &urls {
             log::debug!("requesting: {}", url);
-            let resp = reqwest::get(url).await?;
-            log::debug!("{}", resp.status());
-            if resp.status().is_success() {
-                let bytes: Vec<u8> = resp.bytes().await?.into();
-                let reader = XzDecoder::new(BufReader::new(bytes.as_slice()));
-                match self.extract(component, reader) {
-                    Ok(()) => return Ok(()),
-                    Err(err) => {
-                        log::warn!("extracting {} failed: {:?}", url, err);
+            let resp = reqwest::get(url)
+                .await
+                .map_err(|e| SysrootDownloadError::IO(e.into()))?;
+            log::debug!("response status: {}", resp.status());
+
+            match resp.status() {
+                s if s.is_success() => {
+                    let bytes: Vec<u8> = resp
+                        .bytes()
+                        .await
+                        .map_err(|e| SysrootDownloadError::IO(e.into()))?
+                        .into();
+                    let reader = XzDecoder::new(BufReader::new(bytes.as_slice()));
+                    match self.extract(component, reader) {
+                        Ok(()) => return Ok(()),
+                        Err(err) => {
+                            log::warn!("extracting {url} failed: {err:?}");
+                            found_error_that_is_not_404 = true;
+                        }
                     }
+                }
+                StatusCode::NOT_FOUND => {}
+                _ => {
+                    log::error!("response body: {}", resp.text().await.unwrap_or_default());
+                    found_error_that_is_not_404 = true
                 }
             }
         }
 
-        Err(anyhow!(
-            "unable to download sha {} triple {} module {} from any of {:?}",
-            self.rust_sha,
-            self.triple,
-            component,
-            urls
-        ))
+        if !found_error_that_is_not_404 {
+            // The only errors we saw were 404, so we assume that the toolchain is simply not on CI
+            Err(SysrootDownloadError::SysrootShaNotFound)
+        } else {
+            Err(SysrootDownloadError::IO(anyhow!(
+                "unable to download sha {} triple {} module {component} from any of {urls:?}",
+                self.rust_sha,
+                self.triple,
+            )))
+        }
     }
 
     fn extract<T: Read>(&self, component: Component, reader: T) -> anyhow::Result<()> {
@@ -203,7 +275,7 @@ impl SysrootDownload {
             _ => component.to_string(),
         };
 
-        let unpack_into = self.directory.join(&self.rust_sha);
+        let unpack_into = &self.cache_directory;
 
         for entry in archive.entries()? {
             let mut entry = entry?;
@@ -617,6 +689,7 @@ fn get_lib_dir_from_rustc(rustc: &Path) -> anyhow::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
 
     #[test]
     fn fill_libraries() {

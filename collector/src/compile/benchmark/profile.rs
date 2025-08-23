@@ -45,12 +45,25 @@ impl Profile {
 impl From<Profile> for database::Profile {
     fn from(value: Profile) -> Self {
         match value {
-            Profile::Check => database::Profile::Check,
-            Profile::Debug => database::Profile::Debug,
-            Profile::Doc => database::Profile::Doc,
-            Profile::DocJson => database::Profile::DocJson,
-            Profile::Opt => database::Profile::Opt,
-            Profile::Clippy => database::Profile::Clippy,
+            Profile::Check => Self::Check,
+            Profile::Debug => Self::Debug,
+            Profile::Doc => Self::Doc,
+            Profile::DocJson => Self::DocJson,
+            Profile::Opt => Self::Opt,
+            Profile::Clippy => Self::Clippy,
+        }
+    }
+}
+
+impl From<database::Profile> for Profile {
+    fn from(value: database::Profile) -> Self {
+        match value {
+            database::Profile::Check => Self::Check,
+            database::Profile::Debug => Self::Debug,
+            database::Profile::Doc => Self::Doc,
+            database::Profile::DocJson => Self::DocJson,
+            database::Profile::Opt => Self::Opt,
+            database::Profile::Clippy => Self::Clippy,
         }
     }
 }

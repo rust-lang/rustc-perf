@@ -269,13 +269,16 @@ pub trait Connection: Send + Sync {
     async fn mark_benchmark_job_as_completed(
         &self,
         id: u32,
-        benchmark_job_conculsion: BenchmarkJobConclusion,
+        conclusion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
 
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;
 
     /// Get all of the configuration for all of the collectors
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>>;
+
+    /// Updates the last known heartbeat of a collector to the current time.
+    async fn update_collector_heartbeat(&self, collector_name: &str) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -1171,11 +1174,11 @@ mod tests {
 
             assert_eq!(collector_configs[0].name(), collector_name_one);
             assert_eq!(collector_configs[0].benchmark_set(), benchmark_set_one);
-            assert_eq!(collector_configs[0].is_active(), true);
+            assert!(collector_configs[0].is_active());
 
             assert_eq!(collector_configs[1].name(), collector_name_two);
             assert_eq!(collector_configs[1].benchmark_set(), benchmark_set_two);
-            assert_eq!(collector_configs[1].is_active(), true);
+            assert!(collector_configs[1].is_active());
 
             Ok(ctx)
         })
