@@ -229,7 +229,7 @@ impl SysrootDownload {
             let resp = reqwest::get(url)
                 .await
                 .map_err(|e| SysrootDownloadError::IO(e.into()))?;
-            log::debug!("{}", resp.status());
+            log::debug!("response status: {}", resp.status());
 
             match resp.status() {
                 s if s.is_success() => {
@@ -248,7 +248,10 @@ impl SysrootDownload {
                     }
                 }
                 StatusCode::NOT_FOUND => {}
-                _ => found_error_that_is_not_404 = true,
+                _ => {
+                    log::error!("response body: {}", resp.text().await.unwrap_or_default());
+                    found_error_that_is_not_404 = true
+                }
             }
         }
 
