@@ -329,7 +329,6 @@ pub struct ToolchainComponents {
     pub cargo_configs: Vec<String>,
     pub lib_rustc: Option<PathBuf>,
     pub lib_std: Option<PathBuf>,
-    pub lib_test: Option<PathBuf>,
     pub lib_llvm: Option<PathBuf>,
 }
 
@@ -375,8 +374,6 @@ impl ToolchainComponents {
                     self.lib_rustc = Some(path.clone());
                 } else if filename.starts_with("libstd") {
                     self.lib_std = Some(path.clone());
-                } else if filename.starts_with("libtest") {
-                    self.lib_test = Some(path.clone());
                 }
             }
         }
@@ -699,7 +696,6 @@ mod tests {
         let temp_dir: tempfile::TempDir = tempfile::tempdir().unwrap();
         let lib_rustc_path = create_temp_lib_path("librustc_driver.so", &temp_dir);
         let lib_std_path = create_temp_lib_path("libstd.so", &temp_dir);
-        let lib_test_path = create_temp_lib_path("libtest.so", &temp_dir);
         let lib_new_llvm_path =
             create_temp_lib_path("libLLVM.so.18.1-rust-1.78.0-nightly", &temp_dir);
 
@@ -707,7 +703,6 @@ mod tests {
 
         assert_eq!(components.lib_rustc, Some(lib_rustc_path));
         assert_eq!(components.lib_std, Some(lib_std_path));
-        assert_eq!(components.lib_test, Some(lib_test_path));
         assert_eq!(components.lib_llvm, Some(lib_new_llvm_path));
     }
 
