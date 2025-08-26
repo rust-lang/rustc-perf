@@ -197,12 +197,15 @@ impl SysrootDownload {
             })
         };
 
+        let host_libdir = self.cache_directory.join("lib");
+        let target_libdir = target_libdir_from_host_libdir(&host_libdir, &self.triple);
         let components = ToolchainComponents::from_binaries_and_libdir(
             sysroot_bin("rustc")?,
             Some(sysroot_bin("rustdoc")?),
             sysroot_bin("clippy-driver").ok(),
             sysroot_bin("cargo")?,
-            &self.cache_directory.join("lib"),
+            &host_libdir,
+            &target_libdir,
         )?;
 
         Ok(Sysroot {
@@ -302,6 +305,10 @@ impl SysrootDownload {
     }
 }
 
+fn target_libdir_from_host_libdir(dir: &Path, target: &str) -> PathBuf {
+    dir.join("rustlib").join(target).join("lib")
+}
+
 /// Representation of a toolchain that can be used to compile Rust programs.
 #[derive(Debug, Clone)]
 pub struct Toolchain {
@@ -338,7 +345,8 @@ impl ToolchainComponents {
         rustdoc: Option<PathBuf>,
         clippy: Option<PathBuf>,
         cargo: PathBuf,
-        libdir: &Path,
+        host_libdir: &Path,
+        target_libdir: &Path,
     ) -> anyhow::Result<Self> {
         let mut component = ToolchainComponents {
             rustc,
@@ -347,34 +355,41 @@ impl ToolchainComponents {
             cargo,
             ..Default::default()
         };
-        component.fill_libraries(libdir)?;
+        component.fill_libraries(host_libdir, target_libdir)?;
         Ok(component)
     }
 
     /// Finds known library components in the given `dir` and stores them in `self`.
-    fn fill_libraries(&mut self, dir: &Path) -> anyhow::Result<()> {
-        let files: Vec<(PathBuf, String)> = fs::read_dir(dir)
-            .with_context(|| format!("Cannot read lib dir `{}` to find components", dir.display()))?
-            .map(|entry| Ok(entry?))
-            .collect::<anyhow::Result<Vec<_>>>()?
-            .into_iter()
-            .filter(|entry| entry.path().is_file())
-            .filter_map(|entry| {
-                entry
-                    .path()
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .map(|s| (entry.path(), s.to_string()))
-            })
-            .collect();
+    fn fill_libraries(&mut self, host_libdir: &Path, target_libdir: &Path) -> anyhow::Result<()> {
+        let load_files = |path: &Path| -> anyhow::Result<Vec<(PathBuf, String)>> {
+            let files = fs::read_dir(path)
+                .with_context(|| {
+                    format!(
+                        "Cannot read lib dir `{}` to find components",
+                        path.display()
+                    )
+                })?
+                .map(|entry| Ok(entry?))
+                .collect::<anyhow::Result<Vec<_>>>()?
+                .into_iter()
+                .filter(|entry| entry.path().is_file())
+                .filter_map(|entry| {
+                    entry
+                        .path()
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .map(|s| (entry.path(), s.to_string()))
+                })
+                .collect();
+            Ok(files)
+        };
 
-        for (path, filename) in &files {
-            if path.extension() == Some(OsStr::new("so")) {
-                if filename.starts_with("librustc_driver") {
-                    self.lib_rustc = Some(path.clone());
-                } else if filename.starts_with("libstd") {
-                    self.lib_std = Some(path.clone());
-                }
+        // Look for librustc_driver.so and libLLVM.so in the *host* libdir
+        let host_files = load_files(host_libdir)?;
+        for (path, filename) in &host_files {
+            if path.extension() == Some(OsStr::new("so")) && filename.starts_with("librustc_driver")
+            {
+                self.lib_rustc = Some(path.clone());
             }
         }
 
@@ -383,13 +398,21 @@ impl ToolchainComponents {
         // libLLVM.so.<version>.
         // So we need to check if we have the new name, and use it.
         // If not, we want to look up the original name.
-        let new_llvm = files
+        let new_llvm = host_files
             .iter()
             .find(|(_, filename)| filename.starts_with("libLLVM.so"));
-        let old_llvm = files.iter().find(|(path, filename)| {
+        let old_llvm = host_files.iter().find(|(path, filename)| {
             path.extension() == Some(OsStr::new("so")) && filename.starts_with("libLLVM")
         });
         self.lib_llvm = new_llvm.or(old_llvm).map(|(path, _)| path.clone());
+
+        // Now find libstd in the *target* libdir
+        let target_files = load_files(target_libdir)?;
+        for (path, filename) in target_files {
+            if path.extension() == Some(OsStr::new("so")) && filename.starts_with("libstd") {
+                self.lib_std = Some(path.clone());
+            }
+        }
 
         Ok(())
     }
@@ -595,10 +618,17 @@ pub fn get_local_toolchain(
         debug!("found cargo: {:?}", &cargo);
         cargo
     };
-    let lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;
+    let host_lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;
+    let target_lib_dir = target_libdir_from_host_libdir(&host_lib_dir, &target_triple);
 
-    let mut components =
-        ToolchainComponents::from_binaries_and_libdir(rustc, rustdoc, clippy, cargo, &lib_dir)?;
+    let mut components = ToolchainComponents::from_binaries_and_libdir(
+        rustc,
+        rustdoc,
+        clippy,
+        cargo,
+        &host_lib_dir,
+        &target_lib_dir,
+    )?;
     components.cargo_configs = toolchain_config.cargo_configs.to_vec();
     Ok(Toolchain {
         components,
@@ -646,14 +676,16 @@ pub fn create_toolchain_from_published_version(
     debug!("Found clippy: {}", clippy.display());
     debug!("Found cargo: {}", cargo.display());
 
-    let lib_dir = get_lib_dir_from_rustc(&rustc)?;
+    let host_lib_dir = get_lib_dir_from_rustc(&rustc)?;
+    let target_lib_dir = target_libdir_from_host_libdir(&host_lib_dir, target_triple);
 
     let components = ToolchainComponents::from_binaries_and_libdir(
         rustc,
         Some(rustdoc),
         Some(clippy),
         cargo,
-        &lib_dir,
+        &host_lib_dir,
+        &target_lib_dir,
     )?;
 
     Ok(Toolchain {
@@ -692,14 +724,21 @@ mod tests {
     fn fill_libraries() {
         let mut components = ToolchainComponents::default();
 
-        // create mock dir and libraries
         let temp_dir: tempfile::TempDir = tempfile::tempdir().unwrap();
-        let lib_rustc_path = create_temp_lib_path("librustc_driver.so", &temp_dir);
-        let lib_std_path = create_temp_lib_path("libstd.so", &temp_dir);
-        let lib_new_llvm_path =
-            create_temp_lib_path("libLLVM.so.18.1-rust-1.78.0-nightly", &temp_dir);
+        let host_libdir = temp_dir.path();
+        let target_libdir = target_libdir_from_host_libdir(host_libdir, "foo");
+        std::fs::create_dir_all(&target_libdir).unwrap();
 
-        components.fill_libraries(temp_dir.path()).unwrap();
+        let lib_rustc_path = create_lib(host_libdir, "librustc_driver.so");
+        let lib_std_path = create_lib(
+            &host_libdir.join("rustlib").join("foo").join("lib"),
+            "libstd.so",
+        );
+        let lib_new_llvm_path = create_lib(host_libdir, "libLLVM.so.18.1-rust-1.78.0-nightly");
+
+        components
+            .fill_libraries(host_libdir, &target_libdir)
+            .unwrap();
 
         assert_eq!(components.lib_rustc, Some(lib_rustc_path));
         assert_eq!(components.lib_std, Some(lib_std_path));
@@ -713,18 +752,25 @@ mod tests {
 
         // create mock dir and libraries
         let temp_dir: tempfile::TempDir = tempfile::tempdir().unwrap();
-        let lib_old_llvm_path = create_temp_lib_path(lib_old_llvm, &temp_dir);
+        let host_libdir = temp_dir.path();
+        let target_libdir = target_libdir_from_host_libdir(host_libdir, "foo");
+        std::fs::create_dir_all(&target_libdir).unwrap();
 
-        components.fill_libraries(temp_dir.path()).unwrap();
+        let lib_old_llvm_path = create_lib(host_libdir, lib_old_llvm);
+
+        components
+            .fill_libraries(
+                host_libdir,
+                &target_libdir_from_host_libdir(temp_dir.path(), "foo"),
+            )
+            .unwrap();
 
         assert_eq!(components.lib_llvm, Some(lib_old_llvm_path));
     }
 
-    fn create_temp_lib_path(lib_name: &str, temp_dir: &tempfile::TempDir) -> PathBuf {
-        let lib_path = temp_dir.path().join(lib_name);
-        // create mock file
+    fn create_lib(path: &Path, lib_name: &str) -> PathBuf {
+        let lib_path = path.join(lib_name);
         File::create(&lib_path).unwrap();
-
         lib_path
     }
 }

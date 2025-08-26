@@ -99,9 +99,7 @@ function generateTitle(component: string): string {
   } else if (component === "libLLVM") {
     return `Shared library of the LLVM codegen backend. It is used by librustc_driver.so.`;
   } else if (component === "libstd") {
-    return `Shared library containing the Rust standard library. It is used by librustc_driver.so.`;
-  } else if (component === "libtest") {
-    return `Shared library containing the Rust test harness.`;
+    return `Shared library containing the Rust standard library.`;
   } else {
     return ""; // Unknown component
   }
