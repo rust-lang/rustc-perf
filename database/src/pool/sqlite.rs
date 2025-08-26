@@ -1365,7 +1365,7 @@ impl Connection for SqliteConnection {
     async fn mark_benchmark_job_as_completed(
         &self,
         _id: u32,
-        _benchmark_job_conculsion: BenchmarkJobConclusion,
+        _conclusion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
@@ -1375,6 +1375,10 @@ impl Connection for SqliteConnection {
     }
 
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn update_collector_heartbeat(&self, _collector_name: &str) -> anyhow::Result<()> {
         no_queue_implementation_abort!()
     }
 }
