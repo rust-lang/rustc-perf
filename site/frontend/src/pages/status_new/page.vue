@@ -36,13 +36,6 @@ const dataNew: Ref<{
   timeline: BenchmarkRequest[];
 } | null> = ref(null);
 
-function pullRequestUrlAsHtml(reqType: BenchmarkRequestType): string {
-  if (reqType.type === ReleaseCommit) {
-    return "";
-  }
-  return `<a href="https://github.com/rust-lang/rust/pull/${reqType.pr}">#${reqType.pr}</a>`;
-}
-
 function getCreatedAt(request: BenchmarkRequest): string {
   if (request.status.state == BenchmarkRequestCompleteStr) {
     return request.status.completedAt;
