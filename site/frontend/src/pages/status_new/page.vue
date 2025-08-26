@@ -4,6 +4,7 @@ import {ref, Ref} from "vue";
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
+import {formatDuration} from "../../utils/formatting";
 import {
   StatusResponse,
   CollectorJobMap,
@@ -28,33 +29,11 @@ const dataNew: Ref<
   (StatusResponse & {collectorJobMap: CollectorJobMap}) | null
 > = ref(null);
 
-function PullRequestLink({request}: {request: BenchmarkRequestType}) {
-  if (request.type === ReleaseCommit) {
+function pullRequestUrlAsHtml(reqType: BenchmarkRequestType): string {
+  if (reqType.type === ReleaseCommit) {
     return "";
   }
-  return (
-    <a href={`https://github.com/rust-lang/rust/pull/${request.pr}`}>
-      #{request.pr}
-    </a>
-  );
-}
-
-function formatDuration(milliseconds: number): string {
-  let seconds = milliseconds / 1000;
-  let secs = seconds % 60;
-  let mins = Math.trunc(seconds / 60);
-  let hours = Math.trunc(mins / 60);
-  mins -= hours * 60;
-
-  let s = "";
-  if (hours > 0) {
-    s = `${hours}h ${mins < 10 ? "0" + mins : mins}m ${
-      secs < 10 ? "0" + secs : secs
-    }s`;
-  } else {
-    s = `${mins < 10 ? " " + mins : mins}m ${secs < 10 ? "0" + secs : secs}s`;
-  }
-  return s;
+  return `<a href="https://github.com/rust-lang/rust/pull/${reqType.pr}">#${reqType.pr}</a>`;
 }
 
 loadStatusNew(loading);
@@ -81,13 +60,15 @@ loadStatusNew(loading);
             <tbody>
               <template v-for="req in dataNew.completed">
                 <tr>
-                  <td><PullRequestLink :request="req.requestType" /></td>
+                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
                   <td>{{ req.requestType.type }}</td>
                   <td>{{ req.requestType.tag }}</td>
                   <td>{{ req.status.state }}</td>
                   <td>{{ req.status.completedAt }}</td>
                   <td v-html="formatDuration(req.status.duration)"></td>
-                  <td>{{ req.errors.join("\n") }}</td>
+                  <td>
+                    <pre>{{ req.errors.join("\n") }}</pre>
+                  </td>
                 </tr>
               </template>
             </tbody>
@@ -107,7 +88,7 @@ loadStatusNew(loading);
             <tbody>
               <template v-for="req in dataNew.queue">
                 <tr>
-                  <td><PullRequestLink :request="req.requestType" /></td>
+                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
                   <td>{{ req.requestType.type }}</td>
                   <td>{{ req.requestType.tag }}</td>
                   <td>{{ req.status.state }}</td>
