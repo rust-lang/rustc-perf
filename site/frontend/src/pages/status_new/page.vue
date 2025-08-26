@@ -57,6 +57,17 @@ function getDuration(request: BenchmarkRequest): string {
   return "";
 }
 
+function PullRequestLink({requestType}: {requestType: BenchmarkRequestType}) {
+  if (requestType.type === ReleaseCommit) {
+    return "";
+  }
+  return (
+    <a href={`https://github.com/rust-lang/rust/pull/${requestType.pr}`}>
+      #{requestType.pr}
+    </a>
+  );
+}
+
 loadStatusNew(loading);
 </script>
 
@@ -83,9 +94,11 @@ loadStatusNew(loading);
           <tbody>
             <template v-for="req in dataNew.timeline">
               <tr>
-                <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
+                <td><PullRequestLink :requestType="req.requestType" /></td>
                 <td>{{ req.requestType.type }}</td>
-                <td>{{ req.requestType.tag }}</td>
+                <td>
+                  {{ req.requestType.tag }}
+                </td>
                 <td>{{ req.status.state }}</td>
                 <td v-html="getCreatedAt(req)"></td>
                 <td v-html="getDuration(req)"></td>
