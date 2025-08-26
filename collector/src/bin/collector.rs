@@ -2286,7 +2286,6 @@ async fn record_toolchain_sizes(
     record(conn, aid, "cargo", Some(&paths.cargo)).await;
     record(conn, aid, "librustc_driver", paths.lib_rustc.as_deref()).await;
     record(conn, aid, "libstd", paths.lib_std.as_deref()).await;
-    record(conn, aid, "libtest", paths.lib_test.as_deref()).await;
     record(conn, aid, "libLLVM", paths.lib_llvm.as_deref()).await;
 }
 
