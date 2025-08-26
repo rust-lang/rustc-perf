@@ -184,6 +184,7 @@ function statusClass(c: CollectorConfig): string {
   border-radius: 8px;
 
   table {
+    font-size: 1em;
     border-collapse: collapse;
     width: 100%;
   }

@@ -9,8 +9,11 @@ import {
   StatusResponse,
   CollectorJobMap,
   BenchmarkRequestType,
+  BenchmarkRequest,
   ReleaseCommit,
   createCollectorJobMap,
+  createTimeline,
+  BenchmarkRequestCompleteStr,
 } from "./data";
 import Collector from "./collector.vue";
 
@@ -18,16 +21,20 @@ async function loadStatusNew(loading: Ref<boolean>) {
   dataNew.value = await withLoading(loading, async () => {
     let d: StatusResponse = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
     return {
-      ...d,
+      queueLength: d.queue.length,
       collectorJobMap: createCollectorJobMap(d.collectorConfigs, d.inProgress),
+      timeline: createTimeline(d.completed, d.queue),
     };
   });
 }
 
 const loading = ref(true);
-const dataNew: Ref<
-  (StatusResponse & {collectorJobMap: CollectorJobMap}) | null
-> = ref(null);
+/* @TODO; redo type */
+const dataNew: Ref<{
+  queueLength: number;
+  collectorJobMap: CollectorJobMap;
+  timeline: BenchmarkRequest[];
+} | null> = ref(null);
 
 function pullRequestUrlAsHtml(reqType: BenchmarkRequestType): string {
   if (reqType.type === ReleaseCommit) {
@@ -36,72 +43,69 @@ function pullRequestUrlAsHtml(reqType: BenchmarkRequestType): string {
   return `<a href="https://github.com/rust-lang/rust/pull/${reqType.pr}">#${reqType.pr}</a>`;
 }
 
+function getCreatedAt(request: BenchmarkRequest): string {
+  if (request.status.state == BenchmarkRequestCompleteStr) {
+    return request.status.completedAt;
+  }
+  return "";
+}
+
+function getDuration(request: BenchmarkRequest): string {
+  if (request.status.state == BenchmarkRequestCompleteStr) {
+    return formatDuration(request.status.duration);
+  }
+  return "";
+}
+
 loadStatusNew(loading);
 </script>
 
 <template>
-  <div id="app" class="container">
-    <div v-if="dataNew !== null">
-      <span>
-        <div class="timeline">
-          <h1>Previous</h1>
-          <table>
-            <thead>
-              <tr>
-                <th>Pr</th>
-                <th>Kind</th>
-                <th>Sha / Tag</th>
-                <th>Status</th>
-                <th>Completed At</th>
-                <th>Duration</th>
-                <th>Errors</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="req in dataNew.completed">
-                <tr>
-                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
-                  <td>{{ req.requestType.type }}</td>
-                  <td>{{ req.requestType.tag }}</td>
-                  <td>{{ req.status.state }}</td>
-                  <td>{{ req.status.completedAt }}</td>
-                  <td v-html="formatDuration(req.status.duration)"></td>
-                  <td>
-                    <pre>{{ req.errors.join("\n") }}</pre>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
+  <div v-if="dataNew !== null">
+    <div class="status-page-wrapper">
+      <div class="timeline-wrapper">
+        <h1>Timeline</h1>
+        <div style="margin-bottom: 10px">
+          Queue length: {{ dataNew.queueLength }}
         </div>
-        <div class="timeline">
-          <h1>Queue</h1>
-          <table>
-            <thead>
+        <table>
+          <thead>
+            <tr>
+              <th>Pr</th>
+              <th>Kind</th>
+              <th>Sha / Tag</th>
+              <th>Status</th>
+              <th>Completed At</th>
+              <th>Duration</th>
+              <th>Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="req in dataNew.timeline">
               <tr>
-                <th>Pr</th>
-                <th>Kind</th>
-                <th>Sha / Tag</th>
-                <th>Status</th>
+                <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
+                <td>{{ req.requestType.type }}</td>
+                <td>{{ req.requestType.tag }}</td>
+                <td>{{ req.status.state }}</td>
+                <td v-html="getCreatedAt(req)"></td>
+                <td v-html="getDuration(req)"></td>
+                <td>
+                  <pre>{{ req.errors.join("\n") }}</pre>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              <template v-for="req in dataNew.queue">
-                <tr>
-                  <td v-html="pullRequestUrlAsHtml(req.requestType)"></td>
-                  <td>{{ req.requestType.type }}</td>
-                  <td>{{ req.requestType.tag }}</td>
-                  <td>{{ req.status.state }}</td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-      </span>
-      <h1>Collectors</h1>
-      <div class="grid">
-        <div :key="cc[0]" v-for="cc in Object.entries(dataNew.collectorJobMap)">
-          <Collector :collector="cc[1]" />
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div class="collector-wrapper">
+        <h1>Collectors</h1>
+        <div class="collectors-grid">
+          <div
+            :key="cc[0]"
+            v-for="cc in Object.entries(dataNew.collectorJobMap)"
+          >
+            <Collector :collector="cc[1]" />
+          </div>
         </div>
       </div>
     </div>
@@ -109,13 +113,35 @@ loadStatusNew(loading);
 </template>
 
 <style scoped lang="scss">
-.timeline {
-  max-width: 100%;
-  width: fit-content;
+.status-page-wrapper {
+  display: flex;
+  @media screen and (max-width: 1450px) {
+    flex-direction: column;
+  }
+}
+
+.collector-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  padding-left: 8px;
+}
+
+.timeline-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: fit-content;
+  flex-direction: column;
+  width: 100%;
+  padding-right: 8px;
 
   table {
     border-collapse: collapse;
     font-size: 1.1em;
+    width: 100%;
 
     th,
     td {
@@ -195,7 +221,8 @@ loadStatusNew(loading);
   word-break: break-word;
 }
 
-.grid {
+.collectors-grid {
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
   gap: 20px;

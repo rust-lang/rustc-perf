@@ -1,19 +1,19 @@
-export const BenchmarkRequestComplete = "completed";
-export const BenchmarkRequestInProgress = "in_progress";
-export const BenchmarkRequestArtifactsReady = "artifacts_ready";
+export const BenchmarkRequestCompleteStr = "completed";
+export const BenchmarkRequestInProgressStr = "in_progress";
+export const BenchmarkRequestArtifactsReadyStr = "artifacts_ready";
 
 type BenchmarkRequestStatusComplete = {
-  state: typeof BenchmarkRequestComplete;
+  state: typeof BenchmarkRequestCompleteStr;
   completedAt: string;
   duration: number; // time in milliseconds
 };
 
 type BenchmarkRequestStatusInProgress = {
-  state: typeof BenchmarkRequestInProgress;
+  state: typeof BenchmarkRequestInProgressStr;
 };
 
 type BenchmarkRequestStatusArtifactsReady = {
-  state: typeof BenchmarkRequestArtifactsReady;
+  state: typeof BenchmarkRequestArtifactsReadyStr;
 };
 
 export type BenchmarkRequestStatus =
@@ -186,7 +186,7 @@ export type CollectorJobMap = {
   [key: string]: CollectorConfigAndWork;
 };
 
-/* We might want to let rust do this for us and then render that */
+/* @TODO; Do this in Rust in the api */
 export function createCollectorJobMap(
   collectorConfigs: CollectorConfig[],
   inProgress: StatusResponseInProgress[]
@@ -225,4 +225,12 @@ export function createCollectorJobMap(
     }
   }
   return collectorJobMap;
+}
+
+/* @TODO; Do this in Rust in the api */
+export function createTimeline(
+  completed: BenchmarkRequestComplete[],
+  queue: BenchmarkRequest[]
+) {
+  return queue.concat(<BenchmarkRequest[]>completed);
 }
