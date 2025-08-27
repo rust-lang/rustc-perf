@@ -713,6 +713,11 @@ enum Commands {
         #[arg(long)]
         git_sha: Option<String>,
 
+        /// Periodically check if the collector's commit SHA matches the commit SHA of the
+        /// rustc-perf repository.
+        #[arg(long)]
+        check_git_sha: bool,
+
         #[command(flatten)]
         db: DbOption,
     },
@@ -1360,6 +1365,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
         Commands::BenchmarkJobQueue {
             collector_name,
             git_sha,
+            check_git_sha,
             db,
         } => {
             log_db(&db);
@@ -1368,7 +1374,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
                 Some(sha) => sha,
                 None => {
                     let mut cmd = Command::new("git");
-                    cmd.args(&["rev-parse", "HEAD"]);
+                    cmd.args(["rev-parse", "HEAD"]);
                     let stdout = command_output(&mut cmd)
                         .context("Cannot determine current commit SHA")?
                         .stdout;
@@ -1395,6 +1401,13 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
                 ));
             }
 
+            log::info!(
+                "Starting collector with target {}, benchmark set {} and commit {}",
+                collector_config.target(),
+                collector_config.benchmark_set().get_id(),
+                collector_config.commit_sha().expect("missing commit SHA")
+            );
+
             let benchmarks =
                 get_compile_benchmarks(&compile_benchmark_dir, CompileBenchmarkFilter::All)?;
 
@@ -1403,6 +1416,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
                 conn,
                 &collector_config,
                 benchmarks,
+                check_git_sha,
             ))?;
 
             Ok(0)
@@ -1418,8 +1432,10 @@ async fn run_job_queue_benchmarks(
     mut conn: Box<dyn Connection>,
     collector: &CollectorConfig,
     all_compile_benchmarks: Vec<Benchmark>,
+    check_git_sha: bool,
 ) -> anyhow::Result<()> {
-    // TODO: check collector SHA vs site SHA
+    let mut last_request_tag = None;
+
     while let Some((benchmark_job, artifact_id)) = conn
         .dequeue_benchmark_job(
             collector.name(),
@@ -1428,6 +1444,22 @@ async fn run_job_queue_benchmarks(
         )
         .await?
     {
+        // Here we check if we should update our commit SHA, if rustc-perf has been updated.
+        // We only check for updates when we switch *benchmark requests*, not *benchmark jobs*,
+        // to avoid changing code in the middle of benchmarking the same request.
+        // Note that if an update happens, the job that we have just dequeued will have its deque
+        // counter increased. But since updates are relatively rare, that shouldn't be a big deal,
+        // it will be dequeued again when the collector starts again.
+        if check_git_sha
+            && last_request_tag.is_some()
+            && last_request_tag.as_deref() != Some(benchmark_job.request_tag())
+            && needs_git_update(collector)
+        {
+            log::warn!("Exiting collector to update itself from git.");
+            return Ok(());
+        }
+        last_request_tag = Some(benchmark_job.request_tag().to_string());
+
         log::info!("Dequeued job {benchmark_job:?}, artifact_id {artifact_id:?}");
         let result = run_benchmark_job(
             conn.as_mut(),
@@ -1489,6 +1521,39 @@ async fn run_job_queue_benchmarks(
     }
     log::info!("No job found, exiting");
     Ok(())
+}
+
+/// Returns true if the commit SHA of collector does not match the latest commit SHA of the master
+/// branch of https://github.com/rust-lang/rustc-perf.
+fn needs_git_update(collector: &CollectorConfig) -> bool {
+    let Some(commit_sha) = collector.commit_sha() else {
+        return false;
+    };
+
+    let mut cmd = Command::new("git");
+    cmd.arg("ls-remote")
+        .arg("https://github.com/rust-lang/rustc-perf")
+        .arg("HEAD");
+    let upstream_sha = match command_output(&mut cmd) {
+        Ok(output) => String::from_utf8(output.stdout)
+            .unwrap()
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string(),
+        Err(error) => {
+            log::error!("Cannot determine latest SHA of rustc-perf: {error:?}");
+            return false;
+        }
+    };
+    if commit_sha != upstream_sha {
+        log::warn!(
+            "Commit {commit_sha} of collector is outdated, latest commit is {upstream_sha}."
+        );
+        true
+    } else {
+        false
+    }
 }
 
 /// Error that happened during benchmarking of a job.
