@@ -1204,6 +1204,8 @@ pub struct CollectorConfig {
     is_active: bool,
     last_heartbeat_at: DateTime<Utc>,
     date_added: DateTime<Utc>,
+    /// The commit SHA of `rustc-perf` that the collector currently has checked out.
+    commit_sha: Option<String>,
 }
 
 impl CollectorConfig {
@@ -1229,6 +1231,10 @@ impl CollectorConfig {
 
     pub fn date_added(&self) -> DateTime<Utc> {
         self.date_added
+    }
+
+    pub fn commit_sha(&self) -> Option<&str> {
+        self.commit_sha.as_deref()
     }
 }
 

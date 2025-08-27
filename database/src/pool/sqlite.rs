@@ -1332,9 +1332,10 @@ impl Connection for SqliteConnection {
             .collect::<Result<_, _>>()?)
     }
 
-    async fn get_collector_config(
+    async fn start_collector(
         &self,
         _collector_name: &str,
+        _commit_sha: &str,
     ) -> anyhow::Result<Option<CollectorConfig>> {
         no_queue_implementation_abort!()
     }
