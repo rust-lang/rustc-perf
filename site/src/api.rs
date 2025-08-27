@@ -401,7 +401,7 @@ pub mod status_new {
     pub struct BenchmarkRequestStatusUi {
         pub state: String,
         pub completed_at: Option<DateTime<Utc>>,
-        pub duration: Option<u32>,
+        pub duration_s: Option<u64>,
     }
 
     #[derive(Serialize, Debug)]

@@ -5,7 +5,7 @@ export const BenchmarkRequestArtifactsReadyStr = "artifacts_ready";
 type BenchmarkRequestStatusComplete = {
   state: typeof BenchmarkRequestCompleteStr;
   completedAt: string;
-  duration: number; // time in milliseconds
+  duration_s: number;
 };
 
 type BenchmarkRequestStatusInProgress = {
