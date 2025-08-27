@@ -1,21 +1,64 @@
-<script setup lang="ts">
+<script setup lang="tsx">
+import {h, ref, Ref} from "vue";
+
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {ref, Ref} from "vue";
-import {StatusResponse, CollectorConfig} from "./data";
+import {formatDuration} from "../../utils/formatting";
+import {
+  StatusResponse,
+  CollectorJobMap,
+  BenchmarkRequestType,
+  BenchmarkRequest,
+  ReleaseCommit,
+  createCollectorJobMap,
+  createTimeline,
+  BenchmarkRequestCompleteStr,
+} from "./data";
+import Collector from "./collector.vue";
 
 async function loadStatusNew(loading: Ref<boolean>) {
-  dataNew.value = await withLoading(loading, () =>
-    getJson<StatusResponse>(STATUS_DATA_NEW_URL)
-  );
+  dataNew.value = await withLoading(loading, async () => {
+    let d: StatusResponse = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
+    return {
+      queueLength: d.queue.length,
+      collectorJobMap: createCollectorJobMap(d.collectorConfigs, d.inProgress),
+      timeline: createTimeline(d.completed, d.queue),
+    };
+  });
 }
 
 const loading = ref(true);
-const dataNew: Ref<StatusResponse | null> = ref(null);
+/* @TODO; redo type */
+const dataNew: Ref<{
+  queueLength: number;
+  collectorJobMap: CollectorJobMap;
+  timeline: BenchmarkRequest[];
+} | null> = ref(null);
 
-function statusClass(c: CollectorConfig): string {
-  return c.isActive ? "active" : "inactive";
+function getCreatedAt(request: BenchmarkRequest): string {
+  if (request.status.state == BenchmarkRequestCompleteStr) {
+    return request.status.completedAt;
+  }
+  return "";
+}
+
+function getDuration(request: BenchmarkRequest): string {
+  if (request.status.state == BenchmarkRequestCompleteStr) {
+    return formatDuration(request.status.duration);
+  }
+  return "";
+}
+
+function PullRequestLink({requestType}: {requestType: BenchmarkRequestType}) {
+  if (requestType.type === ReleaseCommit) {
+    return "";
+  }
+  return (
+    <a href={`https://github.com/rust-lang/rust/pull/${requestType.pr}`}>
+      #{requestType.pr}
+    </a>
+  );
 }
 
 loadStatusNew(loading);
@@ -23,45 +66,51 @@ loadStatusNew(loading);
 
 <template>
   <div v-if="dataNew !== null">
-    <span>
-      <h2>JSON from the database</h2>
-      <code style="white-space: break-spaces">
-        {{ JSON.stringify(dataNew, null, 2) }}
-      </code>
-    </span>
-    <div id="app" class="container">
-      <h1>Collectors</h1>
-
-      <div class="grid">
-        <div
-          v-for="c in dataNew.collectorConfigs"
-          :key="c.name + c.target"
-          class="card"
-        >
-          <div>
-            <div class="header">
-              <div class="name">
-                <strong>{{ c.name }}</strong>
-              </div>
-              <div>
-                <strong>Status:</strong>
-                <span class="status" :class="statusClass(c)">
-                  {{ c.isActive ? "Active" : "Inactive" }}
-                </span>
-              </div>
-            </div>
-            <div class="meta">
-              <div><strong>Target:</strong> {{ c.target }}</div>
-              <div><strong>Benchmark Set:</strong> #{{ c.benchmarkSet }}</div>
-              <div>
-                <strong>Last Heartbeat:</strong>
-                {{ c.lastHeartbeatAt }}
-              </div>
-              <div>
-                <strong>Date Added:</strong>
-                {{ c.dateAdded }}
-              </div>
-            </div>
+    <div class="status-page-wrapper">
+      <div class="timeline-wrapper">
+        <h1>Timeline</h1>
+        <div style="margin-bottom: 10px">
+          Queue length: {{ dataNew.queueLength }}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Pr</th>
+              <th>Kind</th>
+              <th>Sha / Tag</th>
+              <th>Status</th>
+              <th>Completed At</th>
+              <th>Duration</th>
+              <th>Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="req in dataNew.timeline">
+              <tr>
+                <td><PullRequestLink :requestType="req.requestType" /></td>
+                <td>{{ req.requestType.type }}</td>
+                <td>
+                  {{ req.requestType.tag }}
+                </td>
+                <td>{{ req.status.state }}</td>
+                <td v-html="getCreatedAt(req)"></td>
+                <td v-html="getDuration(req)"></td>
+                <td>
+                  <pre>{{ req.errors.join("\n") }}</pre>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div class="collector-wrapper">
+        <h1>Collectors</h1>
+        <div class="collectors-grid">
+          <div
+            :key="cc[0]"
+            v-for="cc in Object.entries(dataNew.collectorJobMap)"
+          >
+            <Collector :collector="cc[1]" />
           </div>
         </div>
       </div>
@@ -70,13 +119,35 @@ loadStatusNew(loading);
 </template>
 
 <style scoped lang="scss">
-.timeline {
-  max-width: 100%;
-  width: fit-content;
+.status-page-wrapper {
+  display: flex;
+  @media screen and (max-width: 1450px) {
+    flex-direction: column;
+  }
+}
+
+.collector-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  padding-left: 8px;
+}
+
+.timeline-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: fit-content;
+  flex-direction: column;
+  width: 100%;
+  padding-right: 8px;
 
   table {
     border-collapse: collapse;
     font-size: 1.1em;
+    width: 100%;
 
     th,
     td {
@@ -105,23 +176,6 @@ loadStatusNew(loading);
   @media screen and (min-width: 1440px) {
     width: 100%;
   }
-}
-
-.header {
-}
-
-.status {
-  padding: 2px 8px 2px 0px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  width: 50px;
-}
-
-.status.active {
-  color: green;
-}
-.status.inactive {
-  color: red;
 }
 
 .wrapper {
@@ -172,18 +226,11 @@ loadStatusNew(loading);
   white-space: pre-wrap;
   word-break: break-word;
 }
-.grid {
+
+.collectors-grid {
+  width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
   gap: 20px;
-}
-.card {
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: transform 0.2s ease;
 }
 </style>
