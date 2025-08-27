@@ -1274,15 +1274,8 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         Commands::InstallNext { codegen_backends } => {
-            let last_sha = Command::new("git")
-                .arg("ls-remote")
-                .arg("https://github.com/rust-lang/rust.git")
-                .arg("master")
-                .output()
-                .unwrap();
-            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
-            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
-            let commit = get_commit_or_fake_it(last_sha).expect("success");
+            let last_sha = get_latest_sha("https://github.com/rust-lang/rust").unwrap();
+            let commit = get_commit_or_fake_it(&last_sha).expect("success");
 
             let rt = build_async_runtime();
             let mut sysroot = rt
@@ -1559,21 +1552,8 @@ fn needs_git_update(collector: &CollectorConfig) -> bool {
         return false;
     };
 
-    let mut cmd = Command::new("git");
-    cmd.arg("ls-remote")
-        .arg("https://github.com/rust-lang/rustc-perf")
-        .arg("HEAD");
-    let upstream_sha = match command_output(&mut cmd) {
-        Ok(output) => String::from_utf8(output.stdout)
-            .unwrap()
-            .split_whitespace()
-            .next()
-            .unwrap()
-            .to_string(),
-        Err(error) => {
-            log::error!("Cannot determine latest SHA of rustc-perf: {error:?}");
-            return false;
-        }
+    let Ok(upstream_sha) = get_latest_sha("https://github.com/rust-lang/rustc-perf") else {
+        return false;
     };
     if commit_sha != upstream_sha {
         log::warn!(
@@ -1582,6 +1562,23 @@ fn needs_git_update(collector: &CollectorConfig) -> bool {
         true
     } else {
         false
+    }
+}
+
+/// Returns the latest known sha of the default branch of the specified `repo`.
+fn get_latest_sha(repo: &str) -> anyhow::Result<String> {
+    let mut cmd = Command::new("git");
+    cmd.arg("ls-remote").arg(repo).arg("HEAD");
+    match command_output(&mut cmd) {
+        Ok(output) => Ok(String::from_utf8(output.stdout)?
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string()),
+        Err(error) => {
+            log::error!("Cannot determine latest SHA of {repo}: {error:?}");
+            Err(error)
+        }
     }
 }
 
