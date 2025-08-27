@@ -43,7 +43,7 @@ impl Sysroot {
         triple: &str,
         backends: &[CodegenBackend],
     ) -> Result<Self, SysrootDownloadError> {
-        let cache_directory = cache_directory.join(triple).join(&sha);
+        let cache_directory = cache_directory.join(&sha).join(triple);
         fs::create_dir_all(&cache_directory).map_err(|e| SysrootDownloadError::IO(e.into()))?;
 
         let download = SysrootDownload {
