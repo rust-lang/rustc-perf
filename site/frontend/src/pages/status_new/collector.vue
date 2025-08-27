@@ -5,10 +5,6 @@ const props = defineProps<{
   collector: CollectorConfigAndWork;
 }>();
 
-/* trick typescript into thinking props is used. We _have_ to define it else
- * `collector` in the below code is untyped and thus fails to compile */
-<any>props;
-
 function statusClass(c: CollectorConfig): string {
   return c.isActive ? "active" : "inactive";
 }
@@ -20,7 +16,7 @@ function statusClass(c: CollectorConfig): string {
       <div class="collector-name">
         <span>
           <strong class="collector-sm-padding-right">{{
-            collector.config.name
+            props.collector.config.name
           }}</strong>
           <span
             class="collector-sm-padding-left-right collector-left-divider"
