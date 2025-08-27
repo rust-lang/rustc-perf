@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {ref, Ref} from "vue";
+import {h, ref, Ref} from "vue";
 import {CompareResponse, Tab} from "./types";
 import {
   diffClass,

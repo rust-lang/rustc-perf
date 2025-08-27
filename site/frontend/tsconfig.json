@@ -8,7 +8,6 @@
     "esModuleInterop": true,
     "jsx": "preserve",
     "jsxFactory": "h",
-    "jsxImportSource": "vue",
     "noUnusedLocals": true,
     "noUnusedParameters": true
   }

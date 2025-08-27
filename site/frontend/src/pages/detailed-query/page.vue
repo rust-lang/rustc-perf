@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {ref, Ref, computed} from "vue";
+import {h, ref, Ref, computed} from "vue";
 import {getUrlParams, changeUrl} from "../../utils/navigation";
 import {postMsgpack} from "../../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../../urls";
