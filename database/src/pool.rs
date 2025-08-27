@@ -244,10 +244,13 @@ pub trait Connection: Send + Sync {
         is_active: bool,
     ) -> anyhow::Result<CollectorConfig>;
 
-    /// Get the configuration for a collector by its name.
-    async fn get_collector_config(
+    /// Call this function when a job queue collector starts.
+    /// It ensures that a collector with the given name exists, updates its commit SHA and heartbeat
+    /// and returns its collector config.
+    async fn start_collector(
         &self,
         collector_name: &str,
+        commit_sha: &str,
     ) -> anyhow::Result<Option<CollectorConfig>>;
 
     /// Dequeues a single job for the given collector, target and benchmark set.
@@ -788,7 +791,7 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
 
-            let collector_config_result = db.get_collector_config("collector-1").await.unwrap();
+            let collector_config_result = db.start_collector("collector-1", "foo").await.unwrap();
 
             assert!(collector_config_result.is_none());
 
@@ -802,19 +805,20 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db_client().connection().await;
 
-            let inserted_config = db
+            let mut inserted_config = db
                 .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
                 .await
                 .unwrap();
 
             let config = db
-                .get_collector_config("collector-1")
+                .start_collector("collector-1", "foo")
                 .await
                 .unwrap()
                 .expect("collector config not found");
 
-            // What we entered into the database should be identical to what is
-            // returned from the database
+            inserted_config.commit_sha = Some("foo".to_string());
+            inserted_config.last_heartbeat_at = config.last_heartbeat_at;
+
             assert_eq!(inserted_config, config);
             Ok(ctx)
         })

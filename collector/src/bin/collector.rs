@@ -59,7 +59,7 @@ use collector::toolchain::{
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
-use collector::{utils, CollectorCtx, CollectorStepBuilder};
+use collector::{command_output, utils, CollectorCtx, CollectorStepBuilder};
 use database::{
     ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, CollectorConfig, Commit,
     CommitType, Connection, Pool,
@@ -708,6 +708,11 @@ enum Commands {
         #[arg(long)]
         collector_name: String,
 
+        /// Git SHA of the commit that the collector is currently on.
+        /// If not present, the collector will attempt to figure it out from git directly.
+        #[arg(long)]
+        git_sha: Option<String>,
+
         #[command(flatten)]
         db: DbOption,
     },
@@ -1352,8 +1357,24 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             Ok(0)
         }
 
-        Commands::BenchmarkJobQueue { collector_name, db } => {
+        Commands::BenchmarkJobQueue {
+            collector_name,
+            git_sha,
+            db,
+        } => {
             log_db(&db);
+
+            let git_sha = match git_sha {
+                Some(sha) => sha,
+                None => {
+                    let mut cmd = Command::new("git");
+                    cmd.args(&["rev-parse", "HEAD"]);
+                    let stdout = command_output(&mut cmd)
+                        .context("Cannot determine current commit SHA")?
+                        .stdout;
+                    String::from_utf8(stdout).unwrap().trim().to_string()
+                }
+            };
 
             let pool = Pool::open(&db.db);
             let rt = build_async_runtime();
@@ -1362,7 +1383,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             // Obtain the configuration and validate that it matches the
             // collector's host target
             let collector_config = rt
-                .block_on(conn.get_collector_config(&collector_name))?
+                .block_on(conn.start_collector(&collector_name, &git_sha))?
                 .ok_or_else(|| {
                     anyhow::anyhow!("Collector with name `{collector_name}` not found")
                 })?;
@@ -1398,8 +1419,6 @@ async fn run_job_queue_benchmarks(
     collector: &CollectorConfig,
     all_compile_benchmarks: Vec<Benchmark>,
 ) -> anyhow::Result<()> {
-    conn.update_collector_heartbeat(collector.name()).await?;
-
     // TODO: check collector SHA vs site SHA
     while let Some((benchmark_job, artifact_id)) = conn
         .dequeue_benchmark_job(

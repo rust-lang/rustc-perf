@@ -384,6 +384,9 @@ static MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE benchmark_request ADD COLUMN duration_ms INTEGER NULL;
     "#,
+    r#"
+    ALTER TABLE collector_config ADD COLUMN commit_sha TEXT NULL;
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -1732,28 +1735,33 @@ where
             is_active,
             last_heartbeat_at: row.get::<_, DateTime<Utc>>(0),
             date_added: row.get::<_, DateTime<Utc>>(1),
+            commit_sha: None,
         };
         Ok(collector_config)
     }
 
-    async fn get_collector_config(
+    async fn start_collector(
         &self,
         collector_name: &str,
+        commit_sha: &str,
     ) -> anyhow::Result<Option<CollectorConfig>> {
         let row = self
             .conn()
             .query_opt(
-                "SELECT
+                "
+                UPDATE collector_config
+                SET
+                    last_heartbeat_at = NOW(),
+                    commit_sha = $2
+                WHERE
+                    name = $1
+                RETURNING
                     target,
                     benchmark_set,
                     is_active,
                     last_heartbeat_at,
-                    date_added
-                FROM
-                    collector_config
-                WHERE
-                    name = $1;",
-                &[&collector_name],
+                    date_added",
+                &[&collector_name, &commit_sha],
             )
             .await?;
 
@@ -1767,6 +1775,7 @@ where
                     is_active: row.get::<_, bool>(2),
                     last_heartbeat_at: row.get::<_, DateTime<Utc>>(3),
                     date_added: row.get::<_, DateTime<Utc>>(4),
+                    commit_sha: Some(commit_sha.to_string()),
                 })
             })
             .transpose()?)
@@ -2180,25 +2189,29 @@ where
                     benchmark_set,
                     is_active,
                     last_heartbeat_at,
-                    date_added
+                    date_added,
+                    commit_sha
                 FROM
                     collector_config;",
                 &[],
             )
             .await?;
 
-        let mut configs = vec![];
-        for row in rows {
-            let config = CollectorConfig {
-                name: row.get::<_, String>(0),
-                target: Target::from_str(row.get::<_, &str>(1)).map_err(|e| anyhow::anyhow!(e))?,
-                benchmark_set: BenchmarkSet(row.get::<_, i32>(2) as u32),
-                is_active: row.get::<_, bool>(3),
-                last_heartbeat_at: row.get::<_, DateTime<Utc>>(4),
-                date_added: row.get::<_, DateTime<Utc>>(5),
-            };
-            configs.push(config);
-        }
+        let configs = rows
+            .into_iter()
+            .map(|row| {
+                Ok(CollectorConfig {
+                    name: row.get::<_, String>(0),
+                    target: Target::from_str(row.get::<_, &str>(1))
+                        .map_err(|e| anyhow::anyhow!(e))?,
+                    benchmark_set: BenchmarkSet(row.get::<_, i32>(2) as u32),
+                    is_active: row.get::<_, bool>(3),
+                    last_heartbeat_at: row.get::<_, DateTime<Utc>>(4),
+                    date_added: row.get::<_, DateTime<Utc>>(5),
+                    commit_sha: row.get::<_, Option<String>>(6),
+                })
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
         Ok(configs)
     }
