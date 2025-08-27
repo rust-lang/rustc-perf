@@ -1803,6 +1803,7 @@ where
                             WHEN status = $1 THEN 1
                             ELSE 2
                         END,
+                        request_tag,
                         created_at
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
