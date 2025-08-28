@@ -13,15 +13,73 @@ import {
   CollectorInfo,
   ReleaseCommit,
   BenchmarkRequestCompleteStr,
+  BenchmarkRequestInProgressStr,
 } from "./data";
 import Collector from "./collector.vue";
+
+const loading = ref(true);
+/* @TODO; redo type */
+const dataNew: Ref<{
+  queueLength: number;
+  timeline: BenchmarkRequestWithWaterLine[];
+  requestsMap: Dict<BenchmarkRequest>;
+  jobMap: Dict<BenchmarkJob>;
+  collectorWorkMap: Dict<CollectorInfo>;
+  tagToJobs: Dict<number[]>;
+} | null> = ref(null);
+
+type BenchmarkRequestWithWaterLine = BenchmarkRequest & {isWaterLine: boolean};
+
+function requestIsInProgress(req: BenchmarkRequest, tagToJobs: Dict<number[]>) {
+  switch (req.status.state) {
+    case BenchmarkRequestCompleteStr:
+      if (req.requestType.tag in tagToJobs) {
+        return true;
+      }
+      return false;
+    case BenchmarkRequestInProgressStr:
+      return true;
+    default:
+      return false;
+  }
+}
+
+function getRequestRowClassName(
+  req: BenchmarkRequestWithWaterLine,
+  tagToJobs: Dict<number[]>
+) {
+  const inProgress = requestIsInProgress(req, tagToJobs);
+  if (inProgress && req.isWaterLine) {
+    return "timeline-waterline";
+  } else if (inProgress) {
+    return "timeline-row-bold";
+  }
+  return "";
+}
 
 async function loadStatusNew(loading: Ref<boolean>) {
   dataNew.value = await withLoading(loading, async () => {
     let d: StatusResponse = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
+    let timeline: BenchmarkRequestWithWaterLine[] = [];
+    // figure out where to draw the line.
+    for (let i = 1; i < d.queueRequestTags.length; ++i) {
+      let req = d.requestsMap[d.queueRequestTags[i - 1]];
+      let nextReq = d.requestsMap[d.queueRequestTags[i]];
+      let isWaterLine = false;
+      if (
+        requestIsInProgress(req, d.tagToJobs) &&
+        !requestIsInProgress(nextReq, d.tagToJobs)
+      ) {
+        isWaterLine = true;
+      }
+      timeline.push({
+        ...req,
+        isWaterLine,
+      });
+    }
     return {
       queueLength: d.queueRequestTags.length,
-      timeline: d.queueRequestTags.map((tag) => d.requestsMap[tag]),
+      timeline,
       requestsMap: d.requestsMap,
       jobMap: d.jobMap,
       collectorWorkMap: d.collectorWorkMap,
@@ -29,17 +87,6 @@ async function loadStatusNew(loading: Ref<boolean>) {
     };
   });
 }
-
-const loading = ref(true);
-/* @TODO; redo type */
-const dataNew: Ref<{
-  queueLength: number;
-  timeline: BenchmarkRequest[];
-  requestsMap: Dict<BenchmarkRequest>;
-  jobMap: Dict<BenchmarkJob>;
-  collectorWorkMap: Dict<CollectorInfo>;
-  tagToJobs: Dict<number[]>;
-} | null> = ref(null);
 
 function getCreatedAt(request: BenchmarkRequest): string {
   if (request.status.state == BenchmarkRequestCompleteStr) {
@@ -91,19 +138,18 @@ loadStatusNew(loading);
           </thead>
           <tbody>
             <template v-for="req in dataNew.timeline">
-              <tr>
+              <tr :class="getRequestRowClassName(req, dataNew.tagToJobs)">
                 <td><PullRequestLink :requestType="req.requestType" /></td>
                 <td>{{ req.requestType.type }}</td>
                 <td>
                   {{ req.requestType.tag }}
                 </td>
                 <td>
-                  {{ req.status.state }}
                   {{
                     req.status.state === BenchmarkRequestCompleteStr &&
                     req.requestType.tag in dataNew.tagToJobs
-                      ? "*"
-                      : ""
+                      ? `${req.status.state}*`
+                      : `${req.status.state}`
                   }}
                 </td>
                 <td v-html="getCreatedAt(req)"></td>
@@ -146,6 +192,15 @@ loadStatusNew(loading);
   align-items: center;
   flex-direction: column;
   padding-left: 8px;
+}
+
+.timeline-waterline {
+  border-bottom: 1px solid black;
+  font-weight: bold;
+}
+
+.timeline-row-bold {
+  font-weight: bold;
 }
 
 .timeline-wrapper {

@@ -175,13 +175,13 @@ pub async fn handle_status_page_new(ctxt: Arc<SiteCtxt>) -> ServerResult<status_
                 benchmark_request_to_ui(&parent.0, vec![]).map_err(error_to_string)?,
             );
 
-            for job in parent.1.iter() {
+            for parent_job in parent.1.iter() {
                 if let Some(jobs) = tag_to_jobs.get_mut(&parent_tag) {
-                    jobs.push(job.id());
+                    jobs.push(parent_job.id());
                 } else {
-                    tag_to_jobs.insert(parent_tag.clone(), vec![job.id()]);
+                    tag_to_jobs.insert(parent_tag.clone(), vec![parent_job.id()]);
                 }
-                jobs.push(job);
+                jobs.push(parent_job);
             }
         }
     }
