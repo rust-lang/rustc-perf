@@ -18,7 +18,7 @@ import {
 import Collector from "./collector.vue";
 
 const loading = ref(true);
-/* @TODO; redo type */
+
 const dataNew: Ref<{
   queueLength: number;
   timeline: BenchmarkRequestWithWaterLine[];
