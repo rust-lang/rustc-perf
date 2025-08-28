@@ -2,7 +2,7 @@
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {formatDuration} from "../../utils/formatting";
+import {formatSecondsAsDuration} from "../../utils/formatting";
 import {computed, ref, Ref} from "vue";
 import {
   Artifact,
@@ -275,7 +275,9 @@ loadStatus(loading);
               <td>
                 {{ format(currentRun.expected_end, "HH:mm") }}
               </td>
-              <td>{{ timeLeft <= 0 ? "?" : formatDuration(timeLeft) }}</td>
+              <td>
+                {{ timeLeft <= 0 ? "?" : formatSecondsAsDuration(timeLeft) }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -307,11 +309,11 @@ loadStatus(loading);
                 {{
                   step.current_progress == 0
                     ? ""
-                    : formatDuration(step.current_progress)
+                    : formatSecondsAsDuration(step.current_progress)
                 }}
               </td>
               <td class="aligned">
-                {{ formatDuration(step.expected_duration) }}
+                {{ formatSecondsAsDuration(step.expected_duration) }}
               </td>
             </tr>
           </tbody>
@@ -322,7 +324,7 @@ loadStatus(loading);
         <div>
           Last collection finished at
           {{ fromUnixTime(lastFinishedRun.finished_at).toLocaleString() }} ({{
-            formatDuration(
+            formatSecondsAsDuration(
               differenceInSeconds(
                 new Date(),
                 fromUnixTime(lastFinishedRun.finished_at)
@@ -373,7 +375,7 @@ loadStatus(loading);
                 }}<template v-if="item.end_estimated"> (est.)</template>
               </td>
               <td v-if="item.duration !== null">
-                {{ formatDuration(item.duration) }}
+                {{ formatSecondsAsDuration(item.duration) }}
               </td>
               <td v-else class="centered">-</td>
               <td v-if="item.errors.length > 0">

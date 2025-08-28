@@ -12,18 +12,18 @@ use database::{
 };
 
 fn benchmark_request_status_to_ui(status: BenchmarkRequestStatus) -> BenchmarkRequestStatusUi {
-    let (completed_at, duration) = match status {
+    let (completed_at, duration_s) = match status {
         BenchmarkRequestStatus::Completed {
             duration,
             completed_at,
-        } => (Some(completed_at), u32::try_from(duration.as_millis()).ok()),
+        } => (Some(completed_at), Some(duration.as_secs())),
         _ => (None, None),
     };
 
     BenchmarkRequestStatusUi {
         state: status.as_str().to_owned(),
         completed_at,
-        duration,
+        duration_s,
     }
 }
 

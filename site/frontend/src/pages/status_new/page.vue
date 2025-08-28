@@ -4,7 +4,7 @@ import {h, ref, Ref} from "vue";
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {formatDuration} from "../../utils/formatting";
+import {formatSecondsAsDuration} from "../../utils/formatting";
 import {
   StatusResponse,
   CollectorJobMap,
@@ -45,7 +45,7 @@ function getCreatedAt(request: BenchmarkRequest): string {
 
 function getDuration(request: BenchmarkRequest): string {
   if (request.status.state == BenchmarkRequestCompleteStr) {
-    return formatDuration(request.status.duration);
+    return formatSecondsAsDuration(request.status.duration_s);
   }
   return "";
 }
