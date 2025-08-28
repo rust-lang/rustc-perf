@@ -43,7 +43,13 @@ impl Sysroot {
         triple: &str,
         backends: &[CodegenBackend],
     ) -> Result<Self, SysrootDownloadError> {
-        let cache_directory = cache_directory.join(triple).join(&sha);
+        // The structure of this directory is load-bearing.
+        // We use the commit SHA as the top-level key, to have a quick way of estimating how many
+        // toolchains have been installed in the cache directory.
+        // We also use a nested directory below the target tuple, because rustc outputs weird things
+        // when we query it with `--print sysroot` and its sysroot is located in a directory that
+        // corresponds to a valid target name.
+        let cache_directory = cache_directory.join(&sha).join(triple).join("toolchain");
         fs::create_dir_all(&cache_directory).map_err(|e| SysrootDownloadError::IO(e.into()))?;
 
         let download = SysrootDownload {

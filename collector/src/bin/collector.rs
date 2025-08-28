@@ -65,7 +65,12 @@ use database::{
     CommitType, Connection, Pool,
 };
 
+/// Directory used to cache downloaded Rust toolchains on disk.
 const TOOLCHAIN_CACHE_DIRECTORY: &str = "cache";
+
+/// Maximum allowed number of toolchains in the toolchain cache directory.
+/// If the directory will have more toolchains, it will be purged.
+const TOOLCHAIN_CACHE_MAX_TOOLCHAINS: usize = 30;
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -1269,15 +1274,8 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         Commands::InstallNext { codegen_backends } => {
-            let last_sha = Command::new("git")
-                .arg("ls-remote")
-                .arg("https://github.com/rust-lang/rust.git")
-                .arg("master")
-                .output()
-                .unwrap();
-            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
-            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
-            let commit = get_commit_or_fake_it(last_sha).expect("success");
+            let last_sha = get_latest_sha("https://github.com/rust-lang/rust").unwrap();
+            let commit = get_commit_or_fake_it(&last_sha).expect("success");
 
             let rt = build_async_runtime();
             let mut sysroot = rt
@@ -1434,6 +1432,8 @@ async fn run_job_queue_benchmarks(
     all_compile_benchmarks: Vec<Benchmark>,
     check_git_sha: bool,
 ) -> anyhow::Result<()> {
+    let _ = tidy_toolchain_cache_dir();
+
     let mut last_request_tag = None;
 
     while let Some((benchmark_job, artifact_id)) = conn
@@ -1444,20 +1444,25 @@ async fn run_job_queue_benchmarks(
         )
         .await?
     {
+        // Are we benchmarking a different benchmark request than in the previous iteration of the
+        // loop?
+        let is_new_request = last_request_tag.is_some()
+            && last_request_tag.as_deref() != Some(benchmark_job.request_tag());
+        if is_new_request {
+            let _ = tidy_toolchain_cache_dir();
+        }
+
         // Here we check if we should update our commit SHA, if rustc-perf has been updated.
         // We only check for updates when we switch *benchmark requests*, not *benchmark jobs*,
         // to avoid changing code in the middle of benchmarking the same request.
         // Note that if an update happens, the job that we have just dequeued will have its deque
         // counter increased. But since updates are relatively rare, that shouldn't be a big deal,
         // it will be dequeued again when the collector starts again.
-        if check_git_sha
-            && last_request_tag.is_some()
-            && last_request_tag.as_deref() != Some(benchmark_job.request_tag())
-            && needs_git_update(collector)
-        {
+        if check_git_sha && is_new_request && needs_git_update(collector) {
             log::warn!("Exiting collector to update itself from git.");
             return Ok(());
         }
+
         last_request_tag = Some(benchmark_job.request_tag().to_string());
 
         log::info!("Dequeued job {benchmark_job:?}, artifact_id {artifact_id:?}");
@@ -1523,6 +1528,23 @@ async fn run_job_queue_benchmarks(
     Ok(())
 }
 
+/// Check the toolchain cache directory and delete it if it grows too large.
+/// Currently, we just assume that "too large" means "has more than N toolchains".
+fn tidy_toolchain_cache_dir() -> std::io::Result<()> {
+    let dir_count = Path::new(TOOLCHAIN_CACHE_DIRECTORY)
+        .read_dir()?
+        .filter_map(|e| e.ok())
+        .filter_map(|d| d.file_type().ok())
+        .filter(|t| t.is_dir())
+        .count();
+    if dir_count > TOOLCHAIN_CACHE_MAX_TOOLCHAINS {
+        log::warn!("Purging toolchain cache directory at {TOOLCHAIN_CACHE_DIRECTORY}");
+        // Just remove the whole directory, to avoid having to figure out which toolchains are old
+        std::fs::remove_dir_all(TOOLCHAIN_CACHE_DIRECTORY)?;
+    }
+    Ok(())
+}
+
 /// Returns true if the commit SHA of collector does not match the latest commit SHA of the master
 /// branch of https://github.com/rust-lang/rustc-perf.
 fn needs_git_update(collector: &CollectorConfig) -> bool {
@@ -1530,21 +1552,8 @@ fn needs_git_update(collector: &CollectorConfig) -> bool {
         return false;
     };
 
-    let mut cmd = Command::new("git");
-    cmd.arg("ls-remote")
-        .arg("https://github.com/rust-lang/rustc-perf")
-        .arg("HEAD");
-    let upstream_sha = match command_output(&mut cmd) {
-        Ok(output) => String::from_utf8(output.stdout)
-            .unwrap()
-            .split_whitespace()
-            .next()
-            .unwrap()
-            .to_string(),
-        Err(error) => {
-            log::error!("Cannot determine latest SHA of rustc-perf: {error:?}");
-            return false;
-        }
+    let Ok(upstream_sha) = get_latest_sha("https://github.com/rust-lang/rustc-perf") else {
+        return false;
     };
     if commit_sha != upstream_sha {
         log::warn!(
@@ -1553,6 +1562,23 @@ fn needs_git_update(collector: &CollectorConfig) -> bool {
         true
     } else {
         false
+    }
+}
+
+/// Returns the latest known sha of the default branch of the specified `repo`.
+fn get_latest_sha(repo: &str) -> anyhow::Result<String> {
+    let mut cmd = Command::new("git");
+    cmd.arg("ls-remote").arg(repo).arg("HEAD");
+    match command_output(&mut cmd) {
+        Ok(output) => Ok(String::from_utf8(output.stdout)?
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string()),
+        Err(error) => {
+            log::error!("Cannot determine latest SHA of {repo}: {error:?}");
+            Err(error)
+        }
     }
 }
 
@@ -1606,8 +1632,6 @@ async fn run_benchmark_job(
             };
             // Avoid redownloading the same sysroot multiple times for different jobs, even
             // across collector restarts.
-
-            // TODO: Periodically clear the cache directory to avoid running out of disk space.
             sysroot.preserve();
             Toolchain::from_sysroot(&sysroot, commit.sha.clone())
         }
