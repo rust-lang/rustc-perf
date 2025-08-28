@@ -2161,11 +2161,11 @@ where
                 // This is ever-so-slightly grim however it allows us to not
                 // have to parse the text representation of the jobs. Which
                 // saves a reasonable amount of time to justify doing this.
-                let include_parent = it.get::<_, bool>("parent_active");
+                let parent_active = it.get::<_, bool>("parent_active");
 
                 InProgressRequestWithJobs {
                     request: (benchmark_request, jobs),
-                    parent: if include_parent {
+                    parent: if parent_active {
                         // only parse the jobs if we need to include the parent
                         let parent_jobs: Vec<BenchmarkJob> = it
                             .get::<_, Vec<String>>("parent_jobs")
