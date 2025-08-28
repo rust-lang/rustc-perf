@@ -169,7 +169,12 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
+/// If `stream_output` is true, stdout/stderr of `cmd` should be streamed to stdout/stderr of the
+/// current process, in addition to being captured.
+fn run_command_with_output(
+    cmd: &mut Command,
+    stream_output: bool,
+) -> anyhow::Result<process::Output> {
     use anyhow::Context;
     use utils::read2;
     let mut child = cmd
@@ -178,27 +183,28 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
         .spawn()
         .with_context(|| format!("failed to spawn process for cmd: {cmd:?}"))?;
 
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-    let mut stdout_writer = std::io::LineWriter::new(std::io::stdout());
-    let mut stderr_writer = std::io::LineWriter::new(std::io::stderr());
-    read2::read2(
+    let mut stdout_writer = std::io::LineWriter::new(std::io::stdout().lock());
+    let mut stderr_writer = std::io::LineWriter::new(std::io::stderr().lock());
+
+    let mut stdout_written = 0;
+    let mut stderr_written = 0;
+    let (stdout, stderr) = read2::read2(
         child.stdout.take().unwrap(),
         child.stderr.take().unwrap(),
         &mut |is_stdout, buffer, _is_done| {
             // Send output if trace logging is enabled
-            if log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
+            if stream_output || log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
                 use std::io::Write;
                 if is_stdout {
-                    stdout_writer.write_all(&buffer[stdout.len()..]).unwrap();
+                    stdout_writer.write_all(&buffer[stdout_written..]).unwrap();
                 } else {
-                    stderr_writer.write_all(&buffer[stderr.len()..]).unwrap();
+                    stderr_writer.write_all(&buffer[stderr_written..]).unwrap();
                 }
             }
             if is_stdout {
-                stdout = buffer.clone();
+                stdout_written = buffer.len();
             } else {
-                stderr = buffer.clone();
+                stderr_written = buffer.len();
             }
         },
     )?;
@@ -215,24 +221,36 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
 }
 
 pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
-    let output = run_command_with_output(cmd)?;
+    let output = run_command_with_output(cmd, false)?;
+    check_command_output(&output)?;
+    Ok(output)
+}
 
+pub fn command_output_stream(cmd: &mut Command) -> anyhow::Result<process::Output> {
+    let output = run_command_with_output(cmd, true)?;
+    check_command_output(&output)?;
+    Ok(output)
+}
+
+fn check_command_output(output: &process::Output) -> anyhow::Result<()> {
     if !output.status.success() {
-        return Err(anyhow::anyhow!(
+        Err(anyhow::anyhow!(
             "expected success, got {}\n\nstderr={}\n\n stdout={}\n",
             output.status,
             String::from_utf8_lossy(&output.stderr),
             String::from_utf8_lossy(&output.stdout)
-        ));
+        ))
+    } else {
+        Ok(())
     }
-
-    Ok(output)
 }
 
 pub async fn async_command_output(
     mut cmd: tokio::process::Command,
 ) -> anyhow::Result<process::Output> {
     use anyhow::Context;
+
+    log::debug!("Executing {:?}", cmd);
 
     let start = Instant::now();
     let child = cmd
@@ -241,16 +259,9 @@ pub async fn async_command_output(
         .spawn()
         .with_context(|| format!("failed to spawn process for cmd: {cmd:?}"))?;
     let output = child.wait_with_output().await?;
-    log::trace!("command {cmd:?} took {} ms", start.elapsed().as_millis());
+    log::trace!("Command took {} ms", start.elapsed().as_millis());
 
-    if !output.status.success() {
-        return Err(anyhow::anyhow!(
-            "expected success, got {}\n\nstderr={}\n\n stdout={}\n",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
-        ));
-    }
+    check_command_output(&output)?;
 
     Ok(output)
 }
