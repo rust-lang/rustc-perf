@@ -1238,6 +1238,16 @@ impl CollectorConfig {
     }
 }
 
+/// Mapping of a request to its parent along with all jobs
+#[derive(Debug, PartialEq)]
+pub struct InProgressRequestWithJobs {
+    /// In progress requests along with their associated jobs
+    pub request: (BenchmarkRequest, Vec<BenchmarkJob>),
+    /// Optionally the parent of the above request with _all_ their associated
+    /// jobs
+    pub parent: Option<(BenchmarkRequest, Vec<BenchmarkJob>)>,
+}
+
 /// The data that can be retrived from the database directly to populate the
 /// status page
 #[derive(Debug, PartialEq)]
@@ -1245,5 +1255,5 @@ pub struct PartialStatusPageData {
     /// A Vector of; completed requests with any associated errors
     pub completed_requests: Vec<(BenchmarkRequest, Vec<String>)>,
     /// In progress requests along with their associated jobs
-    pub in_progress: Vec<(BenchmarkRequest, Vec<BenchmarkJob>)>,
+    pub in_progress: Vec<InProgressRequestWithJobs>,
 }

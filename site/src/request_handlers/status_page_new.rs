@@ -141,8 +141,8 @@ pub async fn handle_status_page_new(ctxt: Arc<SiteCtxt>) -> ServerResult<status_
     let mut in_progress: Vec<BenchmarkInProgressUi> = vec![];
     for it in partial_data.in_progress {
         in_progress.push(BenchmarkInProgressUi {
-            request: benchmark_request_to_ui(&it.0, vec![]).map_err(error_to_string)?,
-            jobs: it.1.iter().map(benchmark_job_to_ui).collect(),
+            request: benchmark_request_to_ui(&it.request.0, vec![]).map_err(error_to_string)?,
+            jobs: it.request.1.iter().map(benchmark_job_to_ui).collect(),
         });
     }
 
