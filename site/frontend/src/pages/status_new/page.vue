@@ -7,12 +7,11 @@ import {withLoading} from "../../utils/loading";
 import {formatSecondsAsDuration} from "../../utils/formatting";
 import {
   StatusResponse,
-  CollectorJobMap,
   BenchmarkRequestType,
   BenchmarkRequest,
+  BenchmarkJob,
+  CollectorInfo,
   ReleaseCommit,
-  createCollectorJobMap,
-  createTimeline,
   BenchmarkRequestCompleteStr,
 } from "./data";
 import Collector from "./collector.vue";
@@ -21,9 +20,12 @@ async function loadStatusNew(loading: Ref<boolean>) {
   dataNew.value = await withLoading(loading, async () => {
     let d: StatusResponse = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
     return {
-      queueLength: d.queue.length,
-      collectorJobMap: createCollectorJobMap(d.collectorConfigs, d.inProgress),
-      timeline: createTimeline(d.completed, d.queue),
+      queueLength: d.queueRequestTags.length,
+      timeline: d.queueRequestTags.map((tag) => d.requestsMap[tag]),
+      requestsMap: d.requestsMap,
+      jobMap: d.jobMap,
+      collectorWorkMap: d.collectorWorkMap,
+      tagToJobs: d.tagToJobs,
     };
   });
 }
@@ -32,8 +34,11 @@ const loading = ref(true);
 /* @TODO; redo type */
 const dataNew: Ref<{
   queueLength: number;
-  collectorJobMap: CollectorJobMap;
   timeline: BenchmarkRequest[];
+  requestsMap: Dict<BenchmarkRequest>;
+  jobMap: Dict<BenchmarkJob>;
+  collectorWorkMap: Dict<CollectorInfo>;
+  tagToJobs: Dict<number[]>;
 } | null> = ref(null);
 
 function getCreatedAt(request: BenchmarkRequest): string {
@@ -92,7 +97,15 @@ loadStatusNew(loading);
                 <td>
                   {{ req.requestType.tag }}
                 </td>
-                <td>{{ req.status.state }}</td>
+                <td>
+                  {{ req.status.state }}
+                  {{
+                    req.status.state === BenchmarkRequestCompleteStr &&
+                    req.requestType.tag in dataNew.tagToJobs
+                      ? "*"
+                      : ""
+                  }}
+                </td>
                 <td v-html="getCreatedAt(req)"></td>
                 <td v-html="getDuration(req)"></td>
                 <td>
@@ -107,10 +120,10 @@ loadStatusNew(loading);
         <h1>Collectors</h1>
         <div class="collectors-grid">
           <div
-            :key="cc[0]"
-            v-for="cc in Object.entries(dataNew.collectorJobMap)"
+            v-for="cc in Object.values(dataNew.collectorWorkMap)"
+            :key="cc.config.name"
           >
-            <Collector :collector="cc[1]" />
+            <Collector :jobMap="dataNew.jobMap" :collector="cc" />
           </div>
         </div>
       </div>

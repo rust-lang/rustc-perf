@@ -150,87 +150,15 @@ export type CollectorConfig = {
   dateAdded: string;
 };
 
-export type StatusResponseInProgress = {
-  request: BenchmarkRequestInProgress;
-  jobs: BenchmarkJob[];
+export type CollectorInfo = {
+  config: CollectorConfig;
+  jobIds: number[];
 };
 
 export type StatusResponse = {
-  completed: BenchmarkRequestComplete[];
-  inProgress: StatusResponseInProgress[];
-  collectorConfigs: CollectorConfig[];
-  queue: BenchmarkRequest[];
+  queueRequestTags: string[];
+  requestsMap: Dict<BenchmarkRequest>;
+  jobMap: Dict<BenchmarkJob>;
+  collectorWorkMap: Dict<CollectorInfo>;
+  tagToJobs: Dict<number[]>;
 };
-
-type SimpleJob = {
-  state: BenchmarkJobStatusStr;
-  startedAt: string;
-  backend: string;
-  profile: string;
-  dequeCounter: number;
-};
-
-type SimpleRequest = {
-  type: BenchmarkRequestTypeStr;
-  tag: string;
-  createdAt: string;
-};
-
-export type CollectorConfigAndWork = {
-  jobs: SimpleJob[];
-  config: CollectorConfig;
-  request: SimpleRequest | null;
-};
-
-export type CollectorJobMap = {
-  [key: string]: CollectorConfigAndWork;
-};
-
-/* @TODO; Do this in Rust in the api */
-export function createCollectorJobMap(
-  collectorConfigs: CollectorConfig[],
-  inProgress: StatusResponseInProgress[]
-): CollectorJobMap {
-  const collectorJobMap: CollectorJobMap = {};
-
-  for (const collectorConfig of collectorConfigs) {
-    collectorJobMap[collectorConfig.name] = {
-      request: null,
-      jobs: [],
-      config: collectorConfig,
-    };
-  }
-
-  for (const {request, jobs} of inProgress) {
-    const simpleReq: SimpleRequest = {
-      type: request.requestType.type,
-      tag: request.requestType.tag,
-      createdAt: request.createdAt,
-    };
-    for (const j of jobs) {
-      if (j.status.state !== BenchmarkJobQueued) {
-        const simpleJob: SimpleJob = {
-          state: j.status.state,
-          startedAt: j.status.startedAt,
-          profile: j.profile,
-          backend: j.backend,
-          dequeCounter: j.dequeCounter,
-        };
-        if (collectorJobMap[j.status.collectorName].request == null) {
-          collectorJobMap[j.status.collectorName].request = simpleReq;
-        }
-        /* There will be one in_progress job and a few success/failures*/
-        collectorJobMap[j.status.collectorName].jobs.push(simpleJob);
-      }
-    }
-  }
-  return collectorJobMap;
-}
-
-/* @TODO; Do this in Rust in the api */
-export function createTimeline(
-  completed: BenchmarkRequestComplete[],
-  queue: BenchmarkRequest[]
-) {
-  return queue.concat(<BenchmarkRequest[]>completed);
-}

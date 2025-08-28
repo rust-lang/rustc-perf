@@ -2254,7 +2254,7 @@ where
 
 fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRequest {
     let row_offset = row_offset.unwrap_or(0);
-    let tag = row.get::<_, Option<String>>(0 + row_offset);
+    let tag = row.get::<_, Option<String>>(row_offset);
     let parent_sha = row.get::<_, Option<String>>(1 + row_offset);
     let pr = row.get::<_, Option<i32>>(2 + row_offset);
     let commit_type = row.get::<_, &str>(3 + row_offset);

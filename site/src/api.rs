@@ -394,6 +394,7 @@ pub mod status {
 pub mod status_new {
     use chrono::{DateTime, Utc};
     use database::BenchmarkSet;
+    use hashbrown::HashMap;
     use serde::Serialize;
 
     #[derive(Serialize, Debug)]
@@ -454,7 +455,7 @@ pub mod status_new {
         pub jobs: Vec<BenchmarkJobUi>,
     }
 
-    #[derive(Serialize, Debug)]
+    #[derive(Serialize, Debug, Clone)]
     #[serde(rename_all = "camelCase")]
     pub struct CollectorConfigUi {
         pub name: String,
@@ -465,17 +466,29 @@ pub mod status_new {
         pub date_added: DateTime<Utc>,
     }
 
+    #[derive(Serialize, Debug, Clone)]
+    #[serde(rename_all = "camelCase")]
+    pub struct CollectorInfo {
+        /// Configuration for the collector
+        pub config: CollectorConfigUi,
+        /// Jobs that are assigned to the collector from the currently inprogress
+        /// request and possibly that request's parent.
+        pub job_ids: Vec<u32>,
+    }
+
     #[derive(Serialize, Debug)]
     #[serde(rename_all = "camelCase")]
     pub struct Response {
-        /// Completed requests alongside any errors
-        pub completed: Vec<BenchmarkRequestUi>,
-        /// In progress requests alongside the jobs associated with the request
-        pub in_progress: Vec<BenchmarkInProgressUi>,
-        /// Configuration for all collectors including ones that are inactive
-        pub collector_configs: Vec<CollectorConfigUi>,
-        /// The current queue
-        pub queue: Vec<BenchmarkRequestUi>,
+        /// The current queue, ordered `in_progress`, ... the queue, `completed`
+        pub queue_request_tags: Vec<String>,
+        /// Hash table of request tags to requests
+        pub requests_map: HashMap<String, BenchmarkRequestUi>,
+        /// Hash table of job ids to jobs
+        pub job_map: HashMap<u32, BenchmarkJobUi>,
+        /// Hash table of benchmark set ids to CollectorInfo
+        pub collector_work_map: HashMap<u32, CollectorInfo>,
+        /// Request tag to a vector of job ids
+        pub tag_to_jobs: HashMap<String, Vec<u32>>,
     }
 }
 
