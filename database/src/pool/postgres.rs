@@ -2156,17 +2156,18 @@ where
                     .map(|it| benchmark_job_str_to_type(it).unwrap())
                     .collect();
 
-                let parent_benchmark_request = row_to_benchmark_request(it, Some(12));
-
                 // This is ever-so-slightly grim however it allows us to not
                 // have to parse the text representation of the jobs. Which
                 // saves a reasonable amount of time to justify doing this.
-                let parent_active = it.get::<_, bool>("parent_active");
+                let parent_active = it.get::<_, Option<bool>>("parent_active");
 
                 InProgressRequestWithJobs {
                     request: (benchmark_request, jobs),
-                    parent: if parent_active {
-                        // only parse the jobs if we need to include the parent
+                    parent: if parent_active.unwrap_or(false) {
+                        // The rows values will only be non-null if the `parent_active`
+                        // has been set
+                        let parent_benchmark_request = row_to_benchmark_request(it, Some(12));
+                        // Only parse the jobs if we need to include the parent
                         let parent_jobs: Vec<BenchmarkJob> = it
                             .get::<_, Vec<String>>("parent_jobs")
                             .iter()
