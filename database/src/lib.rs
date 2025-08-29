@@ -1254,13 +1254,3 @@ pub struct CompletedBenchmarkRequestWithErrors {
     /// Benchmark (name) -> error
     errors: HashMap<String, String>,
 }
-
-/// The data that can be retrived from the database directly to populate the
-/// status page
-#[derive(Debug, PartialEq)]
-pub struct PartialStatusPageData {
-    /// A Vector of; completed requests with any associated errors
-    pub completed_requests: Vec<(BenchmarkRequest, Vec<String>)>,
-    /// In progress requests along with their associated jobs
-    pub in_progress: Vec<InProgressRequestWithJobs>,
-}

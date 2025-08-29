@@ -1,9 +1,9 @@
 use crate::{
-    BenchmarkJobConclusion, BenchmarkRequest, BenchmarkSet, CodegenBackend, CollectorConfig,
-    Connection, Profile, Target,
+    BenchmarkJob, BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
+    CodegenBackend, CollectorConfig, Connection, Profile, Target,
 };
 use chrono::Utc;
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 
 pub struct RequestBuilder {
     request: BenchmarkRequest,
@@ -20,32 +20,55 @@ impl RequestBuilder {
         }
     }
 
-    pub async fn add_job(mut self, db: &dyn Connection, job: JobBuilder) -> Self {
-        let id = db
-            .enqueue_benchmark_job(
-                self.request.tag().unwrap(),
-                job.target,
-                job.backend,
-                job.profile,
-                job.benchmark_set,
-            )
+    pub fn tag(&self) -> &str {
+        self.request.tag().unwrap()
+    }
+
+    pub fn assert_has_exact_jobs(&self, jobs: &[BenchmarkJob]) {
+        assert_eq!(jobs.len(), self.jobs.len());
+        let mut expected: HashSet<u32> = self.jobs.iter().map(|(_, id)| *id).collect();
+        for job in jobs {
+            assert!(expected.remove(&job.id));
+        }
+        assert!(expected.is_empty());
+    }
+
+    pub async fn add_job(self, db: &dyn Connection, job: JobBuilder) -> Self {
+        self.add_jobs(db, &[job]).await
+    }
+
+    pub async fn add_jobs(mut self, db: &dyn Connection, jobs: &[JobBuilder]) -> Self {
+        for job in jobs {
+            let id = db
+                .enqueue_benchmark_job(
+                    self.tag(),
+                    job.target,
+                    job.backend,
+                    job.profile,
+                    job.benchmark_set,
+                )
+                .await
+                .unwrap();
+            self.jobs.push((job.clone(), id));
+        }
+        self
+    }
+
+    pub async fn set_in_progress(self, db: &dyn Connection) -> Self {
+        db.update_benchmark_request_status(self.tag(), BenchmarkRequestStatus::InProgress)
             .await
             .unwrap();
-        self.jobs.push((job, id));
         self
     }
 
     /// Continually completes **pending jobs in the DB** until all jobs of this request are
     /// completed, and then completes this benchmark request.
-    pub async fn complete(
-        self,
-        db: &dyn Connection,
-        collector: &CollectorConfig,
-    ) -> BenchmarkRequest {
+    pub async fn complete(self, db: &dyn Connection, collector: &CollectorConfig) -> Self {
         assert!(!self.jobs.is_empty());
+        let tag = self.tag().to_string();
 
-        let mut to_complete: HashMap<u32, JobBuilder> =
-            self.jobs.into_iter().map(|(job, id)| (id, job)).collect();
+        let mut to_complete: HashMap<u32, &JobBuilder> =
+            self.jobs.iter().map(|(job, id)| (*id, job)).collect();
         while !to_complete.is_empty() {
             // We can't specify which job we dequeue, so we have to iterate them one by one and
             // complete them, until we complete all the jobs that we expect
@@ -59,36 +82,39 @@ impl RequestBuilder {
                 .await
                 .unwrap()
                 .unwrap();
-            let conclution = if let Some(expected_job) = to_complete.remove(&job.id) {
-                expected_job.conclution
+            let conclusion = if let Some(expected_job) = to_complete.remove(&job.id) {
+                expected_job.conclusion.clone()
             } else {
                 BenchmarkJobConclusion::Success
             };
-            db.mark_benchmark_job_as_completed(job.id, conclution)
+            db.mark_benchmark_job_as_completed(job.id, conclusion)
                 .await
                 .unwrap();
         }
         // At this point all jobs of the request should be properly completed, so we can also
         // complete the request itself
         assert!(db
-            .maybe_mark_benchmark_request_as_completed(self.request.tag().unwrap())
+            .maybe_mark_benchmark_request_as_completed(&tag)
             .await
             .unwrap());
-        self.request
+        drop(to_complete);
+        self
     }
 }
 
+#[derive(Clone)]
 pub struct JobBuilder {
     target: Target,
     backend: CodegenBackend,
     profile: Profile,
     benchmark_set: u32,
-    conclution: BenchmarkJobConclusion,
+    conclusion: BenchmarkJobConclusion,
 }
 
 impl JobBuilder {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn profile(mut self, profile: Profile) -> Self {
+        self.profile = profile;
+        self
     }
 }
 
@@ -99,9 +125,13 @@ impl Default for JobBuilder {
             backend: CodegenBackend::Llvm,
             profile: Profile::Check,
             benchmark_set: 0,
-            conclution: BenchmarkJobConclusion::Success,
+            conclusion: BenchmarkJobConclusion::Success,
         }
     }
+}
+
+pub fn job() -> JobBuilder {
+    JobBuilder::default()
 }
 
 pub struct CollectorBuilder {

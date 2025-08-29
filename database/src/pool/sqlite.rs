@@ -4,7 +4,7 @@ use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
     CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark,
-    CompletedBenchmarkRequestWithErrors, Date, PartialStatusPageData, Profile, Target,
+    CompletedBenchmarkRequestWithErrors, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -1371,7 +1371,9 @@ impl Connection for SqliteConnection {
         no_queue_implementation_abort!()
     }
 
-    async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData> {
+    async fn get_jobs_of_in_progress_benchmark_requests(
+        &self,
+    ) -> anyhow::Result<HashMap<String, Vec<BenchmarkJob>>> {
         no_queue_implementation_abort!()
     }
 
