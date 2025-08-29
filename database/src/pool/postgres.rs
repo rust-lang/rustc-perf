@@ -1637,9 +1637,10 @@ where
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
-    ) -> anyhow::Result<()> {
-        self.conn()
-            .execute(
+    ) -> anyhow::Result<u32> {
+        let row = self
+            .conn()
+            .query_one(
                 r#"
             INSERT INTO job_queue(
                 request_tag,
@@ -1651,6 +1652,7 @@ where
             )
             VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT DO NOTHING
+            RETURNING job_queue.id
                 "#,
                 &[
                     &request_tag,
@@ -1663,7 +1665,7 @@ where
             )
             .await
             .context("failed to insert benchmark_job")?;
-        Ok(())
+        Ok(row.get::<_, i32>(0) as u32)
     }
 
     async fn get_compile_test_cases_with_measurements(

@@ -214,7 +214,7 @@ pub trait Connection: Send + Sync {
         commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()>;
 
-    /// Add a benchmark job to the job queue.
+    /// Add a benchmark job to the job queue and return its ID.
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
@@ -222,7 +222,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<u32>;
 
     /// Returns a set of compile-time benchmark test cases that were already computed for the
     /// given artifact.
