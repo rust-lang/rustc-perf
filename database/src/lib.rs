@@ -1248,6 +1248,13 @@ pub struct InProgressRequestWithJobs {
     pub parent: Option<(BenchmarkRequest, Vec<BenchmarkJob>)>,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct CompletedBenchmarkRequestWithErrors {
+    request: BenchmarkRequest,
+    /// Benchmark (name) -> error
+    errors: HashMap<String, String>,
+}
+
 /// The data that can be retrived from the database directly to populate the
 /// status page
 #[derive(Debug, PartialEq)]

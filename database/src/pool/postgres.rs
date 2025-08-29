@@ -4,9 +4,9 @@ use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
     BenchmarkJobConclusion, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
     BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkSet, CodegenBackend, CollectionId,
-    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, InProgressRequestWithJobs, Index,
-    PartialStatusPageData, Profile, QueuedCommit, Scenario, Target,
-    BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, CompletedBenchmarkRequestWithErrors,
+    Date, InProgressRequestWithJobs, Index, PartialStatusPageData, Profile, QueuedCommit, Scenario,
+    Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
     BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
     BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -471,6 +471,7 @@ pub struct CachedStatements {
     get_artifact_size: Statement,
     load_benchmark_request_index: Statement,
     get_compile_test_cases_with_measurements: Statement,
+    get_last_n_completed_requests_with_errors: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -667,12 +668,45 @@ impl PostgresConnection {
                         WHERE aid = $1
                     )
                 ").await.unwrap(),
+                get_last_n_completed_requests_with_errors: conn.prepare(&format!("
+                    WITH completed AS (
+                        SELECT {BENCHMARK_REQUEST_COLUMNS}
+                        FROM benchmark_request
+                        WHERE status = $1
+                        -- Select last N completed requests
+                        ORDER BY completed_at DESC
+                        LIMIT $2
+                    ), artifacts AS (
+                        SELECT artifact.id, name
+                        FROM artifact
+                        -- Use right join to only return artifacts for selected requests
+                        RIGHT JOIN completed ON artifact.name = completed.tag
+                    ), errors AS (
+                        SELECT
+                            artifacts.name AS tag,
+                            error.benchmark,
+                            error.error
+                        FROM error
+                        -- Use right join to only return errors for selected artifacts
+                        RIGHT JOIN artifacts ON error.aid = artifacts.id
+                    )
+                    -- Select request duplicated for each pair of (benchmark, error)
+                    SELECT
+                        completed.*,
+                        errors.benchmark,
+                        errors.error
+                    FROM completed
+                    LEFT JOIN errors ON errors.tag = completed.tag
+                    -- Resort the requests, because the original order may be lost
+                    ORDER BY completed.completed_at DESC;
+                ")).await.unwrap(),
             }),
             conn,
         }
     }
 }
 
+// `tag` should be kept as the first column
 const BENCHMARK_REQUEST_COLUMNS: &str =
     "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms";
 
@@ -1986,6 +2020,56 @@ where
         Ok(())
     }
 
+    async fn get_last_n_completed_benchmark_requests(
+        &self,
+        count: u64,
+    ) -> anyhow::Result<Vec<CompletedBenchmarkRequestWithErrors>> {
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_last_n_completed_requests_with_errors,
+                &[&BENCHMARK_REQUEST_STATUS_COMPLETED_STR, &(count as i64)],
+            )
+            .await?;
+
+        // Iterate through the requests and aggregate their errors
+        // Make sure to keep their original order
+        let mut requests = vec![];
+        // tag -> errors
+        let mut errors: HashMap<String, HashMap<String, String>> = Default::default();
+
+        for row in rows {
+            let tag = row.get::<_, &str>(0);
+            let error_benchmark = row.get::<_, Option<String>>(11);
+            let error_content = row.get::<_, Option<String>>(12);
+
+            // We already saw this request, just add errors
+            if let Some(errors) = errors.get_mut(tag) {
+                if let Some(benchmark) = error_benchmark {
+                    errors.insert(benchmark, error_content.unwrap_or_default());
+                }
+            } else {
+                // We see this request for the first time
+                let request = row_to_benchmark_request(&row, None);
+                let request_errors = if let Some(benchmark) = error_benchmark {
+                    HashMap::from([(benchmark, error_content.unwrap_or_default())])
+                } else {
+                    HashMap::new()
+                };
+                errors.insert(tag.to_string(), request_errors);
+                requests.push(request);
+            }
+        }
+
+        Ok(requests
+            .into_iter()
+            .map(|request| {
+                let errors = errors.remove(request.tag().unwrap()).unwrap_or_default();
+                CompletedBenchmarkRequestWithErrors { request, errors }
+            })
+            .collect())
+    }
+
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData> {
         let max_completed_requests = 30;
 
@@ -2273,7 +2357,9 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
 
     let status =
         BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at, duration_ms)
-            .expect("Invalid BenchmarkRequestStatus data in the database");
+            .unwrap_or_else(|e| {
+                panic!("Invalid BenchmarkRequestStatus data in the database for tag {tag:?}: {e:?}")
+            });
 
     match commit_type {
         BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {

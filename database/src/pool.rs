@@ -2,7 +2,8 @@ use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
-    CollectorConfig, CompileBenchmark, PartialStatusPageData, Target,
+    CollectorConfig, CompileBenchmark, CompletedBenchmarkRequestWithErrors, PartialStatusPageData,
+    Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -277,6 +278,15 @@ pub trait Connection: Send + Sync {
 
     async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;
 
+    /// Return the last `count` completed benchmark requests, along with all errors associated with
+    /// them.
+    ///
+    /// The requests will be ordered from most recently to least recently completed.
+    async fn get_last_n_completed_benchmark_requests(
+        &self,
+        count: u64,
+    ) -> anyhow::Result<Vec<CompletedBenchmarkRequestWithErrors>>;
+
     /// Get all of the configuration for all of the collectors
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>>;
 
@@ -403,6 +413,7 @@ impl Pool {
 mod tests {
     use super::*;
     use crate::metric::Metric;
+    use crate::tests::builder::{JobBuilder, RequestBuilder};
     use crate::tests::run_postgres_test;
     use crate::BenchmarkJobStatus;
     use crate::{tests::run_db_test, BenchmarkRequestType, Commit, CommitType, Date};
@@ -1185,6 +1196,82 @@ mod tests {
             assert_eq!(collector_configs[1].name(), collector_name_two);
             assert_eq!(collector_configs[1].benchmark_set(), benchmark_set_two);
             assert!(collector_configs[1].is_active());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_last_completed_requests() {
+        run_postgres_test(|ctx| async {
+            let mut requests = vec![];
+            let db = ctx.db();
+
+            let collector = ctx.add_collector(Default::default()).await;
+
+            // Create several completed requests
+            for id in 1..=3 {
+                // Make some space between completions
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                requests.push(
+                    RequestBuilder::master(
+                        db,
+                        &format!("sha{}", id),
+                        &format!("sha{}", id - 1),
+                        id,
+                    )
+                    .await
+                    .add_job(db, JobBuilder::new())
+                    .await
+                    .complete(db, &collector)
+                    .await,
+                );
+            }
+
+            // Create an additional non-completed request
+            ctx.insert_master_request("foo", "bar", 1000).await;
+
+            // Request 1 will have artifact with errors
+            let aid1 = ctx.upsert_master_artifact("sha1").await;
+            db.record_error(aid1, "crate1", "error1").await;
+            db.record_error(aid1, "crate2", "error2").await;
+
+            // Request 2 will have artifact without errors
+            let _aid2 = ctx.upsert_master_artifact("sha2").await;
+
+            // Request 3 will have no artifact (shouldn't happen in practice, but...)
+
+            let reqs = db.get_last_n_completed_benchmark_requests(5).await.unwrap();
+            assert_eq!(reqs.len(), 3);
+
+            let expected = [
+                ("sha3", HashMap::new()),
+                ("sha2", HashMap::new()),
+                (
+                    "sha1",
+                    HashMap::from([
+                        ("crate1".to_string(), "error1".to_string()),
+                        ("crate2".to_string(), "error2".to_string()),
+                    ]),
+                ),
+            ];
+            for ((sha, errors), req) in expected.into_iter().zip(reqs) {
+                assert_eq!(
+                    req.request.tag().unwrap(),
+                    sha,
+                    "Request {req:?} does not have expected sha {sha}"
+                );
+                assert_eq!(
+                    req.errors, errors,
+                    "Request {req:?} does not have expected errors {errors:?}"
+                );
+            }
+
+            let reqs = db.get_last_n_completed_benchmark_requests(1).await.unwrap();
+            assert_eq!(reqs.len(), 1);
+            assert_eq!(reqs[0].request.tag().unwrap(), "sha3");
 
             Ok(ctx)
         })
