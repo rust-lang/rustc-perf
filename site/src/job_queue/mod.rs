@@ -27,7 +27,7 @@ async fn create_benchmark_request_master_commits(
 ) -> anyhow::Result<()> {
     let master_commits = &ctxt.get_master_commits().commits;
     // TODO; delete at some point in the future
-    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-07-24T00:00:00.000Z")?;
+    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-08-27T00:00:00.000Z")?;
 
     for master_commit in master_commits {
         // We don't want to add masses of obsolete data
@@ -59,7 +59,7 @@ async fn create_benchmark_request_releases(
         .text()
         .await?;
     // TODO; delete at some point in the future
-    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-06-01T00:00:00.000Z")?;
+    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-08-27T00:00:00.000Z")?;
 
     let releases: Vec<_> = releases
         .lines()
