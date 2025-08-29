@@ -96,10 +96,6 @@ impl TestContext {
         }
     }
 
-    pub fn db_pool(&self) -> &Pool {
-        &self.pool
-    }
-
     pub fn db(&self) -> &dyn Connection {
         self.connection.as_ref()
     }

@@ -474,8 +474,7 @@ mod tests {
             // This is essentially testing the database testing framework is
             // wired up correctly. Though makes sense that there should be
             // an empty vector returned if there are no pstats.
-            let db = ctx.db_pool();
-            let result = db.connection().await.get_pstats(&[], &[]).await;
+            let result = ctx.db().get_pstats(&[], &[]).await;
             let expected: Vec<Vec<Option<f64>>> = vec![];
 
             assert_eq!(result, expected);
@@ -487,20 +486,18 @@ mod tests {
     #[tokio::test]
     async fn artifact_storage() {
         run_db_test(|ctx| async {
-            let db = ctx.db_pool();
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let artifact_one = ArtifactId::from(create_commit("abc", time, CommitType::Master));
             let artifact_two = ArtifactId::Tag("nightly-2025-05-14".to_string());
 
-            let artifact_one_id_number = db.connection().await.artifact_id(&artifact_one).await;
-            let artifact_two_id_number = db.connection().await.artifact_id(&artifact_two).await;
+            let artifact_one_id_number = db.artifact_id(&artifact_one).await;
+            let artifact_two_id_number = db.artifact_id(&artifact_two).await;
 
             // We cannot arbitrarily add random sizes to the artifact size
             // table, as there is a constraint that the artifact must actually
             // exist before attaching something to it.
-
-            let db = db.connection().await;
 
             // Artifact one inserts
             db.record_artifact_size(artifact_one_id_number, "llvm.so", 32)
@@ -531,8 +528,8 @@ mod tests {
     #[tokio::test]
     async fn multiple_requests_same_sha() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool();
-            let db = db.connection().await;
+            let db = ctx.db();
+
             db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-1",
                 "parent-sha-1",
@@ -555,7 +552,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
@@ -597,8 +594,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_master_requests_same_pr() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool();
-            let db = db.connection().await;
+            let db = ctx.db();
 
             db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-1",
@@ -626,7 +622,7 @@ mod tests {
     #[tokio::test]
     async fn load_pending_benchmark_requests() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
@@ -672,8 +668,7 @@ mod tests {
     #[tokio::test]
     async fn attach_shas_to_try_benchmark_request() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool();
-            let db = db.connection().await;
+            let db = ctx.db();
 
             let req = BenchmarkRequest::create_try_without_artifacts(42, "", "");
 
@@ -712,8 +707,8 @@ mod tests {
     #[tokio::test]
     async fn enqueue_benchmark_job() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool();
-            let db = db.connection().await;
+            let db = ctx.db();
+
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let benchmark_request =
                 BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
@@ -743,7 +738,7 @@ mod tests {
     #[tokio::test]
     async fn get_compile_test_cases_with_data() {
         run_db_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
 
             let collection = db.collection_id("test").await;
             let artifact = db
@@ -802,7 +797,7 @@ mod tests {
     #[tokio::test]
     async fn get_collector_config_error_if_not_exist() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
 
             let collector_config_result = db.start_collector("collector-1", "foo").await.unwrap();
 
@@ -816,7 +811,7 @@ mod tests {
     #[tokio::test]
     async fn add_collector_config() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
 
             let mut inserted_config = db
                 .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
@@ -841,7 +836,7 @@ mod tests {
     #[tokio::test]
     async fn dequeue_benchmark_job_empty_queue() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
 
             let benchmark_job_result = db
                 .dequeue_benchmark_job(
@@ -862,7 +857,7 @@ mod tests {
     #[tokio::test]
     async fn dequeue_benchmark_job() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let collector_config = db
@@ -931,7 +926,7 @@ mod tests {
     #[tokio::test]
     async fn mark_request_as_complete_empty() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let insert_result = db
@@ -956,7 +951,7 @@ mod tests {
     #[tokio::test]
     async fn mark_request_as_complete() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let benchmark_set = BenchmarkSet(0u32);
             let tag = "sha-1";
@@ -1034,7 +1029,7 @@ mod tests {
     #[tokio::test]
     async fn get_collector_configs() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
             let target = Target::X86_64UnknownLinuxGnu;
 
             let benchmark_set_one = BenchmarkSet(0u32);
