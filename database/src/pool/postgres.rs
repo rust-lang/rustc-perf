@@ -1902,7 +1902,7 @@ where
         }
     }
 
-    async fn mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool> {
+    async fn maybe_mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool> {
         // Find if the benchmark is completed and update it's status to completed
         // in one SQL block
         let row = self

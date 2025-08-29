@@ -265,7 +265,7 @@ pub trait Connection: Send + Sync {
 
     /// Try and mark the benchmark_request as completed. Will return `true` if
     /// it has been marked as completed else `false` meaning there was no change
-    async fn mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool>;
+    async fn maybe_mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool>;
 
     /// Mark the job as completed. Sets the status to 'failed' or 'success'
     /// depending on the enum's completed state being a success
@@ -450,7 +450,7 @@ mod tests {
             .unwrap();
 
         assert!(db
-            .mark_benchmark_request_as_completed(request_tag)
+            .maybe_mark_benchmark_request_as_completed(request_tag)
             .await
             .unwrap());
     }
@@ -932,7 +932,7 @@ mod tests {
                 .await
                 .unwrap();
             assert!(db
-                .mark_benchmark_request_as_completed("sha-1")
+                .maybe_mark_benchmark_request_as_completed("sha-1")
                 .await
                 .unwrap());
             Ok(ctx)
@@ -988,7 +988,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            db.mark_benchmark_request_as_completed(tag).await.unwrap();
+            db.maybe_mark_benchmark_request_as_completed(tag)
+                .await
+                .unwrap();
 
             /* From the status page view we can see that the duration has been
              * updated. Albeit that it will be a very short duration. */

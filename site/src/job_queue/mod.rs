@@ -254,7 +254,7 @@ async fn try_enqueue_next_benchmark_request(
             }
             BenchmarkRequestStatus::InProgress => {
                 if conn
-                    .mark_benchmark_request_as_completed(request.tag().unwrap())
+                    .maybe_mark_benchmark_request_as_completed(request.tag().unwrap())
                     .await?
                 {
                     index.add_tag(request.tag().unwrap());
@@ -366,7 +366,7 @@ mod tests {
             .unwrap();
 
         assert!(db
-            .mark_benchmark_request_as_completed(request_tag)
+            .maybe_mark_benchmark_request_as_completed(request_tag)
             .await
             .unwrap());
     }
