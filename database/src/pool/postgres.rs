@@ -1565,7 +1565,7 @@ where
                 &[
                     &benchmark_request.tag(),
                     &benchmark_request.parent_sha(),
-                    &benchmark_request.pr().map(|it| *it as i32),
+                    &benchmark_request.pr().map(|it| it as i32),
                     &benchmark_request.commit_type,
                     &benchmark_request.status.as_str(),
                     &benchmark_request.created_at,

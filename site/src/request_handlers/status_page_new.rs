@@ -87,7 +87,34 @@ async fn build_collectors(conn: &dyn Connection) -> anyhow::Result<Vec<status_ne
     }
     let mut collectors: Vec<status_new::Collector> = collector_map.into_values().collect();
     collectors.sort_by(|c1, c2| c1.name.cmp(&c2.name));
+    for collector in &mut collectors {
+        collector.jobs.sort_by(|j1, j2| {
+            let prio1 = job_status_to_priority(j1.status);
+            let prio2 = job_status_to_priority(j2.status);
+            prio1
+                .cmp(&prio2)
+                .then(j1.deque_counter.cmp(&j2.deque_counter).reverse())
+                .then_with(|| {
+                    (&j1.target, &j1.backend, &j1.profile, j1.benchmark_set).cmp(&(
+                        &j2.target,
+                        &j2.backend,
+                        &j2.profile,
+                        j2.benchmark_set,
+                    ))
+                })
+        });
+    }
+
     Ok(collectors)
+}
+
+fn job_status_to_priority(status: status_new::BenchmarkJobStatus) -> u32 {
+    match status {
+        status_new::BenchmarkJobStatus::InProgress => 0,
+        status_new::BenchmarkJobStatus::Queued => 1,
+        status_new::BenchmarkJobStatus::Failed => 2,
+        status_new::BenchmarkJobStatus::Success => 3,
+    }
 }
 
 fn request_to_ui(
@@ -105,6 +132,7 @@ fn request_to_ui(
     };
     status_new::BenchmarkRequest {
         tag: req.tag().expect("Missing request tag").to_string(),
+        pr: req.pr(),
         status: match req.status() {
             BenchmarkRequestStatus::WaitingForArtifacts => unreachable!(),
             BenchmarkRequestStatus::ArtifactsReady => status_new::BenchmarkRequestStatus::Queued,
@@ -126,6 +154,16 @@ fn request_to_ui(
 }
 
 fn job_to_ui(job: &BenchmarkJob) -> status_new::BenchmarkJob {
+    let (started_at, completed_at) = match job.status() {
+        BenchmarkJobStatus::Queued => (None, None),
+        BenchmarkJobStatus::InProgress { started_at, .. } => (Some(*started_at), None),
+        BenchmarkJobStatus::Completed {
+            started_at,
+            completed_at,
+            ..
+        } => (Some(*started_at), Some(*completed_at)),
+    };
+
     status_new::BenchmarkJob {
         request_tag: job.request_tag().to_string(),
         target: job.target().as_str().to_string(),
@@ -133,6 +171,8 @@ fn job_to_ui(job: &BenchmarkJob) -> status_new::BenchmarkJob {
         profile: job.profile().as_str().to_string(),
         benchmark_set: job.benchmark_set().get_id(),
         created_at: job.created_at(),
+        started_at,
+        completed_at,
         status: match job.status() {
             BenchmarkJobStatus::Queued => status_new::BenchmarkJobStatus::Queued,
             BenchmarkJobStatus::InProgress { .. } => status_new::BenchmarkJobStatus::InProgress,

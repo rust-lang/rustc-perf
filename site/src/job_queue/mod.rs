@@ -118,7 +118,7 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
         level.sort_unstable_by_key(|bmr| {
             (
                 // PR number takes priority
-                *bmr.pr().unwrap_or(&0),
+                bmr.pr().unwrap_or(0),
                 // Order master commits before try commits
                 if bmr.is_master() { 0 } else { 1 },
                 bmr.created_at(),
@@ -391,7 +391,7 @@ mod tests {
     #[tokio::test]
     async fn queue_ordering() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_pool().connection().await;
+            let db = ctx.db();
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;

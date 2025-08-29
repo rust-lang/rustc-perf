@@ -397,7 +397,6 @@ pub mod status_new {
     use serde::Serialize;
 
     #[derive(Serialize, Debug)]
-    #[serde(rename_all = "camelCase")]
     pub enum BenchmarkRequestStatus {
         Queued,
         InProgress,
@@ -405,7 +404,6 @@ pub mod status_new {
     }
 
     #[derive(Serialize, Debug)]
-    #[serde(rename_all = "camelCase")]
     pub enum BenchmarkRequestType {
         Release,
         Master,
@@ -416,6 +414,7 @@ pub mod status_new {
     #[serde(rename_all = "camelCase")]
     pub struct BenchmarkRequest {
         pub tag: String,
+        pub pr: Option<u32>,
         pub status: BenchmarkRequestStatus,
         pub request_type: BenchmarkRequestType,
         pub created_at: DateTime<Utc>,
@@ -424,8 +423,7 @@ pub mod status_new {
         pub errors: HashMap<String, String>,
     }
 
-    #[derive(Serialize, Debug)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(Serialize, Copy, Clone, Debug)]
     pub enum BenchmarkJobStatus {
         Queued,
         InProgress,
@@ -442,6 +440,8 @@ pub mod status_new {
         pub profile: String,
         pub benchmark_set: u32,
         pub created_at: DateTime<Utc>,
+        pub started_at: Option<DateTime<Utc>>,
+        pub completed_at: Option<DateTime<Utc>>,
         pub status: BenchmarkJobStatus,
         pub deque_counter: u32,
     }

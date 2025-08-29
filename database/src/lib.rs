@@ -957,10 +957,10 @@ impl BenchmarkRequest {
         }
     }
 
-    pub fn pr(&self) -> Option<&u32> {
+    pub fn pr(&self) -> Option<u32> {
         match &self.commit_type {
             BenchmarkRequestType::Try { pr, .. } | BenchmarkRequestType::Master { pr, .. } => {
-                Some(pr)
+                Some(*pr)
             }
             BenchmarkRequestType::Release { .. } => None,
         }

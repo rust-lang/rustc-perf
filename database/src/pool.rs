@@ -575,8 +575,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            complete_request(&*db, "sha-parent-1", collector_name, benchmark_set, target).await;
-            complete_request(&*db, "sha1", collector_name, benchmark_set, target).await;
+            complete_request(db, "sha-parent-1", collector_name, benchmark_set, target).await;
+            complete_request(db, "sha1", collector_name, benchmark_set, target).await;
 
             // This should be fine, req_a was completed
             db.insert_benchmark_request(&req_b).await.unwrap();
@@ -647,7 +647,7 @@ mod tests {
                 db.insert_benchmark_request(req).await.unwrap();
             }
 
-            complete_request(&*db, "1.79.0", collector_name, benchmark_set, target).await;
+            complete_request(db, "1.79.0", collector_name, benchmark_set, target).await;
 
             db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
                 .await
@@ -697,7 +697,7 @@ mod tests {
 
             assert_eq!(req_db.tag(), Some("sha1"));
             assert_eq!(req_db.parent_sha(), Some("sha-parent-1"));
-            assert_eq!(req_db.pr(), Some(&42));
+            assert_eq!(req_db.pr(), Some(42));
 
             Ok(ctx)
         })
