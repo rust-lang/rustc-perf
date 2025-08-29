@@ -391,7 +391,7 @@ mod tests {
     #[tokio::test]
     async fn queue_ordering() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db_pool().connection().await;
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;

@@ -83,7 +83,7 @@ impl TestContext {
         }
     }
 
-    pub fn db_client(&self) -> &Pool {
+    pub fn db_pool(&self) -> &Pool {
         &self.client
     }
 
