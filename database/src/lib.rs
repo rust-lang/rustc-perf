@@ -957,10 +957,10 @@ impl BenchmarkRequest {
         }
     }
 
-    pub fn pr(&self) -> Option<&u32> {
+    pub fn pr(&self) -> Option<u32> {
         match &self.commit_type {
             BenchmarkRequestType::Try { pr, .. } | BenchmarkRequestType::Master { pr, .. } => {
-                Some(pr)
+                Some(*pr)
             }
             BenchmarkRequestType::Release { .. } => None,
         }
@@ -984,6 +984,10 @@ impl BenchmarkRequest {
 
     pub fn commit_date(&self) -> Option<DateTime<Utc>> {
         self.commit_date
+    }
+
+    pub fn commit_type(&self) -> &BenchmarkRequestType {
+        &self.commit_type
     }
 
     pub fn is_master(&self) -> bool {
@@ -1248,12 +1252,9 @@ pub struct InProgressRequestWithJobs {
     pub parent: Option<(BenchmarkRequest, Vec<BenchmarkJob>)>,
 }
 
-/// The data that can be retrived from the database directly to populate the
-/// status page
 #[derive(Debug, PartialEq)]
-pub struct PartialStatusPageData {
-    /// A Vector of; completed requests with any associated errors
-    pub completed_requests: Vec<(BenchmarkRequest, Vec<String>)>,
-    /// In progress requests along with their associated jobs
-    pub in_progress: Vec<InProgressRequestWithJobs>,
+pub struct BenchmarkRequestWithErrors {
+    pub request: BenchmarkRequest,
+    /// Benchmark (name) -> error
+    pub errors: HashMap<String, String>,
 }

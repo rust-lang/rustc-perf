@@ -2,9 +2,9 @@ use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction}
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
-    CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date,
-    PartialStatusPageData, Profile, Target,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestWithErrors,
+    BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType,
+    CompileBenchmark, Date, Profile, Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -1301,7 +1301,7 @@ impl Connection for SqliteConnection {
         _backend: CodegenBackend,
         _profile: Profile,
         _benchmark_set: u32,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<u32> {
         no_queue_implementation_abort!()
     }
 
@@ -1359,7 +1359,7 @@ impl Connection for SqliteConnection {
         no_queue_implementation_abort!()
     }
 
-    async fn mark_benchmark_request_as_completed(&self, _tag: &str) -> anyhow::Result<bool> {
+    async fn maybe_mark_benchmark_request_as_completed(&self, _tag: &str) -> anyhow::Result<bool> {
         no_queue_implementation_abort!()
     }
 
@@ -1371,7 +1371,9 @@ impl Connection for SqliteConnection {
         no_queue_implementation_abort!()
     }
 
-    async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData> {
+    async fn get_jobs_of_in_progress_benchmark_requests(
+        &self,
+    ) -> anyhow::Result<HashMap<String, Vec<BenchmarkJob>>> {
         no_queue_implementation_abort!()
     }
 
@@ -1380,6 +1382,13 @@ impl Connection for SqliteConnection {
     }
 
     async fn update_collector_heartbeat(&self, _collector_name: &str) -> anyhow::Result<()> {
+        no_queue_implementation_abort!()
+    }
+
+    async fn get_last_n_completed_benchmark_requests(
+        &self,
+        _count: u64,
+    ) -> anyhow::Result<Vec<BenchmarkRequestWithErrors>> {
         no_queue_implementation_abort!()
     }
 }

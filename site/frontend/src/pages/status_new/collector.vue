@@ -1,17 +1,12 @@
 <script setup lang="ts">
-import {BenchmarkJob, CollectorInfo, CollectorConfig} from "./data";
+import {CollectorConfig} from "./data";
 
 const props = defineProps<{
-  collector: CollectorInfo;
-  jobMap: Dict<BenchmarkJob>;
+  collector: CollectorConfig;
 }>();
 
 function statusClass(c: CollectorConfig): string {
   return c.isActive ? "active" : "inactive";
-}
-
-function getStartedAt(j: BenchmarkJob): string {
-  return "startedAt" in j.status ? j.status.startedAt : "";
 }
 </script>
 
@@ -21,17 +16,17 @@ function getStartedAt(j: BenchmarkJob): string {
       <div class="collector-name">
         <span>
           <strong class="collector-sm-padding-right">{{
-            props.collector.config.name
+            props.collector.name
           }}</strong>
           <span
             class="collector-sm-padding-left-right collector-left-divider"
-            >{{ collector.config.target }}</span
+            >{{ collector.target }}</span
           >
           <span
             class="collector-sm-padding-left-right status"
-            :class="statusClass(collector.config)"
+            :class="statusClass(collector)"
           >
-            {{ collector.config.isActive ? "Active" : "Inactive" }}
+            {{ collector.isActive ? "Active" : "Inactive" }}
           </span>
         </span>
       </div>
@@ -42,21 +37,21 @@ function getStartedAt(j: BenchmarkJob): string {
         <span class="collector-meta-name">
           <strong>Benchmark Set:</strong>
         </span>
-        <span> #{{ collector.config.benchmarkSet }}</span>
+        <span> #{{ collector.benchmarkSet }}</span>
       </div>
 
       <div class="collector-meta">
         <span class="collector-meta-name">
           <strong>Last Heartbeat:</strong>
         </span>
-        <span>{{ collector.config.lastHeartbeatAt }}</span>
+        <span>{{ collector.lastHeartbeatAt }}</span>
       </div>
 
       <div class="collector-meta">
         <span class="collector-meta-name">
           <strong>Date Added:</strong>
         </span>
-        <span>{{ collector.config.dateAdded }}</span>
+        <span>{{ collector.dateAdded }}</span>
       </div>
     </div>
 
@@ -76,28 +71,28 @@ function getStartedAt(j: BenchmarkJob): string {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="id in collector.jobIds">
+          <tr v-for="job in collector.jobs">
             <td class="table-cell-padding">
-              {{ jobMap[id].requestTag }}
+              {{ job.requestTag }}
             </td>
             <td class="table-cell-padding">
-              {{ jobMap[id].status.state }}
+              {{ job.status }}
             </td>
             <td class="table-cell-padding">
-              {{ getStartedAt(jobMap[id]) }}
+              {{ job.startedAt }}
             </td>
-            <td class="table-cell-padding">{{ jobMap[id].backend }}</td>
-            <td class="table-cell-padding">{{ jobMap[id].profile }}</td>
+            <td class="table-cell-padding">{{ job.backend }}</td>
+            <td class="table-cell-padding">{{ job.profile }}</td>
             <td class="table-cell-padding">
-              {{ jobMap[id].dequeCounter }}
+              {{ job.dequeCounter }}
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <div class="collector-no-work" v-if="collector.jobIds.length === 0">
-      <h3>no active benchmarks 🦦</h3>
+    <div class="collector-no-work" v-if="collector.jobs.length === 0">
+      <h3>no active benchmarks</h3>
     </div>
   </div>
 </template>
