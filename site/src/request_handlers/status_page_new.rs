@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::api::status_new::{
-    BenchmarkInProgressUi, BenchmarkJobStatusUi, BenchmarkJobUi, BenchmarkRequestStatusUi,
-    BenchmarkRequestTypeUi, BenchmarkRequestUi, CollectorConfigUi,
+    BenchmarkJobStatusUi, BenchmarkJobUi, BenchmarkRequestStatusUi, BenchmarkRequestTypeUi,
+    BenchmarkRequestUi, CollectorConfigUi, CollectorInfo,
 };
 use crate::api::{status_new, ServerResult};
 use crate::job_queue::build_queue;
@@ -10,6 +10,7 @@ use crate::load::SiteCtxt;
 use database::{
     BenchmarkJob, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestStatus, CollectorConfig,
 };
+use hashbrown::HashMap;
 
 fn benchmark_request_status_to_ui(status: BenchmarkRequestStatus) -> BenchmarkRequestStatusUi {
     let (completed_at, duration_s) = match status {
@@ -108,7 +109,7 @@ pub async fn handle_status_page_new(ctxt: Arc<SiteCtxt>) -> ServerResult<status_
 
     let error_to_string = |e: anyhow::Error| e.to_string();
 
-    let collector_configs = conn
+    let collector_configs: Vec<CollectorConfigUi> = conn
         .get_collector_configs()
         .await
         .map_err(error_to_string)?
@@ -129,32 +130,115 @@ pub async fn handle_status_page_new(ctxt: Arc<SiteCtxt>) -> ServerResult<status_
         .await
         .map_err(error_to_string)?;
 
+    // We add the in_progress_tags first, then the queue, then completed
+    let mut queue_request_tags: Vec<String> = vec![];
+    let mut requests_map: HashMap<String, BenchmarkRequestUi> = HashMap::new();
+    let mut job_map: HashMap<u32, BenchmarkJobUi> = HashMap::new();
+    let mut collector_work_map: HashMap<u32, CollectorInfo> = HashMap::new();
+    let mut tag_to_jobs: HashMap<String, Vec<u32>> = HashMap::new();
+
+    for it in collector_configs.iter() {
+        // Multiple collectors cannot be part of the same set
+        collector_work_map.insert(
+            it.benchmark_set.0,
+            CollectorInfo {
+                config: it.clone(),
+                job_ids: vec![],
+            },
+        );
+    }
+
+    let mut jobs: Vec<&BenchmarkJob> = vec![];
+
+    for it in partial_data.in_progress.iter() {
+        let tag = it.request.0.tag().unwrap().to_string();
+        queue_request_tags.push(tag.clone());
+        requests_map.insert(
+            tag.clone(),
+            benchmark_request_to_ui(&it.request.0, vec![]).map_err(error_to_string)?,
+        );
+
+        for job in it.request.1.iter() {
+            if let Some(jobs) = tag_to_jobs.get_mut(&tag) {
+                jobs.push(job.id());
+            } else {
+                tag_to_jobs.insert(tag.clone(), vec![job.id()]);
+            }
+            jobs.push(job);
+        }
+
+        if let Some(parent) = &it.parent {
+            let parent_tag = parent.0.tag().unwrap().to_string();
+            queue_request_tags.push(parent_tag.clone());
+            requests_map.insert(
+                parent_tag.clone(),
+                benchmark_request_to_ui(&parent.0, vec![]).map_err(error_to_string)?,
+            );
+
+            for parent_job in parent.1.iter() {
+                if let Some(jobs) = tag_to_jobs.get_mut(&parent_tag) {
+                    jobs.push(parent_job.id());
+                } else {
+                    tag_to_jobs.insert(parent_tag.clone(), vec![parent_job.id()]);
+                }
+                jobs.push(parent_job);
+            }
+        }
+    }
+
     // Create the queue
-    // @TODO; do we need both the queue and the inprogress jobs from the database?
     let queue = build_queue(&*conn, &index).await.map_err(error_to_string)?;
 
-    let mut completed: Vec<BenchmarkRequestUi> = vec![];
+    for it in queue.iter() {
+        // We have already added the inprogress tags to the queue from the above
+        // transformative loop. We do that as the queue will not clock that a
+        // parent request is going to have work despite having a status of
+        // `complete`.
+        let tag = it.tag().unwrap().to_string();
+        if !matches!(it.status(), BenchmarkRequestStatus::InProgress) {
+            queue_request_tags.push(tag.clone());
+            requests_map.insert(
+                tag,
+                benchmark_request_to_ui(it, vec![]).map_err(error_to_string)?,
+            );
+        }
+    }
+
     for it in partial_data.completed_requests {
-        completed.push(benchmark_request_to_ui(&it.0, it.1).map_err(error_to_string)?);
+        let tag = it.0.tag().unwrap().to_string();
+        // To get the requests for the queue in the front end we iterate over
+        // the tags array then index requests map.
+        requests_map.insert(
+            tag,
+            benchmark_request_to_ui(&it.0, it.1).map_err(error_to_string)?,
+        );
     }
 
-    let mut in_progress: Vec<BenchmarkInProgressUi> = vec![];
-    for it in partial_data.in_progress {
-        in_progress.push(BenchmarkInProgressUi {
-            request: benchmark_request_to_ui(&it.0, vec![]).map_err(error_to_string)?,
-            jobs: it.1.iter().map(benchmark_job_to_ui).collect(),
-        });
-    }
+    // sort the jobs
+    jobs.sort_by_key(|job| {
+        (
+            match job.status() {
+                BenchmarkJobStatus::InProgress { .. } => 0,
+                BenchmarkJobStatus::Queued => 1,
+                BenchmarkJobStatus::Completed { .. } => 2,
+            },
+            job.created_at(),
+        )
+    });
 
-    let mut queue_ui: Vec<BenchmarkRequestUi> = vec![];
-    for it in queue {
-        queue_ui.push(benchmark_request_to_ui(&it, vec![]).map_err(error_to_string)?);
+    for it in jobs.iter() {
+        let ui_job = benchmark_job_to_ui(it);
+        job_map.insert(it.id(), ui_job);
+        if let Some(collector) = collector_work_map.get_mut(&it.benchmark_set().0) {
+            collector.job_ids.push(it.id());
+        }
     }
 
     Ok(status_new::Response {
-        completed,
-        in_progress,
-        collector_configs,
-        queue: queue_ui,
+        queue_request_tags,
+        requests_map,
+        job_map,
+        collector_work_map,
+        tag_to_jobs,
     })
 }

@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import {CollectorConfigAndWork, CollectorConfig} from "./data";
+import {BenchmarkJob, CollectorInfo, CollectorConfig} from "./data";
 
 const props = defineProps<{
-  collector: CollectorConfigAndWork;
+  collector: CollectorInfo;
+  jobMap: Dict<BenchmarkJob>;
 }>();
 
 function statusClass(c: CollectorConfig): string {
   return c.isActive ? "active" : "inactive";
+}
+
+function getStartedAt(j: BenchmarkJob): string {
+  return "startedAt" in j.status ? j.status.startedAt : "";
 }
 </script>
 
@@ -55,59 +60,43 @@ function statusClass(c: CollectorConfig): string {
       </div>
     </div>
 
-    <div v-if="collector.request !== null">
-      <div class="table-collector-wrapper">
-        <table class="table-collector">
-          <caption>
-            current benchmark request
-          </caption>
-          <thead>
-            <tr class="table-header-row">
-              <th class="table-header-padding">Type</th>
-              <th class="table-header-padding">Created At</th>
-              <th class="table-header-padding">Sha / Tag</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="table-cell-padding">{{ collector.request.type }}</td>
-              <td class="table-cell-padding">
-                {{ collector.request.createdAt }}
-              </td>
-              <td class="table-cell-padding">{{ collector.request.tag }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="table-collector-wrapper">
-        <table class="table-collector" style="border-collapse: collapse">
-          <caption>
-            current benchmark jobs
-          </caption>
-          <thead>
-            <tr class="table-header-row">
-              <th class="table-header-padding">State</th>
-              <th class="table-header-padding">Started At</th>
-              <th class="table-header-padding">Backend</th>
-              <th class="table-header-padding">Profile</th>
-              <th class="table-header-padding">Dequeue Counter</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="j in collector.jobs">
-              <td class="table-cell-padding">{{ j.state }}</td>
-              <td class="table-cell-padding">{{ j.startedAt }}</td>
-              <td class="table-cell-padding">{{ j.backend }}</td>
-              <td class="table-cell-padding">{{ j.profile }}</td>
-              <td class="table-cell-padding">{{ j.dequeCounter }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="table-collector-wrapper">
+      <table class="table-collector" style="border-collapse: collapse">
+        <caption>
+          current benchmark jobs
+        </caption>
+        <thead>
+          <tr class="table-header-row">
+            <th class="table-header-padding">Tag / Sha</th>
+            <th class="table-header-padding">State</th>
+            <th class="table-header-padding">Started At</th>
+            <th class="table-header-padding">Backend</th>
+            <th class="table-header-padding">Profile</th>
+            <th class="table-header-padding">Dequeue Counter</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="id in collector.jobIds">
+            <td class="table-cell-padding">
+              {{ jobMap[id].requestTag }}
+            </td>
+            <td class="table-cell-padding">
+              {{ jobMap[id].status.state }}
+            </td>
+            <td class="table-cell-padding">
+              {{ getStartedAt(jobMap[id]) }}
+            </td>
+            <td class="table-cell-padding">{{ jobMap[id].backend }}</td>
+            <td class="table-cell-padding">{{ jobMap[id].profile }}</td>
+            <td class="table-cell-padding">
+              {{ jobMap[id].dequeCounter }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="collector-no-work" v-if="collector.request === null">
+    <div class="collector-no-work" v-if="collector.jobIds.length === 0">
       <h3>no active benchmarks 🦦</h3>
     </div>
   </div>

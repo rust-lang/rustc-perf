@@ -1098,54 +1098,54 @@ mod tests {
 
             assert!(status_page_data.in_progress.len() == 1);
             // we should have 2 jobs
-            assert!(status_page_data.in_progress[0].1.len() == 2);
+            assert!(status_page_data.in_progress[0].request.1.len() == 2);
             // the request should be in progress
             assert!(matches!(
-                status_page_data.in_progress[0].0.status(),
+                status_page_data.in_progress[0].request.0.status(),
                 BenchmarkRequestStatus::InProgress
             ));
 
             // Test the first job
             assert!(matches!(
-                status_page_data.in_progress[0].1[0].target(),
+                status_page_data.in_progress[0].request.1[0].target(),
                 Target::X86_64UnknownLinuxGnu
             ));
             assert!(matches!(
-                status_page_data.in_progress[0].1[0].status(),
+                status_page_data.in_progress[0].request.1[0].status(),
                 BenchmarkJobStatus::Queued
             ));
             assert!(matches!(
-                status_page_data.in_progress[0].1[0].backend(),
+                status_page_data.in_progress[0].request.1[0].backend(),
                 CodegenBackend::Llvm
             ));
             assert!(matches!(
-                status_page_data.in_progress[0].1[0].profile(),
+                status_page_data.in_progress[0].request.1[0].profile(),
                 Profile::Opt
             ));
             assert_eq!(
-                status_page_data.in_progress[0].1[0].benchmark_set(),
+                status_page_data.in_progress[0].request.1[0].benchmark_set(),
                 benchmark_set
             );
 
             // test the second job
             assert!(matches!(
-                status_page_data.in_progress[0].1[1].target(),
+                status_page_data.in_progress[0].request.1[1].target(),
                 Target::X86_64UnknownLinuxGnu
             ));
             assert!(matches!(
-                status_page_data.in_progress[0].1[1].status(),
+                status_page_data.in_progress[0].request.1[1].status(),
                 BenchmarkJobStatus::Queued
             ));
             assert!(matches!(
-                status_page_data.in_progress[0].1[1].backend(),
+                status_page_data.in_progress[0].request.1[1].backend(),
                 CodegenBackend::Llvm
             ));
             assert!(matches!(
-                status_page_data.in_progress[0].1[1].profile(),
+                status_page_data.in_progress[0].request.1[1].profile(),
                 Profile::Debug
             ));
             assert_eq!(
-                status_page_data.in_progress[0].1[1].benchmark_set(),
+                status_page_data.in_progress[0].request.1[1].benchmark_set(),
                 benchmark_set
             );
 
