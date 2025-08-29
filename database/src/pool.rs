@@ -1,8 +1,8 @@
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
-    CollectorConfig, CompileBenchmark, CompletedBenchmarkRequestWithErrors, Target,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestWithErrors,
+    BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -282,7 +282,7 @@ pub trait Connection: Send + Sync {
     async fn get_last_n_completed_benchmark_requests(
         &self,
         count: u64,
-    ) -> anyhow::Result<Vec<CompletedBenchmarkRequestWithErrors>>;
+    ) -> anyhow::Result<Vec<BenchmarkRequestWithErrors>>;
 
     /// Return jobs of all requests that are currently in progress, and the jobs of their parents.
     /// The keys of the hashmap contain the request tags.

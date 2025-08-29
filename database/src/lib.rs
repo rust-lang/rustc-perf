@@ -986,6 +986,10 @@ impl BenchmarkRequest {
         self.commit_date
     }
 
+    pub fn commit_type(&self) -> &BenchmarkRequestType {
+        &self.commit_type
+    }
+
     pub fn is_master(&self) -> bool {
         matches!(self.commit_type, BenchmarkRequestType::Master { .. })
     }
@@ -1249,8 +1253,8 @@ pub struct InProgressRequestWithJobs {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct CompletedBenchmarkRequestWithErrors {
-    request: BenchmarkRequest,
+pub struct BenchmarkRequestWithErrors {
+    pub request: BenchmarkRequest,
     /// Benchmark (name) -> error
-    errors: HashMap<String, String>,
+    pub errors: HashMap<String, String>,
 }

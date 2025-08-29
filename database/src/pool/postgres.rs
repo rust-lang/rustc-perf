@@ -3,9 +3,9 @@ use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
     BenchmarkJobConclusion, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkSet, CodegenBackend, CollectionId,
-    CollectorConfig, Commit, CommitType, CompileBenchmark, CompletedBenchmarkRequestWithErrors,
-    Date, Index, Profile, QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet,
+    CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date,
+    Index, Profile, QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
     BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
     BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -2048,7 +2048,7 @@ where
     async fn get_last_n_completed_benchmark_requests(
         &self,
         count: u64,
-    ) -> anyhow::Result<Vec<CompletedBenchmarkRequestWithErrors>> {
+    ) -> anyhow::Result<Vec<BenchmarkRequestWithErrors>> {
         let rows = self
             .conn()
             .query(
@@ -2090,7 +2090,7 @@ where
             .into_iter()
             .map(|request| {
                 let errors = errors.remove(request.tag().unwrap()).unwrap_or_default();
-                CompletedBenchmarkRequestWithErrors { request, errors }
+                BenchmarkRequestWithErrors { request, errors }
             })
             .collect())
     }
