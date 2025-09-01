@@ -697,7 +697,7 @@ impl PostgresConnection {
                         errors.error
                     FROM completed
                     LEFT JOIN errors ON errors.tag = completed.tag
-                    -- Resort the requests, because the original order may be lost
+                    -- Re-sort the requests, because the original order may be lost
                     ORDER BY completed.completed_at DESC;
                 ")).await.unwrap(),
                 get_jobs_of_in_progress_benchmark_requests: conn.prepare(&format!("
