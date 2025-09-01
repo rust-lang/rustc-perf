@@ -1,11 +1,18 @@
 #![allow(dead_code)]
 
+pub mod builder;
+
+use chrono::Utc;
 use std::future::Future;
 use tokio_postgres::config::Host;
 use tokio_postgres::Config;
 
 use crate::pool::postgres::make_client;
-use crate::Pool;
+use crate::tests::builder::CollectorBuilder;
+use crate::{
+    ArtifactId, ArtifactIdNumber, BenchmarkRequest, CollectorConfig, Commit, CommitType,
+    Connection, Date, Pool,
+};
 
 enum TestDb {
     Postgres {
@@ -20,10 +27,12 @@ enum TestDb {
 /// a database.
 pub struct TestContext {
     test_db: TestDb,
-    // Pre-cached client to avoid creating unnecessary connections in tests
-    client: Pool,
+    pool: Pool,
+    // Pre-cached DB connection
+    connection: Box<dyn Connection>,
 }
 
+/// Basic lifecycle functions
 impl TestContext {
     async fn new_postgres(db_url: &str) -> Self {
         let config: Config = db_url.parse().expect("Cannot parse connection string");
@@ -65,32 +74,37 @@ impl TestContext {
             db_name
         );
         let pool = Pool::open(test_db_url.as_str());
+        let connection = pool.connection().await;
 
         Self {
             test_db: TestDb::Postgres {
                 original_db_url: db_url.to_string(),
                 db_name,
             },
-            client: pool,
+            pool,
+            connection,
         }
     }
 
     async fn new_sqlite() -> Self {
         let pool = Pool::open(":memory:");
+        let connection = pool.connection().await;
         Self {
             test_db: TestDb::SQLite,
-            client: pool,
+            pool,
+            connection,
         }
     }
 
-    pub fn db_client(&self) -> &Pool {
-        &self.client
+    pub fn db(&self) -> &dyn Connection {
+        self.connection.as_ref()
     }
 
     async fn finish(self) {
         // Cleanup the test database
         // First, we need to stop using the database
-        drop(self.client);
+        drop(self.connection);
+        drop(self.pool);
 
         match self.test_db {
             TestDb::Postgres {
@@ -108,6 +122,51 @@ impl TestContext {
             }
             TestDb::SQLite => {}
         }
+    }
+}
+
+/// Test helpers
+impl TestContext {
+    /// Create a new master benchmark request and add it to the DB.
+    pub async fn insert_master_request(
+        &self,
+        sha: &str,
+        parent: &str,
+        pr: u32,
+    ) -> BenchmarkRequest {
+        let req = BenchmarkRequest::create_master(sha, parent, pr, Utc::now());
+        self.db().insert_benchmark_request(&req).await.unwrap();
+        req
+    }
+
+    pub async fn complete_request(&self, tag: &str) {
+        // Note: this assumes that there are not non-completed jobs in the DB for the request
+        self.db()
+            .maybe_mark_benchmark_request_as_completed(tag)
+            .await
+            .unwrap();
+    }
+
+    pub async fn upsert_master_artifact(&self, sha: &str) -> ArtifactIdNumber {
+        self.db()
+            .artifact_id(&ArtifactId::Commit(Commit {
+                sha: sha.to_string(),
+                date: Date(Utc::now()),
+                r#type: CommitType::Master,
+            }))
+            .await
+    }
+
+    pub async fn add_collector(&self, collector: CollectorBuilder) -> CollectorConfig {
+        self.db()
+            .add_collector_config(
+                &collector.name,
+                collector.target,
+                collector.benchmark_set.get_id(),
+                true,
+            )
+            .await
+            .unwrap()
     }
 }
 

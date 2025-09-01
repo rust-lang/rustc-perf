@@ -6,50 +6,29 @@ import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
 import {formatSecondsAsDuration} from "../../utils/formatting";
 import {
-  StatusResponse,
-  BenchmarkRequestType,
   BenchmarkRequest,
-  BenchmarkJob,
-  CollectorInfo,
-  ReleaseCommit,
-  BenchmarkRequestCompleteStr,
-  BenchmarkRequestInProgressStr,
+  BenchmarkRequestStatus,
+  CollectorConfig,
+  StatusResponse,
 } from "./data";
 import Collector from "./collector.vue";
 
 const loading = ref(true);
 
-const dataNew: Ref<{
-  queueLength: number;
+const data: Ref<{
   timeline: BenchmarkRequestWithWaterLine[];
-  requestsMap: Dict<BenchmarkRequest>;
-  jobMap: Dict<BenchmarkJob>;
-  collectorWorkMap: Dict<CollectorInfo>;
-  tagToJobs: Dict<number[]>;
+  queueLength: number;
+  collectors: CollectorConfig[];
 } | null> = ref(null);
 
-type BenchmarkRequestWithWaterLine = BenchmarkRequest & {isWaterLine: boolean};
+type BenchmarkRequestWithWaterLine = BenchmarkRequest & {
+  isLastInProgress: boolean;
+  hasPendingJobs: boolean;
+};
 
-function requestIsInProgress(req: BenchmarkRequest, tagToJobs: Dict<number[]>) {
-  switch (req.status.state) {
-    case BenchmarkRequestCompleteStr:
-      if (req.requestType.tag in tagToJobs) {
-        return true;
-      }
-      return false;
-    case BenchmarkRequestInProgressStr:
-      return true;
-    default:
-      return false;
-  }
-}
-
-function getRequestRowClassName(
-  req: BenchmarkRequestWithWaterLine,
-  tagToJobs: Dict<number[]>
-) {
-  const inProgress = requestIsInProgress(req, tagToJobs);
-  if (inProgress && req.isWaterLine) {
+function getRequestRowClassName(req: BenchmarkRequestWithWaterLine) {
+  const inProgress = req.status === "InProgress";
+  if (inProgress && req.isLastInProgress) {
     return "timeline-waterline";
   } else if (inProgress) {
     return "timeline-row-bold";
@@ -57,79 +36,95 @@ function getRequestRowClassName(
   return "";
 }
 
-async function loadStatusNew(loading: Ref<boolean>) {
-  dataNew.value = await withLoading(loading, async () => {
-    let d: StatusResponse = await getJson<StatusResponse>(STATUS_DATA_NEW_URL);
+async function loadStatusData(loading: Ref<boolean>) {
+  data.value = await withLoading(loading, async () => {
+    let resp: StatusResponse = await getJson<StatusResponse>(
+      STATUS_DATA_NEW_URL
+    );
     let timeline: BenchmarkRequestWithWaterLine[] = [];
-    // figure out where to draw the line.
-    for (let i = 1; i < d.queueRequestTags.length; ++i) {
-      let req = d.requestsMap[d.queueRequestTags[i - 1]];
-      let nextReq = d.requestsMap[d.queueRequestTags[i]];
-      let isWaterLine = false;
-      if (
-        requestIsInProgress(req, d.tagToJobs) &&
-        !requestIsInProgress(nextReq, d.tagToJobs)
-      ) {
-        isWaterLine = true;
+
+    let queueLength = 0;
+
+    let requests_with_pending_jobs = new Set();
+    for (const job of resp.collectors.flatMap((c) => c.jobs)) {
+      if (job.status === "Queued" || job.status === "InProgress") {
+        requests_with_pending_jobs.add(job.requestTag);
       }
-      timeline.push({
-        ...req,
-        isWaterLine,
-      });
     }
+
+    // Figure out where to draw the line.
+    for (let i = 0; i < resp.requests.length; i++) {
+      let request = resp.requests[i];
+      let isLastInProgress =
+        request.status === "InProgress" &&
+        (i == resp.requests.length - 1 ||
+          resp.requests[i + 1].status !== "InProgress");
+      timeline.push({
+        ...request,
+        isLastInProgress,
+        hasPendingJobs: requests_with_pending_jobs.has(request.tag),
+      });
+
+      if (request.status !== "Completed") {
+        queueLength += 1;
+      }
+    }
+
     return {
-      queueLength: d.queueRequestTags.length,
       timeline,
-      requestsMap: d.requestsMap,
-      jobMap: d.jobMap,
-      collectorWorkMap: d.collectorWorkMap,
-      tagToJobs: d.tagToJobs,
+      collectors: resp.collectors,
+      queueLength,
     };
   });
 }
 
-function getCreatedAt(request: BenchmarkRequest): string {
-  if (request.status.state == BenchmarkRequestCompleteStr) {
-    return request.status.completedAt;
-  }
-  return "";
-}
-
 function getDuration(request: BenchmarkRequest): string {
-  if (request.status.state == BenchmarkRequestCompleteStr) {
-    return formatSecondsAsDuration(request.status.duration_s);
+  if (request.status === "Completed") {
+    return formatSecondsAsDuration(request.durationS);
   }
   return "";
 }
 
-function PullRequestLink({requestType}: {requestType: BenchmarkRequestType}) {
-  if (requestType.type === ReleaseCommit) {
+function formatStatus(status: BenchmarkRequestStatus): string {
+  if (status === "Completed") {
+    return "Finished";
+  } else if (status === "InProgress") {
+    return "In progress";
+  } else if (status === "Queued") {
+    return "Queued";
+  } else {
+    return "Unknown";
+  }
+}
+
+function PullRequestLink({request}: {request: BenchmarkRequest}) {
+  if (request.requestType === "Release") {
     return "";
   }
   return (
-    <a href={`https://github.com/rust-lang/rust/pull/${requestType.pr}`}>
-      #{requestType.pr}
+    <a href={`https://github.com/rust-lang/rust/pull/${request.pr}`}>
+      #{request.pr}
     </a>
   );
 }
 
-loadStatusNew(loading);
+loadStatusData(loading);
 </script>
 
 <template>
-  <div v-if="dataNew !== null">
+  <div v-if="data !== null">
     <div class="status-page-wrapper">
       <div class="timeline-wrapper">
         <h1>Timeline</h1>
         <div style="margin-bottom: 10px">
-          Queue length: {{ dataNew.queueLength }}
+          Queue length: {{ data.queueLength }}
         </div>
         <table>
           <thead>
             <tr>
-              <th>Pr</th>
+              <th>PR</th>
               <th>Kind</th>
-              <th>Sha / Tag</th>
+              <th>Tag</th>
               <th>Status</th>
               <th>Completed At</th>
               <th>Duration</th>
@@ -137,25 +132,23 @@ loadStatusNew(loading);
             </tr>
           </thead>
           <tbody>
-            <template v-for="req in dataNew.timeline">
-              <tr :class="getRequestRowClassName(req, dataNew.tagToJobs)">
-                <td><PullRequestLink :requestType="req.requestType" /></td>
-                <td>{{ req.requestType.type }}</td>
+            <template v-for="req in data.timeline">
+              <tr :class="getRequestRowClassName(req)">
+                <td><PullRequestLink :request="req" /></td>
+                <td>{{ req.requestType }}</td>
                 <td>
-                  {{ req.requestType.tag }}
+                  {{ req.tag }}
                 </td>
                 <td>
-                  {{
-                    req.status.state === BenchmarkRequestCompleteStr &&
-                    req.requestType.tag in dataNew.tagToJobs
-                      ? `${req.status.state}*`
-                      : `${req.status.state}`
+                  {{ formatStatus(req.status)
+                  }}{{
+                    req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
                 </td>
-                <td v-html="getCreatedAt(req)"></td>
+                <td v-html="req.createdAt"></td>
                 <td v-html="getDuration(req)"></td>
                 <td>
-                  <pre>{{ req.errors.join("\n") }}</pre>
+                  <pre>{{ req.errors }}</pre>
                 </td>
               </tr>
             </template>
@@ -165,16 +158,14 @@ loadStatusNew(loading);
       <div class="collector-wrapper">
         <h1>Collectors</h1>
         <div class="collectors-grid">
-          <div
-            v-for="cc in Object.values(dataNew.collectorWorkMap)"
-            :key="cc.config.name"
-          >
-            <Collector :jobMap="dataNew.jobMap" :collector="cc" />
+          <div v-for="collector in data.collectors" :key="collector.name">
+            <Collector :collector="collector" />
           </div>
         </div>
       </div>
     </div>
   </div>
+  <div v-else>Loading status…</div>
 </template>
 
 <style scoped lang="scss">

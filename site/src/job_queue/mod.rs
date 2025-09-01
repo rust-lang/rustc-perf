@@ -27,7 +27,7 @@ async fn create_benchmark_request_master_commits(
 ) -> anyhow::Result<()> {
     let master_commits = &ctxt.get_master_commits().commits;
     // TODO; delete at some point in the future
-    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-07-24T00:00:00.000Z")?;
+    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-08-27T00:00:00.000Z")?;
 
     for master_commit in master_commits {
         // We don't want to add masses of obsolete data
@@ -59,7 +59,7 @@ async fn create_benchmark_request_releases(
         .text()
         .await?;
     // TODO; delete at some point in the future
-    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-06-01T00:00:00.000Z")?;
+    let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-08-27T00:00:00.000Z")?;
 
     let releases: Vec<_> = releases
         .lines()
@@ -118,7 +118,7 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
         level.sort_unstable_by_key(|bmr| {
             (
                 // PR number takes priority
-                *bmr.pr().unwrap_or(&0),
+                bmr.pr().unwrap_or(0),
                 // Order master commits before try commits
                 if bmr.is_master() { 0 } else { 1 },
                 bmr.created_at(),
@@ -254,7 +254,7 @@ async fn try_enqueue_next_benchmark_request(
             }
             BenchmarkRequestStatus::InProgress => {
                 if conn
-                    .mark_benchmark_request_as_completed(request.tag().unwrap())
+                    .maybe_mark_benchmark_request_as_completed(request.tag().unwrap())
                     .await?
                 {
                     index.add_tag(request.tag().unwrap());
@@ -366,7 +366,7 @@ mod tests {
             .unwrap();
 
         assert!(db
-            .mark_benchmark_request_as_completed(request_tag)
+            .maybe_mark_benchmark_request_as_completed(request_tag)
             .await
             .unwrap());
     }
@@ -391,7 +391,7 @@ mod tests {
     #[tokio::test]
     async fn queue_ordering() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;

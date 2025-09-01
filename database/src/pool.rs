@@ -1,8 +1,8 @@
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkSet, CodegenBackend,
-    CollectorConfig, CompileBenchmark, PartialStatusPageData, Target,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestWithErrors,
+    BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -214,7 +214,7 @@ pub trait Connection: Send + Sync {
         commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()>;
 
-    /// Add a benchmark job to the job queue.
+    /// Add a benchmark job to the job queue and return its ID.
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
@@ -222,7 +222,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<u32>;
 
     /// Returns a set of compile-time benchmark test cases that were already computed for the
     /// given artifact.
@@ -265,7 +265,7 @@ pub trait Connection: Send + Sync {
 
     /// Try and mark the benchmark_request as completed. Will return `true` if
     /// it has been marked as completed else `false` meaning there was no change
-    async fn mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool>;
+    async fn maybe_mark_benchmark_request_as_completed(&self, tag: &str) -> anyhow::Result<bool>;
 
     /// Mark the job as completed. Sets the status to 'failed' or 'success'
     /// depending on the enum's completed state being a success
@@ -275,7 +275,20 @@ pub trait Connection: Send + Sync {
         conclusion: BenchmarkJobConclusion,
     ) -> anyhow::Result<()>;
 
-    async fn get_status_page_data(&self) -> anyhow::Result<PartialStatusPageData>;
+    /// Return the last `count` completed benchmark requests, along with all errors associated with
+    /// them.
+    ///
+    /// The requests will be ordered from most recently to least recently completed.
+    async fn get_last_n_completed_benchmark_requests(
+        &self,
+        count: u64,
+    ) -> anyhow::Result<Vec<BenchmarkRequestWithErrors>>;
+
+    /// Return jobs of all requests that are currently in progress, and the jobs of their parents.
+    /// The keys of the hashmap contain the request tags.
+    async fn get_jobs_of_in_progress_benchmark_requests(
+        &self,
+    ) -> anyhow::Result<HashMap<String, Vec<BenchmarkJob>>>;
 
     /// Get all of the configuration for all of the collectors
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>>;
@@ -403,8 +416,8 @@ impl Pool {
 mod tests {
     use super::*;
     use crate::metric::Metric;
+    use crate::tests::builder::{job, RequestBuilder};
     use crate::tests::run_postgres_test;
-    use crate::BenchmarkJobStatus;
     use crate::{tests::run_db_test, BenchmarkRequestType, Commit, CommitType, Date};
     use chrono::Utc;
     use std::str::FromStr;
@@ -450,7 +463,7 @@ mod tests {
             .unwrap();
 
         assert!(db
-            .mark_benchmark_request_as_completed(request_tag)
+            .maybe_mark_benchmark_request_as_completed(request_tag)
             .await
             .unwrap());
     }
@@ -461,8 +474,7 @@ mod tests {
             // This is essentially testing the database testing framework is
             // wired up correctly. Though makes sense that there should be
             // an empty vector returned if there are no pstats.
-            let db = ctx.db_client();
-            let result = db.connection().await.get_pstats(&[], &[]).await;
+            let result = ctx.db().get_pstats(&[], &[]).await;
             let expected: Vec<Vec<Option<f64>>> = vec![];
 
             assert_eq!(result, expected);
@@ -474,20 +486,18 @@ mod tests {
     #[tokio::test]
     async fn artifact_storage() {
         run_db_test(|ctx| async {
-            let db = ctx.db_client();
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let artifact_one = ArtifactId::from(create_commit("abc", time, CommitType::Master));
             let artifact_two = ArtifactId::Tag("nightly-2025-05-14".to_string());
 
-            let artifact_one_id_number = db.connection().await.artifact_id(&artifact_one).await;
-            let artifact_two_id_number = db.connection().await.artifact_id(&artifact_two).await;
+            let artifact_one_id_number = db.artifact_id(&artifact_one).await;
+            let artifact_two_id_number = db.artifact_id(&artifact_two).await;
 
             // We cannot arbitrarily add random sizes to the artifact size
             // table, as there is a constraint that the artifact must actually
             // exist before attaching something to it.
-
-            let db = db.connection().await;
 
             // Artifact one inserts
             db.record_artifact_size(artifact_one_id_number, "llvm.so", 32)
@@ -518,8 +528,8 @@ mod tests {
     #[tokio::test]
     async fn multiple_requests_same_sha() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
-            let db = db.connection().await;
+            let db = ctx.db();
+
             db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-1",
                 "parent-sha-1",
@@ -542,7 +552,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
@@ -565,8 +575,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            complete_request(&*db, "sha-parent-1", collector_name, benchmark_set, target).await;
-            complete_request(&*db, "sha1", collector_name, benchmark_set, target).await;
+            complete_request(db, "sha-parent-1", collector_name, benchmark_set, target).await;
+            complete_request(db, "sha1", collector_name, benchmark_set, target).await;
 
             // This should be fine, req_a was completed
             db.insert_benchmark_request(&req_b).await.unwrap();
@@ -584,8 +594,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_master_requests_same_pr() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
-            let db = db.connection().await;
+            let db = ctx.db();
 
             db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-1",
@@ -613,7 +622,7 @@ mod tests {
     #[tokio::test]
     async fn load_pending_benchmark_requests() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
@@ -638,7 +647,7 @@ mod tests {
                 db.insert_benchmark_request(req).await.unwrap();
             }
 
-            complete_request(&*db, "1.79.0", collector_name, benchmark_set, target).await;
+            complete_request(db, "1.79.0", collector_name, benchmark_set, target).await;
 
             db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
                 .await
@@ -659,8 +668,7 @@ mod tests {
     #[tokio::test]
     async fn attach_shas_to_try_benchmark_request() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
-            let db = db.connection().await;
+            let db = ctx.db();
 
             let req = BenchmarkRequest::create_try_without_artifacts(42, "", "");
 
@@ -689,7 +697,7 @@ mod tests {
 
             assert_eq!(req_db.tag(), Some("sha1"));
             assert_eq!(req_db.parent_sha(), Some("sha-parent-1"));
-            assert_eq!(req_db.pr(), Some(&42));
+            assert_eq!(req_db.pr(), Some(42));
 
             Ok(ctx)
         })
@@ -699,8 +707,8 @@ mod tests {
     #[tokio::test]
     async fn enqueue_benchmark_job() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client();
-            let db = db.connection().await;
+            let db = ctx.db();
+
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let benchmark_request =
                 BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
@@ -730,7 +738,7 @@ mod tests {
     #[tokio::test]
     async fn get_compile_test_cases_with_data() {
         run_db_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
 
             let collection = db.collection_id("test").await;
             let artifact = db
@@ -789,7 +797,7 @@ mod tests {
     #[tokio::test]
     async fn get_collector_config_error_if_not_exist() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
 
             let collector_config_result = db.start_collector("collector-1", "foo").await.unwrap();
 
@@ -803,7 +811,7 @@ mod tests {
     #[tokio::test]
     async fn add_collector_config() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
 
             let mut inserted_config = db
                 .add_collector_config("collector-1", Target::X86_64UnknownLinuxGnu, 1, true)
@@ -828,7 +836,7 @@ mod tests {
     #[tokio::test]
     async fn dequeue_benchmark_job_empty_queue() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
 
             let benchmark_job_result = db
                 .dequeue_benchmark_job(
@@ -849,7 +857,7 @@ mod tests {
     #[tokio::test]
     async fn dequeue_benchmark_job() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let collector_config = db
@@ -918,7 +926,7 @@ mod tests {
     #[tokio::test]
     async fn mark_request_as_complete_empty() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
 
             let insert_result = db
@@ -932,7 +940,7 @@ mod tests {
                 .await
                 .unwrap();
             assert!(db
-                .mark_benchmark_request_as_completed("sha-1")
+                .maybe_mark_benchmark_request_as_completed("sha-1")
                 .await
                 .unwrap());
             Ok(ctx)
@@ -943,7 +951,7 @@ mod tests {
     #[tokio::test]
     async fn mark_request_as_complete() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let benchmark_set = BenchmarkSet(0u32);
             let tag = "sha-1";
@@ -988,17 +996,18 @@ mod tests {
                 .await
                 .unwrap();
 
-            db.mark_benchmark_request_as_completed(tag).await.unwrap();
+            db.maybe_mark_benchmark_request_as_completed(tag)
+                .await
+                .unwrap();
 
             /* From the status page view we can see that the duration has been
              * updated. Albeit that it will be a very short duration. */
-            let status_page_view = db.get_status_page_data().await.unwrap();
-            let req = &status_page_view
-                .completed_requests
+            let completed = db.get_last_n_completed_benchmark_requests(1).await.unwrap();
+            let req = &completed
                 .iter()
-                .find(|it| it.0.tag() == Some(tag))
+                .find(|it| it.request.tag() == Some(tag))
                 .unwrap()
-                .0;
+                .request;
 
             assert!(matches!(
                 req.status(),
@@ -1018,146 +1027,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_status_page_data() {
-        run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
-            let benchmark_set = BenchmarkSet(0u32);
-            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let tag = "sha-1";
-            let tag_two = "sha-2";
-            let collector_name = "collector-1";
-            let target = Target::X86_64UnknownLinuxGnu;
-
-            db.add_collector_config(collector_name, target, benchmark_set.0, true)
-                .await
-                .unwrap();
-
-            let benchmark_request = BenchmarkRequest::create_release(tag, time);
-            db.insert_benchmark_request(&benchmark_request)
-                .await
-                .unwrap();
-
-            complete_request(&*db, tag, collector_name, benchmark_set.0, target).await;
-            // record a couple of errors against the tag
-            let artifact_id = db.artifact_id(&ArtifactId::Tag(tag.to_string())).await;
-
-            db.record_error(artifact_id, "example-1", "This is an error")
-                .await;
-            db.record_error(artifact_id, "example-2", "This is another error")
-                .await;
-
-            let benchmark_request_two = BenchmarkRequest::create_release(tag_two, time);
-            db.insert_benchmark_request(&benchmark_request_two)
-                .await
-                .unwrap();
-
-            db.enqueue_benchmark_job(
-                benchmark_request_two.tag().unwrap(),
-                target,
-                CodegenBackend::Llvm,
-                Profile::Opt,
-                benchmark_set.0,
-            )
-            .await
-            .unwrap();
-            db.enqueue_benchmark_job(
-                benchmark_request_two.tag().unwrap(),
-                target,
-                CodegenBackend::Llvm,
-                Profile::Debug,
-                benchmark_set.0,
-            )
-            .await
-            .unwrap();
-
-            db.update_benchmark_request_status(
-                benchmark_request_two.tag().unwrap(),
-                BenchmarkRequestStatus::InProgress,
-            )
-            .await
-            .unwrap();
-
-            let status_page_data = db.get_status_page_data().await.unwrap();
-
-            assert!(status_page_data.completed_requests.len() == 1);
-            assert_eq!(status_page_data.completed_requests[0].0.tag().unwrap(), tag);
-            assert!(matches!(
-                status_page_data.completed_requests[0].0.status(),
-                BenchmarkRequestStatus::Completed { .. }
-            ));
-            // can't really test duration
-            // ensure errors are correct
-            assert_eq!(
-                status_page_data.completed_requests[0].1[0],
-                "This is an error".to_string()
-            );
-            assert_eq!(
-                status_page_data.completed_requests[0].1[1],
-                "This is another error".to_string()
-            );
-
-            assert!(status_page_data.in_progress.len() == 1);
-            // we should have 2 jobs
-            assert!(status_page_data.in_progress[0].request.1.len() == 2);
-            // the request should be in progress
-            assert!(matches!(
-                status_page_data.in_progress[0].request.0.status(),
-                BenchmarkRequestStatus::InProgress
-            ));
-
-            // Test the first job
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[0].target(),
-                Target::X86_64UnknownLinuxGnu
-            ));
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[0].status(),
-                BenchmarkJobStatus::Queued
-            ));
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[0].backend(),
-                CodegenBackend::Llvm
-            ));
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[0].profile(),
-                Profile::Opt
-            ));
-            assert_eq!(
-                status_page_data.in_progress[0].request.1[0].benchmark_set(),
-                benchmark_set
-            );
-
-            // test the second job
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[1].target(),
-                Target::X86_64UnknownLinuxGnu
-            ));
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[1].status(),
-                BenchmarkJobStatus::Queued
-            ));
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[1].backend(),
-                CodegenBackend::Llvm
-            ));
-            assert!(matches!(
-                status_page_data.in_progress[0].request.1[1].profile(),
-                Profile::Debug
-            ));
-            assert_eq!(
-                status_page_data.in_progress[0].request.1[1].benchmark_set(),
-                benchmark_set
-            );
-
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    #[tokio::test]
     async fn get_collector_configs() {
         run_postgres_test(|ctx| async {
-            let db = ctx.db_client().connection().await;
+            let db = ctx.db();
             let target = Target::X86_64UnknownLinuxGnu;
 
             let benchmark_set_one = BenchmarkSet(0u32);
@@ -1183,6 +1055,166 @@ mod tests {
             assert_eq!(collector_configs[1].name(), collector_name_two);
             assert_eq!(collector_configs[1].benchmark_set(), benchmark_set_two);
             assert!(collector_configs[1].is_active());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_last_completed_requests() {
+        run_postgres_test(|ctx| async {
+            let mut requests = vec![];
+            let db = ctx.db();
+
+            let collector = ctx.add_collector(Default::default()).await;
+
+            // Create several completed requests
+            for id in 1..=3 {
+                // Make some space between completions
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                requests.push(
+                    RequestBuilder::master(
+                        db,
+                        &format!("sha{}", id),
+                        &format!("sha{}", id - 1),
+                        id,
+                    )
+                    .await
+                    .add_job(db, job())
+                    .await
+                    .complete(db, &collector)
+                    .await,
+                );
+            }
+
+            // Create an additional non-completed request
+            ctx.insert_master_request("foo", "bar", 1000).await;
+
+            // Request 1 will have artifact with errors
+            let aid1 = ctx.upsert_master_artifact("sha1").await;
+            db.record_error(aid1, "crate1", "error1").await;
+            db.record_error(aid1, "crate2", "error2").await;
+
+            // Request 2 will have artifact without errors
+            let _aid2 = ctx.upsert_master_artifact("sha2").await;
+
+            // Request 3 will have no artifact (shouldn't happen in practice, but...)
+
+            let reqs = db.get_last_n_completed_benchmark_requests(5).await.unwrap();
+            assert_eq!(reqs.len(), 3);
+
+            let expected = [
+                ("sha3", HashMap::new()),
+                ("sha2", HashMap::new()),
+                (
+                    "sha1",
+                    HashMap::from([
+                        ("crate1".to_string(), "error1".to_string()),
+                        ("crate2".to_string(), "error2".to_string()),
+                    ]),
+                ),
+            ];
+            for ((sha, errors), req) in expected.into_iter().zip(reqs) {
+                assert_eq!(
+                    req.request.tag().unwrap(),
+                    sha,
+                    "Request {req:?} does not have expected sha {sha}"
+                );
+                assert_eq!(
+                    req.errors, errors,
+                    "Request {req:?} does not have expected errors {errors:?}"
+                );
+            }
+
+            let reqs = db.get_last_n_completed_benchmark_requests(1).await.unwrap();
+            assert_eq!(reqs.len(), 1);
+            assert_eq!(reqs[0].request.tag().unwrap(), "sha3");
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_in_progress_jobs() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db();
+
+            let collector = ctx.add_collector(Default::default()).await;
+
+            // Artifacts ready request, should be ignored
+            RequestBuilder::master(db, "foo", "bar", 1000).await;
+
+            // Create a completed parent with jobs
+            let completed = RequestBuilder::master(db, "sha4-parent", "sha0", 1001)
+                .await
+                .add_jobs(
+                    db,
+                    &[job().profile(Profile::Doc), job().profile(Profile::Opt)],
+                )
+                .await
+                .complete(db, &collector)
+                .await;
+
+            // In progress request without a parent
+            let req1 = RequestBuilder::master(db, "sha1", "sha0", 1)
+                .await
+                .set_in_progress(db)
+                .await;
+
+            // In progress request with a parent that has no jobs
+            let req2 = RequestBuilder::master(db, "sha2", "sha1", 2)
+                .await
+                .add_jobs(
+                    db,
+                    &[job().profile(Profile::Check), job().profile(Profile::Debug)],
+                )
+                .await
+                .set_in_progress(db)
+                .await;
+
+            // In progress request with a parent that has jobs
+            let req3 = RequestBuilder::master(db, "sha3", "sha2", 3)
+                .await
+                .add_jobs(
+                    db,
+                    &[job().profile(Profile::Doc), job().profile(Profile::Opt)],
+                )
+                .await
+                .set_in_progress(db)
+                .await;
+
+            // In progress request with a parent that has jobs, but is completed
+            let req4 = RequestBuilder::master(db, "sha4", completed.tag(), 4)
+                .await
+                .add_jobs(
+                    db,
+                    &[job().profile(Profile::Doc), job().profile(Profile::Check)],
+                )
+                .await
+                .set_in_progress(db)
+                .await;
+
+            let mut reqs = db
+                .get_jobs_of_in_progress_benchmark_requests()
+                .await
+                .unwrap();
+
+            // Check that all jobs are unique
+            let mut job_ids = HashSet::new();
+            for job in reqs.values().flatten() {
+                assert!(job_ids.insert(job.id));
+            }
+
+            // Check that all jobs were returned
+            assert!(!reqs.contains_key(req1.tag()));
+            req2.assert_has_exact_jobs(&reqs.remove(req2.tag()).unwrap());
+            req3.assert_has_exact_jobs(&reqs.remove(req3.tag()).unwrap());
+            req4.assert_has_exact_jobs(&reqs.remove(req4.tag()).unwrap());
+            completed.assert_has_exact_jobs(&reqs.remove(completed.tag()).unwrap());
+            assert!(reqs.is_empty());
 
             Ok(ctx)
         })

@@ -393,102 +393,78 @@ pub mod status {
 
 pub mod status_new {
     use chrono::{DateTime, Utc};
-    use database::BenchmarkSet;
     use hashbrown::HashMap;
     use serde::Serialize;
 
     #[derive(Serialize, Debug)]
+    pub enum BenchmarkRequestStatus {
+        Queued,
+        InProgress,
+        Completed,
+    }
+
+    #[derive(Serialize, Debug)]
+    pub enum BenchmarkRequestType {
+        Release,
+        Master,
+        Try,
+    }
+
+    #[derive(Serialize, Debug)]
     #[serde(rename_all = "camelCase")]
-    pub struct BenchmarkRequestStatusUi {
-        pub state: String,
+    pub struct BenchmarkRequest {
+        pub tag: String,
+        pub pr: Option<u32>,
+        pub status: BenchmarkRequestStatus,
+        pub request_type: BenchmarkRequestType,
+        pub created_at: DateTime<Utc>,
         pub completed_at: Option<DateTime<Utc>>,
         pub duration_s: Option<u64>,
+        pub errors: HashMap<String, String>,
+    }
+
+    #[derive(Serialize, Copy, Clone, Debug)]
+    pub enum BenchmarkJobStatus {
+        Queued,
+        InProgress,
+        Success,
+        Failed,
     }
 
     #[derive(Serialize, Debug)]
     #[serde(rename_all = "camelCase")]
-    pub struct BenchmarkRequestTypeUi {
-        pub r#type: String,
-        pub tag: Option<String>,
-        pub parent_sha: Option<String>,
-        pub pr: Option<u32>,
-    }
-
-    #[derive(Serialize, Debug)]
-    #[serde(rename_all = "camelCase")]
-    pub struct BenchmarkRequestUi {
-        pub status: BenchmarkRequestStatusUi,
-        pub request_type: BenchmarkRequestTypeUi,
-        pub commit_date: Option<DateTime<Utc>>,
-        pub created_at: DateTime<Utc>,
-        pub backends: Vec<String>,
-        pub profiles: String,
-        pub errors: Vec<String>,
-    }
-
-    #[derive(Serialize, Debug)]
-    #[serde(rename_all = "camelCase")]
-    pub struct BenchmarkJobStatusUi {
-        pub state: String,
-        pub started_at: Option<DateTime<Utc>>,
-        pub completed_at: Option<DateTime<Utc>>,
-        pub collector_name: Option<String>,
-    }
-
-    #[derive(Serialize, Debug)]
-    #[serde(rename_all = "camelCase")]
-    pub struct BenchmarkJobUi {
+    pub struct BenchmarkJob {
+        pub request_tag: String,
         pub target: String,
         pub backend: String,
         pub profile: String,
-        pub request_tag: String,
-        pub benchmark_set: BenchmarkSet,
+        pub benchmark_set: u32,
         pub created_at: DateTime<Utc>,
-        pub status: BenchmarkJobStatusUi,
+        pub started_at: Option<DateTime<Utc>>,
+        pub completed_at: Option<DateTime<Utc>>,
+        pub status: BenchmarkJobStatus,
         pub deque_counter: u32,
     }
 
     #[derive(Serialize, Debug)]
     #[serde(rename_all = "camelCase")]
-    pub struct BenchmarkInProgressUi {
-        pub request: BenchmarkRequestUi,
-        pub jobs: Vec<BenchmarkJobUi>,
-    }
-
-    #[derive(Serialize, Debug, Clone)]
-    #[serde(rename_all = "camelCase")]
-    pub struct CollectorConfigUi {
+    pub struct Collector {
         pub name: String,
         pub target: String,
-        pub benchmark_set: BenchmarkSet,
+        pub benchmark_set: u32,
         pub is_active: bool,
         pub last_heartbeat_at: DateTime<Utc>,
         pub date_added: DateTime<Utc>,
-    }
-
-    #[derive(Serialize, Debug, Clone)]
-    #[serde(rename_all = "camelCase")]
-    pub struct CollectorInfo {
-        /// Configuration for the collector
-        pub config: CollectorConfigUi,
-        /// Jobs that are assigned to the collector from the currently inprogress
-        /// request and possibly that request's parent.
-        pub job_ids: Vec<u32>,
+        pub jobs: Vec<BenchmarkJob>,
     }
 
     #[derive(Serialize, Debug)]
     #[serde(rename_all = "camelCase")]
     pub struct Response {
-        /// The current queue, ordered `in_progress`, ... the queue, `completed`
-        pub queue_request_tags: Vec<String>,
-        /// Hash table of request tags to requests
-        pub requests_map: HashMap<String, BenchmarkRequestUi>,
-        /// Hash table of job ids to jobs
-        pub job_map: HashMap<u32, BenchmarkJobUi>,
-        /// Hash table of benchmark set ids to CollectorInfo
-        pub collector_work_map: HashMap<u32, CollectorInfo>,
-        /// Request tag to a vector of job ids
-        pub tag_to_jobs: HashMap<String, Vec<u32>>,
+        /// The current queue, starting from the queued request that will be benchmarked at the
+        /// latest time, then the `in_progress` requests, and then the `completed` requests.
+        pub requests: Vec<BenchmarkRequest>,
+        pub collectors: Vec<Collector>,
     }
 }
 

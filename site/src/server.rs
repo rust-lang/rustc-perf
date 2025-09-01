@@ -394,7 +394,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .header_typed(ContentType::text_utf8())
                     .header_typed(CacheControl::new().with_no_cache().with_no_store())
-                    .body(hyper::Body::from(err))
+                    .body(hyper::Body::from(format!("{err:?}")))
                     .unwrap()),
             };
         }
