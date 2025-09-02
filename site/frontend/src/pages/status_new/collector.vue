@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import {ref} from "vue";
-import {CollectorConfig} from "./data";
+import {ref, Ref} from "vue";
+import {CollectorConfig, BenchmarkJobStatus} from "./data";
 
 const props = defineProps<{
   collector: CollectorConfig;
@@ -10,13 +10,21 @@ function statusClass(c: CollectorConfig): string {
   return c.isActive ? "active" : "inactive";
 }
 
-const FILTERS = ["InProgress", "Queued", "Success", "Failure"];
-const ACTIVE_FILTERS = ref(new Set(FILTERS));
+const FILTERS: BenchmarkJobStatus[] = [
+  "InProgress",
+  "Queued",
+  "Success",
+  "Failed",
+];
+const ACTIVE_FILTERS: Ref<Record<BenchmarkJobStatus, boolean>> = ref({
+  InProgress: true,
+  Queued: true,
+  Success: false,
+  Failed: false,
+});
 
 function filterJobByStatus(status: string) {
-  if (!ACTIVE_FILTERS.value.delete(status)) {
-    ACTIVE_FILTERS.value.add(status);
-  }
+  ACTIVE_FILTERS.value[status] = !ACTIVE_FILTERS.value[status];
 }
 </script>
 
@@ -79,7 +87,7 @@ function filterJobByStatus(status: string) {
                 <input
                   type="checkbox"
                   value="filter"
-                  :checked="ACTIVE_FILTERS.has(filter)"
+                  :checked="ACTIVE_FILTERS[filter]"
                 />
               </button>
             </template>
@@ -102,12 +110,7 @@ function filterJobByStatus(status: string) {
         </thead>
         <tbody>
           <template v-for="job in collector.jobs">
-            <tr
-              :key="`${job.requestTag}-${job.status}-${ACTIVE_FILTERS.has(
-                job.status
-              )}`"
-              v-if="ACTIVE_FILTERS.has(job.status)"
-            >
+            <tr v-if="ACTIVE_FILTERS[job.status]">
               <td class="table-cell-padding">
                 {{ job.requestTag }}
               </td>
