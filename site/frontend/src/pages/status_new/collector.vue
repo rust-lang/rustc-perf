@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {ref} from "vue";
 import {CollectorConfig} from "./data";
 
 const props = defineProps<{
@@ -7,6 +8,15 @@ const props = defineProps<{
 
 function statusClass(c: CollectorConfig): string {
   return c.isActive ? "active" : "inactive";
+}
+
+const FILTERS = ["InProgress", "Queued", "Success", "Failure"];
+const ACTIVE_FILTERS = ref(new Set(FILTERS));
+
+function filterJobByStatus(status: string) {
+  if (!ACTIVE_FILTERS.value.delete(status)) {
+    ACTIVE_FILTERS.value.add(status);
+  }
 }
 </script>
 
@@ -56,6 +66,26 @@ function statusClass(c: CollectorConfig): string {
     </div>
 
     <div class="table-collector-wrapper">
+      <div class="table-collector-status-filter-wrapper">
+        <div class="table-collector-status-filters">
+          <strong>Filter by job status:</strong>
+          <div class="table-collector-status-filter-btn-wrapper">
+            <template v-for="filter in FILTERS">
+              <button
+                class="table-collector-status-filter-btn"
+                @click="filterJobByStatus(filter)"
+              >
+                {{ filter }}
+                <input
+                  type="checkbox"
+                  value="filter"
+                  :checked="ACTIVE_FILTERS.has(filter)"
+                />
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
       <table class="table-collector" style="border-collapse: collapse">
         <caption>
           current benchmark jobs
@@ -71,22 +101,29 @@ function statusClass(c: CollectorConfig): string {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="job in collector.jobs">
-            <td class="table-cell-padding">
-              {{ job.requestTag }}
-            </td>
-            <td class="table-cell-padding">
-              {{ job.status }}
-            </td>
-            <td class="table-cell-padding">
-              {{ job.startedAt }}
-            </td>
-            <td class="table-cell-padding">{{ job.backend }}</td>
-            <td class="table-cell-padding">{{ job.profile }}</td>
-            <td class="table-cell-padding">
-              {{ job.dequeCounter }}
-            </td>
-          </tr>
+          <template v-for="job in collector.jobs">
+            <tr
+              :key="`${job.requestTag}-${job.status}-${ACTIVE_FILTERS.has(
+                job.status
+              )}`"
+              v-if="ACTIVE_FILTERS.has(job.status)"
+            >
+              <td class="table-cell-padding">
+                {{ job.requestTag }}
+              </td>
+              <td class="table-cell-padding">
+                {{ job.status }}
+              </td>
+              <td class="table-cell-padding">
+                {{ job.startedAt }}
+              </td>
+              <td class="table-cell-padding">{{ job.backend }}</td>
+              <td class="table-cell-padding">{{ job.profile }}</td>
+              <td class="table-cell-padding">
+                {{ job.dequeCounter }}
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -98,8 +135,11 @@ function statusClass(c: CollectorConfig): string {
 </template>
 
 <style lang="scss" scoped>
+$sm-padding: 8px;
+$sm-radius: 8px;
+
 .collector-card {
-  border-radius: 8px;
+  border-radius: $sm-radius;
   flex-direction: column;
   justify-content: space-between;
   padding: 16px;
@@ -109,11 +149,11 @@ function statusClass(c: CollectorConfig): string {
 }
 .collector-name {
   font-size: 1.5em;
-  padding: 8px;
+  padding: $sm-padding;
 }
 
 .meta {
-  padding: 8px;
+  padding: $sm-padding;
 }
 
 .collector-meta {
@@ -134,13 +174,39 @@ function statusClass(c: CollectorConfig): string {
 }
 
 .collector-sm-padding-left-right {
-  padding: 0px 8px;
+  padding: 0px $sm-padding;
 }
 .collector-sm-padding-left {
-  padding-left: 8px;
+  padding-left: $sm-padding;
 }
 .collector-sm-padding-right {
-  padding-right: 8px;
+  padding-right: $sm-padding;
+}
+
+.table-collector-status-filter-wrapper {
+  padding: $sm-padding 0px;
+}
+
+.table-collector-status-filters {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-collector-status-filter-btn-wrapper {
+  padding-top: $sm-padding;
+  display: flex;
+  flex-direction: row;
+}
+
+.table-collector-status-filter-btn {
+  border: 1px solid #333;
+  border-radius: $sm-radius;
+  width: 100%;
+  margin-right: $sm-padding;
+}
+
+.table-collector-status-filter-btn:hover {
+  transition: 250ms;
 }
 
 .status {
@@ -158,10 +224,10 @@ function statusClass(c: CollectorConfig): string {
 }
 
 .table-collector-wrapper {
-  padding: 8px;
+  padding: $sm-padding;
+  margin: $sm-padding 0px;
   background-color: #eee;
-  margin: 8px 0px;
-  border-radius: 8px;
+  border-radius: $sm-radius;
 
   table {
     font-size: 1em;
@@ -183,12 +249,12 @@ function statusClass(c: CollectorConfig): string {
   }
 
   .table-header-padding {
-    padding: 8px 8px 0px 0px;
+    padding: $sm-padding $sm-padding 0px $sm-padding;
     text-align: left;
   }
 
   .table-cell-padding {
-    padding: 8px 8px 1px 0px;
+    padding: $sm-padding $sm-padding 1px 0px;
     text-align: left;
   }
 }
@@ -199,9 +265,9 @@ function statusClass(c: CollectorConfig): string {
   align-items: center;
   height: 40px;
   background-color: #eee;
-  margin: 8px;
-  padding: 8px;
-  border-radius: 8px;
+  margin: $sm-padding;
+  padding: $sm-padding;
+  border-radius: $sm-radius;
 
   h3 {
     font-variant: small-caps;
