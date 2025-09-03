@@ -15,12 +15,13 @@ pub async fn handle_status_page_new(ctxt: Arc<SiteCtxt>) -> anyhow::Result<statu
     let index = conn.load_benchmark_request_index().await?;
 
     // The queue contains any in-progress request(s) and then the following requests in queue order
+    // We reverse so that it starts with the request that will be benchmarked the latest
     let mut queue: Vec<status_new::BenchmarkRequest> = build_queue(&*conn, &index)
         .await?
         .into_iter()
         .map(|req| request_to_ui(&req, HashMap::new()))
         .collect();
-
+    queue.reverse();
     // And then we add N most recently completed requests to it
     let completed = conn.get_last_n_completed_benchmark_requests(10).await?;
     queue.extend(
