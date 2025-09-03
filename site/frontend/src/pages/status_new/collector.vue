@@ -20,7 +20,7 @@ const ACTIVE_FILTERS: Ref<Record<BenchmarkJobStatus, boolean>> = ref({
   InProgress: true,
   Queued: true,
   Success: false,
-  Failed: false,
+  Failed: true,
 });
 
 function filterJobByStatus(status: string) {
