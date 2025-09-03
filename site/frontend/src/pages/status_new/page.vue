@@ -99,13 +99,7 @@ function formatStatus(status: BenchmarkRequestStatus): string {
 }
 
 function hasErrors(errors: Dict<string>) {
-  // This is a bit odd but if the error object has values the loop will be
-  // hit and thus return true.
-  for (const key in errors) {
-    console.log(key);
-    return true;
-  }
-  return false;
+  return Object.keys(errors).length !== 0;
 }
 
 function getErrorsLength(errors: Dict<string>) {
