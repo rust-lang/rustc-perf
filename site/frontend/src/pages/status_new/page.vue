@@ -97,6 +97,13 @@ function formatStatus(status: BenchmarkRequestStatus): string {
   }
 }
 
+function formatErrors(errors: Dict<string>) {
+  return Object.entries(errors).reduce(
+    (acc, e) => (acc += `${e[0]}: ${e[1]}\n`),
+    ""
+  );
+}
+
 function PullRequestLink({request}: {request: BenchmarkRequest}) {
   if (request.requestType === "Release") {
     return "";
@@ -145,10 +152,10 @@ loadStatusData(loading);
                     req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
                 </td>
-                <td v-html="req.createdAt"></td>
+                <td v-html="req.completedAt"></td>
                 <td v-html="getDuration(req)"></td>
                 <td>
-                  <pre>{{ req.errors }}</pre>
+                  <pre>{{ formatErrors(req.errors) }}</pre>
                 </td>
               </tr>
             </template>
