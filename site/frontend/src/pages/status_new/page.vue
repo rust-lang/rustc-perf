@@ -5,6 +5,7 @@ import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
 import {formatSecondsAsDuration} from "../../utils/formatting";
+import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
   BenchmarkRequestStatus,
@@ -97,11 +98,19 @@ function formatStatus(status: BenchmarkRequestStatus): string {
   }
 }
 
-function formatErrors(errors: Dict<string>) {
-  return Object.entries(errors).reduce(
-    (acc, e) => (acc += `${e[0]}: ${e[1]}\n`),
-    ""
-  );
+function hasErrors(errors: Dict<string>) {
+  // This is a bit odd but if the error object has values the loop will be
+  // hit and thus return true.
+  for (const key in errors) {
+    console.log(key);
+    return true;
+  }
+  return false;
+}
+
+function getErrorsLength(errors: Dict<string>) {
+  const errorsLen = Object.keys(errors).length;
+  return `${errorsLen} ${errorsLen > 1 ? "s" : ""}`;
 }
 
 function PullRequestLink({request}: {request: BenchmarkRequest}) {
@@ -114,6 +123,9 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
     </a>
   );
 }
+
+const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
+  useExpandedStore();
 
 loadStatusData(loading);
 </script>
@@ -154,8 +166,26 @@ loadStatusData(loading);
                 </td>
                 <td v-html="req.completedAt"></td>
                 <td v-html="getDuration(req)"></td>
-                <td>
-                  <pre>{{ formatErrors(req.errors) }}</pre>
+
+                <td v-if="hasErrors(req.errors)">
+                  <button @click="toggleExpandedErrors(req.tag)">
+                    {{ hasExpandedErrors(req.tag) ? "Hide" : "Show" }}
+                    {{ getErrorsLength(req.errors) }}
+                  </button>
+                </td>
+                <td v-else></td>
+              </tr>
+
+              <tr v-if="hasExpandedErrors(req.tag)">
+                <td colspan="7" style="padding: 10px 0">
+                  <div v-for="benchmark in Object.entries(req.errors)">
+                    <div>
+                      <details open>
+                        <summary>{{ benchmark[0] }}</summary>
+                        <pre class="error">{{ benchmark[1] }}</pre>
+                      </details>
+                    </div>
+                  </div>
                 </td>
               </tr>
             </template>
