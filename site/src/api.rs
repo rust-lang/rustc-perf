@@ -647,6 +647,12 @@ pub mod github {
         pub head_commit: HeadCommit,
         pub before: String,
         pub commits: Vec<Commit>,
+        pub repository: Repository,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Repository {
+        pub default_branch: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

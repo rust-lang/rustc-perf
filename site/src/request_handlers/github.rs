@@ -23,7 +23,9 @@ pub async fn handle_github(
 
 async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<github::Response> {
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
-    if push.r#ref != "refs/heads/master" || push.sender.login != "bors" {
+    if push.r#ref != format!("refs/heads/{}", push.repository.default_branch)
+        || push.sender.login != "bors"
+    {
         return Ok(github::Response);
     }
     let rollup_pr_number = match rollup_pr_number(&gh_client, &push.head_commit.message).await? {
