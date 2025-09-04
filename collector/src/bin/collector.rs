@@ -1389,7 +1389,9 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             let collector_config = rt
                 .block_on(conn.start_collector(&collector_name, &git_sha))?
                 .ok_or_else(|| {
-                    anyhow::anyhow!("Collector with name `{collector_name}` not found")
+                    anyhow::anyhow!(
+                        "No active collector with the name `{collector_name}` not found"
+                    )
                 })?;
 
             if collector_config.target().as_str() != host_target_tuple {
