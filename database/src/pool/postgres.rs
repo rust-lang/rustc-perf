@@ -1816,7 +1816,8 @@ where
                     last_heartbeat_at = NOW(),
                     commit_sha = $2
                 WHERE
-                    name = $1
+                    name = $1 AND
+                    is_active = true
                 RETURNING
                     target,
                     benchmark_set,
