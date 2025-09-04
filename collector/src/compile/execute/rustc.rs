@@ -193,9 +193,9 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             .current_dir("rust")
             .arg("fetch")
             .arg("origin")
-            .arg("master")
+            .arg("HEAD")
             .status()
-            .context("git fetch origin master")?;
+            .context("git fetch origin HEAD")?;
         assert!(status.success(), "git fetch successful");
     } else {
         let status = Command::new("git")
