@@ -105,7 +105,7 @@ async fn record(
     .context("configuring")?;
     assert!(status.success(), "configure successful");
 
-    let output = crate::command_output(
+    let output = crate::command_output_stream(
         Command::new("python3")
             .arg(
                 checkout
