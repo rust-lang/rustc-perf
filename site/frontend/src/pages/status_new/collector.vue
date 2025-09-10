@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, Ref} from "vue";
+import {formatISODate} from "../../utils/formatting";
 import {CollectorConfig, BenchmarkJobStatus} from "./data";
 
 const props = defineProps<{
@@ -25,6 +26,19 @@ const ACTIVE_FILTERS: Ref<Record<BenchmarkJobStatus, boolean>> = ref({
 
 function filterJobByStatus(status: string) {
   ACTIVE_FILTERS.value[status] = !ACTIVE_FILTERS.value[status];
+}
+
+function formatJobStatus(status: BenchmarkJobStatus): string {
+  switch (status) {
+    case "InProgress":
+      return "In progress";
+    case "Success":
+    case "Failed":
+    case "Queued":
+      return status;
+    default:
+      return "Unknown";
+  }
 }
 </script>
 
@@ -62,14 +76,14 @@ function filterJobByStatus(status: string) {
         <span class="collector-meta-name">
           <strong>Last Heartbeat:</strong>
         </span>
-        <span>{{ collector.lastHeartbeatAt }}</span>
+        <span>{{ formatISODate(collector.lastHeartbeatAt) }}</span>
       </div>
 
       <div class="collector-meta">
         <span class="collector-meta-name">
           <strong>Date Added:</strong>
         </span>
-        <span>{{ collector.dateAdded }}</span>
+        <span>{{ formatISODate(collector.dateAdded) }}</span>
       </div>
     </div>
 
@@ -83,7 +97,7 @@ function filterJobByStatus(status: string) {
                 class="table-collector-status-filter-btn"
                 @click="filterJobByStatus(filter)"
               >
-                {{ filter }}
+                {{ formatJobStatus(filter) }}
                 <input
                   type="checkbox"
                   value="filter"
@@ -115,10 +129,10 @@ function filterJobByStatus(status: string) {
                 {{ job.requestTag }}
               </td>
               <td class="table-cell-padding">
-                {{ job.status }}
+                {{ formatJobStatus(job.status) }}
               </td>
               <td class="table-cell-padding">
-                {{ job.startedAt }}
+                {{ formatISODate(job.startedAt) }}
               </td>
               <td class="table-cell-padding">{{ job.backend }}</td>
               <td class="table-cell-padding">{{ job.profile }}</td>

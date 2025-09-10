@@ -1,3 +1,5 @@
+import {parseISO, format} from "date-fns";
+
 // `time` has to be in seconds
 export function formatSecondsAsDuration(time: number): string {
   let seconds = time % 60;
@@ -16,4 +18,12 @@ export function formatSecondsAsDuration(time: number): string {
     }s`;
   }
   return s;
+}
+
+// Takes a date like `2025-09-10T08:22:47.161348Z` -> `"2025-09-10 08:22:47"`
+export function formatISODate(dateString?: string): string {
+  if (dateString) {
+    return format(parseISO(dateString), "yyyy-MM-dd HH:mm:ss");
+  }
+  return "";
 }
