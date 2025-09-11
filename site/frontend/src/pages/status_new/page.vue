@@ -210,7 +210,6 @@ loadStatusData(loading);
 .collector-wrapper {
   width: 100%;
   display: flex;
-  justify-content: center;
   align-items: center;
   flex-direction: column;
   padding-left: 8px;
