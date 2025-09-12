@@ -289,8 +289,6 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
     let ctxt = site_ctxt.clone();
 
     loop {
-        interval.tick().await;
-
         if let Some(ctxt_clone) = {
             let guard = ctxt.read();
             guard.as_ref().cloned()
@@ -300,6 +298,8 @@ pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u
                 Err(e) => log::error!("Cron job failed to execute: {e:?}"),
             }
         }
+
+        interval.tick().await;
     }
 }
 

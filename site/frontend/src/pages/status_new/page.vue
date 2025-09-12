@@ -4,7 +4,7 @@ import {h, ref, Ref} from "vue";
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {formatSecondsAsDuration} from "../../utils/formatting";
+import {formatSecondsAsDuration, formatISODate} from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
@@ -158,7 +158,7 @@ loadStatusData(loading);
                     req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
                 </td>
-                <td v-html="req.completedAt"></td>
+                <td v-html="formatISODate(req.completedAt)"></td>
                 <td v-html="getDuration(req)"></td>
 
                 <td v-if="hasErrors(req.errors)">
@@ -210,7 +210,6 @@ loadStatusData(loading);
 .collector-wrapper {
   width: 100%;
   display: flex;
-  justify-content: center;
   align-items: center;
   flex-direction: column;
   padding-left: 8px;
