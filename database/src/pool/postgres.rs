@@ -754,10 +754,8 @@ impl PostgresConnection {
                         UNION
                         SELECT tag FROM parents
                     )
-                    SELECT job_queue.*
-                    FROM requests
-                    -- Only get requests that have some jobs
-                    RIGHT JOIN job_queue on job_queue.request_tag = requests.tag
+                    -- Only get the jobs of in_progress requests
+                    SELECT * FROM job_queue WHERE job_queue.request_tag IN (SELECT * FROM requests)
                 ")).await.unwrap(),
             }),
             conn,
