@@ -414,7 +414,13 @@ static MIGRATIONS: &[&str] = &[
     // of requests grows to make things fast we need an index on the completed_at
     r#"
     CREATE INDEX IF NOT EXISTS benchmark_request_completed_idx ON benchmark_request(completed_at);
-    "#
+    "#,
+    // Artifacts table grows massively and we do a join on artifacts.id = error.aid.
+    // Thus error.aid needs an index to filter errors for an artifact without
+    // a full table scan
+    r#"
+    CREATE INDEX IF NOT EXISTS error_aid_idx ON error(aid);
+    "#,
 ];
 
 #[async_trait::async_trait]
