@@ -406,6 +406,31 @@ static MIGRATIONS: &[Migration] = &[
         alter table pstat_series_with_target rename to pstat_series;
     "#,
     ),
+    Migration::new(
+        r#"
+        CREATE TABLE IF NOT EXISTS error_new (
+            id      INTEGER PRIMARY KEY,
+            aid     INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            context TEXT NOT NULL,
+            job_id  INTEGER
+        );
+
+        INSERT INTO
+            error_new (aid, message, context)
+        SELECT
+            aid,
+            error,
+            benchmark
+        FROM
+            error;
+
+        DROP TABLE error;
+        ALTER TABLE error_new RENAME TO error;
+
+        CREATE INDEX IF NOT EXISTS error_artifact_idx ON error(aid);
+        "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -765,11 +790,20 @@ impl Connection for SqliteConnection {
         unimplemented!("recording raw self profile files is not implemented for sqlite")
     }
 
-    async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {
+    async fn record_error(
+        &self,
+        artifact: ArtifactIdNumber,
+        context: &str,
+        message: &str,
+        job_id: Option<u32>,
+    ) {
+        if job_id.is_some() {
+            no_queue_implementation_abort!()
+        }
         self.raw_ref()
             .execute(
-                "insert into error (benchmark, aid, error) VALUES (?, ?, ?)",
-                params![krate, &artifact.0, &error],
+                "insert into error (context, aid, message) VALUES (?, ?, ?)",
+                params![context, &artifact.0, &message],
             )
             .unwrap();
     }
@@ -935,7 +969,7 @@ impl Connection for SqliteConnection {
     }
     async fn get_error(&self, aid: crate::ArtifactIdNumber) -> HashMap<String, String> {
         self.raw_ref()
-            .prepare_cached("select benchmark, error from error where aid = ?")
+            .prepare_cached("select context, message from error where aid = ?")
             .unwrap()
             .query_map(params![&aid.0], |row| Ok((row.get(0)?, row.get(1)?)))
             .unwrap()

@@ -191,12 +191,12 @@ impl Table for Error {
     }
 
     fn postgres_select_statement(&self, since_weeks_ago: Option<u32>) -> String {
-        let s = "select benchmark, aid, error from ".to_string() + self.name();
+        let s = "select context, aid, message from ".to_string() + self.name();
         with_filter_clause_maybe(s, ARTIFACT_JOIN_AND_WHERE, since_weeks_ago)
     }
 
     fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into error (benchmark, aid, error) VALUES (?, ?, ?)"
+        "insert into error (context, aid, message) VALUES (?, ?, ?)"
     }
 
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
