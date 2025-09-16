@@ -388,9 +388,9 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE collector_config ADD COLUMN commit_sha TEXT NULL;
     "#,
     r#"
-    CREATE TABLE IF NOT EXISTS error_new (
+    CREATE TABLE error_new (
         id      SERIAL PRIMARY KEY,
-        aid     INTEGER NOT NULL,
+        aid     INTEGER NOT NULL REFERENCES artifact(id) ON DELETE CASCADE ON UPDATE CASCADE,
         message TEXT NOT NULL,
         context TEXT NOT NULL,
         job_id  INTEGER
@@ -408,7 +408,7 @@ static MIGRATIONS: &[&str] = &[
     DROP TABLE error;
     ALTER TABLE error_new RENAME TO error;
 
-    CREATE INDEX IF NOT EXISTS error_artifact_idx ON error(aid);
+    CREATE INDEX error_artifact_idx ON error(aid);
     "#,
 ];
 

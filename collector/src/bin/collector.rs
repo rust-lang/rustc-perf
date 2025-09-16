@@ -1511,7 +1511,7 @@ async fn run_job_queue_benchmarks(
                         // not with a benchmark.
                         conn.record_error(
                             artifact_row_id,
-                            &format!("job:{}", benchmark_job.id()),
+                            &format!("exhausted retry count"),
                             &format!("Error while benchmarking job {benchmark_job:?}: {error:?}"),
                             Some(benchmark_job.id()),
                         )
@@ -2174,6 +2174,7 @@ async fn run_benchmarks(
             &collector,
             runtime.filter,
             runtime.iterations,
+            shared.job_id,
         )
         .await
         .context("Runtime benchmarks failed")
