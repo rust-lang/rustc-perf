@@ -408,9 +408,9 @@ static MIGRATIONS: &[Migration] = &[
     ),
     Migration::new(
         r#"
-        CREATE TABLE IF NOT EXISTS error_new (
+        CREATE TABLE error_new (
             id      INTEGER PRIMARY KEY,
-            aid     INTEGER NOT NULL,
+            aid     INTEGER NOT NULL REFERENCES artifact(id) ON DELETE CASCADE ON UPDATE CASCADE,
             message TEXT NOT NULL,
             context TEXT NOT NULL,
             job_id  INTEGER
@@ -428,7 +428,7 @@ static MIGRATIONS: &[Migration] = &[
         DROP TABLE error;
         ALTER TABLE error_new RENAME TO error;
 
-        CREATE INDEX IF NOT EXISTS error_artifact_idx ON error(aid);
+        CREATE INDEX error_artifact_idx ON error(aid);
         "#,
     ),
 ];
