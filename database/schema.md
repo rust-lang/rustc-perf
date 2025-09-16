@@ -257,8 +257,8 @@ Records an error within the application namely a;
 
 Columns:
 
-* **id** (`BIGINT` / `SERIAL`): Primary key identifier for the job row;
-  auto increments with each new job.
+* **id** (`BIGINT` / `SERIAL`): Primary key identifier for the error row;
+  auto increments with each new error.
 * **aid** (`INTERGER`): References the artifact id column.
 * **context** (`TEXT NOT NULL`): A little message to be able to understand a 
   bit more about why or where the error occured.
