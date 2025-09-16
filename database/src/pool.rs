@@ -1,8 +1,8 @@
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestWithErrors,
-    BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark, Target,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestWithErrors, BenchmarkSet,
+    CodegenBackend, CollectorConfig, CompileBenchmark, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -202,13 +202,9 @@ pub trait Connection: Send + Sync {
     /// been completed yet. Pending statuses are `ArtifactsReady` and `InProgress`.
     async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>>;
 
-    /// Update the status of a `benchmark_request` with the given `tag`.
+    /// Update the status of a `benchmark_request` with the given `tag` to `in_progress`
     /// If no such request exists in the DB, returns an error.
-    async fn update_benchmark_request_status(
-        &self,
-        tag: &str,
-        status: BenchmarkRequestStatus,
-    ) -> anyhow::Result<()>;
+    async fn set_benchmark_request_in_progress(&self, tag: &str) -> anyhow::Result<()>;
 
     /// Update a Try commit to have a `sha` and `parent_sha`. Will update the
     /// status of the request too a ready state.
@@ -424,6 +420,7 @@ mod tests {
     use crate::metric::Metric;
     use crate::tests::builder::{job, RequestBuilder};
     use crate::tests::run_postgres_test;
+    use crate::BenchmarkRequestStatus;
     use crate::{tests::run_db_test, BenchmarkRequestType, Commit, CommitType, Date};
     use chrono::Utc;
     use std::str::FromStr;
@@ -633,6 +630,7 @@ mod tests {
             let target = Target::X86_64UnknownLinuxGnu;
             let collector_name = "collector-1";
             let benchmark_set = 1;
+            let tag = "1.79.0";
 
             db.add_collector_config(collector_name, target, benchmark_set, true)
                 .await
@@ -653,11 +651,12 @@ mod tests {
                 db.insert_benchmark_request(req).await.unwrap();
             }
 
-            complete_request(db, "1.79.0", collector_name, benchmark_set, target).await;
+            complete_request(db, tag, collector_name, benchmark_set, target).await;
 
-            db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
+            db.enqueue_benchmark_job(tag, target, CodegenBackend::Llvm, Profile::Opt, 0)
                 .await
                 .unwrap();
+            db.set_benchmark_request_in_progress("sha-2").await.unwrap();
 
             let requests = db.load_pending_benchmark_requests().await.unwrap();
 

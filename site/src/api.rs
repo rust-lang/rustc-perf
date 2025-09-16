@@ -418,6 +418,7 @@ pub mod status_new {
         pub status: BenchmarkRequestStatus,
         pub request_type: BenchmarkRequestType,
         pub created_at: DateTime<Utc>,
+        pub estimated_completed_at: Option<DateTime<Utc>>,
         pub completed_at: Option<DateTime<Utc>>,
         pub duration_s: Option<u64>,
         pub errors: HashMap<String, String>,

@@ -121,22 +121,27 @@ fn request_to_ui(
     req: &BenchmarkRequest,
     errors: HashMap<String, String>,
 ) -> status_new::BenchmarkRequest {
-    let (completed_at, duration_s) = match req.status() {
-        BenchmarkRequestStatus::WaitingForArtifacts => (None, None),
-        BenchmarkRequestStatus::ArtifactsReady => (None, None),
-        BenchmarkRequestStatus::InProgress => (None, None),
+    let (completed_at, duration_s, estimated_completed_at) = match req.status() {
+        BenchmarkRequestStatus::WaitingForArtifacts => (None, None, None),
+        BenchmarkRequestStatus::ArtifactsReady => (None, None, None),
+        BenchmarkRequestStatus::InProgress {
+            estimated_completed_at,
+        } => (None, None, estimated_completed_at),
         BenchmarkRequestStatus::Completed {
             completed_at,
             duration,
-        } => (Some(completed_at), Some(duration.as_secs())),
+        } => (Some(completed_at), Some(duration.as_secs()), None),
     };
+
     status_new::BenchmarkRequest {
         tag: req.tag().expect("Missing request tag").to_string(),
         pr: req.pr(),
         status: match req.status() {
             BenchmarkRequestStatus::WaitingForArtifacts => unreachable!(),
             BenchmarkRequestStatus::ArtifactsReady => status_new::BenchmarkRequestStatus::Queued,
-            BenchmarkRequestStatus::InProgress => status_new::BenchmarkRequestStatus::InProgress,
+            BenchmarkRequestStatus::InProgress { .. } => {
+                status_new::BenchmarkRequestStatus::InProgress
+            }
             BenchmarkRequestStatus::Completed { .. } => {
                 status_new::BenchmarkRequestStatus::Completed
             }
@@ -150,6 +155,7 @@ fn request_to_ui(
         completed_at,
         duration_s,
         errors,
+        estimated_completed_at,
     }
 }
 

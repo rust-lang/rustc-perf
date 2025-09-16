@@ -807,7 +807,14 @@ pub struct ArtifactCollection {
 pub enum BenchmarkRequestStatus {
     WaitingForArtifacts,
     ArtifactsReady,
-    InProgress,
+    InProgress {
+        /// Derived from looking at the last 30days of benchmarks which have
+        /// completed with the same profile, backend combination as this request
+        /// then adding that offset to the `started_at`. It's done this way as
+        /// we don't have (or really need) a `started_at` for a
+        /// `benchmark_request`
+        estimated_completed_at: Option<DateTime<Utc>>,
+    },
     Completed {
         completed_at: DateTime<Utc>,
         duration: Duration,
@@ -824,7 +831,7 @@ impl BenchmarkRequestStatus {
         match self {
             Self::WaitingForArtifacts => BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
             Self::ArtifactsReady => BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR,
-            Self::InProgress => BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR,
+            Self::InProgress { .. } => BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR,
             Self::Completed { .. } => BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
         }
     }
@@ -833,11 +840,14 @@ impl BenchmarkRequestStatus {
         text: &str,
         completion_date: Option<DateTime<Utc>>,
         duration_ms: Option<i32>,
+        estimated_completed_at: Option<DateTime<Utc>>,
     ) -> anyhow::Result<Self> {
         match text {
             BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR => Ok(Self::WaitingForArtifacts),
             BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR => Ok(Self::ArtifactsReady),
-            BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR => Ok(Self::InProgress),
+            BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR => Ok(Self::InProgress {
+                estimated_completed_at,
+            }),
             BENCHMARK_REQUEST_STATUS_COMPLETED_STR => Ok(Self::Completed {
                 completed_at: completion_date.ok_or_else(|| {
                     anyhow!("No completion date for a completed BenchmarkRequestStatus")

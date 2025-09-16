@@ -25,6 +25,7 @@ export type BenchmarkJob = {
   completedAt: string | null;
   status: BenchmarkJobStatus;
   dequeCounter: number;
+  estimatedCompletedAt: string | null;
 };
 
 export type CollectorConfig = {

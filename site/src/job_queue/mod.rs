@@ -155,7 +155,7 @@ pub async fn build_queue(
 
     // The queue starts with in progress
     let mut queue: Vec<BenchmarkRequest> = pending.extract_if_stable(|request| {
-        matches!(request.status(), BenchmarkRequestStatus::InProgress)
+        matches!(request.status(), BenchmarkRequestStatus::InProgress { .. })
     });
 
     // We sort the in-progress ones based on the started date
@@ -231,7 +231,7 @@ pub async fn enqueue_benchmark_request(
     }
 
     tx.conn()
-        .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
+        .set_benchmark_request_in_progress(request_tag)
         .await?;
     tx.commit().await?;
     Ok(())
@@ -252,7 +252,7 @@ async fn try_enqueue_next_benchmark_request(
                 enqueue_benchmark_request(conn, &request).await?;
                 break;
             }
-            BenchmarkRequestStatus::InProgress => {
+            BenchmarkRequestStatus::InProgress { .. } => {
                 if conn
                     .maybe_mark_benchmark_request_as_completed(request.tag().unwrap())
                     .await?
@@ -309,8 +309,7 @@ mod tests {
     use chrono::Utc;
     use database::tests::run_postgres_test;
     use database::{
-        BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
-        CodegenBackend, Profile, Target,
+        BenchmarkJobConclusion, BenchmarkRequest, BenchmarkSet, CodegenBackend, Profile, Target,
     };
 
     fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
@@ -474,9 +473,7 @@ mod tests {
             db.attach_shas_to_try_benchmark_request(16, "try1", "rrr", Utc::now())
                 .await
                 .unwrap();
-            db.update_benchmark_request_status("try1", BenchmarkRequestStatus::InProgress)
-                .await
-                .unwrap();
+            db.set_benchmark_request_in_progress("try1").await.unwrap();
             db.attach_shas_to_try_benchmark_request(17, "baz", "foo", Utc::now())
                 .await
                 .unwrap();

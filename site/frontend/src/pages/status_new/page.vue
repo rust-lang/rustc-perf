@@ -118,6 +118,13 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
   );
 }
 
+function getCompletedAt(req: BenchmarkRequest) {
+  if (req.status === "Completed") {
+    return formatISODate(req.completedAt);
+  }
+  return `<strong>${formatISODate(req.completedAt)} (est.)</strong>`;
+}
+
 const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
   useExpandedStore();
 
@@ -158,7 +165,7 @@ loadStatusData(loading);
                     req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
                 </td>
-                <td v-html="formatISODate(req.completedAt)"></td>
+                <td v-html="getCompletedAt(req)"></td>
                 <td v-html="getDuration(req)"></td>
 
                 <td v-if="hasErrors(req.errors)">

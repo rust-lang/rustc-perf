@@ -495,6 +495,7 @@ pub struct CachedStatements {
     get_compile_test_cases_with_measurements: Statement,
     get_last_n_completed_requests_with_errors: Statement,
     get_jobs_of_in_progress_benchmark_requests: Statement,
+    get_pending_benchmark_requests: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -748,6 +749,54 @@ impl PostgresConnection {
                     -- Only get requests that have some jobs
                     RIGHT JOIN job_queue on job_queue.request_tag = requests.tag
                 ")).await.unwrap(),
+                // Finds a start time for the in_progress requests and estimates
+                // a completion time
+                get_pending_benchmark_requests: conn.prepare(&format!( "
+                    WITH in_progress AS (
+                        SELECT
+                            {BENCHMARK_REQUEST_COLUMNS}
+                        FROM
+                            benchmark_request
+                        WHERE
+                            status = '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}' OR 
+                            status = '{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}'
+                    ), average_completion_time AS (
+                        -- Find similar benchmark requests completion times
+                        SELECT
+                            AVG(benchmark_request.duration_ms) AS average_duration
+                        FROM
+                            benchmark_request
+                        LEFT JOIN in_progress ON benchmark_request.backends = in_progress.backends
+                        AND benchmark_request.profiles =  in_progress.profiles
+                        WHERE benchmark_request.status = '{BENCHMARK_REQUEST_STATUS_COMPLETED_STR}'
+                        AND benchmark_request.completed_at > current_date - INTERVAL '30' DAY
+                        LIMIT 30
+                    ), in_progress_started_at AS (
+                        SELECT
+                            tag AS request_tag,
+                            started_at
+                        FROM
+                            benchmark_request 
+                        LEFT JOIN 
+                            job_queue ON benchmark_request.tag = job_queue.request_tag
+                        WHERE
+                            benchmark_request.status = '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}' ORDER BY started_at ASC LIMIT 1
+                    )
+                    SELECT
+                        {BENCHMARK_REQUEST_COLUMNS},
+                        CASE
+                            WHEN status = '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}'
+                            THEN COALESCE(started_at + (average_duration * INTERVAL '1  ms'), NOW() + INTERVAL '1 h')
+                            ELSE NULL
+                        END
+                        AS estimated_completed_at
+                    FROM
+                        in_progress
+                    LEFT JOIN 
+                        in_progress_started_at ON in_progress.tag = in_progress_started_at.request_tag
+                    CROSS JOIN average_completion_time
+                    ORDER BY status DESC
+                    ")).await.unwrap()
             }),
             conn,
         }
@@ -1634,18 +1683,7 @@ where
         Ok(BenchmarkRequestIndex { all, completed })
     }
 
-    async fn update_benchmark_request_status(
-        &self,
-        tag: &str,
-        status: BenchmarkRequestStatus,
-    ) -> anyhow::Result<()> {
-        // We cannot use this function to mark requests as complete, as
-        // we need to know if all jobs are complete first.
-        if matches!(status, BenchmarkRequestStatus::Completed { .. }) {
-            panic!("Please use `mark_benchmark_request_as_completed(...)` to complete benchmark_requests");
-        }
-
-        let status_str = status.as_str();
+    async fn set_benchmark_request_in_progress(&self, tag: &str) -> anyhow::Result<()> {
         let modified_rows = self
             .conn()
             .execute(
@@ -1653,7 +1691,7 @@ where
                 UPDATE benchmark_request
                 SET status = $1
                 WHERE tag = $2;"#,
-                &[&status_str, &tag],
+                &[&BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, &tag],
             )
             .await
             .context("failed to update benchmark request status")?;
@@ -1703,24 +1741,17 @@ where
     }
 
     async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>> {
-        let query = format!(
-            r#"
-                SELECT {BENCHMARK_REQUEST_COLUMNS}
-                FROM benchmark_request
-                WHERE status IN('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')"#
-        );
-
-        let rows = self
+        Ok(self
             .conn()
-            .query(&query, &[])
+            .query(&self.statements().get_pending_benchmark_requests, &[])
             .await
-            .context("Failed to get pending benchmark requests")?;
-
-        let requests = rows
+            .context("Failed to get pending benchmark requests")?
             .into_iter()
-            .map(|it| row_to_benchmark_request(&it, None))
-            .collect();
-        Ok(requests)
+            .map(|it| {
+                let estimated_completed_at = it.get::<_, Option<DateTime<Utc>>>(11);
+                row_to_benchmark_request(&it, None, estimated_completed_at)
+            })
+            .collect())
     }
 
     async fn enqueue_benchmark_job(
@@ -2110,7 +2141,7 @@ where
                 }
             } else {
                 // We see this request for the first time
-                let request = row_to_benchmark_request(&row, None);
+                let request = row_to_benchmark_request(&row, None, None);
                 let request_errors = if let Some(benchmark) = error_benchmark {
                     HashMap::from([(benchmark, error_content.unwrap_or_default())])
                 } else {
@@ -2237,7 +2268,11 @@ where
     }
 }
 
-fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRequest {
+fn row_to_benchmark_request(
+    row: &Row,
+    row_offset: Option<usize>,
+    estimated_completed_at: Option<DateTime<Utc>>,
+) -> BenchmarkRequest {
     let row_offset = row_offset.unwrap_or(0);
     let tag = row.get::<_, Option<String>>(row_offset);
     let parent_sha = row.get::<_, Option<String>>(1 + row_offset);
@@ -2253,11 +2288,15 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
 
     let pr = pr.map(|v| v as u32);
 
-    let status =
-        BenchmarkRequestStatus::from_str_and_completion_date(status, completed_at, duration_ms)
-            .unwrap_or_else(|e| {
-                panic!("Invalid BenchmarkRequestStatus data in the database for tag {tag:?}: {e:?}")
-            });
+    let status = BenchmarkRequestStatus::from_str_and_completion_date(
+        status,
+        completed_at,
+        duration_ms,
+        estimated_completed_at,
+    )
+    .unwrap_or_else(|e| {
+        panic!("Invalid BenchmarkRequestStatus data in the database for tag {tag:?}: {e:?}")
+    });
 
     match commit_type {
         BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {

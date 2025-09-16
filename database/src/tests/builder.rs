@@ -1,6 +1,6 @@
 use crate::{
-    BenchmarkJob, BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
-    CodegenBackend, CollectorConfig, Connection, Profile, Target,
+    BenchmarkJob, BenchmarkJobConclusion, BenchmarkRequest, BenchmarkSet, CodegenBackend,
+    CollectorConfig, Connection, Profile, Target,
 };
 use chrono::Utc;
 use hashbrown::{HashMap, HashSet};
@@ -55,7 +55,7 @@ impl RequestBuilder {
     }
 
     pub async fn set_in_progress(self, db: &dyn Connection) -> Self {
-        db.update_benchmark_request_status(self.tag(), BenchmarkRequestStatus::InProgress)
+        db.set_benchmark_request_in_progress(self.tag())
             .await
             .unwrap();
         self
