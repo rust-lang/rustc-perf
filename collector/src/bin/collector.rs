@@ -137,6 +137,7 @@ struct SharedBenchmarkConfig {
     artifact_id: ArtifactId,
     toolchain: Toolchain,
     record_duration: bool,
+    job_id: Option<u32>,
 }
 
 fn check_measureme_installed() -> Result<(), String> {
@@ -847,12 +848,14 @@ fn main_result() -> anyhow::Result<i32> {
                 runtime.group,
                 &toolchain,
                 &artifact_id,
+                None,
             ))?;
 
             let shared = SharedBenchmarkConfig {
                 artifact_id,
                 toolchain,
                 record_duration: true,
+                job_id: None,
             };
             let config = RuntimeBenchmarkConfig::new(
                 runtime_suite,
@@ -996,6 +999,7 @@ fn main_result() -> anyhow::Result<i32> {
                 toolchain,
                 artifact_id,
                 record_duration: true,
+                job_id: None,
             };
             let config = CompileBenchmarkConfig {
                 benchmarks,
@@ -1048,7 +1052,12 @@ fn main_result() -> anyhow::Result<i32> {
                         let toolchain =
                             create_toolchain_from_published_version(&tag, &host_target_tuple)?;
                         let conn = rt.block_on(pool.connection());
-                        rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))
+                        rt.block_on(bench_published_artifact(
+                            conn,
+                            toolchain,
+                            &benchmark_dirs,
+                            None,
+                        ))
                     }
                     NextArtifact::Commit {
                         commit,
@@ -1132,6 +1141,7 @@ fn main_result() -> anyhow::Result<i32> {
                             None,
                             &toolchain,
                             &artifact_id,
+                            None,
                         ))?;
 
                         let runtime_config = RuntimeBenchmarkConfig {
@@ -1143,6 +1153,7 @@ fn main_result() -> anyhow::Result<i32> {
                             artifact_id,
                             toolchain,
                             record_duration: true,
+                            job_id: None,
                         };
 
                         rt.block_on(run_benchmarks(
@@ -1173,7 +1184,12 @@ fn main_result() -> anyhow::Result<i32> {
             let conn = rt.block_on(pool.connection());
             let toolchain =
                 create_toolchain_from_published_version(&toolchain, &host_target_tuple)?;
-            rt.block_on(bench_published_artifact(conn, toolchain, &benchmark_dirs))?;
+            rt.block_on(bench_published_artifact(
+                conn,
+                toolchain,
+                &benchmark_dirs,
+                None,
+            ))?;
             Ok(0)
         }
 
@@ -1495,8 +1511,9 @@ async fn run_job_queue_benchmarks(
                         // not with a benchmark.
                         conn.record_error(
                             artifact_row_id,
-                            &format!("job:{}", benchmark_job.id()),
+                            "Job failure",
                             &format!("Error while benchmarking job {benchmark_job:?}: {error:?}"),
+                            Some(benchmark_job.id()),
                         )
                         .await;
 
@@ -1656,6 +1673,7 @@ async fn run_benchmark_job(
         artifact_id,
         toolchain,
         record_duration: false,
+        job_id: Some(job.id()),
     };
 
     // A failure here means that it was not possible to compile something, that likely won't resolve
@@ -1723,6 +1741,7 @@ async fn create_benchmark_configs(
             None,
             toolchain,
             artifact_id,
+            Some(job.id()),
         )
         .await?;
         Some(RuntimeBenchmarkConfig {
@@ -2047,6 +2066,7 @@ async fn load_runtime_benchmarks(
     group: Option<String>,
     toolchain: &Toolchain,
     artifact_id: &ArtifactId,
+    job_id: Option<u32>,
 ) -> anyhow::Result<BenchmarkSuite> {
     let BenchmarkSuiteCompilation {
         suite,
@@ -2059,7 +2079,7 @@ async fn load_runtime_benchmarks(
         RuntimeCompilationOpts::default(),
     )?;
 
-    record_runtime_compilation_errors(conn, artifact_id, failed_to_compile).await;
+    record_runtime_compilation_errors(conn, artifact_id, failed_to_compile, job_id).await;
     Ok(suite)
 }
 
@@ -2067,11 +2087,12 @@ async fn record_runtime_compilation_errors(
     connection: &mut dyn Connection,
     artifact_id: &ArtifactId,
     errors: HashMap<String, String>,
+    job_id: Option<u32>,
 ) {
     let artifact_row_number = connection.artifact_id(artifact_id).await;
     for (krate, error) in errors {
         connection
-            .record_error(artifact_row_number, &krate, &error)
+            .record_error(artifact_row_number, &krate, &error, job_id)
             .await;
     }
 }
@@ -2153,6 +2174,7 @@ async fn run_benchmarks(
             &collector,
             runtime.filter,
             runtime.iterations,
+            shared.job_id,
         )
         .await
         .context("Runtime benchmarks failed")
@@ -2175,6 +2197,7 @@ async fn bench_published_artifact(
     mut connection: Box<dyn Connection>,
     toolchain: Toolchain,
     dirs: &BenchmarkDirs<'_>,
+    job_id: Option<u32>,
 ) -> anyhow::Result<()> {
     let artifact_id = ArtifactId::Tag(toolchain.id.clone());
 
@@ -2200,6 +2223,7 @@ async fn bench_published_artifact(
         None,
         &toolchain,
         &artifact_id,
+        job_id,
     )
     .await?;
 
@@ -2207,6 +2231,7 @@ async fn bench_published_artifact(
         artifact_id,
         toolchain,
         record_duration: true,
+        job_id: None,
     };
     run_benchmarks(
         connection.as_mut(),
@@ -2295,6 +2320,7 @@ async fn bench_compile(
                     collector.artifact_row_id,
                     &benchmark_name.0,
                     &format!("{s:?}"),
+                    shared.job_id,
                 )
                 .await;
         };

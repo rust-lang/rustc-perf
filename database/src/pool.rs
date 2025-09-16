@@ -74,7 +74,13 @@ pub trait Connection: Send + Sync {
         profile: Profile,
         scenario: Scenario,
     );
-    async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str);
+    async fn record_error(
+        &self,
+        artifact: ArtifactIdNumber,
+        context: &str,
+        message: &str,
+        job_id: Option<u32>,
+    );
     async fn record_rustc_crate(
         &self,
         collection: CollectionId,
@@ -1094,8 +1100,8 @@ mod tests {
 
             // Request 1 will have artifact with errors
             let aid1 = ctx.upsert_master_artifact("sha1").await;
-            db.record_error(aid1, "crate1", "error1").await;
-            db.record_error(aid1, "crate2", "error2").await;
+            db.record_error(aid1, "crate1", "error1", None).await;
+            db.record_error(aid1, "crate2", "error2", None).await;
 
             // Request 2 will have artifact without errors
             let _aid2 = ctx.upsert_master_artifact("sha2").await;

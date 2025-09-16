@@ -250,14 +250,21 @@ bors_sha    pr  parent_sha  complete  requested    include  exclude  runs  commi
 
 ### error
 
-Records a compilation or runtime error for an artifact and a benchmark.
+Records an error within the application namely a;
+- compilation
+- runtime
+- error contextual to a benchmark job
 
-```
-sqlite> select * from error limit 1;
-aid         benchmark   error
-----------  ---         -----
-1           syn-1.0.89  Failed to compile...
-```
+Columns:
+
+* **id** (`BIGINT` / `SERIAL`): Primary key identifier for the error row;
+  auto increments with each new error.
+* **aid** (`INTERGER`): References the artifact id column.
+* **context** (`TEXT NOT NULL`): A little message to be able to understand a 
+  bit more about why or where the error occured.
+* **message** (`TEXT NOT NULL`): The error message.
+* **job_id** (`INTEGER`): A nullable job_id which, if it exists it will inform
+  us as to which job this error is part of.
 
 ## New benchmarking design
 We are currently implementing a new design for dispatching benchmarks to collector(s) and storing

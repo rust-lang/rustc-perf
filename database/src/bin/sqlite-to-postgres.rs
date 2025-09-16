@@ -241,9 +241,10 @@ struct Error;
 
 #[derive(Serialize)]
 struct ErrorRow<'a> {
+    id: i32,
     aid: i32,
-    benchmark: &'a str,
-    error: Nullable<&'a str>,
+    context: &'a str,
+    message: Nullable<&'a str>,
 }
 
 impl Table for Error {
@@ -252,11 +253,11 @@ impl Table for Error {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "aid, benchmark, error"
+        "id, aid, context, message, job_id"
     }
 
     fn postgres_attributes() -> &'static str {
-        "aid, benchmark, error"
+        "id, aid, context, message, job_id"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -266,9 +267,10 @@ impl Table for Error {
     fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
         writer
             .serialize(ErrorRow {
-                aid: row.get(0).unwrap(),
-                benchmark: row.get_ref(1).unwrap().as_str().unwrap(),
-                error: row.get_ref(2).unwrap().try_into().unwrap(),
+                id: row.get(0).unwrap(),
+                aid: row.get(1).unwrap(),
+                context: row.get_ref(2).unwrap().as_str().unwrap(),
+                message: row.get_ref(3).unwrap().try_into().unwrap(),
             })
             .unwrap();
     }

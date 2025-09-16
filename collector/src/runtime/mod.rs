@@ -35,6 +35,7 @@ pub async fn bench_runtime(
     collector: &CollectorCtx,
     filter: RuntimeBenchmarkFilter,
     iterations: u32,
+    job_id: Option<u32>,
 ) -> anyhow::Result<()> {
     let filtered = suite.filtered_benchmark_count(&filter);
     println!("Executing {filtered} benchmarks\n");
@@ -89,7 +90,12 @@ pub async fn bench_runtime(
         if let Err(error) = result {
             eprintln!("collector error: {error:#}");
             tx.conn()
-                .record_error(collector.artifact_row_id, &step_name, &format!("{error:?}"))
+                .record_error(
+                    collector.artifact_row_id,
+                    &step_name,
+                    &format!("{error:?}"),
+                    job_id,
+                )
                 .await;
         };
 

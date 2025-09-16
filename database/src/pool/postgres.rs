@@ -387,6 +387,29 @@ static MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE collector_config ADD COLUMN commit_sha TEXT NULL;
     "#,
+    r#"
+    CREATE TABLE error_new (
+        id      SERIAL PRIMARY KEY,
+        aid     INTEGER NOT NULL REFERENCES artifact(id) ON DELETE CASCADE ON UPDATE CASCADE,
+        message TEXT NOT NULL,
+        context TEXT NOT NULL,
+        job_id  INTEGER
+    );
+
+    INSERT INTO
+        error_new (aid, message, context)
+    SELECT
+        aid,
+        error,
+        benchmark
+    FROM
+        error;
+
+    DROP TABLE error;
+    ALTER TABLE error_new RENAME TO error;
+
+    CREATE INDEX error_artifact_idx ON error(aid);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -577,7 +600,7 @@ impl PostgresConnection {
                     .prepare("insert into rustc_compilation (aid, cid, crate, duration) VALUES ($1, $2, $3, $4)")
                     .await
                     .unwrap(),
-                get_error: conn.prepare("select benchmark, error from error where aid = $1").await.unwrap(),
+                get_error: conn.prepare("select context, message from error where aid = $1").await.unwrap(),
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, target, metric) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and target = $5 and metric = $6").await.unwrap(),
                 collection_id: conn.prepare("insert into collection (perf_commit) VALUES ($1) returning id").await.unwrap(),
@@ -684,8 +707,8 @@ impl PostgresConnection {
                     ), errors AS (
                         SELECT
                             artifacts.name AS tag,
-                            error.benchmark,
-                            error.error
+                            error.context,
+                            error.message
                         FROM error
                         -- Use right join to only return errors for selected artifacts
                         RIGHT JOIN artifacts ON error.aid = artifacts.id
@@ -693,12 +716,12 @@ impl PostgresConnection {
                     -- Select request duplicated for each pair of (benchmark, error)
                     SELECT
                         completed.*,
-                        errors.benchmark,
-                        errors.error
+                        errors.context,
+                        errors.message
                     FROM completed
                     LEFT JOIN errors ON errors.tag = completed.tag
                     -- Re-sort the requests, because the original order may be lost
-                    ORDER BY completed.completed_at DESC;
+                    ORDER BY completed.completed_at DESC
                 ")).await.unwrap(),
                 get_jobs_of_in_progress_benchmark_requests: conn.prepare(&format!("
                     -- Get in progress requests
@@ -1180,11 +1203,22 @@ where
         ArtifactIdNumber(aid)
     }
 
-    async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {
+    async fn record_error(
+        &self,
+        artifact: ArtifactIdNumber,
+        context: &str,
+        message: &str,
+        job_id: Option<u32>,
+    ) {
         self.conn()
             .execute(
-                "insert into error (benchmark, aid, error) VALUES ($1, $2, $3)",
-                &[&krate, &(artifact.0 as i32), &error],
+                "insert into error (context, aid, message, job_id) VALUES ($1, $2, $3, $4)",
+                &[
+                    &context,
+                    &(artifact.0 as i32),
+                    &message,
+                    &job_id.map(|id| id as i32),
+                ],
             )
             .await
             .unwrap();
