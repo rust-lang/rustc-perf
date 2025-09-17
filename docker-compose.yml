@@ -12,6 +12,3 @@ services:
       interval: 2s
       timeout: 2s
       retries: 15
-    tmpfs:
-      - /var/lib/postgresql/data       # store data in RAM
-
