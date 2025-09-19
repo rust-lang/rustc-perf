@@ -158,8 +158,13 @@ loadStatusData(loading);
                     req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
                 </td>
-                <td v-html="formatISODate(req.completedAt)"></td>
-                <td v-html="getDuration(req)"></td>
+                <td>
+                  {{ formatISODate(req.completedAt) }}
+                  <span v-if="req.endEstimated">(est.)</span>
+                </td>
+                <td>
+                  {{ getDuration(req) }}
+                </td>
 
                 <td v-if="hasErrors(req.errors)">
                   <button @click="toggleExpandedErrors(req.tag)">

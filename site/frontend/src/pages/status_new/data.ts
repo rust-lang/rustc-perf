@@ -8,6 +8,7 @@ export type BenchmarkRequest = {
   requestType: BenchmarkRequestType;
   createdAt: string;
   completedAt: string | null;
+  endEstimated: boolean;
   durationS: number | null;
   errors: Dict<string>;
 };
