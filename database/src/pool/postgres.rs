@@ -410,6 +410,11 @@ static MIGRATIONS: &[&str] = &[
 
     CREATE INDEX error_artifact_idx ON error(aid);
     "#,
+    // For completed requests we take the last N completed. As the total number
+    // of requests grows to make things fast we need an index on the completed_at
+    r#"
+    CREATE INDEX benchmark_request_completed_idx ON benchmark_request(completed_at);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -743,10 +748,8 @@ impl PostgresConnection {
                         UNION
                         SELECT tag FROM parents
                     )
-                    SELECT job_queue.*
-                    FROM requests
-                    -- Only get requests that have some jobs
-                    RIGHT JOIN job_queue on job_queue.request_tag = requests.tag
+                    -- Only get the jobs of in_progress requests
+                    SELECT * FROM job_queue INNER JOIN requests ON job_queue.request_tag = requests.tag
                 ")).await.unwrap(),
             }),
             conn,
