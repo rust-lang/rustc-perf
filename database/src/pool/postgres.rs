@@ -749,7 +749,7 @@ impl PostgresConnection {
                         SELECT tag FROM parents
                     )
                     -- Only get the jobs of in_progress requests
-                    SELECT * FROM job_queue WHERE job_queue.request_tag IN (SELECT * FROM requests)
+                    SELECT * FROM job_queue INNER JOIN requests ON job_queue.request_tag = requests.tag
                 ")).await.unwrap(),
             }),
             conn,
