@@ -1,7 +1,5 @@
 mod utils;
 
-use std::{str::FromStr, sync::Arc};
-
 use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
@@ -9,6 +7,7 @@ use collector::benchmark_set::benchmark_set_count;
 use database::{BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, Target};
 use hashbrown::HashSet;
 use parking_lot::RwLock;
+use std::{str::FromStr, sync::Arc};
 use tokio::time::{self, Duration};
 
 pub fn run_new_queue() -> bool {
@@ -237,29 +236,28 @@ pub async fn enqueue_benchmark_request(
     Ok(())
 }
 
-/// Try to find a benchmark request that should be enqueue next, and if such request is found,
-/// enqueue it.
-async fn try_enqueue_next_benchmark_request(
+/// Update the state of benchmark requests.
+/// If there is a request that has artifacts ready, and nothing is currently in-progress,
+/// it will be enqueued.
+/// If there is a request whose jobs have all completed, it will be marked as completed.
+async fn process_benchmark_requests(
     conn: &mut dyn database::pool::Connection,
     index: &mut BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
     let queue = build_queue(conn, index).await?;
 
-    #[allow(clippy::never_loop)]
     for request in queue {
         match request.status() {
-            BenchmarkRequestStatus::ArtifactsReady => {
-                enqueue_benchmark_request(conn, &request).await?;
-                break;
-            }
             BenchmarkRequestStatus::InProgress => {
-                if conn
-                    .maybe_mark_benchmark_request_as_completed(request.tag().unwrap())
-                    .await?
-                {
-                    index.add_tag(request.tag().unwrap());
+                let tag = request.tag().expect("In progress request without a tag");
+                if conn.maybe_mark_benchmark_request_as_completed(tag).await? {
+                    index.add_tag(tag);
                     continue;
                 }
+                break;
+            }
+            BenchmarkRequestStatus::ArtifactsReady => {
+                enqueue_benchmark_request(conn, &request).await?;
                 break;
             }
             BenchmarkRequestStatus::WaitingForArtifacts
@@ -274,12 +272,16 @@ async fn try_enqueue_next_benchmark_request(
 /// For queueing jobs, add the jobs you want to queue to this function
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
+
     let mut index = conn.load_benchmark_request_index().await?;
+
     // Put the master commits into the `benchmark_requests` queue
     create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
     create_benchmark_request_releases(&*conn, &index).await?;
-    try_enqueue_next_benchmark_request(&mut *conn, &mut index).await?;
+    // Enqueue waiting requests and try to complete in-progress ones
+    process_benchmark_requests(&mut *conn, &mut index).await?;
+
     Ok(())
 }
 
