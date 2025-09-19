@@ -413,7 +413,7 @@ static MIGRATIONS: &[&str] = &[
     // For completed requests we take the last N completed. As the total number
     // of requests grows to make things fast we need an index on the completed_at
     r#"
-    CREATE INDEX IF NOT EXISTS benchmark_request_completed_idx ON benchmark_request(completed_at);
+    CREATE INDEX benchmark_request_completed_idx ON benchmark_request(completed_at);
     "#,
 ];
 
