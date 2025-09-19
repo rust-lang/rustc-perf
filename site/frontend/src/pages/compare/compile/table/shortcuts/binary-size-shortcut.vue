@@ -36,7 +36,8 @@ function normalizeBackend(backend: string): string {
     </Tooltip>
   </div>
 
-  <pre><code>./target/release/collector binary_stats compile \
+  <pre><code>cargo run --release --bin collector \
+    binary_stats compile \
     +{{ props.baseArtifact.commit }} \
     --rustc2 +{{ props.artifact.commit }} \
     --exact-match {{ testCase.benchmark }} \
