@@ -1597,6 +1597,22 @@ where
         &self,
         benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<()> {
+        // @TODO delete this when the new system has been running. This code
+        // prevents a foreign key violation in the job_queue table. This can
+        // happen as the parent_sha may not be in the range of initial commits
+        // we load into the database when the job queue first starts and inserts
+        // it's first batch of requests.
+        let row = self
+            .conn()
+            .query_one(
+                "SELECT tag FROM benchmark_request WHERE tag = $1",
+                &[&benchmark_request.parent_sha()],
+            )
+            .await
+            .context("Failed to check parent sha")?;
+
+        let parent_sha = row.get::<_, Option<String>>(0).map(|parent_sha| parent_sha);
+
         self.conn()
             .execute(
                 r#"
@@ -1615,7 +1631,7 @@ where
             "#,
                 &[
                     &benchmark_request.tag(),
-                    &benchmark_request.parent_sha(),
+                    &parent_sha,
                     &benchmark_request.pr().map(|it| it as i32),
                     &benchmark_request.commit_type,
                     &benchmark_request.status.as_str(),
