@@ -22,7 +22,7 @@ pub fn run_new_queue() -> bool {
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database
 async fn create_benchmark_request_master_commits(
-    ctxt: &Arc<SiteCtxt>,
+    ctxt: &SiteCtxt,
     conn: &dyn database::pool::Connection,
     index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
@@ -282,7 +282,7 @@ async fn process_benchmark_requests(
 }
 
 /// For queueing jobs, add the jobs you want to queue to this function
-async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
+async fn cron_enqueue_jobs(site_ctxt: &SiteCtxt) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
 
     let index = conn.load_benchmark_request_index().await?;
@@ -297,9 +297,9 @@ async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Entry point for the cron
-pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, seconds: u64) {
-    let mut interval = time::interval(Duration::from_secs(seconds));
+/// Entry point for the cron job that manages the benchmark request and job queue.
+pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, run_interval: Duration) {
+    let mut interval = time::interval(run_interval);
     let ctxt = site_ctxt.clone();
 
     loop {
@@ -484,7 +484,7 @@ mod tests {
                 create_master("mmm", "aaa", 18),
             ];
 
-            db_insert_requests(&*db, &requests).await;
+            db_insert_requests(db, &requests).await;
             db.attach_shas_to_try_benchmark_request(16, "try1", "rrr", Utc::now())
                 .await
                 .unwrap();
@@ -496,7 +496,7 @@ mod tests {
                 .unwrap();
 
             mark_as_completed(
-                &*db,
+                db,
                 &["bar", "345", "aaa", "rrr"],
                 collector_name,
                 benchmark_set,
@@ -504,7 +504,7 @@ mod tests {
             )
             .await;
 
-            let sorted: Vec<BenchmarkRequest> = build_queue(&*db).await.unwrap();
+            let sorted: Vec<BenchmarkRequest> = build_queue(db).await.unwrap();
 
             queue_order_matches(&sorted, &["try1", "v1.2.3", "123", "foo", "mmm", "baz"]);
             Ok(ctx)

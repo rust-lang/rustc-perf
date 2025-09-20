@@ -4,6 +4,7 @@ use site::job_queue::{cron_main, run_new_queue};
 use site::load;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::task;
 
 #[cfg(unix)]
@@ -60,7 +61,11 @@ async fn main() {
 
     if run_new_queue() {
         task::spawn(async move {
-            cron_main(ctxt.clone(), queue_update_interval_seconds).await;
+            cron_main(
+                ctxt.clone(),
+                Duration::from_secs(queue_update_interval_seconds),
+            )
+            .await;
         });
     }
 

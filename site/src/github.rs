@@ -250,7 +250,7 @@ async fn attach_shas_to_try_benchmark_request(
             )
             .await
         {
-            log::error!("Failed to add shas to try commit {}", e);
+            log::error!("Failed to add shas to try commit: {e:?}");
         }
     }
 }
