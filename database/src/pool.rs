@@ -433,50 +433,12 @@ mod tests {
     use std::collections::BTreeSet;
     use std::str::FromStr;
 
-    /// Create a Commit
     fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
         Commit {
             sha: commit_sha.into(),
             date: Date(time),
             r#type,
         }
-    }
-
-    async fn complete_request(
-        db: &dyn Connection,
-        request_tag: &str,
-        collector_name: &str,
-        benchmark_set: u32,
-        target: Target,
-    ) {
-        /* Create job for the request */
-        db.enqueue_benchmark_job(
-            request_tag,
-            target,
-            CodegenBackend::Llvm,
-            Profile::Opt,
-            benchmark_set,
-        )
-        .await
-        .unwrap();
-
-        let (job, _) = db
-            .dequeue_benchmark_job(collector_name, target, BenchmarkSet(benchmark_set))
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(job.request_tag(), request_tag);
-
-        /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
-            .await
-            .unwrap();
-
-        assert!(db
-            .maybe_mark_benchmark_request_as_completed(request_tag)
-            .await
-            .unwrap());
     }
 
     #[tokio::test]
@@ -564,37 +526,25 @@ mod tests {
     async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
-            let target = Target::X86_64UnknownLinuxGnu;
-            let collector_name = "collector-1";
-            let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, target, benchmark_set, true)
+            // Insert a try build
+            ctx.insert_try_request(42).await;
+            db.attach_shas_to_try_benchmark_request(42, "sha-1", "sha-parent-1", Utc::now())
                 .await
                 .unwrap();
 
-            // Complete parent
-            let parent = BenchmarkRequest::create_release("sha-parent-1", Utc::now());
-            // Complete
-            let req_a = BenchmarkRequest::create_try_without_artifacts(42, "", "");
-            // WaitingForArtifacts
-            let req_b = BenchmarkRequest::create_try_without_artifacts(42, "", "");
-            let req_c = BenchmarkRequest::create_try_without_artifacts(42, "", "");
+            // Then finish it
+            ctx.complete_request("sha-1").await;
 
-            db.insert_benchmark_request(&parent).await.unwrap();
-            db.insert_benchmark_request(&req_a).await.unwrap();
-            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
-                .await
-                .unwrap();
-
-            complete_request(db, "sha-parent-1", collector_name, benchmark_set, target).await;
-            complete_request(db, "sha1", collector_name, benchmark_set, target).await;
-
-            // This should be fine, req_a was completed
-            db.insert_benchmark_request(&req_b).await.unwrap();
-            // This should fail, we can't have two queued requests at once
-            db.insert_benchmark_request(&req_c).await.expect_err(
-                "It was possible to record two try benchmark requests without artifacts",
-            );
+            // Insert a try build for the same PR again
+            // This should be fine, because the previous request was already completed
+            ctx.insert_try_request(42).await;
+            // But this should fail, as we can't have two queued requests at once
+            db.insert_benchmark_request(&BenchmarkRequest::create_try_without_artifacts(
+                42, "", "",
+            ))
+            .await
+            .expect_err("It was possible to record two try benchmark requests without artifacts");
 
             Ok(ctx)
         })
