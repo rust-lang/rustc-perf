@@ -26,7 +26,15 @@ async fn create_benchmark_request_master_commits(
     conn: &dyn database::pool::Connection,
     index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
-    let master_commits = &ctxt.get_master_commits().commits;
+    let now = Utc::now();
+
+    let master_commits = ctxt.get_master_commits();
+    // Only consider the last ~month of master commits
+    let master_commits = master_commits
+        .commits
+        .iter()
+        .filter(|c| now.signed_duration_since(c.time) < chrono::Duration::days(29));
+
     // TODO; delete at some point in the future
     let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-08-27T00:00:00.000Z")?;
 
@@ -62,12 +70,11 @@ async fn create_benchmark_request_releases(
     // TODO; delete at some point in the future
     let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-08-27T00:00:00.000Z")?;
 
-    let releases: Vec<_> = releases
+    let releases = releases
         .lines()
         .rev()
         .filter_map(parse_release_string)
-        .take(20)
-        .collect();
+        .take(20);
 
     for (name, commit_date) in releases {
         if commit_date >= cutoff && !index.contains_tag(&name) {
