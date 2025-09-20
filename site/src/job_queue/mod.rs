@@ -4,8 +4,10 @@ use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
-use database::{BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, Target};
-use hashbrown::HashSet;
+use database::{
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, PendingBenchmarkRequests,
+    Target,
+};
 use parking_lot::RwLock;
 use std::{str::FromStr, sync::Arc};
 use tokio::time::{self, Duration};
@@ -79,23 +81,26 @@ async fn create_benchmark_request_releases(
     Ok(())
 }
 
-/// Sorts try and master requests that are in the `ArtifactsReady` status.
+/// Sorts try and master requests that are in the `ArtifactsReady` status and return them in the
+/// correct queue order, where the first returned request will be the first to be benchmarked next.
 /// Doesn't consider in-progress requests or release artifacts.
-fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [BenchmarkRequest]) {
-    let mut done: HashSet<String> = index.completed_requests().clone();
+fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRequest> {
+    let PendingBenchmarkRequests {
+        requests: mut pending,
+        completed_parent_tags: mut done,
+    } = pending;
 
-    // Ensure all the items are ready to be sorted, if they are not this is
-    // undefined behaviour
-    assert!(request_queue.iter().all(|bmr| {
+    // Ensure all the items are ready to be sorted
+    assert!(pending.iter().all(|bmr| {
         bmr.status() == BenchmarkRequestStatus::ArtifactsReady && (bmr.is_master() || bmr.is_try())
     }));
 
     let mut finished = 0;
-    while finished < request_queue.len() {
+    while finished < pending.len() {
         // The next level is those elements in the unordered queue which
         // are ready to be benchmarked (i.e., those with parent in done or no
         // parent).
-        let level_len = partition_in_place(request_queue[finished..].iter_mut(), |bmr| {
+        let level_len = partition_in_place(pending[finished..].iter_mut(), |bmr| {
             bmr.parent_sha().is_none_or(|parent| done.contains(parent))
         });
 
@@ -108,12 +113,12 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
                 panic!("No master/try commit is ready for benchmarking");
             } else {
                 log::warn!("No master/try commit is ready for benchmarking");
-                return;
+                return pending;
             }
         }
 
         // Everything in level has the same topological order, then we sort based on heuristics
-        let level = &mut request_queue[finished..][..level_len];
+        let level = &mut pending[finished..][..level_len];
         level.sort_unstable_by_key(|bmr| {
             (
                 // PR number takes priority
@@ -129,14 +134,15 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
             // that all of the statuses of the benchmark requests are
             // `ArtifactsReady` it is implausable for this `expect(...)` to be
             // hit.
-            done.insert(
-                c.tag()
-                    .expect("Tag should exist on a benchmark request being sorted")
-                    .to_string(),
-            );
+            let tag = c
+                .tag()
+                .expect("Tag should exist on a benchmark request being sorted")
+                .to_string();
+            done.insert(tag);
         }
         finished += level_len;
     }
+    pending
 }
 
 /// Creates a benchmark request queue that determines in what order will
@@ -147,13 +153,12 @@ fn sort_benchmark_requests(index: &BenchmarkRequestIndex, request_queue: &mut [B
 /// Does not consider requests that are waiting for artifacts or that are alredy completed.
 pub async fn build_queue(
     conn: &dyn database::pool::Connection,
-    index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<Vec<BenchmarkRequest>> {
     // Load ArtifactsReady and InProgress benchmark requests
     let mut pending = conn.load_pending_benchmark_requests().await?;
 
     // The queue starts with in progress
-    let mut queue: Vec<BenchmarkRequest> = pending.extract_if_stable(|request| {
+    let mut queue: Vec<BenchmarkRequest> = pending.requests.extract_if_stable(|request| {
         matches!(request.status(), BenchmarkRequestStatus::InProgress)
     });
 
@@ -161,8 +166,9 @@ pub async fn build_queue(
     queue.sort_unstable_by_key(|req| req.created_at());
 
     // Add release artifacts ordered by the release tag (1.87.0 before 1.88.0) and `created_at`.
-    let mut release_artifacts: Vec<BenchmarkRequest> =
-        pending.extract_if_stable(|request| request.is_release());
+    let mut release_artifacts: Vec<BenchmarkRequest> = pending
+        .requests
+        .extract_if_stable(|request| request.is_release());
 
     release_artifacts.sort_unstable_by(|a, b| {
         a.tag()
@@ -171,7 +177,8 @@ pub async fn build_queue(
     });
 
     queue.append(&mut release_artifacts);
-    sort_benchmark_requests(index, &mut pending);
+
+    let mut pending = sort_benchmark_requests(pending);
     queue.append(&mut pending);
     Ok(queue)
 }
@@ -242,16 +249,14 @@ pub async fn enqueue_benchmark_request(
 /// If there is a request whose jobs have all completed, it will be marked as completed.
 async fn process_benchmark_requests(
     conn: &mut dyn database::pool::Connection,
-    index: &mut BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
-    let queue = build_queue(conn, index).await?;
+    let queue = build_queue(conn).await?;
 
     for request in queue {
         match request.status() {
             BenchmarkRequestStatus::InProgress => {
                 let tag = request.tag().expect("In progress request without a tag");
                 if conn.maybe_mark_benchmark_request_as_completed(tag).await? {
-                    index.add_tag(tag);
                     continue;
                 }
                 break;
@@ -273,14 +278,14 @@ async fn process_benchmark_requests(
 async fn cron_enqueue_jobs(site_ctxt: &Arc<SiteCtxt>) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
 
-    let mut index = conn.load_benchmark_request_index().await?;
+    let index = conn.load_benchmark_request_index().await?;
 
     // Put the master commits into the `benchmark_requests` queue
     create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
     create_benchmark_request_releases(&*conn, &index).await?;
     // Enqueue waiting requests and try to complete in-progress ones
-    process_benchmark_requests(&mut *conn, &mut index).await?;
+    process_benchmark_requests(&mut *conn).await?;
 
     Ok(())
 }
@@ -492,9 +497,7 @@ mod tests {
             )
             .await;
 
-            let index = db.load_benchmark_request_index().await.unwrap();
-
-            let sorted: Vec<BenchmarkRequest> = build_queue(&*db, &index).await.unwrap();
+            let sorted: Vec<BenchmarkRequest> = build_queue(&*db).await.unwrap();
 
             queue_order_matches(&sorted, &["try1", "v1.2.3", "123", "foo", "mmm", "baz"]);
             Ok(ctx)
