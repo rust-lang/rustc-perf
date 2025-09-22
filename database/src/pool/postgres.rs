@@ -5,9 +5,10 @@ use crate::{
     BenchmarkJobConclusion, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
     BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet,
     CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date,
-    Index, Profile, QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
-    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
-    BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    Index, PendingBenchmarkRequests, Profile, QueuedCommit, Scenario, Target,
+    BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
+    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
     BENCHMARK_REQUEST_TRY_STR,
@@ -500,6 +501,7 @@ pub struct CachedStatements {
     get_compile_test_cases_with_measurements: Statement,
     get_last_n_completed_requests_with_errors: Statement,
     get_jobs_of_in_progress_benchmark_requests: Statement,
+    load_pending_benchmark_requests: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -683,7 +685,7 @@ impl PostgresConnection {
                     where aid = $1
                 ").await.unwrap(),
                 load_benchmark_request_index: conn.prepare("
-                    SELECT tag, status
+                    SELECT tag
                     FROM benchmark_request
                     WHERE tag IS NOT NULL
                 ").await.unwrap(),
@@ -751,6 +753,18 @@ impl PostgresConnection {
                     -- Only get the jobs of in_progress requests
                     SELECT * FROM job_queue INNER JOIN requests ON job_queue.request_tag = requests.tag
                 ")).await.unwrap(),
+                // Load pending benchmark requests, along with information whether their parent is
+                // completed or not
+                load_pending_benchmark_requests: conn.prepare(&format!("
+                    WITH pending AS (
+                        SELECT {BENCHMARK_REQUEST_COLUMNS}
+                        FROM benchmark_request AS req
+                        WHERE status IN ('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')
+                    )
+                    SELECT (parent.status = '{BENCHMARK_REQUEST_STATUS_COMPLETED_STR}') AS parent_done, pending.*
+                    FROM pending
+                    LEFT JOIN benchmark_request as parent ON parent.tag = pending.parent_sha
+                ")).await.unwrap(),
             }),
             conn,
         }
@@ -809,7 +823,7 @@ where
                                     None => Date(Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).unwrap()),
                                 }
                             },
-                            r#type: CommitType::from_str(&row.get::<_, String>(3)).unwrap()
+                            r#type: CommitType::from_str(&row.get::<_, String>(3)).unwrap(),
                         },
                     )
                 })
@@ -1188,13 +1202,13 @@ where
             Some(aid) => aid.get::<_, i32>(0) as u32,
             None => {
                 self.conn()
-            .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
-                &info.name,
-                &info.date,
-                &info.kind,
-            ])
-            .await
-            .unwrap();
+                    .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
+                        &info.name,
+                        &info.date,
+                        &info.kind,
+                    ])
+                    .await
+                    .unwrap();
                 self.conn()
                     .query_one("select id from artifact where name = $1", &[&info.name])
                     .await
@@ -1623,18 +1637,11 @@ where
             .await
             .context("Cannot load benchmark request index")?;
 
-        let mut all = HashSet::with_capacity(requests.len());
-        let mut completed = HashSet::with_capacity(requests.len());
-        for request in requests {
-            let tag = request.get::<_, String>(0);
-            let status = request.get::<_, &str>(1);
-
-            if status == BENCHMARK_REQUEST_STATUS_COMPLETED_STR {
-                completed.insert(tag.clone());
-            }
-            all.insert(tag);
-        }
-        Ok(BenchmarkRequestIndex { all, completed })
+        let all = requests
+            .into_iter()
+            .map(|row| row.get::<_, String>(0))
+            .collect();
+        Ok(BenchmarkRequestIndex { all })
     }
 
     async fn update_benchmark_request_status(
@@ -1705,25 +1712,30 @@ where
         Ok(())
     }
 
-    async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>> {
-        let query = format!(
-            r#"
-                SELECT {BENCHMARK_REQUEST_COLUMNS}
-                FROM benchmark_request
-                WHERE status IN('{BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR}', '{BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR}')"#
-        );
-
+    async fn load_pending_benchmark_requests(&self) -> anyhow::Result<PendingBenchmarkRequests> {
         let rows = self
             .conn()
-            .query(&query, &[])
+            .query(&self.statements().load_pending_benchmark_requests, &[])
             .await
             .context("Failed to get pending benchmark requests")?;
 
-        let requests = rows
-            .into_iter()
-            .map(|it| row_to_benchmark_request(&it, None))
-            .collect();
-        Ok(requests)
+        let mut completed_parent_tags = HashSet::new();
+        let mut requests = Vec::with_capacity(rows.len());
+        for row in rows {
+            let parent_done = row.get::<_, Option<bool>>(0);
+            let request = row_to_benchmark_request(&row, Some(1));
+            if let Some(true) = parent_done {
+                if let Some(parent) = request.parent_sha() {
+                    completed_parent_tags.insert(parent.to_string());
+                }
+            }
+            requests.push(request);
+        }
+
+        Ok(PendingBenchmarkRequests {
+            requests,
+            completed_parent_tags,
+        })
     }
 
     async fn enqueue_benchmark_job(

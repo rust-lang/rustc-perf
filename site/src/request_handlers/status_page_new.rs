@@ -13,10 +13,8 @@ use std::time::Duration;
 pub async fn handle_status_page_new(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status_new::Response> {
     let conn = ctxt.conn().await;
 
-    let index = conn.load_benchmark_request_index().await?;
-
     // The queue contains any in-progress request(s) and then the following requests in queue order
-    let queue = build_queue(&*conn, &index).await?;
+    let queue = build_queue(&*conn).await?;
     let completed = conn.get_last_n_completed_benchmark_requests(10).await?;
 
     // Figure out approximately how long was the most recent master benchmark request

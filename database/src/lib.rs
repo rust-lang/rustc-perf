@@ -1041,12 +1041,9 @@ impl BenchmarkRequest {
 }
 
 /// Cached information about benchmark requests in the DB
-/// FIXME: only store non-try requests here
 pub struct BenchmarkRequestIndex {
     /// Tags (SHA or release name) of all known benchmark requests
     all: HashSet<String>,
-    /// Tags (SHA or release name) of all benchmark requests in the completed status
-    completed: HashSet<String>,
 }
 
 impl BenchmarkRequestIndex {
@@ -1054,16 +1051,13 @@ impl BenchmarkRequestIndex {
     pub fn contains_tag(&self, tag: &str) -> bool {
         self.all.contains(tag)
     }
+}
 
-    /// Return tags of already completed benchmark requests.
-    pub fn completed_requests(&self) -> &HashSet<String> {
-        &self.completed
-    }
-
-    pub fn add_tag(&mut self, tag: &str) {
-        self.all.insert(tag.to_string());
-        self.completed.insert(tag.to_string());
-    }
+/// Contains pending (ArtifactsReady or InProgress) benchmark requests, and a set of their parents
+/// that are already completed.
+pub struct PendingBenchmarkRequests {
+    pub requests: Vec<BenchmarkRequest>,
+    pub completed_parent_tags: HashSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

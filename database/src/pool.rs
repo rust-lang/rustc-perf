@@ -2,7 +2,8 @@ use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestWithErrors,
-    BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark, Target,
+    BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark, PendingBenchmarkRequests,
+    Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -189,7 +190,8 @@ pub trait Connection: Send + Sync {
     async fn purge_artifact(&self, aid: &ArtifactId);
 
     /// Add an item to the `benchmark_requests`, if the `benchmark_request`
-    /// exists an Error will be returned
+    /// exists an Error will be returned.
+    /// We require the caller to pass an index, to ensure that it is always kept up-to-date.
     async fn insert_benchmark_request(
         &self,
         benchmark_request: &BenchmarkRequest,
@@ -200,7 +202,9 @@ pub trait Connection: Send + Sync {
 
     /// Load all pending benchmark requests, i.e. those that have artifacts ready, but haven't
     /// been completed yet. Pending statuses are `ArtifactsReady` and `InProgress`.
-    async fn load_pending_benchmark_requests(&self) -> anyhow::Result<Vec<BenchmarkRequest>>;
+    /// Also returns their parents, so that we can quickly check which requests are ready for being
+    /// enqueued.
+    async fn load_pending_benchmark_requests(&self) -> anyhow::Result<PendingBenchmarkRequests>;
 
     /// Update the status of a `benchmark_request` with the given `tag`.
     /// If no such request exists in the DB, returns an error.
@@ -426,52 +430,15 @@ mod tests {
     use crate::tests::run_postgres_test;
     use crate::{tests::run_db_test, BenchmarkRequestType, Commit, CommitType, Date};
     use chrono::Utc;
+    use std::collections::BTreeSet;
     use std::str::FromStr;
 
-    /// Create a Commit
     fn create_commit(commit_sha: &str, time: chrono::DateTime<Utc>, r#type: CommitType) -> Commit {
         Commit {
             sha: commit_sha.into(),
             date: Date(time),
             r#type,
         }
-    }
-
-    async fn complete_request(
-        db: &dyn Connection,
-        request_tag: &str,
-        collector_name: &str,
-        benchmark_set: u32,
-        target: Target,
-    ) {
-        /* Create job for the request */
-        db.enqueue_benchmark_job(
-            request_tag,
-            target,
-            CodegenBackend::Llvm,
-            Profile::Opt,
-            benchmark_set,
-        )
-        .await
-        .unwrap();
-
-        let (job, _) = db
-            .dequeue_benchmark_job(collector_name, target, BenchmarkSet(benchmark_set))
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(job.request_tag(), request_tag);
-
-        /* Mark the job as complete */
-        db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
-            .await
-            .unwrap();
-
-        assert!(db
-            .maybe_mark_benchmark_request_as_completed(request_tag)
-            .await
-            .unwrap());
     }
 
     #[tokio::test]
@@ -559,37 +526,25 @@ mod tests {
     async fn multiple_non_completed_try_requests() {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
-            let target = Target::X86_64UnknownLinuxGnu;
-            let collector_name = "collector-1";
-            let benchmark_set = 1;
 
-            db.add_collector_config(collector_name, target, benchmark_set, true)
+            // Insert a try build
+            ctx.insert_try_request(42).await;
+            db.attach_shas_to_try_benchmark_request(42, "sha-1", "sha-parent-1", Utc::now())
                 .await
                 .unwrap();
 
-            // Complete parent
-            let parent = BenchmarkRequest::create_release("sha-parent-1", Utc::now());
-            // Complete
-            let req_a = BenchmarkRequest::create_try_without_artifacts(42, "", "");
-            // WaitingForArtifacts
-            let req_b = BenchmarkRequest::create_try_without_artifacts(42, "", "");
-            let req_c = BenchmarkRequest::create_try_without_artifacts(42, "", "");
+            // Then finish it
+            ctx.complete_request("sha-1").await;
 
-            db.insert_benchmark_request(&parent).await.unwrap();
-            db.insert_benchmark_request(&req_a).await.unwrap();
-            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
-                .await
-                .unwrap();
-
-            complete_request(db, "sha-parent-1", collector_name, benchmark_set, target).await;
-            complete_request(db, "sha1", collector_name, benchmark_set, target).await;
-
-            // This should be fine, req_a was completed
-            db.insert_benchmark_request(&req_b).await.unwrap();
-            // This should fail, we can't have two queued requests at once
-            db.insert_benchmark_request(&req_c).await.expect_err(
-                "It was possible to record two try benchmark requests without artifacts",
-            );
+            // Insert a try build for the same PR again
+            // This should be fine, because the previous request was already completed
+            ctx.insert_try_request(42).await;
+            // But this should fail, as we can't have two queued requests at once
+            db.insert_benchmark_request(&BenchmarkRequest::create_try_without_artifacts(
+                42, "", "",
+            ))
+            .await
+            .expect_err("It was possible to record two try benchmark requests without artifacts");
 
             Ok(ctx)
         })
@@ -629,42 +584,47 @@ mod tests {
     async fn load_pending_benchmark_requests() {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
-            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
-            let target = Target::X86_64UnknownLinuxGnu;
-            let collector_name = "collector-1";
-            let benchmark_set = 1;
-
-            db.add_collector_config(collector_name, target, benchmark_set, true)
-                .await
-                .unwrap();
 
             // ArtifactsReady
-            let req_a = BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+            let req_a = ctx.insert_master_request("sha-1", "parent-sha-1", 42).await;
             // ArtifactsReady
-            let req_b = BenchmarkRequest::create_release("1.80.0", time);
+            let req_b = ctx.insert_release_request("1.80.0").await;
             // WaitingForArtifacts
-            let req_c = BenchmarkRequest::create_try_without_artifacts(50, "", "");
+            ctx.insert_try_request(50).await;
             // InProgress
-            let req_d = BenchmarkRequest::create_master("sha-2", "parent-sha-2", 51, time);
+            let req_d = ctx.insert_master_request("sha-2", "parent-sha-2", 51).await;
             // Completed
-            let req_e = BenchmarkRequest::create_release("1.79.0", time);
+            ctx.insert_release_request("1.79.0").await;
 
-            for &req in &[&req_a, &req_b, &req_c, &req_d, &req_e] {
-                db.insert_benchmark_request(req).await.unwrap();
-            }
-
-            complete_request(db, "1.79.0", collector_name, benchmark_set, target).await;
+            ctx.complete_request("1.79.0").await;
+            ctx.insert_master_request("parent-sha-1", "grandparent-sha-0", 100)
+                .await;
+            ctx.complete_request("parent-sha-1").await;
+            ctx.insert_master_request("parent-sha-2", "grandparent-sha-1", 101)
+                .await;
+            ctx.complete_request("parent-sha-2").await;
 
             db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
                 .await
                 .unwrap();
 
-            let requests = db.load_pending_benchmark_requests().await.unwrap();
+            let pending = db.load_pending_benchmark_requests().await.unwrap();
+            let requests = pending.requests;
 
             assert_eq!(requests.len(), 3);
             for req in &[req_a, req_b, req_d] {
                 assert!(requests.iter().any(|r| r.tag() == req.tag()));
             }
+
+            assert_eq!(
+                pending
+                    .completed_parent_tags
+                    .into_iter()
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>(),
+                vec!["parent-sha-1".to_string(), "parent-sha-2".to_string()]
+            );
 
             Ok(ctx)
         })
@@ -687,6 +647,7 @@ mod tests {
                 .load_pending_benchmark_requests()
                 .await
                 .unwrap()
+                .requests
                 .into_iter()
                 .next()
                 .unwrap();

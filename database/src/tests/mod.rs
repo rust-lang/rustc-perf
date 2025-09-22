@@ -139,6 +139,20 @@ impl TestContext {
         req
     }
 
+    /// Create a new release benchmark request and add it to the DB.
+    pub async fn insert_release_request(&self, tag: &str) -> BenchmarkRequest {
+        let req = BenchmarkRequest::create_release(tag, Utc::now());
+        self.db().insert_benchmark_request(&req).await.unwrap();
+        req
+    }
+
+    /// Create a new try benchmark request without artifacts and add it to the DB.
+    pub async fn insert_try_request(&self, pr: u32) -> BenchmarkRequest {
+        let req = BenchmarkRequest::create_try_without_artifacts(pr, "", "");
+        self.db().insert_benchmark_request(&req).await.unwrap();
+        req
+    }
+
     pub async fn complete_request(&self, tag: &str) {
         // Note: this assumes that there are not non-completed jobs in the DB for the request
         self.db()
