@@ -20,12 +20,13 @@ pub fn run_new_queue() -> bool {
 }
 
 /// Store the latest master commits or do nothing if all of them are
-/// already in the database
+/// already in the database.
+/// Returns `true` if at least one benchmark request was inserted.
 async fn create_benchmark_request_master_commits(
     ctxt: &SiteCtxt,
     conn: &dyn database::pool::Connection,
     index: &BenchmarkRequestIndex,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let now = Utc::now();
 
     let master_commits = ctxt.get_master_commits();
@@ -38,6 +39,7 @@ async fn create_benchmark_request_master_commits(
     // TODO; delete at some point in the future
     let cutoff: chrono::DateTime<Utc> = chrono::DateTime::from_str("2025-08-27T00:00:00.000Z")?;
 
+    let mut inserted = false;
     for master_commit in master_commits {
         // We don't want to add masses of obsolete data
         if master_commit.time >= cutoff && !index.contains_tag(&master_commit.sha) {
@@ -51,18 +53,21 @@ async fn create_benchmark_request_master_commits(
             log::info!("Inserting master benchmark request {benchmark:?}");
             if let Err(error) = conn.insert_benchmark_request(&benchmark).await {
                 log::error!("Failed to insert master benchmark request: {error:?}");
+            } else {
+                inserted = true;
             }
         }
     }
-    Ok(())
+    Ok(inserted)
 }
 
 /// Store the latest release commits or do nothing if all of them are
 /// already in the database
+/// Returns `true` if at least one benchmark request was inserted.
 async fn create_benchmark_request_releases(
     conn: &dyn database::pool::Connection,
     index: &BenchmarkRequestIndex,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let releases: String = reqwest::get("https://static.rust-lang.org/manifests.txt")
         .await?
         .text()
@@ -76,16 +81,19 @@ async fn create_benchmark_request_releases(
         .filter_map(parse_release_string)
         .take(20);
 
+    let mut inserted = false;
     for (name, commit_date) in releases {
         if commit_date >= cutoff && !index.contains_tag(&name) {
             let release_request = BenchmarkRequest::create_release(&name, commit_date);
             log::info!("Inserting release benchmark request {release_request:?}");
             if let Err(error) = conn.insert_benchmark_request(&release_request).await {
                 log::error!("Failed to insert release benchmark request: {error}");
+            } else {
+                inserted = true;
             }
         }
     }
-    Ok(())
+    Ok(inserted)
 }
 
 /// Sorts try and master requests that are in the `ArtifactsReady` status and return them in the
@@ -285,14 +293,22 @@ async fn process_benchmark_requests(
 async fn cron_enqueue_jobs(site_ctxt: &SiteCtxt) -> anyhow::Result<()> {
     let mut conn = site_ctxt.conn().await;
 
-    let index = conn.load_benchmark_request_index().await?;
+    let index = site_ctxt.known_benchmark_requests.load();
 
+    let mut requests_inserted = false;
     // Put the master commits into the `benchmark_requests` queue
-    create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
+    requests_inserted |= create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
-    create_benchmark_request_releases(&*conn, &index).await?;
+    requests_inserted |= create_benchmark_request_releases(&*conn, &index).await?;
     // Enqueue waiting requests and try to complete in-progress ones
     process_benchmark_requests(&mut *conn).await?;
+
+    // If some change happened, reload the benchmark request index
+    if requests_inserted {
+        site_ctxt
+            .known_benchmark_requests
+            .store(Arc::new(conn.load_benchmark_request_index().await?));
+    }
 
     Ok(())
 }
