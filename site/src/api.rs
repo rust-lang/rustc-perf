@@ -419,6 +419,8 @@ pub mod status_new {
         pub request_type: BenchmarkRequestType,
         pub created_at: DateTime<Utc>,
         pub completed_at: Option<DateTime<Utc>>,
+        // If true, then `completed_at` is only an estimation of when will the request complete
+        pub end_estimated: bool,
         pub duration_s: Option<u64>,
         pub errors: HashMap<String, String>,
     }

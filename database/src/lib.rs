@@ -1034,6 +1034,10 @@ impl BenchmarkRequest {
     pub fn is_completed(&self) -> bool {
         matches!(self.status, BenchmarkRequestStatus::Completed { .. })
     }
+
+    pub fn is_in_progress(&self) -> bool {
+        matches!(self.status, BenchmarkRequestStatus::InProgress { .. })
+    }
 }
 
 /// Cached information about benchmark requests in the DB
