@@ -872,7 +872,7 @@ pub enum BenchmarkRequestType {
     /// A Master commit
     Master {
         sha: String,
-        parent_sha: String,
+        parent_sha: Option<String>,
         pr: u32,
     },
     /// A release only has a tag
@@ -937,7 +937,7 @@ impl BenchmarkRequest {
             commit_type: BenchmarkRequestType::Master {
                 pr,
                 sha: sha.to_string(),
-                parent_sha: parent_sha.to_string(),
+                parent_sha: Some(parent_sha.to_string()),
             },
             commit_date: Some(commit_date),
             created_at: Utc::now(),
@@ -968,8 +968,8 @@ impl BenchmarkRequest {
 
     pub fn parent_sha(&self) -> Option<&str> {
         match &self.commit_type {
-            BenchmarkRequestType::Try { parent_sha, .. } => parent_sha.as_deref(),
-            BenchmarkRequestType::Master { parent_sha, .. } => Some(parent_sha),
+            BenchmarkRequestType::Try { parent_sha, .. }
+            | BenchmarkRequestType::Master { parent_sha, .. } => parent_sha.as_deref(),
             BenchmarkRequestType::Release { .. } => None,
         }
     }

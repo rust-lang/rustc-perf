@@ -1602,16 +1602,18 @@ where
         // happen as the parent_sha may not be in the range of initial commits
         // we load into the database when the job queue first starts and inserts
         // it's first batch of requests.
-        let row = self
+        let rows = self
             .conn()
-            .query_one(
+            .query(
                 "SELECT tag FROM benchmark_request WHERE tag = $1",
                 &[&benchmark_request.parent_sha()],
             )
             .await
             .context("Failed to check parent sha")?;
 
-        let parent_sha = row.get::<_, Option<String>>(0).map(|parent_sha| parent_sha);
+        let parent_sha = rows
+            .first()
+            .map(|row| row.get::<_, Option<String>>(0).map(|parent_sha| parent_sha));
 
         self.conn()
             .execute(
@@ -2306,7 +2308,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
         BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
             commit_type: BenchmarkRequestType::Master {
                 sha: tag.expect("Master commit in the DB without a SHA"),
-                parent_sha: parent_sha.expect("Master commit in the DB without a parent SHA"),
+                parent_sha,
                 pr: pr.expect("Master commit in the DB without a PR"),
             },
             commit_date,
