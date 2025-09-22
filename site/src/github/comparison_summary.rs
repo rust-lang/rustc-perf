@@ -70,7 +70,7 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 /// Posts a comment to GitHub summarizing the comparison of the queued commit with its parent
 ///
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
-async fn post_comparison_comment(
+pub async fn post_comparison_comment(
     ctxt: &SiteCtxt,
     commit: QueuedCommit,
     is_master_commit: bool,

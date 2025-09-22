@@ -1,12 +1,13 @@
 mod utils;
 
+use crate::github::comparison_summary::post_comparison_comment;
 use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
 use database::{
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, PendingBenchmarkRequests,
-    Target,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType, Date,
+    PendingBenchmarkRequests, QueuedCommit, Target,
 };
 use parking_lot::RwLock;
 use std::{str::FromStr, sync::Arc};
@@ -262,16 +263,20 @@ pub async fn enqueue_benchmark_request(
 /// If there is a request that has artifacts ready, and nothing is currently in-progress,
 /// it will be enqueued.
 /// If there is a request whose jobs have all completed, it will be marked as completed.
+///
+/// Returns benchmark requests that were completed.
 async fn process_benchmark_requests(
     conn: &mut dyn database::pool::Connection,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<BenchmarkRequest>> {
     let queue = build_queue(conn).await?;
 
+    let mut completed = vec![];
     for request in queue {
         match request.status() {
             BenchmarkRequestStatus::InProgress => {
                 let tag = request.tag().expect("In progress request without a tag");
                 if conn.maybe_mark_benchmark_request_as_completed(tag).await? {
+                    completed.push(request);
                     continue;
                 }
                 break;
@@ -286,28 +291,79 @@ async fn process_benchmark_requests(
             }
         }
     }
-    Ok(())
+    Ok(completed)
 }
 
 /// For queueing jobs, add the jobs you want to queue to this function
-async fn cron_enqueue_jobs(site_ctxt: &SiteCtxt) -> anyhow::Result<()> {
-    let mut conn = site_ctxt.conn().await;
+async fn cron_enqueue_jobs(ctxt: &SiteCtxt) -> anyhow::Result<()> {
+    let mut conn = ctxt.conn().await;
 
-    let index = site_ctxt.known_benchmark_requests.load();
+    let index = ctxt.known_benchmark_requests.load();
 
     let mut requests_inserted = false;
     // Put the master commits into the `benchmark_requests` queue
-    requests_inserted |= create_benchmark_request_master_commits(site_ctxt, &*conn, &index).await?;
+    requests_inserted |= create_benchmark_request_master_commits(ctxt, &*conn, &index).await?;
     // Put the releases into the `benchmark_requests` queue
     requests_inserted |= create_benchmark_request_releases(&*conn, &index).await?;
     // Enqueue waiting requests and try to complete in-progress ones
-    process_benchmark_requests(&mut *conn).await?;
+    let completed_reqs = process_benchmark_requests(&mut *conn).await?;
 
     // If some change happened, reload the benchmark request index
     if requests_inserted {
-        site_ctxt
-            .known_benchmark_requests
+        ctxt.known_benchmark_requests
             .store(Arc::new(conn.load_benchmark_request_index().await?));
+    }
+
+    // Send a comment to GitHub for completed requests and reload the DB index
+    if !completed_reqs.is_empty() {
+        let index = database::Index::load(&mut *conn).await;
+        log::info!("index has {} commits", index.commits().len());
+        ctxt.index.store(Arc::new(index));
+
+        // Refresh the landing page
+        ctxt.landing_page.store(Arc::new(None));
+
+        // Send comments to GitHub
+        for request in completed_reqs {
+            let (is_master, pr, sha, parent_sha) = match request.commit_type() {
+                BenchmarkRequestType::Try {
+                    pr,
+                    parent_sha,
+                    sha,
+                } => (
+                    false,
+                    *pr,
+                    sha.clone().expect("Completed try commit without a SHA"),
+                    parent_sha
+                        .clone()
+                        .expect("Completed try commit without a parent SHA"),
+                ),
+                BenchmarkRequestType::Master {
+                    pr,
+                    sha,
+                    parent_sha,
+                } => (true, *pr, sha.clone(), parent_sha.clone()),
+                BenchmarkRequestType::Release { .. } => continue,
+            };
+            let commit = QueuedCommit {
+                pr,
+                sha,
+                parent_sha,
+                include: None,
+                exclude: None,
+                runs: None,
+                commit_date: request.commit_date().map(Date),
+                backends: Some(
+                    request
+                        .backends()?
+                        .into_iter()
+                        .map(|b| b.as_str())
+                        .collect::<Vec<_>>()
+                        .join(","),
+                ),
+            };
+            post_comparison_comment(ctxt, commit, is_master).await?;
+        }
     }
 
     Ok(())
