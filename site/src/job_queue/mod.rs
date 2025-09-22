@@ -334,9 +334,7 @@ async fn cron_enqueue_jobs(ctxt: &SiteCtxt) -> anyhow::Result<()> {
                     false,
                     *pr,
                     sha.clone().expect("Completed try commit without a SHA"),
-                    parent_sha
-                        .clone()
-                        .expect("Completed try commit without a parent SHA"),
+                    parent_sha.clone(),
                 ),
                 BenchmarkRequestType::Master {
                     pr,
@@ -345,24 +343,27 @@ async fn cron_enqueue_jobs(ctxt: &SiteCtxt) -> anyhow::Result<()> {
                 } => (true, *pr, sha.clone(), parent_sha.clone()),
                 BenchmarkRequestType::Release { .. } => continue,
             };
-            let commit = QueuedCommit {
-                pr,
-                sha,
-                parent_sha,
-                include: None,
-                exclude: None,
-                runs: None,
-                commit_date: request.commit_date().map(Date),
-                backends: Some(
-                    request
-                        .backends()?
-                        .into_iter()
-                        .map(|b| b.as_str())
-                        .collect::<Vec<_>>()
-                        .join(","),
-                ),
-            };
-            post_comparison_comment(ctxt, commit, is_master).await?;
+
+            if let Some(parent_sha) = parent_sha {
+                let commit = QueuedCommit {
+                    pr,
+                    sha,
+                    parent_sha,
+                    include: None,
+                    exclude: None,
+                    runs: None,
+                    commit_date: request.commit_date().map(Date),
+                    backends: Some(
+                        request
+                            .backends()?
+                            .into_iter()
+                            .map(|b| b.as_str())
+                            .collect::<Vec<_>>()
+                            .join(","),
+                    ),
+                };
+                post_comparison_comment(ctxt, commit, is_master).await?;
+            }
         }
     }
 
