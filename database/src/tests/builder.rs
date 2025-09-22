@@ -11,7 +11,7 @@ pub struct RequestBuilder {
 }
 
 impl RequestBuilder {
-    pub async fn master(db: &dyn Connection, tag: &str, parent: &str, pr: u32) -> Self {
+    pub async fn master(db: &dyn Connection, tag: &str, parent: Option<&str>, pr: u32) -> Self {
         let request = BenchmarkRequest::create_master(tag, parent, pr, Utc::now());
         db.insert_benchmark_request(&request).await.unwrap();
         Self {

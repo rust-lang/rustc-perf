@@ -1597,24 +1597,15 @@ where
         &self,
         benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<()> {
-        // @TODO delete this when the new system has been running. This code
-        // prevents a foreign key violation in the job_queue table. This can
-        // happen as the parent_sha may not be in the range of initial commits
-        // we load into the database when the job queue first starts and inserts
-        // it's first batch of requests.
-        let rows = self
-            .conn()
-            .query(
-                "SELECT tag FROM benchmark_request WHERE tag = $1",
-                &[&benchmark_request.parent_sha()],
-            )
-            .await
-            .context("Failed to check parent sha")?;
-
-        let parent_sha = rows
-            .first()
-            .map(|row| row.get::<_, Option<String>>(0).map(|parent_sha| parent_sha));
-
+        // We sometimes mark the `parent_sha` as NULL if the `parent_sha` does
+        // not exist as a `benchmark_request`. This can occur when we start the
+        // system and previous commits do not exist in the database.
+        //
+        // We thought about doing this at the point of job creation however
+        // that would then end up swallowing some possibly errors when
+        // inserting. Namely a job should not be created if a tag does not
+        // exist in the `benchmark_request` table. Thus it's living here for
+        // the time being.
         self.conn()
             .execute(
                 r#"
@@ -1629,11 +1620,24 @@ where
                     profiles,
                     commit_date
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
-            "#,
+                VALUES (
+                    $1,
+                    CASE
+                        WHEN EXISTS (SELECT 1 FROM benchmark_request WHERE tag = $2)
+                            THEN $2
+                        ELSE NULL
+                    END,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    $8,
+                    $9
+                );"#,
                 &[
                     &benchmark_request.tag(),
-                    &parent_sha,
+                    &benchmark_request.parent_sha(),
                     &benchmark_request.pr().map(|it| it as i32),
                     &benchmark_request.commit_type,
                     &benchmark_request.status.as_str(),

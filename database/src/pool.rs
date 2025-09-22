@@ -505,7 +505,7 @@ mod tests {
 
             db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-1",
-                "parent-sha-1",
+                Some("parent-sha-1"),
                 42,
                 Utc::now(),
             ))
@@ -559,7 +559,7 @@ mod tests {
 
             db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-1",
-                "parent-sha-1",
+                Some("parent-sha-1"),
                 42,
                 Utc::now(),
             ))
@@ -568,7 +568,7 @@ mod tests {
 
             db.insert_benchmark_request(&BenchmarkRequest::create_master(
                 "a-sha-2",
-                "parent-sha-2",
+                Some("parent-sha-2"),
                 42,
                 Utc::now(),
             ))
@@ -585,18 +585,21 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
 
-            // Releases don't need parent shas
-            ctx.insert_release_request("parent-sha-1").await;
-            ctx.insert_release_request("parent-sha-2").await;
+            ctx.insert_master_request("parent-sha-1", None, 68).await;
+            ctx.insert_master_request("parent-sha-2", None, 419).await;
 
             // ArtifactsReady
-            let req_a = ctx.insert_master_request("sha-1", "parent-sha-1", 42).await;
+            let req_a = ctx
+                .insert_master_request("sha-1", Some("parent-sha-1"), 42)
+                .await;
             // ArtifactsReady
             let req_b = ctx.insert_release_request("1.80.0").await;
             // WaitingForArtifacts
             ctx.insert_try_request(50).await;
             // InProgress
-            let req_d = ctx.insert_master_request("sha-2", "parent-sha-2", 51).await;
+            let req_d = ctx
+                .insert_master_request("sha-2", Some("parent-sha-2"), 51)
+                .await;
             // Completed
             ctx.insert_release_request("1.79.0").await;
 
@@ -678,7 +681,7 @@ mod tests {
 
             let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
             let benchmark_request =
-                BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+                BenchmarkRequest::create_master("sha-1", Some("parent-sha-1"), 42, time);
 
             // Insert the request so we don't violate the foreign key
             db.insert_benchmark_request(&benchmark_request)
@@ -833,7 +836,7 @@ mod tests {
                 .unwrap();
 
             let benchmark_request =
-                BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+                BenchmarkRequest::create_master("sha-1", Some("parent-sha-1"), 42, time);
 
             // Insert the request so we don't violate the foreign key
             db.insert_benchmark_request(&benchmark_request)
@@ -902,7 +905,7 @@ mod tests {
             assert!(insert_result.is_ok());
 
             let benchmark_request =
-                BenchmarkRequest::create_master("sha-1", "parent-sha-1", 42, time);
+                BenchmarkRequest::create_master("sha-1", Some("parent-sha-1"), 42, time);
             db.insert_benchmark_request(&benchmark_request)
                 .await
                 .unwrap();
@@ -1045,7 +1048,7 @@ mod tests {
                     RequestBuilder::master(
                         db,
                         &format!("sha{}", id),
-                        &format!("sha{}", id - 1),
+                        Some(&format!("sha{}", id - 1)),
                         id,
                     )
                     .await
@@ -1057,7 +1060,7 @@ mod tests {
             }
 
             // Create an additional non-completed request
-            ctx.insert_master_request("foo", "bar", 1000).await;
+            ctx.insert_master_request("foo", Some("bar"), 1000).await;
 
             // Request 1 will have artifact with errors
             let aid1 = ctx.upsert_master_artifact("sha1").await;
@@ -1112,10 +1115,10 @@ mod tests {
             let collector = ctx.add_collector(Default::default()).await;
 
             // Artifacts ready request, should be ignored
-            RequestBuilder::master(db, "foo", "bar", 1000).await;
+            RequestBuilder::master(db, "foo", Some("bar"), 1000).await;
 
             // Create a completed parent with jobs
-            let completed = RequestBuilder::master(db, "sha4-parent", "sha0", 1001)
+            let completed = RequestBuilder::master(db, "sha4-parent", Some("sha0"), 1001)
                 .await
                 .add_jobs(
                     db,
@@ -1126,13 +1129,13 @@ mod tests {
                 .await;
 
             // In progress request without a parent
-            let req1 = RequestBuilder::master(db, "sha1", "sha0", 1)
+            let req1 = RequestBuilder::master(db, "sha1", Some("sha0"), 1)
                 .await
                 .set_in_progress(db)
                 .await;
 
             // In progress request with a parent that has no jobs
-            let req2 = RequestBuilder::master(db, "sha2", "sha1", 2)
+            let req2 = RequestBuilder::master(db, "sha2", Some("sha1"), 2)
                 .await
                 .add_jobs(
                     db,
@@ -1143,7 +1146,7 @@ mod tests {
                 .await;
 
             // In progress request with a parent that has jobs
-            let req3 = RequestBuilder::master(db, "sha3", "sha2", 3)
+            let req3 = RequestBuilder::master(db, "sha3", Some("sha2"), 3)
                 .await
                 .add_jobs(
                     db,
@@ -1154,7 +1157,7 @@ mod tests {
                 .await;
 
             // In progress request with a parent that has jobs, but is completed
-            let req4 = RequestBuilder::master(db, "sha4", completed.tag(), 4)
+            let req4 = RequestBuilder::master(db, "sha4", Some(completed.tag()), 4)
                 .await
                 .add_jobs(
                     db,

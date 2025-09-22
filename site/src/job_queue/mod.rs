@@ -47,7 +47,7 @@ async fn create_benchmark_request_master_commits(
             let pr = master_commit.pr.unwrap_or(0);
             let benchmark = BenchmarkRequest::create_master(
                 &master_commit.sha,
-                &master_commit.parent_sha,
+                Some(&master_commit.parent_sha),
                 pr,
                 master_commit.time,
             );
@@ -401,7 +401,7 @@ mod tests {
         CodegenBackend, Profile, Target,
     };
 
-    fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
+    fn create_master(sha: &str, parent: Option<&str>, pr: u32) -> BenchmarkRequest {
         BenchmarkRequest::create_master(sha, parent, pr, Utc::now())
     }
 
@@ -546,16 +546,16 @@ mod tests {
              *           +----------------+
              **/
             let requests = vec![
-                create_master("bar", "parent1", 10),
-                create_master("345", "parent2", 11),
-                create_master("aaa", "parent3", 12),
-                create_master("rrr", "parent4", 13),
-                create_master("123", "bar", 14),
-                create_master("foo", "345", 15),
+                create_master("bar", Some("parent1"), 10),
+                create_master("345", Some("parent2"), 11),
+                create_master("aaa", Some("parent3"), 12),
+                create_master("rrr", Some("parent4"), 13),
+                create_master("123", Some("bar"), 14),
+                create_master("foo", Some("345"), 15),
                 create_try(16),
                 create_release("v1.2.3"),
                 create_try(17),
-                create_master("mmm", "aaa", 18),
+                create_master("mmm", Some("aaa"), 18),
             ];
 
             db_insert_requests(db, &requests).await;

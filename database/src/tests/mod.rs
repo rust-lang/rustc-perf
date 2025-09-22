@@ -131,7 +131,7 @@ impl TestContext {
     pub async fn insert_master_request(
         &self,
         sha: &str,
-        parent: &str,
+        parent: Option<&str>,
         pr: u32,
     ) -> BenchmarkRequest {
         let req = BenchmarkRequest::create_master(sha, parent, pr, Utc::now());

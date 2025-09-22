@@ -932,12 +932,17 @@ impl BenchmarkRequest {
     }
 
     /// Create a master benchmark request that is in the `ArtifactsReady` status.
-    pub fn create_master(sha: &str, parent_sha: &str, pr: u32, commit_date: DateTime<Utc>) -> Self {
+    pub fn create_master(
+        sha: &str,
+        parent_sha: Option<&str>,
+        pr: u32,
+        commit_date: DateTime<Utc>,
+    ) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Master {
                 pr,
                 sha: sha.to_string(),
-                parent_sha: Some(parent_sha.to_string()),
+                parent_sha: parent_sha.map(|it| it.to_string()),
             },
             commit_date: Some(commit_date),
             created_at: Utc::now(),
@@ -1036,7 +1041,7 @@ impl BenchmarkRequest {
     }
 
     pub fn is_in_progress(&self) -> bool {
-        matches!(self.status, BenchmarkRequestStatus::InProgress { .. })
+        matches!(self.status, BenchmarkRequestStatus::InProgress)
     }
 }
 
