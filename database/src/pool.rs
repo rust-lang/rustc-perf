@@ -585,6 +585,10 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
 
+            // Releases don't need parent shas
+            ctx.insert_release_request("parent-sha-1").await;
+            ctx.insert_release_request("parent-sha-2").await;
+
             // ArtifactsReady
             let req_a = ctx.insert_master_request("sha-1", "parent-sha-1", 42).await;
             // ArtifactsReady
@@ -597,11 +601,7 @@ mod tests {
             ctx.insert_release_request("1.79.0").await;
 
             ctx.complete_request("1.79.0").await;
-            ctx.insert_master_request("parent-sha-1", "grandparent-sha-0", 100)
-                .await;
             ctx.complete_request("parent-sha-1").await;
-            ctx.insert_master_request("parent-sha-2", "grandparent-sha-1", 101)
-                .await;
             ctx.complete_request("parent-sha-2").await;
 
             db.update_benchmark_request_status("sha-2", BenchmarkRequestStatus::InProgress)
