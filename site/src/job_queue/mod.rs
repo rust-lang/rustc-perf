@@ -11,7 +11,7 @@ use database::{
 };
 use parking_lot::RwLock;
 use std::{str::FromStr, sync::Arc};
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, MissedTickBehavior};
 
 pub fn run_new_queue() -> bool {
     std::env::var("RUN_CRON")
@@ -372,6 +372,8 @@ async fn cron_enqueue_jobs(ctxt: &SiteCtxt) -> anyhow::Result<()> {
 /// Entry point for the cron job that manages the benchmark request and job queue.
 pub async fn cron_main(site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, run_interval: Duration) {
     let mut interval = time::interval(run_interval);
+    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
     let ctxt = site_ctxt.clone();
 
     loop {
