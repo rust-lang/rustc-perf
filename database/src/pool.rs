@@ -234,6 +234,18 @@ pub trait Connection: Send + Sync {
         benchmark_set: u32,
     ) -> anyhow::Result<u32>;
 
+    /// Add a benchmark job which is explicitly using a `parent_sha` we split
+    /// this out to improve our error handling. A `parent_sha` may not have
+    /// an associated request in the `benchmarek`
+    async fn enqueue_parent_benchmark_job(
+        &self,
+        parent_sha: &str,
+        target: Target,
+        backend: CodegenBackend,
+        profile: Profile,
+        benchmark_set: u32,
+    ) -> (bool, anyhow::Result<u32>);
+
     /// Returns a set of compile-time benchmark test cases that were already computed for the
     /// given artifact.
     /// Note that for efficiency reasons, the function only checks if we have at least a single
@@ -1182,6 +1194,28 @@ mod tests {
             req4.assert_has_exact_jobs(&reqs.remove(req4.tag()).unwrap());
             completed.assert_has_exact_jobs(&reqs.remove(completed.tag()).unwrap());
             assert!(reqs.is_empty());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn enqueue_parent_benchmark_job() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db();
+
+            let (violates_foreign_key, _) = db
+                .enqueue_parent_benchmark_job(
+                    "sha-0",
+                    Target::X86_64UnknownLinuxGnu,
+                    CodegenBackend::Llvm,
+                    Profile::Debug,
+                    0,
+                )
+                .await;
+
+            assert!(violates_foreign_key);
 
             Ok(ctx)
         })

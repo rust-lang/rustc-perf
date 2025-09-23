@@ -216,6 +216,8 @@ pub async fn enqueue_benchmark_request(
 
     let backends = benchmark_request.backends()?;
     let profiles = benchmark_request.profiles()?;
+    // Prevent the error from spamming the logs
+    let mut has_emitted_parent_sha_error = false;
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
@@ -237,15 +239,30 @@ pub async fn enqueue_benchmark_request(
                     // but was already benchmarked then the collector will ignore
                     // it as it will see it already has results.
                     if let Some(parent_sha) = benchmark_request.parent_sha() {
-                        tx.conn()
-                            .enqueue_benchmark_job(
+                        let (is_foreign_key_violation, result) = tx
+                            .conn()
+                            .enqueue_parent_benchmark_job(
                                 parent_sha,
                                 target,
                                 backend,
                                 profile,
                                 benchmark_set as u32,
                             )
-                            .await?;
+                            .await;
+
+                        // At some point in time the parent_sha may not refer
+                        // to a `benchmark_request` and we want to be able to
+                        // see that error.
+                        if let Err(e) = result {
+                            if is_foreign_key_violation && !has_emitted_parent_sha_error {
+                                log::error!("Failed to create job for parent sha {e:?}");
+                                has_emitted_parent_sha_error = true;
+                            } else if has_emitted_parent_sha_error && is_foreign_key_violation {
+                                continue;
+                            } else {
+                                return Err(e);
+                            }
+                        }
                     }
                 }
             }
