@@ -1036,7 +1036,7 @@ impl BenchmarkRequest {
     }
 
     pub fn is_in_progress(&self) -> bool {
-        matches!(self.status, BenchmarkRequestStatus::InProgress { .. })
+        matches!(self.status, BenchmarkRequestStatus::InProgress)
     }
 }
 
