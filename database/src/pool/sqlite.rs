@@ -1339,6 +1339,17 @@ impl Connection for SqliteConnection {
         no_queue_implementation_abort!()
     }
 
+    async fn enqueue_parent_benchmark_job(
+        &self,
+        _parent_sha: &str,
+        _target: Target,
+        _backend: CodegenBackend,
+        _profile: Profile,
+        _benchmark_set: u32,
+    ) -> (bool, anyhow::Result<u32>) {
+        no_queue_implementation_abort!()
+    }
+
     async fn get_compile_test_cases_with_measurements(
         &self,
         artifact_row_id: &ArtifactIdNumber,

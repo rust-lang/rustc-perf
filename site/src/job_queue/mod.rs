@@ -205,7 +205,6 @@ pub async fn build_queue(
 pub async fn enqueue_benchmark_request(
     conn: &mut dyn database::pool::Connection,
     benchmark_request: &BenchmarkRequest,
-    index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
     let mut tx = conn.transaction().await;
 
@@ -240,21 +239,29 @@ pub async fn enqueue_benchmark_request(
                     // but was already benchmarked then the collector will ignore
                     // it as it will see it already has results.
                     if let Some(parent_sha) = benchmark_request.parent_sha() {
-                        if !has_emitted_parent_sha_error && !index.contains_tag(parent_sha) {
-                            log::error!("Parent tag; {parent_sha} does not exist in request benchmarks. Skipping");
-                            has_emitted_parent_sha_error = true;
-                        }
+                        let (is_foreign_key_violation, result) = tx
+                            .conn()
+                            .enqueue_parent_benchmark_job(
+                                parent_sha,
+                                target,
+                                backend,
+                                profile,
+                                benchmark_set as u32,
+                            )
+                            .await;
 
-                        if !has_emitted_parent_sha_error {
-                            tx.conn()
-                                .enqueue_benchmark_job(
-                                    parent_sha,
-                                    target,
-                                    backend,
-                                    profile,
-                                    benchmark_set as u32,
-                                )
-                                .await?;
+                        // At some point in time the parent_sha may not refer
+                        // to a `benchmark_request` and we want to be able to
+                        // see that error.
+                        if let Err(e) = result {
+                            if is_foreign_key_violation && !has_emitted_parent_sha_error {
+                                log::error!("Failed to create job for parent sha {e:?}");
+                                has_emitted_parent_sha_error = true;
+                            } else if has_emitted_parent_sha_error && is_foreign_key_violation {
+                                continue;
+                            } else {
+                                return Err(e);
+                            }
                         }
                     }
                 }
@@ -277,7 +284,6 @@ pub async fn enqueue_benchmark_request(
 /// Returns benchmark requests that were completed.
 async fn process_benchmark_requests(
     conn: &mut dyn database::pool::Connection,
-    index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<Vec<BenchmarkRequest>> {
     let queue = build_queue(conn).await?;
 
@@ -293,7 +299,7 @@ async fn process_benchmark_requests(
                 break;
             }
             BenchmarkRequestStatus::ArtifactsReady => {
-                enqueue_benchmark_request(conn, &request, index).await?;
+                enqueue_benchmark_request(conn, &request).await?;
                 break;
             }
             BenchmarkRequestStatus::WaitingForArtifacts
@@ -317,7 +323,7 @@ async fn cron_enqueue_jobs(ctxt: &SiteCtxt) -> anyhow::Result<()> {
     // Put the releases into the `benchmark_requests` queue
     requests_inserted |= create_benchmark_request_releases(&*conn, &index).await?;
     // Enqueue waiting requests and try to complete in-progress ones
-    let completed_reqs = process_benchmark_requests(&mut *conn, &index).await?;
+    let completed_reqs = process_benchmark_requests(&mut *conn).await?;
 
     // If some change happened, reload the benchmark request index
     if requests_inserted {

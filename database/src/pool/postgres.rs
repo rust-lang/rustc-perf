@@ -22,6 +22,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio_postgres::error::SqlState;
 use tokio_postgres::Statement;
 use tokio_postgres::{GenericClient, Row};
 
@@ -1736,6 +1737,64 @@ where
             requests,
             completed_parent_tags,
         })
+    }
+
+    async fn enqueue_parent_benchmark_job(
+        &self,
+        parent_sha: &str,
+        target: Target,
+        backend: CodegenBackend,
+        profile: Profile,
+        benchmark_set: u32,
+    ) -> (bool, anyhow::Result<u32>) {
+        let row_result = self
+            .conn()
+            .query_one(
+                r#"
+            INSERT INTO job_queue(
+                request_tag,
+                target,
+                backend,
+                profile,
+                benchmark_set,
+                status
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT DO NOTHING
+            RETURNING job_queue.id
+                "#,
+                &[
+                    &parent_sha,
+                    &target,
+                    &backend,
+                    &profile,
+                    &(benchmark_set as i32),
+                    &BENCHMARK_JOB_STATUS_QUEUED_STR,
+                ],
+            )
+            .await;
+
+        match row_result {
+            Ok(row) => (false, Ok(row.get::<_, i32>(0) as u32)),
+            Err(e) => {
+                if let Some(db_err) = e.as_db_error() {
+                    if db_err.code() == &SqlState::FOREIGN_KEY_VIOLATION {
+                        let constraint = db_err.constraint().unwrap_or("benchmark_tag constraint");
+                        let detail = db_err.detail().unwrap_or("");
+                        return (
+                            true,
+                            Err(anyhow::anyhow!(
+                                "Foreign key violation on {} for request_tag='{}'. {}",
+                                constraint,
+                                parent_sha,
+                                detail
+                            )),
+                        );
+                    }
+                }
+                (false, Err(e.into()))
+            }
+        }
     }
 
     async fn enqueue_benchmark_job(
