@@ -224,7 +224,7 @@ pub trait Connection: Send + Sync {
         commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()>;
 
-    /// Add a benchmark job to the job queue and return its ID.
+    /// Add a benchmark job to the job queue.
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
@@ -232,7 +232,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
-    ) -> anyhow::Result<u32>;
+    ) -> anyhow::Result<Option<u32>>;
 
     /// Add a benchmark job which is explicitly using a `parent_sha` we split
     /// this out to improve our error handling. A `parent_sha` may not have

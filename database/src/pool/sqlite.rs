@@ -1335,7 +1335,7 @@ impl Connection for SqliteConnection {
         _backend: CodegenBackend,
         _profile: Profile,
         _benchmark_set: u32,
-    ) -> anyhow::Result<u32> {
+    ) -> anyhow::Result<Option<u32>> {
         no_queue_implementation_abort!()
     }
 
