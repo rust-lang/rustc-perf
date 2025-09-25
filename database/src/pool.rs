@@ -224,7 +224,8 @@ pub trait Connection: Send + Sync {
         commit_date: DateTime<Utc>,
     ) -> anyhow::Result<()>;
 
-    /// Add a benchmark job to the job queue.
+    /// Add a benchmark job to the job queue and returns its ID, if it was not
+    /// already in the DB previously.
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
