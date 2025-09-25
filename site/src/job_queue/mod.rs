@@ -20,6 +20,13 @@ pub fn run_new_queue() -> bool {
         .unwrap_or(false)
 }
 
+/// rust-lang/rust PR that will be used for testing the new system.
+const TEST_PR_FOR_NEW_SYSTEM: u32 = 147039;
+
+pub fn should_use_new_system(pr: u32) -> bool {
+    run_new_queue() && pr == TEST_PR_FOR_NEW_SYSTEM
+}
+
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database.
 /// Returns `true` if at least one benchmark request was inserted.
