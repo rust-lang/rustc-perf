@@ -13,18 +13,18 @@ use parking_lot::RwLock;
 use std::{str::FromStr, sync::Arc};
 use tokio::time::{self, Duration, MissedTickBehavior};
 
-pub fn run_new_queue() -> bool {
-    std::env::var("RUN_CRON")
+pub fn is_job_queue_enabled() -> bool {
+    std::env::var("USE_JOB_QUEUE")
         .ok()
         .and_then(|x| x.parse().ok())
-        .unwrap_or(false)
+        .unwrap_or(true)
 }
 
-/// rust-lang/rust PR that will be used for testing the new system.
-const TEST_PR_FOR_NEW_SYSTEM: u32 = 147039;
+/// rust-lang/rust PR that will be used for testing the job queue.
+const TEST_PR_FOR_JOB_QUEUE: u32 = 147039;
 
-pub fn should_use_new_system(pr: u32) -> bool {
-    run_new_queue() && pr == TEST_PR_FOR_NEW_SYSTEM
+pub fn should_use_job_queue(pr: u32) -> bool {
+    is_job_queue_enabled() && pr == TEST_PR_FOR_JOB_QUEUE
 }
 
 /// Store the latest master commits or do nothing if all of them are

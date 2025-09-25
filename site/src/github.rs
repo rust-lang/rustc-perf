@@ -2,7 +2,7 @@ pub mod client;
 pub mod comparison_summary;
 
 use crate::api::github::Commit;
-use crate::job_queue::should_use_new_system;
+use crate::job_queue::should_use_job_queue;
 use crate::load::{MissingReason, SiteCtxt, TryCommit};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -279,7 +279,7 @@ pub async fn enqueue_shas(
         };
         let conn = ctxt.conn().await;
 
-        let queued = if should_use_new_system(pr_number) {
+        let queued = if should_use_job_queue(pr_number) {
             attach_shas_to_try_benchmark_request(
                 &*conn,
                 pr_number,
