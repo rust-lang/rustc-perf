@@ -1804,10 +1804,11 @@ where
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
-    ) -> anyhow::Result<u32> {
-        let row = self
+    ) -> anyhow::Result<Option<u32>> {
+        // This will return zero rows if the job already exists
+        let rows = self
             .conn()
-            .query_one(
+            .query(
                 r#"
             INSERT INTO job_queue(
                 request_tag,
@@ -1832,7 +1833,11 @@ where
             )
             .await
             .context("failed to insert benchmark_job")?;
-        Ok(row.get::<_, i32>(0) as u32)
+        if let Some(row) = rows.first() {
+            return Ok(Some(row.get::<_, i32>(0) as u32));
+        } else {
+            return Ok(None);
+        }
     }
 
     async fn get_compile_test_cases_with_measurements(

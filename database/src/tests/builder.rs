@@ -49,7 +49,7 @@ impl RequestBuilder {
                 )
                 .await
                 .unwrap();
-            self.jobs.push((job.clone(), id));
+            self.jobs.push((job.clone(), id.unwrap()));
         }
         self
     }
