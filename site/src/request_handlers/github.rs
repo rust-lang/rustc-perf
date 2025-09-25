@@ -3,7 +3,7 @@ use crate::github::{
     client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
-use crate::job_queue::{run_new_queue, should_use_new_system};
+use crate::job_queue::should_use_new_system;
 use crate::load::SiteCtxt;
 
 use database::BenchmarkRequest;

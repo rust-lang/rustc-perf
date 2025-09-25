@@ -1,6 +1,6 @@
 use futures::future::FutureExt;
 use parking_lot::RwLock;
-use site::job_queue::{cron_main, run_new_queue};
+use site::job_queue::{create_queue_process, run_new_queue};
 use site::load;
 use std::env;
 use std::sync::Arc;
@@ -61,7 +61,7 @@ async fn main() {
 
     if run_new_queue() {
         task::spawn(async move {
-            cron_main(
+            create_queue_process(
                 ctxt.clone(),
                 Duration::from_secs(queue_update_interval_seconds),
             )

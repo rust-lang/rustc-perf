@@ -2,7 +2,7 @@ pub mod client;
 pub mod comparison_summary;
 
 use crate::api::github::Commit;
-use crate::job_queue::{run_new_queue, should_use_new_system};
+use crate::job_queue::should_use_new_system;
 use crate::load::{MissingReason, SiteCtxt, TryCommit};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
