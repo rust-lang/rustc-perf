@@ -51,14 +51,14 @@ async fn create_benchmark_request_master_commits(
     for master_commit in master_commits {
         // We don't want to add masses of obsolete data
         if master_commit.time >= cutoff && !index.contains_tag(&master_commit.sha) {
-            let pr = master_commit.pr.unwrap_or(0);
-            let benchmark = BenchmarkRequest::create_master(
-                &master_commit.sha,
-                &master_commit.parent_sha,
-                pr,
-                master_commit.time,
-            );
-            log::info!("Inserting master benchmark request {benchmark:?}");
+            // let pr = master_commit.pr.unwrap_or(0);
+            // let benchmark = BenchmarkRequest::create_master(
+            //     &master_commit.sha,
+            //     &master_commit.parent_sha,
+            //     pr,
+            //     master_commit.time,
+            // );
+            // log::info!("Inserting master benchmark request {benchmark:?}");
 
             // Do not create benchmark requests on production, to allow running in parallel with
             // the old system.
@@ -95,8 +95,8 @@ async fn create_benchmark_request_releases(
     let inserted = false;
     for (name, commit_date) in releases {
         if commit_date >= cutoff && !index.contains_tag(&name) {
-            let release_request = BenchmarkRequest::create_release(&name, commit_date);
-            log::info!("Inserting release benchmark request {release_request:?}");
+            // let release_request = BenchmarkRequest::create_release(&name, commit_date);
+            // log::info!("Inserting release benchmark request {release_request:?}");
 
             // Do not create benchmark requests on production, to allow running in parallel with
             // the old system.
@@ -230,7 +230,7 @@ pub async fn enqueue_benchmark_request(
     let backends = request.backends()?;
     let profiles = request.profiles()?;
     // Prevent the error from spamming the logs
-    let mut has_emitted_parent_sha_error = false;
+    // let mut has_emitted_parent_sha_error = false;
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
