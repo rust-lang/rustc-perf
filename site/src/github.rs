@@ -2,7 +2,7 @@ pub mod client;
 pub mod comparison_summary;
 
 use crate::api::github::Commit;
-use crate::job_queue::run_new_queue;
+use crate::job_queue::should_use_job_queue;
 use crate::load::{MissingReason, SiteCtxt, TryCommit};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -240,18 +240,16 @@ async fn attach_shas_to_try_benchmark_request(
     commit: &TryCommit,
     commit_date: DateTime<Utc>,
 ) {
-    if run_new_queue() {
-        if let Err(e) = conn
-            .attach_shas_to_try_benchmark_request(
-                pr_number,
-                &commit.sha,
-                &commit.parent_sha,
-                commit_date,
-            )
-            .await
-        {
-            log::error!("Failed to add shas to try commit: {e:?}");
-        }
+    if let Err(e) = conn
+        .attach_shas_to_try_benchmark_request(
+            pr_number,
+            &commit.sha,
+            &commit.parent_sha,
+            commit_date,
+        )
+        .await
+    {
+        log::error!("Failed to add shas to try commit: {e:?}");
     }
 }
 
@@ -281,22 +279,24 @@ pub async fn enqueue_shas(
         };
         let conn = ctxt.conn().await;
 
-        attach_shas_to_try_benchmark_request(
-            &*conn,
-            pr_number,
-            &try_commit,
-            commit_response.commit.committer.date,
-        )
-        .await;
-
-        let queued = conn
-            .pr_attach_commit(
+        let queued = if should_use_job_queue(pr_number) {
+            attach_shas_to_try_benchmark_request(
+                &*conn,
+                pr_number,
+                &try_commit,
+                commit_response.commit.committer.date,
+            )
+            .await;
+            true
+        } else {
+            conn.pr_attach_commit(
                 pr_number,
                 &try_commit.sha,
                 &try_commit.parent_sha,
                 Some(commit_response.commit.committer.date),
             )
-            .await;
+            .await
+        };
         if queued {
             if !msg.is_empty() {
                 msg.push('\n');
