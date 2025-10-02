@@ -3,7 +3,7 @@ use crate::github::{
     client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
-use crate::job_queue::run_new_queue;
+use crate::job_queue::should_use_job_queue;
 use crate::load::SiteCtxt;
 
 use database::BenchmarkRequest;
@@ -84,13 +84,10 @@ async fn record_try_benchmark_request_without_artifacts(
     pr: u32,
     backends: &str,
 ) {
-    // We only want to run this if the new system is running
-    if run_new_queue() {
-        let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, "");
-        log::info!("Inserting try benchmark request {try_request:?}");
-        if let Err(e) = conn.insert_benchmark_request(&try_request).await {
-            log::error!("Failed to insert try benchmark request: {}", e);
-        }
+    let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, "");
+    log::info!("Inserting try benchmark request {try_request:?}");
+    if let Err(e) = conn.insert_benchmark_request(&try_request).await {
+        log::error!("Failed to insert try benchmark request: {}", e);
     }
 }
 
@@ -120,20 +117,23 @@ async fn handle_rust_timer(
             Ok(cmd) => {
                 let conn = ctxt.conn().await;
 
-                record_try_benchmark_request_without_artifacts(
-                    &*conn,
-                    issue.number,
-                    cmd.params.backends.unwrap_or(""),
-                )
-                .await;
-                conn.queue_pr(
-                    issue.number,
-                    cmd.params.include,
-                    cmd.params.exclude,
-                    cmd.params.runs,
-                    cmd.params.backends,
-                )
-                .await;
+                if should_use_job_queue(issue.number) {
+                    record_try_benchmark_request_without_artifacts(
+                        &*conn,
+                        issue.number,
+                        cmd.params.backends.unwrap_or(""),
+                    )
+                    .await;
+                } else {
+                    conn.queue_pr(
+                        issue.number,
+                        cmd.params.include,
+                        cmd.params.exclude,
+                        cmd.params.runs,
+                        cmd.params.backends,
+                    )
+                    .await;
+                }
                 format!(
                     "Awaiting bors try build completion.
 
@@ -166,20 +166,23 @@ async fn handle_rust_timer(
     {
         let conn = ctxt.conn().await;
         for command in &valid_build_cmds {
-            record_try_benchmark_request_without_artifacts(
-                &*conn,
-                issue.number,
-                command.params.backends.unwrap_or(""),
-            )
-            .await;
-            conn.queue_pr(
-                issue.number,
-                command.params.include,
-                command.params.exclude,
-                command.params.runs,
-                command.params.backends,
-            )
-            .await;
+            if should_use_job_queue(issue.number) {
+                record_try_benchmark_request_without_artifacts(
+                    &*conn,
+                    issue.number,
+                    command.params.backends.unwrap_or(""),
+                )
+                .await;
+            } else {
+                conn.queue_pr(
+                    issue.number,
+                    command.params.include,
+                    command.params.exclude,
+                    command.params.runs,
+                    command.params.backends,
+                )
+                .await;
+            }
         }
     }
 
