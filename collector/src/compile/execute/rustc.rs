@@ -1,11 +1,7 @@
 //! Performance collection for rust-lang/rust compilation.
 //!
-//! This benchmarks a x.py build --stage 0 compiler/rustc invocation on the
+//! This benchmarks a `x.py build compiler/rustc` invocation on the
 //! latest master compiler.
-//!
-//! We don't run the (more typical) stage 1 library/test build because there's
-//! no real reason for us to compile the standard library twice, and it avoids
-//! having to think about how to deduplicate results.
 
 use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
