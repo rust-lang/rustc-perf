@@ -8,10 +8,6 @@ const props = defineProps<{
   collector: CollectorConfig;
 }>();
 
-function statusClass(c: CollectorConfig): string {
-  return c.isActive ? "active" : "inactive";
-}
-
 const FILTERS: BenchmarkJobStatus[] = [
   "InProgress",
   "Queued",
@@ -51,16 +47,16 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
   let statusClass = "active";
 
   switch (collector.isActive) {
-    case true:
+    case false:
       if (hourDiff >= maxInactivityHours) {
         statusText = "Offline";
-        statusClass = "inactive";
+        statusClass = "offline";
       } else {
         statusText = "Active";
         statusClass = "active";
       }
       break;
-    case false:
+    case true:
       statusText = "Inactive";
       statusClass = "inactive";
       break;
@@ -262,6 +258,11 @@ $sm-radius: 8px;
   font-weight: bold;
 }
 .status.inactive {
+  background: #ccc;
+  color: white;
+  font-weight: bold;
+}
+.status.offline {
   background: red;
   color: white;
   font-weight: bold;
