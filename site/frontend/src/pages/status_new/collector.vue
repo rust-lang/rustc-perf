@@ -1,15 +1,12 @@
-<script setup lang="ts">
-import {ref, Ref} from "vue";
+<script setup lang="tsx">
+import {h, ref, Ref} from "vue";
+import {parseISO, differenceInHours} from "date-fns";
 import {formatISODate} from "../../utils/formatting";
 import {CollectorConfig, BenchmarkJobStatus} from "./data";
 
 const props = defineProps<{
   collector: CollectorConfig;
 }>();
-
-function statusClass(c: CollectorConfig): string {
-  return c.isActive ? "active" : "inactive";
-}
 
 const FILTERS: BenchmarkJobStatus[] = [
   "InProgress",
@@ -40,6 +37,37 @@ function formatJobStatus(status: BenchmarkJobStatus): string {
       return "Unknown";
   }
 }
+
+function ActiveStatus({collector}: {collector: CollectorConfig}) {
+  const now = new Date();
+  const maxInactivityHours = 1;
+  const lastHeartBeatAt = parseISO(collector.lastHeartbeatAt);
+  const hourDiff = differenceInHours(now, lastHeartBeatAt);
+  let statusText = "Active";
+  let statusClass = "active";
+
+  switch (collector.isActive) {
+    case false:
+      if (hourDiff >= maxInactivityHours) {
+        statusText = "Offline";
+        statusClass = "offline";
+      } else {
+        statusText = "Active";
+        statusClass = "active";
+      }
+      break;
+    case true:
+      statusText = "Inactive";
+      statusClass = "inactive";
+      break;
+  }
+
+  return (
+    <span class={`collector-sm-padding-left-right status ${statusClass}`}>
+      {statusText}
+    </span>
+  );
+}
 </script>
 
 <template>
@@ -54,12 +82,7 @@ function formatJobStatus(status: BenchmarkJobStatus): string {
             class="collector-sm-padding-left-right collector-left-divider"
             >{{ collector.target }}</span
           >
-          <span
-            class="collector-sm-padding-left-right status"
-            :class="statusClass(collector)"
-          >
-            {{ collector.isActive ? "Active" : "Inactive" }}
-          </span>
+          <ActiveStatus :collector="collector" />
         </span>
       </div>
     </div>
@@ -235,6 +258,11 @@ $sm-radius: 8px;
   font-weight: bold;
 }
 .status.inactive {
+  background: #ccc;
+  color: white;
+  font-weight: bold;
+}
+.status.offline {
   background: red;
   color: white;
   font-weight: bold;
