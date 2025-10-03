@@ -1132,6 +1132,7 @@ pub struct BenchmarkJob {
     created_at: DateTime<Utc>,
     status: BenchmarkJobStatus,
     deque_counter: u32,
+    kind: BenchmarkJobKind,
 }
 
 impl BenchmarkJob {
@@ -1178,6 +1179,10 @@ impl BenchmarkJob {
 
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
+    }
+
+    pub fn kind(&self) -> BenchmarkJobKind {
+        self.kind
     }
 }
 
@@ -1255,4 +1260,33 @@ pub struct BenchmarkRequestWithErrors {
     pub request: BenchmarkRequest,
     /// Benchmark (name) -> error
     pub errors: HashMap<String, String>,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
+pub enum BenchmarkJobKind {
+    Runtime,
+    Compiletime,
+    Rustc,
+}
+
+impl fmt::Display for BenchmarkJobKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BenchmarkJobKind::Runtime => write!(f, "runtime"),
+            BenchmarkJobKind::Compiletime => write!(f, "compiletime"),
+            BenchmarkJobKind::Rustc => write!(f, "rustc"),
+        }
+    }
+}
+
+impl FromStr for BenchmarkJobKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "runtime" => BenchmarkJobKind::Runtime,
+            "compiletime" => BenchmarkJobKind::Compiletime,
+            "rustc" => BenchmarkJobKind::Rustc,
+            _ => return Err(format!("{s} is not a codegen backend")),
+        })
+    }
 }

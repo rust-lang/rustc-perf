@@ -6,8 +6,8 @@ use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
 use database::{
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType, Date,
-    PendingBenchmarkRequests, QueuedCommit, Target,
+    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
+    BenchmarkRequestType, Date, PendingBenchmarkRequests, Profile, QueuedCommit, Target,
 };
 use parking_lot::RwLock;
 use std::{str::FromStr, sync::Arc};
@@ -234,6 +234,30 @@ pub async fn enqueue_benchmark_request(
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
+        // enqueue Runtime job and Rustc job, for each backend
+        for &backend in backends.iter() {
+            tx.conn()
+                .enqueue_benchmark_job(
+                    request_tag,
+                    target,
+                    backend,
+                    Profile::Opt,
+                    0u32,
+                    BenchmarkJobKind::Runtime,
+                )
+                .await?;
+            tx.conn()
+                .enqueue_benchmark_job(
+                    request_tag,
+                    target,
+                    backend,
+                    Profile::Opt,
+                    0u32,
+                    BenchmarkJobKind::Rustc,
+                )
+                .await?;
+        }
+
         for benchmark_set in 0..benchmark_set_count(target.into()) {
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
@@ -244,6 +268,7 @@ pub async fn enqueue_benchmark_request(
                             backend,
                             profile,
                             benchmark_set as u32,
+                            BenchmarkJobKind::Compiletime,
                         )
                         .await?;
                     // If there is a parent, we create a job for it too. The
@@ -264,6 +289,7 @@ pub async fn enqueue_benchmark_request(
                     //             backend,
                     //             profile,
                     //             benchmark_set as u32,
+                    //             BenchmarkJobKind::Compiletime,
                     //         )
                     //         .await;
                     //
@@ -438,8 +464,8 @@ mod tests {
     use chrono::Utc;
     use database::tests::run_postgres_test;
     use database::{
-        BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
-        CodegenBackend, Profile, Target,
+        BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestStatus,
+        BenchmarkSet, CodegenBackend, Profile, Target,
     };
 
     fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
@@ -477,6 +503,7 @@ mod tests {
             CodegenBackend::Llvm,
             Profile::Opt,
             benchmark_set,
+            BenchmarkJobKind::Compiletime,
         )
         .await
         .unwrap();
