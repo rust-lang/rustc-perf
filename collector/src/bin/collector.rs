@@ -136,7 +136,6 @@ impl RuntimeBenchmarkConfig {
 struct SharedBenchmarkConfig {
     artifact_id: ArtifactId,
     toolchain: Toolchain,
-    record_duration: bool,
     job_id: Option<u32>,
 }
 
@@ -854,7 +853,6 @@ fn main_result() -> anyhow::Result<i32> {
             let shared = SharedBenchmarkConfig {
                 artifact_id,
                 toolchain,
-                record_duration: true,
                 job_id: None,
             };
             let config = RuntimeBenchmarkConfig::new(
@@ -998,7 +996,6 @@ fn main_result() -> anyhow::Result<i32> {
             let shared = SharedBenchmarkConfig {
                 toolchain,
                 artifact_id,
-                record_duration: true,
                 job_id: None,
             };
             let config = CompileBenchmarkConfig {
@@ -1152,7 +1149,6 @@ fn main_result() -> anyhow::Result<i32> {
                         let shared = SharedBenchmarkConfig {
                             artifact_id,
                             toolchain,
-                            record_duration: true,
                             job_id: None,
                         };
 
@@ -1672,7 +1668,6 @@ async fn run_benchmark_job(
     let shared = SharedBenchmarkConfig {
         artifact_id,
         toolchain,
-        record_duration: false,
         job_id: Some(job.id()),
     };
 
@@ -2131,7 +2126,7 @@ async fn init_collection(
     runtime: Option<&RuntimeBenchmarkConfig>,
 ) -> CollectorCtx {
     assert!(runtime.is_some() || compile.is_some());
-    let mut builder = CollectorStepBuilder::default();
+    let mut builder = CollectorStepBuilder::new(shared.job_id);
     if let Some(compile) = compile {
         builder = builder.record_compile_benchmarks(&compile.benchmarks, compile.bench_rustc);
     }
@@ -2174,7 +2169,6 @@ async fn run_benchmarks(
             &collector,
             runtime.filter,
             runtime.iterations,
-            shared.job_id,
         )
         .await
         .context("Runtime benchmarks failed")
@@ -2182,7 +2176,7 @@ async fn run_benchmarks(
         Ok(())
     };
 
-    if shared.record_duration {
+    if shared.job_id.is_none() {
         let end = start.elapsed();
         connection
             .record_duration(collector.artifact_row_id, end)
@@ -2230,7 +2224,6 @@ async fn bench_published_artifact(
     let shared = SharedBenchmarkConfig {
         artifact_id,
         toolchain,
-        record_duration: true,
         job_id: None,
     };
     run_benchmarks(

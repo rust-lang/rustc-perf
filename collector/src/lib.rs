@@ -302,9 +302,17 @@ pub async fn master_commits() -> anyhow::Result<Vec<MasterCommit>> {
 #[derive(Default)]
 pub struct CollectorStepBuilder {
     steps: Vec<String>,
+    job_id: Option<u32>,
 }
 
 impl CollectorStepBuilder {
+    pub fn new(job_id: Option<u32>) -> Self {
+        Self {
+            steps: vec![],
+            job_id,
+        }
+    }
+
     pub fn record_compile_benchmarks(
         mut self,
         benchmarks: &[Benchmark],
@@ -338,9 +346,11 @@ impl CollectorStepBuilder {
         let artifact_row_id = {
             let mut tx = conn.transaction().await;
             let artifact_row_id = tx.conn().artifact_id(artifact_id).await;
-            tx.conn()
-                .collector_start(artifact_row_id, &self.steps)
-                .await;
+            if self.job_id.is_none() {
+                tx.conn()
+                    .collector_start(artifact_row_id, &self.steps)
+                    .await;
+            }
             tx.commit().await.unwrap();
             artifact_row_id
         };
@@ -353,6 +363,7 @@ impl CollectorStepBuilder {
         CollectorCtx {
             artifact_row_id,
             measured_compile_test_cases,
+            job_id: self.job_id,
         }
     }
 }
@@ -362,17 +373,26 @@ pub struct CollectorCtx {
     pub artifact_row_id: ArtifactIdNumber,
     /// Which tests cases were already computed **before** this collection began?
     pub measured_compile_test_cases: HashSet<CompileTestCase>,
+    pub job_id: Option<u32>,
 }
 
 impl CollectorCtx {
+    pub fn is_from_job_queue(&self) -> bool {
+        self.job_id.is_some()
+    }
+
     pub async fn start_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {
-        conn.collector_start_step(self.artifact_row_id, &benchmark_name.0)
-            .await;
+        if !self.is_from_job_queue() {
+            conn.collector_start_step(self.artifact_row_id, &benchmark_name.0)
+                .await;
+        }
     }
 
     pub async fn end_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {
-        conn.collector_end_step(self.artifact_row_id, &benchmark_name.0)
-            .await
+        if !self.is_from_job_queue() {
+            conn.collector_end_step(self.artifact_row_id, &benchmark_name.0)
+                .await;
+        }
     }
 
     /// Starts a new runtime benchmark collector step.
@@ -384,14 +404,20 @@ impl CollectorCtx {
         group: &BenchmarkGroup,
     ) -> Option<String> {
         let step_name = runtime_group_step_name(&group.name);
-        conn.collector_start_step(self.artifact_row_id, &step_name)
-            .await
-            .then_some(step_name)
+        if self.is_from_job_queue() {
+            Some(step_name)
+        } else {
+            conn.collector_start_step(self.artifact_row_id, &step_name)
+                .await
+                .then_some(step_name)
+        }
     }
 
     pub async fn end_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) {
-        conn.collector_end_step(self.artifact_row_id, &runtime_group_step_name(&group.name))
-            .await
+        if !self.is_from_job_queue() {
+            conn.collector_end_step(self.artifact_row_id, &runtime_group_step_name(&group.name))
+                .await;
+        }
     }
 }
 
