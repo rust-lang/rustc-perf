@@ -1,9 +1,9 @@
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestWithErrors,
-    BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark, PendingBenchmarkRequests,
-    Target,
+    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
+    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark,
+    PendingBenchmarkRequests, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -233,6 +233,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        kind: BenchmarkJobKind,
     ) -> anyhow::Result<Option<u32>>;
 
     /// Add a benchmark job which is explicitly using a `parent_sha` we split
@@ -245,6 +246,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        kind: BenchmarkJobKind,
     ) -> (bool, anyhow::Result<u32>);
 
     /// Returns a set of compile-time benchmark test cases that were already computed for the
@@ -706,6 +708,7 @@ mod tests {
                     CodegenBackend::Llvm,
                     Profile::Opt,
                     0u32,
+                    BenchmarkJobKind::Runtime,
                 )
                 .await;
             assert!(result.is_ok());
@@ -860,6 +863,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 1u32,
+                BenchmarkJobKind::Runtime,
             )
             .await
             .unwrap();
@@ -956,6 +960,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 benchmark_set.0,
+                BenchmarkJobKind::Runtime,
             )
             .await
             .unwrap();
@@ -1213,6 +1218,7 @@ mod tests {
                     CodegenBackend::Llvm,
                     Profile::Debug,
                     0,
+                    BenchmarkJobKind::Runtime,
                 )
                 .await;
 

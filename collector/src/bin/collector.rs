@@ -1699,13 +1699,22 @@ async fn create_benchmark_configs(
     let mut bench_rustc = false;
     let mut bench_runtime = false;
     let mut bench_compile_benchmarks = HashSet::new();
-    for member in benchmark_set_members {
-        match member {
-            BenchmarkSetMember::CompileBenchmark(benchmark) => {
-                bench_compile_benchmarks.insert(benchmark);
+
+    match job.kind() {
+        database::BenchmarkJobKind::Runtime => {
+            bench_runtime = true;
+        }
+        database::BenchmarkJobKind::Compiletime => {
+            for member in benchmark_set_members {
+                match member {
+                    BenchmarkSetMember::CompileBenchmark(benchmark) => {
+                        bench_compile_benchmarks.insert(benchmark);
+                    }
+                }
             }
-            BenchmarkSetMember::RuntimeBenchmarks => bench_runtime = true,
-            BenchmarkSetMember::Rustc => bench_rustc = true,
+        }
+        database::BenchmarkJobKind::Rustc => {
+            bench_rustc = true;
         }
     }
 

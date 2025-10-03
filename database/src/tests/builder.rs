@@ -1,6 +1,7 @@
 use crate::{
-    BenchmarkJob, BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
-    CodegenBackend, CollectorConfig, Connection, Profile, Target,
+    BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest,
+    BenchmarkRequestStatus, BenchmarkSet, CodegenBackend, CollectorConfig, Connection, Profile,
+    Target,
 };
 use chrono::Utc;
 use hashbrown::{HashMap, HashSet};
@@ -46,6 +47,7 @@ impl RequestBuilder {
                     job.backend,
                     job.profile,
                     job.benchmark_set,
+                    job.kind,
                 )
                 .await
                 .unwrap();
@@ -109,6 +111,7 @@ pub struct JobBuilder {
     profile: Profile,
     benchmark_set: u32,
     conclusion: BenchmarkJobConclusion,
+    kind: BenchmarkJobKind,
 }
 
 impl JobBuilder {
@@ -126,6 +129,7 @@ impl Default for JobBuilder {
             profile: Profile::Check,
             benchmark_set: 0,
             conclusion: BenchmarkJobConclusion::Success,
+            kind: BenchmarkJobKind::Compiletime,
         }
     }
 }
