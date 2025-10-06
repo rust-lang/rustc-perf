@@ -7,7 +7,8 @@ use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
 use database::{
     BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
-    BenchmarkRequestType, Date, PendingBenchmarkRequests, Profile, QueuedCommit, Target,
+    BenchmarkRequestType, CodegenBackend, Date, PendingBenchmarkRequests, Profile, QueuedCommit,
+    Target,
 };
 use parking_lot::RwLock;
 use std::{str::FromStr, sync::Arc};
@@ -232,31 +233,35 @@ pub async fn enqueue_benchmark_request(
     // Prevent the error from spamming the logs
     // let mut has_emitted_parent_sha_error = false;
 
+    // Enqueue Rustc job for only for x86_64 & llvm. This benchmark is how long
+    // it takes to build the rust compiler. It takes a while to run and is
+    // assumed that if the compilation of other rust project improve then this
+    // too would improve.
+    tx.conn()
+        .enqueue_benchmark_job(
+            request_tag,
+            Target::X86_64UnknownLinuxGnu,
+            CodegenBackend::Llvm,
+            Profile::Opt,
+            0u32,
+            BenchmarkJobKind::Rustc,
+        )
+        .await?;
+
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
-        // enqueue Runtime job and Rustc job, for each backend
-        for &backend in backends.iter() {
-            tx.conn()
-                .enqueue_benchmark_job(
-                    request_tag,
-                    target,
-                    backend,
-                    Profile::Opt,
-                    0u32,
-                    BenchmarkJobKind::Runtime,
-                )
-                .await?;
-            tx.conn()
-                .enqueue_benchmark_job(
-                    request_tag,
-                    target,
-                    backend,
-                    Profile::Opt,
-                    0u32,
-                    BenchmarkJobKind::Rustc,
-                )
-                .await?;
-        }
+        // Enqueue Runtime job for all targets using LLVM as the backend for
+        // runtime benchmarks
+        tx.conn()
+            .enqueue_benchmark_job(
+                request_tag,
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                0u32,
+                BenchmarkJobKind::Runtime,
+            )
+            .await?;
 
         for benchmark_set in 0..benchmark_set_count(target.into()) {
             for &backend in backends.iter() {
