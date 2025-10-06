@@ -1582,12 +1582,19 @@ where
         // thanks to ON DELETE CASCADE.
         let info = aid.info();
         self.conn()
-            .execute("delete from artifact where name = $1", &[&info.name])
+            .execute("DELETE FROM artifact WHERE name = $1", &[&info.name])
             .await
             .unwrap();
         self.conn()
             .execute(
-                "delete from pull_request_build where bors_sha = $1",
+                "DELETE FROM pull_request_build WHERE bors_sha = $1",
+                &[&info.name],
+            )
+            .await
+            .unwrap();
+        self.conn()
+            .execute(
+                "DELETE FROM benchmark_request WHERE tag = $1",
                 &[&info.name],
             )
             .await

@@ -439,7 +439,7 @@ impl Pool {
 mod tests {
     use super::*;
     use crate::metric::Metric;
-    use crate::tests::builder::{job, RequestBuilder};
+    use crate::tests::builder::{job, CollectorBuilder, RequestBuilder};
     use crate::tests::run_postgres_test;
     use crate::{tests::run_db_test, BenchmarkRequestType, Commit, CommitType, Date};
     use chrono::Utc;
@@ -1217,6 +1217,47 @@ mod tests {
                 .await;
 
             assert!(violates_foreign_key);
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn purge_artifact() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db();
+
+            ctx.upsert_master_artifact("foo").await;
+            ctx.insert_master_request("foo", "bar", 1).await;
+            db.enqueue_benchmark_job(
+                "foo",
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                Profile::Check,
+                0,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            db.purge_artifact(&ArtifactId::Tag("foo".to_string())).await;
+
+            assert!(!db
+                .load_benchmark_request_index()
+                .await
+                .unwrap()
+                .contains_tag("foo"));
+
+            let collector = ctx.add_collector(CollectorBuilder::default()).await;
+            assert!(db
+                .dequeue_benchmark_job(
+                    collector.name(),
+                    collector.target(),
+                    collector.benchmark_set(),
+                )
+                .await
+                .unwrap()
+                .is_none());
 
             Ok(ctx)
         })
