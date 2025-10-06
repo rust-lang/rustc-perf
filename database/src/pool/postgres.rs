@@ -418,7 +418,7 @@ static MIGRATIONS: &[&str] = &[
     CREATE INDEX benchmark_request_completed_idx ON benchmark_request(completed_at);
     "#,
     r#"
-    ALTER TABLE job_queue ADD COLUMN kind TEXT NOT NULL;
+    ALTER TABLE job_queue ADD COLUMN kind TEXT NOT NULL DEFAULT 'compiletime';
     "#,
 ];
 
