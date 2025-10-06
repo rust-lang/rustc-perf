@@ -1242,6 +1242,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Check,
                 0,
+                BenchmarkJobKind::Compiletime,
             )
             .await
             .unwrap()
