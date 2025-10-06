@@ -6,8 +6,9 @@ use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
 use database::{
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType, Date,
-    PendingBenchmarkRequests, QueuedCommit, Target,
+    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
+    BenchmarkRequestType, CodegenBackend, Date, PendingBenchmarkRequests, Profile, QueuedCommit,
+    Target,
 };
 use parking_lot::RwLock;
 use std::{str::FromStr, sync::Arc};
@@ -232,8 +233,36 @@ pub async fn enqueue_benchmark_request(
     // Prevent the error from spamming the logs
     // let mut has_emitted_parent_sha_error = false;
 
+    // Enqueue Rustc job for only for x86_64 & llvm. This benchmark is how long
+    // it takes to build the rust compiler. It takes a while to run and is
+    // assumed that if the compilation of other rust project improve then this
+    // too would improve.
+    tx.conn()
+        .enqueue_benchmark_job(
+            request_tag,
+            Target::X86_64UnknownLinuxGnu,
+            CodegenBackend::Llvm,
+            Profile::Opt,
+            0u32,
+            BenchmarkJobKind::Rustc,
+        )
+        .await?;
+
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
+        // Enqueue Runtime job for all targets using LLVM as the backend for
+        // runtime benchmarks
+        tx.conn()
+            .enqueue_benchmark_job(
+                request_tag,
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                0u32,
+                BenchmarkJobKind::Runtime,
+            )
+            .await?;
+
         for benchmark_set in 0..benchmark_set_count(target.into()) {
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
@@ -244,6 +273,7 @@ pub async fn enqueue_benchmark_request(
                             backend,
                             profile,
                             benchmark_set as u32,
+                            BenchmarkJobKind::Compiletime,
                         )
                         .await?;
                     // If there is a parent, we create a job for it too. The
@@ -264,6 +294,7 @@ pub async fn enqueue_benchmark_request(
                     //             backend,
                     //             profile,
                     //             benchmark_set as u32,
+                    //             BenchmarkJobKind::Compiletime,
                     //         )
                     //         .await;
                     //
@@ -438,8 +469,8 @@ mod tests {
     use chrono::Utc;
     use database::tests::run_postgres_test;
     use database::{
-        BenchmarkJobConclusion, BenchmarkRequest, BenchmarkRequestStatus, BenchmarkSet,
-        CodegenBackend, Profile, Target,
+        BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestStatus,
+        BenchmarkSet, CodegenBackend, Profile, Target,
     };
 
     fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
@@ -477,6 +508,7 @@ mod tests {
             CodegenBackend::Llvm,
             Profile::Opt,
             benchmark_set,
+            BenchmarkJobKind::Compiletime,
         )
         .await
         .unwrap();

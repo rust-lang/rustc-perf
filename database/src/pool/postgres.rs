@@ -2,13 +2,13 @@ use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction}
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
-    BenchmarkJobConclusion, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet,
-    CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date,
-    Index, PendingBenchmarkRequests, Profile, QueuedCommit, Scenario, Target,
-    BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
-    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
-    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
+    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
+    Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests, Profile,
+    QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
     BENCHMARK_REQUEST_TRY_STR,
@@ -416,6 +416,9 @@ static MIGRATIONS: &[&str] = &[
     // of requests grows to make things fast we need an index on the completed_at
     r#"
     CREATE INDEX benchmark_request_completed_idx ON benchmark_request(completed_at);
+    "#,
+    r#"
+    ALTER TABLE job_queue ADD COLUMN kind TEXT NOT NULL;
     "#,
 ];
 
@@ -1753,6 +1756,7 @@ where
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        kind: BenchmarkJobKind,
     ) -> (bool, anyhow::Result<u32>) {
         let row_result = self
             .conn()
@@ -1764,9 +1768,10 @@ where
                 backend,
                 profile,
                 benchmark_set,
-                status
+                status,
+                kind
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT DO NOTHING
             RETURNING job_queue.id
                 "#,
@@ -1777,6 +1782,7 @@ where
                     &profile,
                     &(benchmark_set as i32),
                     &BENCHMARK_JOB_STATUS_QUEUED_STR,
+                    &kind,
                 ],
             )
             .await;
@@ -1811,6 +1817,7 @@ where
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        kind: BenchmarkJobKind,
     ) -> anyhow::Result<Option<u32>> {
         // This will return zero rows if the job already exists
         let rows = self
@@ -1823,9 +1830,10 @@ where
                 backend,
                 profile,
                 benchmark_set,
-                status
+                status,
+                kind
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT DO NOTHING
             RETURNING job_queue.id
                 "#,
@@ -1836,6 +1844,7 @@ where
                     &profile,
                     &(benchmark_set as i32),
                     &BENCHMARK_JOB_STATUS_QUEUED_STR,
+                    &kind,
                 ],
             )
             .await
@@ -2021,6 +2030,7 @@ where
                     updated.created_at,
                     updated.started_at,
                     updated.retry,
+                    updated.kind,
                     br.commit_type,
                     br.commit_date
                 FROM updated
@@ -2054,9 +2064,11 @@ where
                         collector_name: collector_name.into(),
                     },
                     deque_counter: row.get::<_, i32>(6) as u32,
+                    kind: BenchmarkJobKind::from_str(row.get::<_, &str>(7))
+                        .map_err(|e| anyhow::anyhow!(e))?,
                 };
-                let commit_type = row.get::<_, &str>(7);
-                let commit_date = row.get::<_, Option<DateTime<Utc>>>(8);
+                let commit_type = row.get::<_, &str>(8);
+                let commit_date = row.get::<_, Option<DateTime<Utc>>>(9);
 
                 let commit_date = Date(commit_date.ok_or_else(|| {
                     anyhow::anyhow!("Dequeuing job for a benchmark request without commit date")
@@ -2262,6 +2274,8 @@ where
                 created_at: row.get::<_, DateTime<Utc>>(6),
                 status,
                 deque_counter: row.get::<_, i32>(10) as u32,
+                kind: BenchmarkJobKind::from_str(row.get::<_, &str>(12))
+                    .map_err(|e| anyhow::anyhow!(e))?,
             };
             request_to_jobs
                 .entry(job.request_tag.clone())
@@ -2429,6 +2443,7 @@ impl_to_postgresql_via_to_string!(BenchmarkRequestType);
 impl_to_postgresql_via_to_string!(Target);
 impl_to_postgresql_via_to_string!(CodegenBackend);
 impl_to_postgresql_via_to_string!(Profile);
+impl_to_postgresql_via_to_string!(BenchmarkJobKind);
 
 #[cfg(test)]
 mod tests {
