@@ -2335,6 +2335,10 @@ where
             .await?;
         Ok(())
     }
+
+    fn supports_job_queue(&self) -> bool {
+        true
+    }
 }
 
 fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRequest {

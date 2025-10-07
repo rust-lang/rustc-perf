@@ -1303,7 +1303,9 @@ impl Connection for SqliteConnection {
     }
 
     async fn load_benchmark_request_index(&self) -> anyhow::Result<BenchmarkRequestIndex> {
-        no_queue_implementation_abort!()
+        Ok(BenchmarkRequestIndex {
+            all: Default::default(),
+        })
     }
 
     async fn load_pending_benchmark_requests(&self) -> anyhow::Result<PendingBenchmarkRequests> {
@@ -1437,6 +1439,10 @@ impl Connection for SqliteConnection {
         _count: u64,
     ) -> anyhow::Result<Vec<BenchmarkRequestWithErrors>> {
         no_queue_implementation_abort!()
+    }
+
+    fn supports_job_queue(&self) -> bool {
+        false
     }
 }
 
