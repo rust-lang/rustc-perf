@@ -37,7 +37,7 @@ jobs:
           rustup default $RUST_TOOLCHAIN_VERSION
           rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
         env:
-          RUST_TOOLCHAIN_VERSION: 1.85.0
+          RUST_TOOLCHAIN_VERSION: 1.88.0
 
       - uses: Swatinem/rust-cache@v2
         with:
