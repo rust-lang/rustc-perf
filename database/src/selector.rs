@@ -5,11 +5,11 @@
 //!
 //! * :benchmark/:profile/:scenario/:metric => [cid => u64]
 //! * :crate/:profile/:scenario/:self_profile_query/:stat (SelfProfileTime, SelfProfileCacheHits, ...)
-//!     :stat = time => Duration,
-//!     :stat = cache hits => u32,
-//!     :stat = invocation count => u32,
-//!     :stat = blocked time => Duration,
-//!     :stat = incremental load time => Duration,
+//!   :stat = time => Duration,
+//!   :stat = cache hits => u32,
+//!   :stat = invocation count => u32,
+//!   :stat = blocked time => Duration,
+//!   :stat = incremental load time => Duration,
 //!
 //! Note that the returned series always have a "simple" type of a small set --
 //! things like arrays, integers. We aggregate into higher level types above the
