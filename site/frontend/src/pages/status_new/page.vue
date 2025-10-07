@@ -4,7 +4,11 @@ import {h, ref, Ref} from "vue";
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {formatSecondsAsDuration, formatISODate} from "../../utils/formatting";
+import {
+  formatSecondsAsDuration,
+  formatISODate,
+  shortenTag,
+} from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
@@ -150,7 +154,7 @@ loadStatusData(loading);
                 <td><PullRequestLink :request="req" /></td>
                 <td>{{ req.requestType }}</td>
                 <td>
-                  {{ req.tag }}
+                  {{ shortenTag(req.tag) }}
                 </td>
                 <td>
                   {{ formatStatus(req.status)
@@ -324,7 +328,7 @@ loadStatusData(loading);
 .collectors-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(500px, 100%));
   gap: 20px;
 }
 </style>
