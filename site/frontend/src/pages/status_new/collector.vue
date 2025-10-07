@@ -1,7 +1,7 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
 import {parseISO, differenceInHours} from "date-fns";
-import {formatISODate} from "../../utils/formatting";
+import {formatISODate, shortenTag} from "../../utils/formatting";
 import {CollectorConfig, BenchmarkJobStatus} from "./data";
 
 const props = defineProps<{
@@ -149,7 +149,7 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
           <template v-for="job in collector.jobs">
             <tr v-if="ACTIVE_FILTERS[job.status]">
               <td class="table-cell-padding">
-                {{ job.requestTag.slice(0, 12) }}
+                {{ shortenTag(job.requestTag) }}
               </td>
               <td class="table-cell-padding">
                 {{ formatJobStatus(job.status) }}
