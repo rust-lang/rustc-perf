@@ -22,6 +22,9 @@ pub trait Connection: Send + Sync {
 
     async fn load_index(&mut self) -> Index;
 
+    /// Returns true if the given database backend supports the job queue system.
+    fn supports_job_queue(&self) -> bool;
+
     /// None means that the caller doesn't know; it should be left alone if
     /// known or set to false if unknown.
     async fn record_compile_benchmark(

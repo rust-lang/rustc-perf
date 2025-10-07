@@ -366,6 +366,9 @@ async fn process_benchmark_requests(
 /// finishes completed benchmark requests.
 async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
     let mut conn = ctxt.conn().await;
+    if !conn.supports_job_queue() {
+        return Ok(());
+    }
 
     let index = ctxt.known_benchmark_requests.load();
 
