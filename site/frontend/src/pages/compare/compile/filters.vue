@@ -210,6 +210,26 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           <div class="section section-list-wrapper">
             <div class="section-heading">
               <div style="width: 160px">
+                <span>Targets</span>
+                <Tooltip>The host target of the benchmarked compiler. </Tooltip>
+              </div>
+            </div>
+            <ul class="states-list">
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    v-model="filter.target.x86_64_unknown_linux_gnu"
+                  />
+                  <span class="label">x86_64-unknown-linux-gnu</span>
+                </label>
+                <Tooltip>The default Linux x64 target.</Tooltip>
+              </li>
+            </ul>
+          </div>
+          <div class="section section-list-wrapper">
+            <div class="section-heading">
+              <div style="width: 160px">
                 <span>Categories</span>
                 <Tooltip
                   >Select benchmarks based on their category (primary or
