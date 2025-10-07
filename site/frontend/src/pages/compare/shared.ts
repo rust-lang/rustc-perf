@@ -1,3 +1,5 @@
+import {Target} from "./compile/common";
+
 export function formatDate(dateString: string): string {
   const date = new Date(dateString);
   function padStr(i) {
@@ -92,4 +94,12 @@ export function benchmarkNameMatchesFilter(
   } catch (e) {
     return benchmarkName.includes(trimmedFilterName);
   }
+}
+
+const TARGET_SHORTCUTS: {[target in Target]: string} = {
+  "x86_64-unknown-linux-gnu": "x64",
+};
+
+export function formatTarget(target: Target): string {
+  return TARGET_SHORTCUTS[target] ?? target;
 }
