@@ -72,6 +72,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
 export type Profile = "check" | "debug" | "opt" | "doc";
 export type CodegenBackend = "llvm" | "cranelift";
 export type Category = "primary" | "secondary";
+export type Target = "x86_64-unknown-linux-gnu";
 
 export type CompileBenchmarkMap = Dict<CompileBenchmarkMetadata>;
 
@@ -95,6 +96,7 @@ export interface CompileBenchmarkComparison {
   profile: Profile;
   scenario: string;
   backend: CodegenBackend;
+  target: Target;
   comparison: StatComparison;
 }
 
@@ -103,6 +105,7 @@ export interface CompileTestCase {
   profile: Profile;
   scenario: string;
   backend: CodegenBackend;
+  target: Target;
   category: Category;
 }
 
@@ -198,6 +201,7 @@ export function computeCompileComparisonsWithNonRelevant(
           profile: c.profile,
           scenario: c.scenario,
           backend: c.backend,
+          target: c.target,
           category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
         };
         return calculateComparison(c.comparison, testCase);
@@ -242,11 +246,12 @@ export function transformDataForBackendComparison(
       cranelift: number | null;
       benchmark: string;
       profile: Profile;
+      target: Target;
       scenario: string;
     }
   > = new Map();
   for (const comparison of comparisons) {
-    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario}`;
+    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario};${comparison.target}`;
     if (!benchmarkMap.has(key)) {
       benchmarkMap.set(key, {
         llvm: null,
@@ -254,6 +259,7 @@ export function transformDataForBackendComparison(
         benchmark: comparison.benchmark,
         profile: comparison.profile,
         scenario: comparison.scenario,
+        target: comparison.target,
       });
     }
     const record = benchmarkMap.get(key);
@@ -271,6 +277,7 @@ export function transformDataForBackendComparison(
       scenario: entry.scenario,
       // Treat LLVM as the baseline
       backend: "llvm",
+      target: entry.target,
       comparison: {
         statistics: [entry.llvm, entry.cranelift],
         is_relevant: true,

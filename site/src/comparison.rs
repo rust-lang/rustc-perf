@@ -11,6 +11,7 @@ use collector::Bound;
 use database::{
     metric::Metric,
     selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
+    Target,
 };
 use database::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use serde::Serialize;
@@ -152,6 +153,7 @@ pub async fn handle_compare(
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
             backend: comparison.backend.to_string(),
+            target: comparison.target.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();
@@ -742,6 +744,7 @@ async fn compare_given_commits(
             scenario: test_case.scenario,
             benchmark: test_case.benchmark,
             backend: test_case.backend,
+            target: test_case.target,
             comparison,
         },
     )
@@ -1315,6 +1318,7 @@ pub struct CompileTestResultComparison {
     profile: Profile,
     scenario: Scenario,
     backend: CodegenBackend,
+    target: Target,
     comparison: TestResultComparison,
 }
 
