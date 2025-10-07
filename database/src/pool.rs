@@ -1063,17 +1063,12 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(100)).await;
 
                 requests.push(
-                    RequestBuilder::master(
-                        db,
-                        &format!("sha{}", id),
-                        &format!("sha{}", id - 1),
-                        id,
-                    )
-                    .await
-                    .add_job(db, job())
-                    .await
-                    .complete(db, &collector)
-                    .await,
+                    RequestBuilder::master(db, &format!("sha{id}"), &format!("sha{}", id - 1), id)
+                        .await
+                        .add_job(db, job())
+                        .await
+                        .complete(db, &collector)
+                        .await,
                 );
             }
 
