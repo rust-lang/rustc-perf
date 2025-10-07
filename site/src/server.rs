@@ -567,6 +567,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn parse_body<D>(body: &[u8]) -> Result<D, Response>
 where
     D: DeserializeOwned,
@@ -590,6 +591,7 @@ where
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn parse_query_string<D>(uri: &http::Uri) -> Result<D, Response>
 where
     D: DeserializeOwned,
