@@ -149,7 +149,7 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
           <template v-for="job in collector.jobs">
             <tr v-if="ACTIVE_FILTERS[job.status]">
               <td class="table-cell-padding">
-                {{ job.requestTag }}
+                {{ job.requestTag.slice(0, 12) }}
               </td>
               <td class="table-cell-padding">
                 {{ formatJobStatus(job.status) }}
