@@ -19,6 +19,9 @@ export type CompileBenchmarkFilter = {
     llvm: boolean;
     cranelift: boolean;
   };
+  target: {
+    x86_64_unknown_linux_gnu: boolean;
+  };
   category: {
     primary: boolean;
     secondary: boolean;
@@ -54,6 +57,9 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     llvm: true,
     cranelift: true,
   },
+  target: {
+    x86_64_unknown_linux_gnu: true,
+  },
   category: {
     primary: true,
     secondary: true,
@@ -72,6 +78,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
 export type Profile = "check" | "debug" | "opt" | "doc";
 export type CodegenBackend = "llvm" | "cranelift";
 export type Category = "primary" | "secondary";
+export type Target = "x86_64-unknown-linux-gnu";
 
 export type CompileBenchmarkMap = Dict<CompileBenchmarkMetadata>;
 
@@ -95,6 +102,7 @@ export interface CompileBenchmarkComparison {
   profile: Profile;
   scenario: string;
   backend: CodegenBackend;
+  target: Target;
   comparison: StatComparison;
 }
 
@@ -103,6 +111,7 @@ export interface CompileTestCase {
   profile: Profile;
   scenario: string;
   backend: CodegenBackend;
+  target: Target;
   category: Category;
 }
 
@@ -151,6 +160,15 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
+  function targetFilter(target: Target): boolean {
+    if (target === "x86_64-unknown-linux-gnu") {
+      return filter.target.x86_64_unknown_linux_gnu;
+    } else {
+      // Unknown, but by default we should show things
+      return true;
+    }
+  }
+
   function artifactFilter(metadata: CompileBenchmarkMetadata | null): boolean {
     if (metadata?.binary === null) return true;
 
@@ -183,6 +201,7 @@ export function computeCompileComparisonsWithNonRelevant(
       profileFilter(comparison.testCase.profile) &&
       scenarioFilter(comparison.testCase.scenario) &&
       backendFilter(comparison.testCase.backend) &&
+      targetFilter(comparison.testCase.target) &&
       categoryFilter(comparison.testCase.category) &&
       artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
       changeFilter(comparison) &&
@@ -198,6 +217,7 @@ export function computeCompileComparisonsWithNonRelevant(
           profile: c.profile,
           scenario: c.scenario,
           backend: c.backend,
+          target: c.target,
           category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
         };
         return calculateComparison(c.comparison, testCase);
@@ -242,11 +262,12 @@ export function transformDataForBackendComparison(
       cranelift: number | null;
       benchmark: string;
       profile: Profile;
+      target: Target;
       scenario: string;
     }
   > = new Map();
   for (const comparison of comparisons) {
-    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario}`;
+    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario};${comparison.target}`;
     if (!benchmarkMap.has(key)) {
       benchmarkMap.set(key, {
         llvm: null,
@@ -254,6 +275,7 @@ export function transformDataForBackendComparison(
         benchmark: comparison.benchmark,
         profile: comparison.profile,
         scenario: comparison.scenario,
+        target: comparison.target,
       });
     }
     const record = benchmarkMap.get(key);
@@ -271,6 +293,7 @@ export function transformDataForBackendComparison(
       scenario: entry.scenario,
       // Treat LLVM as the baseline
       backend: "llvm",
+      target: entry.target,
       comparison: {
         statistics: [entry.llvm, entry.cranelift],
         is_relevant: true,
