@@ -355,11 +355,18 @@ fn main() {
 
             "Eprintln" => {
                 let mut cmd = Command::new(tool);
+
+                let file_path = "eprintln";
                 cmd.args(args).stderr(std::process::Stdio::from(
-                    std::fs::File::create("eprintln").unwrap(),
+                    std::fs::File::create(file_path).unwrap(),
                 ));
 
-                run_with_determinism_env(cmd);
+                determinism_env(&mut cmd);
+                let status = cmd.status().expect("failed to spawn");
+                if !status.success() {
+                    let stderr = std::fs::read_to_string(file_path).unwrap_or_default();
+                    panic!("command did not complete successfully: {cmd:?}\nstderr:\n{stderr}");
+                }
             }
 
             "LlvmLines" => {
