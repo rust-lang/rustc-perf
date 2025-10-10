@@ -1,5 +1,8 @@
 name: Manual deploy
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
 
 env:
@@ -8,7 +11,7 @@ env:
 jobs:
   deploy:
     name: Deploy
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout the source code
         uses: actions/checkout@v4
