@@ -794,9 +794,10 @@ fn main_result() -> anyhow::Result<i32> {
         runtime: &runtime_benchmark_dir,
     };
 
-    // This clearly won't work for all architectures, but should be good enough for x64 Linux
-    // and ARM 64-bit Linux.
-    let host_target_tuple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
+    let host_target_tuple =
+        String::from_utf8(command_output(Command::new("rustc").arg("--print=host-tuple"))?.stdout)?
+            .trim()
+            .to_string();
 
     match args.command {
         Commands::BinaryStats { mode, symbols } => {
