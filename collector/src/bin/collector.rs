@@ -794,16 +794,54 @@ fn main_result() -> anyhow::Result<i32> {
         runtime: &runtime_benchmark_dir,
     };
 
-    let host_target_tuple =
-        String::from_utf8(command_output(Command::new("rustc").arg("--print=host-tuple"))?.stdout)?
-            .trim()
-            .to_string();
+    // We need to find the host tuple for a couple of things (several collector commands need it).
+    // Probably the simplest way of determining it is asking rustc what is its host tuple.
+    // However, where to get that rustc? We could just try using "rustc", but that is not always
+    // available, e.g. on Rust's CI.
+    // So we try to figure out if we have some rustc available from the command that is being
+    // executed; such rustc should definitely be executable on this host.
+    // If we don't, we'll simply fall back to `rustc`.
+    let used_rustc: Option<String> = match &args.command {
+        Commands::BinaryStats {
+            mode: BinaryStatsMode::Compile(args),
+            ..
+        } => Some(args.local.rustc.clone()),
+        Commands::BenchRuntimeLocal { local, .. } => Some(local.rustc.clone()),
+        Commands::ProfileRuntime { rustc, .. } => Some(rustc.clone()),
+        Commands::CodegenDiff { rustc1, .. } => Some(rustc1.clone()),
+        Commands::BenchLocal { local, .. } => Some(local.rustc.clone()),
+        Commands::ProfileLocal { local, .. } => Some(local.rustc.clone()),
+        Commands::BinaryStats {
+            mode: BinaryStatsMode::Local(_),
+            ..
+        }
+        | Commands::BenchNext { .. }
+        | Commands::BenchPublished { .. }
+        | Commands::InstallNext { .. }
+        | Commands::Download(_)
+        | Commands::PurgeArtifact { .. }
+        | Commands::BenchCmp { .. }
+        | Commands::AddCollector { .. }
+        | Commands::BenchmarkJobQueue { .. } => None,
+    };
+
+    let host_target_tuple = match used_rustc {
+        Some(rustc) => get_host_tuple_from_rustc(&rustc),
+        None => get_host_tuple_from_rustc("rustc"),
+    };
+    // We only unwrap the host tuple in places where we actually need it, to avoid panicking if it
+    // is missing, but we don't really need it.
+    let require_host_target_tuple = || {
+        host_target_tuple.expect(
+            "Cannot determine host target tuple. Please make a `rustc` binary available in PATH.",
+        )
+    };
 
     match args.command {
         Commands::BinaryStats { mode, symbols } => {
             match mode {
                 BinaryStatsMode::Compile(args) => {
-                    binary_stats_compile(args, symbols, &host_target_tuple)?;
+                    binary_stats_compile(args, symbols, &require_host_target_tuple())?;
                 }
                 BinaryStatsMode::Local(args) => {
                     binary_stats_local(args, symbols)?;
@@ -822,7 +860,8 @@ fn main_result() -> anyhow::Result<i32> {
             purge,
         } => {
             log_db(&db);
-            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &host_target_tuple)?;
+            let toolchain =
+                get_local_toolchain_for_runtime_benchmarks(&local, &require_host_target_tuple())?;
             let pool = Pool::open(&db.db);
 
             let isolation_mode = if no_isolate {
@@ -871,6 +910,7 @@ fn main_result() -> anyhow::Result<i32> {
             rustc2,
             benchmark,
         } => {
+            let host_target_tuple = require_host_target_tuple();
             let get_suite = |rustc: &str, id: &str| {
                 let toolchain = get_local_toolchain(
                     &[Profile::Opt],
@@ -928,6 +968,7 @@ fn main_result() -> anyhow::Result<i32> {
             rustc1: rustc,
             rustc2,
         } => {
+            let host_target_tuple = require_host_target_tuple();
             let get_toolchain = |rustc: &str, id: &str| {
                 let toolchain = get_local_toolchain(
                     &[Profile::Opt],
@@ -978,7 +1019,7 @@ fn main_result() -> anyhow::Result<i32> {
                     .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                     .id(local.id.as_deref()),
                 "",
-                host_target_tuple,
+                require_host_target_tuple(),
             )?;
 
             let mut benchmarks = get_compile_benchmarks(&compile_benchmark_dir, (&local).into())?;
@@ -1047,8 +1088,10 @@ fn main_result() -> anyhow::Result<i32> {
 
                 match next {
                     NextArtifact::Release(tag) => {
-                        let toolchain =
-                            create_toolchain_from_published_version(&tag, &host_target_tuple)?;
+                        let toolchain = create_toolchain_from_published_version(
+                            &tag,
+                            &require_host_target_tuple(),
+                        )?;
                         let conn = rt.block_on(pool.connection());
                         rt.block_on(bench_published_artifact(
                             conn,
@@ -1097,7 +1140,7 @@ fn main_result() -> anyhow::Result<i32> {
                             .block_on(Sysroot::install(
                                 Path::new(TOOLCHAIN_CACHE_DIRECTORY),
                                 sha.clone(),
-                                &host_target_tuple,
+                                &require_host_target_tuple(),
                                 &backends,
                             ))
                             .map_err(SysrootDownloadError::as_anyhow_error)
@@ -1180,7 +1223,7 @@ fn main_result() -> anyhow::Result<i32> {
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
             let toolchain =
-                create_toolchain_from_published_version(&toolchain, &host_target_tuple)?;
+                create_toolchain_from_published_version(&toolchain, &require_host_target_tuple())?;
             rt.block_on(bench_published_artifact(
                 conn,
                 toolchain,
@@ -1221,6 +1264,7 @@ fn main_result() -> anyhow::Result<i32> {
                 .build_global()
                 .unwrap();
 
+            let host_target_tuple = require_host_target_tuple();
             let mut get_toolchain_and_profile =
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {
                     let toolchain = get_local_toolchain(
@@ -1295,7 +1339,7 @@ fn main_result() -> anyhow::Result<i32> {
                 .block_on(Sysroot::install(
                     Path::new(TOOLCHAIN_CACHE_DIRECTORY),
                     commit.sha,
-                    &host_target_tuple,
+                    &require_host_target_tuple(),
                     &codegen_backends.0,
                 ))
                 .map_err(SysrootDownloadError::as_anyhow_error)?;
@@ -1407,6 +1451,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
                     )
                 })?;
 
+            let host_target_tuple = require_host_target_tuple();
             if collector_config.target().as_str() != host_target_tuple {
                 return Err(anyhow::anyhow!(
                     "The collector `{collector_name}` is configured for target `{}`, but the current host target seems to be `{host_target_tuple}`",
@@ -1435,6 +1480,14 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             Ok(0)
         }
     }
+}
+
+fn get_host_tuple_from_rustc(rustc: &str) -> anyhow::Result<String> {
+    Ok(
+        String::from_utf8(command_output(Command::new(rustc).arg("--print=host-tuple"))?.stdout)?
+            .trim()
+            .to_string(),
+    )
 }
 
 /// Maximum number of failures before a job will be marked as failed.
