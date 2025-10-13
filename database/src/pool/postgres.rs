@@ -420,6 +420,18 @@ static MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE job_queue ADD COLUMN kind TEXT NOT NULL DEFAULT 'compiletime';
     "#,
+    r#"
+    ALTER TABLE job_queue DROP CONSTRAINT job_queue_unique;
+    ALTER TABLE job_queue ADD CONSTRAINT job_queue_unique
+        UNIQUE (
+            request_tag,
+            target,
+            backend,
+            profile,
+            kind,
+            benchmark_set
+        );
+    "#,
 ];
 
 #[async_trait::async_trait]

@@ -230,52 +230,42 @@ pub async fn enqueue_benchmark_request(
 
     let backends = request.backends()?;
     let profiles = request.profiles()?;
+
     // Prevent the error from spamming the logs
     // let mut has_emitted_parent_sha_error = false;
 
-    // Enqueue Rustc job for only for x86_64 & llvm. This benchmark is how long
-    // it takes to build the rust compiler. It takes a while to run and is
-    // assumed that if the compilation of other rust project improve then this
-    // too would improve.
-    tx.conn()
-        .enqueue_benchmark_job(
-            request_tag,
-            Target::X86_64UnknownLinuxGnu,
-            CodegenBackend::Llvm,
-            Profile::Opt,
-            0u32,
-            BenchmarkJobKind::Rustc,
-        )
-        .await?;
+    let mut enqueue_job_required = async |request_tag,
+                                          target,
+                                          backend,
+                                          profile,
+                                          benchmark_set,
+                                          kind| {
+        let created_job = tx
+            .conn()
+            .enqueue_benchmark_job(request_tag, target, backend, profile, benchmark_set, kind)
+            .await?;
+        match created_job {
+                Some(_) => Ok(()),
+                None => Err(anyhow::anyhow!(
+                    "Cannot created job for tag {request_tag} (target={target}, backend={backend}, profile={profile}, set={benchmark_set}, kind={kind}): job already exists in the DB"
+                )),
+            }
+    };
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
-        // Enqueue Runtime job for all targets using LLVM as the backend for
-        // runtime benchmarks
-        tx.conn()
-            .enqueue_benchmark_job(
-                request_tag,
-                target,
-                CodegenBackend::Llvm,
-                Profile::Opt,
-                0u32,
-                BenchmarkJobKind::Runtime,
-            )
-            .await?;
-
         for benchmark_set in 0..benchmark_set_count(target.into()) {
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
-                    tx.conn()
-                        .enqueue_benchmark_job(
-                            request_tag,
-                            target,
-                            backend,
-                            profile,
-                            benchmark_set as u32,
-                            BenchmarkJobKind::Compiletime,
-                        )
-                        .await?;
+                    enqueue_job_required(
+                        request_tag,
+                        target,
+                        backend,
+                        profile,
+                        benchmark_set as u32,
+                        BenchmarkJobKind::Compiletime,
+                    )
+                    .await?;
                     // If there is a parent, we create a job for it too. The
                     // database will ignore it if there is already a job there.
                     // If the parent job has been deleted from the database
@@ -315,7 +305,33 @@ pub async fn enqueue_benchmark_request(
                 }
             }
         }
+
+        // Enqueue Runtime job for all targets using LLVM as the backend for
+        // runtime benchmarks
+        enqueue_job_required(
+            request_tag,
+            target,
+            CodegenBackend::Llvm,
+            Profile::Opt,
+            0u32,
+            BenchmarkJobKind::Runtime,
+        )
+        .await?;
     }
+
+    // Enqueue Rustc job for only for x86_64 & llvm. This benchmark is how long
+    // it takes to build the rust compiler. It takes a while to run and is
+    // assumed that if the compilation of other rust project improve then this
+    // too would improve.
+    enqueue_job_required(
+        request_tag,
+        Target::X86_64UnknownLinuxGnu,
+        CodegenBackend::Llvm,
+        Profile::Opt,
+        0u32,
+        BenchmarkJobKind::Rustc,
+    )
+    .await?;
 
     tx.conn()
         .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
@@ -468,7 +484,7 @@ pub async fn create_queue_process(
 
 #[cfg(test)]
 mod tests {
-    use crate::job_queue::build_queue;
+    use crate::job_queue::{build_queue, process_benchmark_requests};
     use chrono::Utc;
     use database::tests::run_postgres_test;
     use database::{
@@ -657,6 +673,29 @@ mod tests {
             let sorted: Vec<BenchmarkRequest> = build_queue(db).await.unwrap();
 
             queue_order_matches(&sorted, &["try1", "v1.2.3", "123", "foo", "mmm", "baz"]);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn insert_all_jobs() {
+        run_postgres_test(|mut ctx| async {
+            ctx.insert_master_request("bar", "baz", 1).await;
+            ctx.complete_request("bar").await;
+            ctx.insert_master_request("foo", "bar", 1).await;
+
+            process_benchmark_requests(ctx.db_mut()).await?;
+            let jobs = ctx
+                .db()
+                .get_jobs_of_in_progress_benchmark_requests()
+                .await
+                .unwrap()
+                .remove("foo")
+                .unwrap();
+            // runtime + rustc + 4 compile-time jobs
+            assert_eq!(jobs.len(), 6);
+
             Ok(ctx)
         })
         .await;
