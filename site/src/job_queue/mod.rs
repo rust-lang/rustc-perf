@@ -484,7 +484,7 @@ pub async fn create_queue_process(
 
 #[cfg(test)]
 mod tests {
-    use crate::job_queue::build_queue;
+    use crate::job_queue::{build_queue, process_benchmark_requests};
     use chrono::Utc;
     use database::tests::run_postgres_test;
     use database::{
@@ -673,6 +673,29 @@ mod tests {
             let sorted: Vec<BenchmarkRequest> = build_queue(db).await.unwrap();
 
             queue_order_matches(&sorted, &["try1", "v1.2.3", "123", "foo", "mmm", "baz"]);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn insert_all_jobs() {
+        run_postgres_test(|mut ctx| async {
+            ctx.insert_master_request("bar", "baz", 1).await;
+            ctx.complete_request("bar").await;
+            ctx.insert_master_request("foo", "bar", 1).await;
+
+            process_benchmark_requests(ctx.db_mut()).await?;
+            let jobs = ctx
+                .db()
+                .get_jobs_of_in_progress_benchmark_requests()
+                .await
+                .unwrap()
+                .remove("foo")
+                .unwrap();
+            // runtime + rustc + 4 compile-time jobs
+            assert_eq!(jobs.len(), 6);
+
             Ok(ctx)
         })
         .await;

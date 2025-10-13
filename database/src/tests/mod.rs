@@ -100,6 +100,10 @@ impl TestContext {
         self.connection.as_ref()
     }
 
+    pub fn db_mut(&mut self) -> &mut dyn Connection {
+        self.connection.as_mut()
+    }
+
     async fn finish(self) {
         // Cleanup the test database
         // First, we need to stop using the database
