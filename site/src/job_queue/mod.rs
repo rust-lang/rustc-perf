@@ -252,34 +252,8 @@ pub async fn enqueue_benchmark_request(
             }
     };
 
-    // Enqueue Rustc job for only for x86_64 & llvm. This benchmark is how long
-    // it takes to build the rust compiler. It takes a while to run and is
-    // assumed that if the compilation of other rust project improve then this
-    // too would improve.
-    enqueue_job_required(
-        request_tag,
-        Target::X86_64UnknownLinuxGnu,
-        CodegenBackend::Llvm,
-        Profile::Opt,
-        0u32,
-        BenchmarkJobKind::Rustc,
-    )
-    .await?;
-
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
-        // Enqueue Runtime job for all targets using LLVM as the backend for
-        // runtime benchmarks
-        enqueue_job_required(
-            request_tag,
-            target,
-            CodegenBackend::Llvm,
-            Profile::Opt,
-            0u32,
-            BenchmarkJobKind::Runtime,
-        )
-        .await?;
-
         for benchmark_set in 0..benchmark_set_count(target.into()) {
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
@@ -331,7 +305,33 @@ pub async fn enqueue_benchmark_request(
                 }
             }
         }
+
+        // Enqueue Runtime job for all targets using LLVM as the backend for
+        // runtime benchmarks
+        enqueue_job_required(
+            request_tag,
+            target,
+            CodegenBackend::Llvm,
+            Profile::Opt,
+            0u32,
+            BenchmarkJobKind::Runtime,
+        )
+        .await?;
     }
+
+    // Enqueue Rustc job for only for x86_64 & llvm. This benchmark is how long
+    // it takes to build the rust compiler. It takes a while to run and is
+    // assumed that if the compilation of other rust project improve then this
+    // too would improve.
+    enqueue_job_required(
+        request_tag,
+        Target::X86_64UnknownLinuxGnu,
+        CodegenBackend::Llvm,
+        Profile::Opt,
+        0u32,
+        BenchmarkJobKind::Rustc,
+    )
+    .await?;
 
     tx.conn()
         .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
