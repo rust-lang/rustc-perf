@@ -11,6 +11,7 @@
 #![crate_type="dylib"]
 
 #![allow(unused_parens)]
+#![allow(semicolon_in_expressions_from_macros)]
 
 #![cfg_attr(feature = "heap_size", feature(plugin, custom_derive))]
 #![cfg_attr(feature = "heap_size", plugin(heapsize_plugin))]
