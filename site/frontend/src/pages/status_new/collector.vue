@@ -43,22 +43,30 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
   const maxInactivityHours = 1;
   const lastHeartBeatAt = parseISO(collector.lastHeartbeatAt);
   const hourDiff = differenceInHours(now, lastHeartBeatAt);
-  let statusText = "Active";
-  let statusClass = "active";
+  let statusText = "Waiting";
+  let statusClass = "waiting";
 
   switch (collector.isActive) {
     case false:
+      statusText = "Inactive";
+      statusClass = "inactive";
+      break;
+    case true:
       if (hourDiff >= maxInactivityHours) {
         statusText = "Offline";
         statusClass = "offline";
       } else {
-        statusText = "Active";
-        statusClass = "active";
+        const allJobsComplete = collector.jobs.every(
+          (job) => job.status === "Failed" || job.status === "Success"
+        );
+        if (allJobsComplete || collector.jobs.length === 0) {
+          statusText = "Waiting";
+          statusClass = "waiting";
+        } else {
+          statusText = "Benchmarking";
+          statusClass = "benchmarking";
+        }
       }
-      break;
-    case true:
-      statusText = "Inactive";
-      statusClass = "inactive";
       break;
   }
 
@@ -252,8 +260,13 @@ $sm-radius: 8px;
 .status {
 }
 
-.status.active {
+.status.benchmarking {
   background: #117411;
+  color: white;
+  font-weight: bold;
+}
+.status.waiting {
+  background: #1b45e4;
   color: white;
   font-weight: bold;
 }
