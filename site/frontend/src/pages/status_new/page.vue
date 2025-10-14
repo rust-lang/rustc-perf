@@ -13,6 +13,7 @@ import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
   BenchmarkRequestStatus,
+  BenchmarkJob,
   CollectorConfig,
   StatusResponse,
 } from "./data";
@@ -122,6 +123,32 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
   );
 }
 
+// This works off the assumption that all of the collectors are working on the
+// same request.
+function getJobCompletion(
+  req: BenchmarkRequest,
+  collectors: CollectorConfig[]
+) {
+  const sampleJob = collectors?.[0]?.jobs?.[0];
+  if (!sampleJob) return "";
+  if (sampleJob.requestTag !== req.tag) return "";
+
+  const allJobs: BenchmarkJob[] = [];
+  for (const collector of collectors) {
+    allJobs.push(...collector.jobs);
+  }
+  const completed = allJobs.reduce((acc, job) => {
+    if (job.status === "Failed" || job.status === "Success") {
+      acc += 1;
+    }
+    return acc;
+  }, 0);
+  if (allJobs.length) {
+    return `${completed} / ${allJobs.length}`;
+  }
+  return "";
+}
+
 const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
   useExpandedStore();
 
@@ -143,6 +170,7 @@ loadStatusData(loading);
               <th>Kind</th>
               <th>Tag</th>
               <th>Status</th>
+              <th>Jobs Complete</th>
               <th>Completed At</th>
               <th>Duration</th>
               <th>Errors</th>
@@ -161,6 +189,9 @@ loadStatusData(loading);
                   }}{{
                     req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
+                </td>
+                <td>
+                  {{ getJobCompletion(req, data.collectors) }}
                 </td>
                 <td>
                   {{ formatISODate(req.completedAt) }}
