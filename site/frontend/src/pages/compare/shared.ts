@@ -1,4 +1,5 @@
 import {Target} from "./compile/common";
+import {TargetSet} from "./types";
 
 export function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -94,6 +95,31 @@ export function benchmarkNameMatchesFilter(
   } catch (e) {
     return benchmarkName.includes(trimmedFilterName);
   }
+}
+
+export function targetMatchesFilter(
+  target: Target,
+  target_set: TargetSet
+): boolean {
+  if (target === "x86_64-unknown-linux-gnu") {
+    return target_set.x86_64_unknown_linux_gnu;
+  } else {
+    // Unknown, but by default we should show things
+    return true;
+  }
+}
+
+export function loadTargetSetFromUrl(
+  urlParams: Dict<string>,
+  defaultTargetSet: TargetSet
+): TargetSet {
+  return {
+    x86_64_unknown_linux_gnu: getBoolOrDefault(
+      urlParams,
+      "target-x86_64-unknown-linux-gnu",
+      defaultTargetSet.x86_64_unknown_linux_gnu
+    ),
+  };
 }
 
 const TARGET_SHORTCUTS: {[target in Target]: string} = {

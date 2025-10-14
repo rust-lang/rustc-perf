@@ -57,3 +57,7 @@ export enum Tab {
   Bootstrap = "bootstrap",
   ArtifactSize = "artifact-size",
 }
+
+export interface TargetSet {
+  x86_64_unknown_linux_gnu: boolean;
+}
