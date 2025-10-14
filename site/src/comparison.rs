@@ -163,6 +163,7 @@ pub async fn handle_compare(
         .into_iter()
         .map(|comparison| api::comparison::RuntimeBenchmarkComparison {
             benchmark: comparison.benchmark.to_string(),
+            target: comparison.target.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();

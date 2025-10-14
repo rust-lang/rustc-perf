@@ -1,9 +1,11 @@
 import {BenchmarkFilter, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
 import {benchmarkNameMatchesFilter} from "../shared";
+import {Target} from "../compile/common";
 
 export interface RuntimeTestCase {
   benchmark: string;
+  target: Target;
 }
 
 export type RuntimeBenchmarkFilter = BenchmarkFilter;
@@ -16,6 +18,7 @@ export const defaultRuntimeFilter: RuntimeBenchmarkFilter = {
 
 export interface RuntimeBenchmarkComparison {
   benchmark: string;
+  target: Target;
   comparison: StatComparison;
 }
 
@@ -37,6 +40,7 @@ export function computeRuntimeComparisonsWithNonRelevant(
       (c: RuntimeBenchmarkComparison): TestCaseComparison<RuntimeTestCase> => {
         let testCase = {
           benchmark: c.benchmark,
+          target: c.target,
         };
         return calculateComparison(c.comparison, testCase);
       }

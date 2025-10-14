@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {TestCaseComparison} from "../data";
 import Tooltip from "../tooltip.vue";
-import {percentClass} from "../shared";
+import {formatTarget, percentClass} from "../shared";
 import {RuntimeTestCase} from "./common";
 import {computed} from "vue";
 import Accordion from "../../../components/accordion.vue";
@@ -52,6 +52,7 @@ const unit = computed(() => {
         <tr>
           <th class="toggle-arrow"></th>
           <th>Benchmark</th>
+          <th>Target</th>
           <th>% Change</th>
           <th>
             Significance Threshold
@@ -85,6 +86,9 @@ const unit = computed(() => {
             <template v-slot:default>
               <td>
                 {{ comparison.testCase.benchmark }}
+              </td>
+              <td :title="comparison.testCase.target">
+                {{ formatTarget(comparison.testCase.target) }}
               </td>
               <td>
                 <div class="numeric-aligned">
