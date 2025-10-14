@@ -59,7 +59,7 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
         const allJobsComplete = collector.jobs.every(
           (job) => job.status === "Failed" || job.status === "Success"
         );
-        if (allJobsComplete || collector.jobs.length === 0) {
+        if (allJobsComplete) {
           statusText = "Waiting";
           statusClass = "waiting";
         } else {
