@@ -431,6 +431,21 @@ static MIGRATIONS: &[Migration] = &[
         CREATE INDEX error_artifact_idx ON error(aid);
         "#,
     ),
+    // Add runtime target as a unique constraint, defaulting to 'x86_64-unknown-linux-gnu'
+    Migration::without_foreign_key_constraints(
+        r#"
+        create table runtime_pstat_series_with_target(
+            id integer primary key not null,
+            benchmark text not null,
+            target text not null default 'x86_64-unknown-linux-gnu',
+            metric text not null,
+            UNIQUE(benchmark, target, metric)
+        );
+        insert into runtime_pstat_series_with_target select id, benchmark, 'x86_64-unknown-linux-gnu', metric from runtime_pstat_series;
+        drop table runtime_pstat_series;
+        alter table runtime_pstat_series_with_target rename to runtime_pstat_series;
+    "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -579,14 +594,15 @@ impl Connection for SqliteConnection {
             .collect();
         let runtime_pstat_series = self
             .raw()
-            .prepare("select id, benchmark, metric from runtime_pstat_series;")
+            .prepare("select id, benchmark, target, metric from runtime_pstat_series;")
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
                     row.get::<_, i32>(0)? as u32,
                     (
                         row.get::<_, String>(1)?.as_str().into(),
-                        row.get::<_, String>(2)?.as_str().into(),
+                        Target::from_str(row.get::<_, String>(2)?.as_str()).unwrap(),
+                        row.get::<_, String>(3)?.as_str().into(),
                     ),
                 ))
             })
@@ -750,19 +766,21 @@ impl Connection for SqliteConnection {
         artifact: ArtifactIdNumber,
         benchmark: &str,
         metric: &str,
+        target: Target,
         value: f64,
     ) {
+        let target = target.to_string();
         self.raw_ref()
             .execute(
-                "insert or ignore into runtime_pstat_series (benchmark, metric) VALUES (?, ?)",
-                params![&benchmark, &metric,],
+                "insert or ignore into runtime_pstat_series (benchmark, target, metric) VALUES (?, ?, ?)",
+                params![&benchmark, &target, &metric],
             )
             .unwrap();
         let sid: i32 = self
             .raw_ref()
             .query_row(
-                "select id from runtime_pstat_series where benchmark = ? and metric = ?",
-                params![&benchmark, &metric,],
+                "select id from runtime_pstat_series where benchmark = ? and target = ? and metric = ?",
+                params![&benchmark, &target, &metric],
                 |r| r.get(0),
             )
             .unwrap();

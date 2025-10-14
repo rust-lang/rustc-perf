@@ -760,6 +760,7 @@ async fn compare_given_commits(
         master_commits,
         |test_case, comparison| RuntimeTestResultComparison {
             benchmark: test_case.benchmark,
+            target: test_case.target,
             comparison,
         },
     )
@@ -1351,6 +1352,7 @@ impl std::hash::Hash for CompileTestResultComparison {
 #[derive(Debug, Clone)]
 pub struct RuntimeTestResultComparison {
     benchmark: Benchmark,
+    target: Target,
     comparison: TestResultComparison,
 }
 

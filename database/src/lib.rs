@@ -522,7 +522,7 @@ pub struct Index {
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
     pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Target, Metric)>,
     /// Id lookup of runtime stat description ids
-    runtime_pstat_series: Indexed<(Benchmark, Metric)>,
+    runtime_pstat_series: Indexed<(Benchmark, Target, Metric)>,
 }
 
 /// An index lookup
@@ -725,7 +725,7 @@ impl Index {
         self.runtime_pstat_series
             .map
             .keys()
-            .map(|(_, metric)| metric)
+            .map(|(_, _, metric)| metric)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())
@@ -752,7 +752,7 @@ impl Index {
 
     pub fn runtime_statistic_descriptions(
         &self,
-    ) -> impl Iterator<Item = (&(Benchmark, Metric), StatisticalDescriptionId)> + '_ {
+    ) -> impl Iterator<Item = (&(Benchmark, Target, Metric), StatisticalDescriptionId)> + '_ {
         self.runtime_pstat_series
             .map
             .iter()

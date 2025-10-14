@@ -121,14 +121,21 @@ struct RuntimeBenchmarkConfig {
     runtime_suite: BenchmarkSuite,
     filter: RuntimeBenchmarkFilter,
     iterations: u32,
+    target: Target,
 }
 
 impl RuntimeBenchmarkConfig {
-    fn new(suite: BenchmarkSuite, filter: RuntimeBenchmarkFilter, iterations: u32) -> Self {
+    fn new(
+        suite: BenchmarkSuite,
+        filter: RuntimeBenchmarkFilter,
+        iterations: u32,
+        target: Target,
+    ) -> Self {
         Self {
             runtime_suite: suite.filter(&filter),
             filter,
             iterations,
+            target,
         }
     }
 }
@@ -860,8 +867,9 @@ fn main_result() -> anyhow::Result<i32> {
             purge,
         } => {
             log_db(&db);
-            let toolchain =
-                get_local_toolchain_for_runtime_benchmarks(&local, &require_host_target_tuple())?;
+
+            let host_tuple = require_host_target_tuple();
+            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &host_tuple)?;
             let pool = Pool::open(&db.db);
 
             let isolation_mode = if no_isolate {
@@ -899,6 +907,7 @@ fn main_result() -> anyhow::Result<i32> {
                 runtime_suite,
                 RuntimeBenchmarkFilter::new(local.exclude, local.include),
                 iterations,
+                Target::from_str(&host_tuple).expect("Found unexpected host target"),
             );
             rt.block_on(run_benchmarks(conn.as_mut(), shared, None, Some(config)))?;
             Ok(0)
@@ -1189,6 +1198,7 @@ fn main_result() -> anyhow::Result<i32> {
                             runtime_suite,
                             filter: RuntimeBenchmarkFilter::keep_all(),
                             iterations: DEFAULT_RUNTIME_ITERATIONS,
+                            target: Target::default(),
                         };
                         let shared = SharedBenchmarkConfig {
                             artifact_id,
@@ -1806,6 +1816,7 @@ async fn create_benchmark_configs(
             runtime_suite,
             filter: RuntimeBenchmarkFilter::keep_all(),
             iterations: DEFAULT_RUNTIME_ITERATIONS,
+            target: job.target().into(),
         })
     } else {
         None
@@ -2232,6 +2243,7 @@ async fn run_benchmarks(
             &collector,
             runtime.filter,
             runtime.iterations,
+            runtime.target,
         )
         .await
         .context("Runtime benchmarks failed")
@@ -2306,6 +2318,7 @@ async fn bench_published_artifact(
             runtime_suite,
             RuntimeBenchmarkFilter::keep_all(),
             DEFAULT_RUNTIME_ITERATIONS,
+            Target::default(),
         )),
     )
     .await
