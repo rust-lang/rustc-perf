@@ -15,6 +15,7 @@ import {
   BenchmarkRequestStatus,
   CollectorConfig,
   StatusResponse,
+  isJobComplete,
 } from "./data";
 import Collector from "./collector.vue";
 
@@ -122,6 +123,25 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
   );
 }
 
+function getJobCompletion(
+  req: BenchmarkRequest,
+  collectors: CollectorConfig[]
+) {
+  const jobs = collectors
+    .flatMap((c) => c.jobs)
+    .filter((j) => j.requestTag === req.tag);
+  if (jobs.length === 0) {
+    return "";
+  }
+  const completed = jobs.reduce((acc, job) => {
+    if (isJobComplete(job)) {
+      acc += 1;
+    }
+    return acc;
+  }, 0);
+  return `${completed} / ${jobs.length}`;
+}
+
 const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
   useExpandedStore();
 
@@ -143,6 +163,7 @@ loadStatusData(loading);
               <th>Kind</th>
               <th>Tag</th>
               <th>Status</th>
+              <th>Jobs Complete</th>
               <th>Completed At</th>
               <th>Duration</th>
               <th>Errors</th>
@@ -161,6 +182,9 @@ loadStatusData(loading);
                   }}{{
                     req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
+                </td>
+                <td>
+                  {{ getJobCompletion(req, data.collectors) }}
                 </td>
                 <td>
                   {{ formatISODate(req.completedAt) }}

@@ -2,7 +2,7 @@
 import {h, ref, Ref} from "vue";
 import {parseISO, differenceInHours} from "date-fns";
 import {formatISODate, shortenTag} from "../../utils/formatting";
-import {CollectorConfig, BenchmarkJobStatus} from "./data";
+import {CollectorConfig, BenchmarkJobStatus, isJobComplete} from "./data";
 
 const props = defineProps<{
   collector: CollectorConfig;
@@ -56,9 +56,7 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
         statusText = "Offline";
         statusClass = "offline";
       } else {
-        const allJobsComplete = collector.jobs.every(
-          (job) => job.status === "Failed" || job.status === "Success"
-        );
+        const allJobsComplete = collector.jobs.every(isJobComplete);
         if (allJobsComplete) {
           statusText = "Waiting";
           statusClass = "waiting";

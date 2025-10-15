@@ -42,3 +42,7 @@ export type StatusResponse = {
   requests: BenchmarkRequest[];
   collectors: CollectorConfig[];
 };
+
+export function isJobComplete(job: BenchmarkJob): boolean {
+  return job.status === "Failed" || job.status === "Success";
+}
