@@ -21,6 +21,8 @@ const ACTIVE_FILTERS: Ref<Record<BenchmarkJobStatus, boolean>> = ref({
   Failed: true,
 });
 
+const showJobs: Ref<boolean> = ref(false);
+
 function filterJobByStatus(status: string) {
   ACTIVE_FILTERS.value[status] = !ACTIVE_FILTERS.value[status];
 }
@@ -74,6 +76,10 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
     </span>
   );
 }
+
+function toggleShowJobs() {
+  showJobs.value = !showJobs.value;
+}
 </script>
 
 <template>
@@ -114,9 +120,10 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
         </span>
         <span>{{ formatISODate(collector.dateAdded) }}</span>
       </div>
+      <button @click="toggleShowJobs">show jobs</button>
     </div>
 
-    <div class="table-collector-wrapper">
+    <div v-if="showJobs" class="table-collector-wrapper">
       <div class="table-collector-status-filter-wrapper">
         <div class="table-collector-status-filters">
           <strong>Filter by job status:</strong>

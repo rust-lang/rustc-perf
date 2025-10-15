@@ -235,9 +235,7 @@ loadStatusData(loading);
 <style scoped lang="scss">
 .status-page-wrapper {
   display: flex;
-  @media screen and (max-width: 1450px) {
-    flex-direction: column;
-  }
+  flex-direction: column;
 }
 
 .collector-wrapper {
