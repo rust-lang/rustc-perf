@@ -457,28 +457,36 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Entry point for the cron job that manages the benchmark request and job queue.
-pub async fn create_queue_process(
+/// Entry point for the job queue handler, a "cron job" that manages benchmark requests and
+/// the job queue.
+pub async fn create_job_queue_process(
     site_ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>,
     run_interval: Duration,
 ) {
+    // The job queue process will be restarted in case of panics.
+    // If it panicked repeatedly because of some transient error, it could lead to 100% CPU
+    // utilization and a panic loop.
+    // We thus ensure that we will always wait for the specified interval **first** before
+    // attempting to run the cron job. In that case even if it panics everytime, the panic won't
+    // happen more often than N seconds.
     let mut interval = time::interval(run_interval);
     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    interval.reset();
 
     let ctxt = site_ctxt.clone();
 
     loop {
+        interval.tick().await;
+
         if let Some(ctxt_clone) = {
             let guard = ctxt.read();
             guard.as_ref().cloned()
         } {
             match perform_queue_tick(&ctxt_clone).await {
-                Ok(_) => log::info!("Cron job finished"),
-                Err(e) => log::error!("Cron job failed to execute: {e:?}"),
+                Ok(_) => log::info!("Job queue handler finished"),
+                Err(e) => log::error!("Job queue handler failed: {e:?}"),
             }
         }
-
-        interval.tick().await;
     }
 }
 

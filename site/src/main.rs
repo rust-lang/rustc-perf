@@ -1,6 +1,6 @@
 use futures::future::FutureExt;
 use parking_lot::RwLock;
-use site::job_queue::{create_queue_process, is_job_queue_enabled};
+use site::job_queue::{create_job_queue_process, is_job_queue_enabled};
 use site::load;
 use std::env;
 use std::sync::Arc;
@@ -59,15 +59,19 @@ async fn main() {
 
     let server = site::server::start(ctxt.clone(), port).fuse();
 
-    if is_job_queue_enabled() {
+    let create_job_queue_handler = |ctxt: Arc<RwLock<Option<Arc<load::SiteCtxt>>>>| {
         task::spawn(async move {
-            create_queue_process(
-                ctxt.clone(),
-                Duration::from_secs(queue_update_interval_seconds),
-            )
-            .await;
-        });
-    }
+            if is_job_queue_enabled() {
+                create_job_queue_process(ctxt, Duration::from_secs(queue_update_interval_seconds))
+                    .await;
+            } else {
+                futures::future::pending::<()>().await;
+            }
+        })
+        .fuse()
+    };
+
+    let mut job_queue_handler = create_job_queue_handler(ctxt.clone());
 
     futures::pin_mut!(server);
     futures::pin_mut!(fut);
@@ -84,6 +88,17 @@ async fn main() {
                         std::panic::resume_unwind(panic);
                     }
                 }
+            }
+            // We want to have a panic boundary here; if the job queue handler panics for any
+            // reason (e.g. a transient networking/DB issue), we want to continue running it in the
+            // future.
+            // We thus use tokio::task::spawn, wait for a potential panic, and then restart the
+            // task again.
+            res = job_queue_handler => {
+                // The job queue handler task future has "finished", which means that it had to crash.
+                let error = res.expect_err("Job queue handler finished without an error");
+                log::error!("The job queue handler has panicked\n{error:?}\nIt will be now restarted");
+                job_queue_handler = create_job_queue_handler(ctxt.clone());
             }
         }
     }
