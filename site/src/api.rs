@@ -340,6 +340,7 @@ pub mod comparison {
     #[derive(Debug, Clone, Serialize)]
     pub struct RuntimeBenchmarkComparison {
         pub benchmark: String,
+        pub target: String,
         pub comparison: StatComparison,
     }
 }

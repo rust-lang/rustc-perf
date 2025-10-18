@@ -18,7 +18,7 @@ import {
 } from "./common";
 import {BenchmarkInfo} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
-import {getBoolOrDefault} from "../shared";
+import {getBoolOrDefault, loadTargetSetFromUrl} from "../shared";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -78,13 +78,7 @@ function loadFilterFromUrl(
         defaultFilter.backend.cranelift
       ),
     },
-    target: {
-      x86_64_unknown_linux_gnu: getBoolOrDefault(
-        urlParams,
-        "target-x86_64-unknown-linux-gnu",
-        defaultFilter.target.x86_64_unknown_linux_gnu
-      ),
-    },
+    target: loadTargetSetFromUrl(urlParams, defaultFilter.target),
     category: {
       primary: getBoolOrDefault(
         urlParams,

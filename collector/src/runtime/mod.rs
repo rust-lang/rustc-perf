@@ -20,6 +20,7 @@ use crate::{command_output, CollectorCtx};
 mod benchmark;
 mod profile;
 
+use crate::compile::benchmark::target::Target;
 pub use benchmark::RuntimeCompilationOpts;
 pub use profile::{profile_runtime, RuntimeProfiler};
 
@@ -35,6 +36,7 @@ pub async fn bench_runtime(
     collector: &CollectorCtx,
     filter: RuntimeBenchmarkFilter,
     iterations: u32,
+    target: Target,
 ) -> anyhow::Result<()> {
     let filtered = suite.filtered_benchmark_count(&filter);
     println!("Executing {filtered} benchmarks\n");
@@ -74,6 +76,7 @@ pub async fn bench_runtime(
                             tx.conn(),
                             collector.artifact_row_id,
                             &rustc_perf_version,
+                            target,
                             result,
                         )
                         .await;
@@ -126,6 +129,7 @@ async fn record_stats(
     conn: &dyn Connection,
     artifact_id: ArtifactIdNumber,
     rustc_perf_version: &str,
+    target: Target,
     result: BenchmarkResult,
 ) {
     async fn record<'a>(
@@ -133,6 +137,7 @@ async fn record_stats(
         artifact_id: ArtifactIdNumber,
         collection_id: CollectionId,
         result: &'a BenchmarkResult,
+        target: Target,
         value: Option<u64>,
         metric: &'a str,
     ) {
@@ -142,6 +147,7 @@ async fn record_stats(
                 artifact_id,
                 &result.name,
                 metric,
+                target.into(),
                 value as f64,
             )
             .await;
@@ -156,6 +162,7 @@ async fn record_stats(
             artifact_id,
             collection_id,
             &result,
+            target,
             stat.instructions,
             "instructions:u",
         )
@@ -165,6 +172,7 @@ async fn record_stats(
             artifact_id,
             collection_id,
             &result,
+            target,
             stat.cycles,
             "cycles:u",
         )
@@ -174,6 +182,7 @@ async fn record_stats(
             artifact_id,
             collection_id,
             &result,
+            target,
             stat.branch_misses,
             "branch-misses",
         )
@@ -183,6 +192,7 @@ async fn record_stats(
             artifact_id,
             collection_id,
             &result,
+            target,
             stat.cache_misses,
             "cache-misses",
         )
@@ -192,6 +202,7 @@ async fn record_stats(
             artifact_id,
             collection_id,
             &result,
+            target,
             Some(stat.wall_time.as_nanos() as u64),
             "wall-time",
         )

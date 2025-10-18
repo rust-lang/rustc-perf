@@ -82,7 +82,7 @@ async fn main() {
             }
         }
 
-        for (&(benchmark, metric), id) in sqlite_idx.runtime_statistic_descriptions() {
+        for (&(benchmark, target, metric), id) in sqlite_idx.runtime_statistic_descriptions() {
             let stat = sqlite_conn
                 .get_runtime_pstats(&[id], &[Some(sqlite_aid)])
                 .await
@@ -92,7 +92,14 @@ async fn main() {
                 .unwrap();
             if let Some(stat) = stat {
                 postgres_conn
-                    .record_runtime_statistic(cid, postgres_aid, &benchmark, metric.as_str(), stat)
+                    .record_runtime_statistic(
+                        cid,
+                        postgres_aid,
+                        &benchmark,
+                        metric.as_str(),
+                        target,
+                        stat,
+                    )
                     .await;
             }
         }

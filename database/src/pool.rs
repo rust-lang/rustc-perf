@@ -64,6 +64,7 @@ pub trait Connection: Send + Sync {
         artifact: ArtifactIdNumber,
         benchmark: &str,
         metric: &str,
+        target: Target,
         value: f64,
     );
     /// Records a self-profile artifact in S3.
