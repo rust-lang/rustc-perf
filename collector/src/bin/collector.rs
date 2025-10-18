@@ -826,8 +826,8 @@ fn main_result() -> anyhow::Result<i32> {
     };
 
     let host_target_tuple = match used_rustc {
-        Some(rustc) => get_host_tuple_from_rustc(&rustc),
-        None => get_host_tuple_from_rustc("rustc"),
+        Some(rustc) if !rustc.starts_with("+") => get_host_tuple_from_rustc(&rustc),
+        _ => get_host_tuple_from_rustc("rustc"),
     };
     // We only unwrap the host tuple in places where we actually need it, to avoid panicking if it
     // is missing, but we don't really need it.
