@@ -666,8 +666,8 @@ impl PostgresConnection {
                     select name, category
                     from benchmark
                 ").await.unwrap(),
-                insert_runtime_pstat_series: conn.prepare("insert into runtime_pstat_series (benchmark, target, metric) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
-                select_runtime_pstat_series: conn.prepare("select id from runtime_pstat_series where benchmark = $1 and target = $2 and metric = $3").await.unwrap(),
+                insert_runtime_pstat_series: conn.prepare("INSERT INTO runtime_pstat_series (benchmark, target, metric) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                select_runtime_pstat_series: conn.prepare("SELECT id FROM runtime_pstat_series WHERE benchmark = $1 AND target = $2 AND metric = $3").await.unwrap(),
                 insert_runtime_pstat: conn
                     .prepare("insert into runtime_pstat (series, aid, cid, value) VALUES ($1, $2, $3, $4)")
                     .await
@@ -889,7 +889,7 @@ where
             runtime_pstat_series: self
                 .conn()
                 .query(
-                    "select id, benchmark, target, metric from runtime_pstat_series;",
+                    "SELECT id, benchmark, target, metric FROM runtime_pstat_series;",
                     &[],
                 )
                 .await

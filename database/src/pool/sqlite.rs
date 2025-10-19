@@ -434,16 +434,16 @@ static MIGRATIONS: &[Migration] = &[
     // Add runtime target as a unique constraint, defaulting to 'x86_64-unknown-linux-gnu'
     Migration::without_foreign_key_constraints(
         r#"
-        create table runtime_pstat_series_with_target(
+        CREATE TABLE runtime_pstat_series_with_target(
             id integer primary key not null,
             benchmark text not null,
             target text not null default 'x86_64-unknown-linux-gnu',
             metric text not null,
             UNIQUE(benchmark, target, metric)
         );
-        insert into runtime_pstat_series_with_target select id, benchmark, 'x86_64-unknown-linux-gnu', metric from runtime_pstat_series;
-        drop table runtime_pstat_series;
-        alter table runtime_pstat_series_with_target rename to runtime_pstat_series;
+        INSERT INTO runtime_pstat_series_with_target SELECT id, benchmark, 'x86_64-unknown-linux-gnu', metric FROM runtime_pstat_series;
+        DROP TABLE runtime_pstat_series;
+        ALTER TABLE runtime_pstat_series_with_target RENAME TO runtime_pstat_series;
     "#,
     ),
 ];
@@ -594,7 +594,7 @@ impl Connection for SqliteConnection {
             .collect();
         let runtime_pstat_series = self
             .raw()
-            .prepare("select id, benchmark, target, metric from runtime_pstat_series;")
+            .prepare("SELECT id, benchmark, target, metric FROM runtime_pstat_series;")
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
@@ -772,21 +772,21 @@ impl Connection for SqliteConnection {
         let target = target.to_string();
         self.raw_ref()
             .execute(
-                "insert or ignore into runtime_pstat_series (benchmark, target, metric) VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO runtime_pstat_series (benchmark, target, metric) VALUES (?, ?, ?)",
                 params![&benchmark, &target, &metric],
             )
             .unwrap();
         let sid: i32 = self
             .raw_ref()
             .query_row(
-                "select id from runtime_pstat_series where benchmark = ? and target = ? and metric = ?",
+                "SELECT id FROM runtime_pstat_series WHERE benchmark = ? AND target = ? AND metric = ?",
                 params![&benchmark, &target, &metric],
                 |r| r.get(0),
             )
             .unwrap();
         self.raw_ref()
             .execute(
-                "insert into runtime_pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)",
+                "INSERT INTO runtime_pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)",
                 params![&sid, &artifact.0, &collection.0, &value],
             )
             .unwrap();
