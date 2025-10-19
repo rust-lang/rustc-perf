@@ -397,11 +397,11 @@ impl Table for RuntimePstatSeries {
     }
 
     fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
-        "select id, benchmark, metric from ".to_string() + self.name()
+        "SELECT id, benchmark, target, metric FROM ".to_string() + self.name()
     }
 
     fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into runtime_pstat_series (id, benchmark, metric) VALUES (?, ?, ?)"
+        "INSERT INTO runtime_pstat_series (id, benchmark, target, metric) VALUES (?, ?, ?, ?)"
     }
 
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
@@ -410,6 +410,7 @@ impl Table for RuntimePstatSeries {
                 row.get::<_, i32>(0),
                 row.get::<_, &str>(1),
                 row.get::<_, &str>(2),
+                row.get::<_, &str>(3),
             ])
             .unwrap();
     }
