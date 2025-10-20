@@ -5,6 +5,9 @@ import SummaryTable from "../summary/summary-table.vue";
 import {createPersistedRef} from "../../../storage";
 import {PREF_AGGREGATIONS_OPENED} from "../prefs";
 import {CompileTestCase} from "./common";
+import {computed} from "vue";
+import {diffClass, formatPercentChange} from "../shared";
+import Tooltip from "../tooltip.vue";
 
 const props = defineProps<{
   cases: TestCaseComparison<CompileTestCase>[];
@@ -24,6 +27,13 @@ function calculateSummary(
 }
 
 const opened = createPersistedRef(PREF_AGGREGATIONS_OPENED);
+
+const totalBefore = computed(() =>
+  props.cases.map((c) => c.datumA).reduce((acc, v) => acc + v, 0)
+);
+const totalAfter = computed(() =>
+  props.cases.map((c) => c.datumB).reduce((acc, v) => acc + v, 0)
+);
 </script>
 
 <template>
@@ -32,6 +42,17 @@ const opened = createPersistedRef(PREF_AGGREGATIONS_OPENED);
       <template #label>Aggregations</template>
       <template #content>
         <div>
+          <div>
+            Total accumulated change:
+            <span :class="diffClass(totalAfter - totalBefore)">
+              {{ formatPercentChange(totalBefore, totalAfter) }}</span
+            >
+            <Tooltip style="margin-left: 1em">
+              The total accumulated change in the measured metric across all
+              visible benchmarks. Computed by summing the value of the metric
+              for all visible benchmarks and comparing the before/after sum.
+            </Tooltip>
+          </div>
           <div class="aggregation-section">
             <div class="header">Profile</div>
             <div class="groups">
