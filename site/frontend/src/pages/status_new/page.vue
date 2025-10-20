@@ -14,6 +14,7 @@ import {
   StatusResponse,
 } from "./data";
 import Collector from "./collector.vue";
+import CommitSha from "./commit-sha.vue";
 
 const loading = ref(true);
 
@@ -116,18 +117,6 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
   );
 }
 
-function CommitSha({request}: {request: BenchmarkRequest}): string {
-  if (request.requestType === "Release") {
-    return request.tag;
-  }
-  const sha = request.tag;
-  return (
-    <a href={`https://github.com/rust-lang/rust/commit/${sha}`}>
-      {sha.substring(0, 13)}
-    </a>
-  );
-}
-
 function RequestProgress({
   request,
   collectors,
@@ -197,7 +186,7 @@ loadStatusData(loading);
               <tr :class="getRequestRowClassName(req)">
                 <td><PullRequestLink :request="req" /></td>
                 <td>{{ req.requestType }}</td>
-                <td><CommitSha :request="req" /></td>
+                <td><CommitSha :tag="req.tag"></CommitSha></td>
                 <td>
                   {{ formatStatus(req.status)
                   }}{{

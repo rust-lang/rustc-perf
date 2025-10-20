@@ -1,8 +1,14 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
 import {parseISO, differenceInHours} from "date-fns";
-import {formatISODate, shortenTag} from "../../utils/formatting";
-import {CollectorConfig, BenchmarkJobStatus, isJobComplete} from "./data";
+import {formatISODate} from "../../utils/formatting";
+import {
+  CollectorConfig,
+  BenchmarkJobStatus,
+  isJobComplete,
+  BenchmarkJob,
+} from "./data";
+import CommitSha from "./commit-sha.vue";
 
 const props = defineProps<{
   collector: CollectorConfig;
@@ -163,6 +169,7 @@ function toggleShowJobs() {
             <tr v-if="ACTIVE_FILTERS[job.status]">
               <td class="table-cell-padding">
                 {{ shortenTag(job.requestTag) }}
+                <CommitSha :tag="job.requestTag"></CommitSha>
               </td>
               <td class="table-cell-padding">
                 {{ formatJobStatus(job.status) }}

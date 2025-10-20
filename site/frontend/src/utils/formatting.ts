@@ -27,11 +27,3 @@ export function formatISODate(dateString?: string): string {
   }
   return "";
 }
-
-// Shorten a tag, only commit shas will be truncated
-export function shortenTag(tag: string): string {
-  if (tag.length < 40) {
-    return tag;
-  }
-  return tag.slice(0, 12);
-}
