@@ -7,7 +7,7 @@ on:
 jobs:
   test-stable:
     name: Test stable benchmarks
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout the source code
         uses: actions/checkout@v4
@@ -32,4 +32,4 @@ jobs:
 
       - name: Run stable benchmarks
         run: |
-          cargo run --bin collector bench_local `rustup +beta which rustc` --category Stable
+          cargo run -p collector --bin collector bench_local `rustup +beta which rustc` --category Stable
