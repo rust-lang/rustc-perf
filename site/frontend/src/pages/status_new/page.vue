@@ -342,7 +342,7 @@ loadStatusData(loading);
 .collectors-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(500px, 100%));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(800px, 1fr));
+  grid-gap: 20px;
 }
 </style>
