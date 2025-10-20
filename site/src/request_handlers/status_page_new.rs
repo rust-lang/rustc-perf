@@ -231,6 +231,7 @@ fn job_to_ui(job: &BenchmarkJob) -> status_new::BenchmarkJob {
 
     status_new::BenchmarkJob {
         request_tag: job.request_tag().to_string(),
+        kind: job.kind().to_string(),
         target: job.target().as_str().to_string(),
         backend: job.backend().as_str().to_string(),
         profile: job.profile().as_str().to_string(),

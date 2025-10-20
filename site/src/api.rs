@@ -438,6 +438,7 @@ pub mod status_new {
     #[serde(rename_all = "camelCase")]
     pub struct BenchmarkJob {
         pub request_tag: String,
+        pub kind: String,
         pub target: String,
         pub backend: String,
         pub profile: String,
