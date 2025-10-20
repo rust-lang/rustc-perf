@@ -86,6 +86,21 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
 function toggleShowJobs() {
   showJobs.value = !showJobs.value;
 }
+
+function formatBackend(job: BenchmarkJob): string {
+  if (job.kind === "compiletime") {
+    return job.backend;
+  } else {
+    return "";
+  }
+}
+function formatProfile(job: BenchmarkJob): string {
+  if (job.kind === "compiletime") {
+    return job.profile;
+  } else {
+    return "";
+  }
+}
 </script>
 
 <template>
@@ -151,45 +166,45 @@ function toggleShowJobs() {
         </div>
       </div>
       <table class="table-collector" style="border-collapse: collapse">
-        <caption>
-          current benchmark jobs
-        </caption>
         <thead>
           <tr class="table-header-row">
-            <th class="table-header-padding">Tag / Sha</th>
-            <th class="table-header-padding">State</th>
-            <th class="table-header-padding">Started At</th>
-            <th class="table-header-padding">Backend</th>
-            <th class="table-header-padding">Profile</th>
-            <th class="table-header-padding">Dequeue Counter</th>
+            <th>Tag</th>
+            <th>Status</th>
+            <th>Started at</th>
+            <th>Completed at</th>
+            <th>Kind</th>
+            <th>Backend</th>
+            <th>Profile</th>
+            <th>Attempts</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="job in collector.jobs">
             <tr v-if="ACTIVE_FILTERS[job.status]">
-              <td class="table-cell-padding">
-                {{ shortenTag(job.requestTag) }}
+              <td>
                 <CommitSha :tag="job.requestTag"></CommitSha>
               </td>
-              <td class="table-cell-padding">
+              <td>
                 {{ formatJobStatus(job.status) }}
               </td>
-              <td class="table-cell-padding">
+              <td>
                 {{ formatISODate(job.startedAt) }}
               </td>
-              <td class="table-cell-padding">{{ job.backend }}</td>
-              <td class="table-cell-padding">{{ job.profile }}</td>
-              <td class="table-cell-padding">
+              <td>
+                {{ formatISODate(job.completedAt) }}
+              </td>
+              <td>{{ job.kind }}</td>
+              <td>{{ formatBackend(job) }}</td>
+              <td>
+                {{ formatProfile(job) }}
+              </td>
+              <td>
                 {{ job.dequeCounter }}
               </td>
             </tr>
           </template>
         </tbody>
       </table>
-    </div>
-
-    <div class="collector-no-work" v-if="collector.jobs.length === 0">
-      <h3>no active benchmarks</h3>
     </div>
   </div>
 </template>
