@@ -1524,9 +1524,10 @@ async fn run_job_queue_benchmarks(
         {
             // Are we benchmarking a different benchmark request than in the previous iteration of the
             // loop?
-            let is_new_request = last_request_tag.is_some()
-                && last_request_tag.as_deref() != Some(benchmark_job.request_tag());
+            let is_new_request = last_request_tag.is_none()
+                || (last_request_tag.as_deref() != Some(benchmark_job.request_tag()));
             if is_new_request {
+                log::info!("Starting new request {}", benchmark_job.request_tag());
                 let _ = tidy_toolchain_cache_dir();
             }
 
