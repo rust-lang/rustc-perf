@@ -141,7 +141,10 @@ function formatProfile(job: BenchmarkJob): string {
         </span>
         <span>{{ formatISODate(collector.dateAdded) }}</span>
       </div>
-      <button @click="toggleShowJobs">show jobs</button>
+      <button @click="toggleShowJobs" class="show-jobs">
+        <template v-if="showJobs">Hide jobs</template>
+        <template v-else>Show jobs</template>
+      </button>
     </div>
 
     <div v-if="showJobs" class="table-collector-wrapper">
