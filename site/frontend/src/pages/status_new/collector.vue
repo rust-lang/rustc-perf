@@ -154,15 +154,12 @@ function formatProfile(job: BenchmarkJob): string {
           <div class="table-collector-status-filter-btn-wrapper">
             <template v-for="filter in FILTERS">
               <button
-                class="table-collector-status-filter-btn"
+                :class="{
+                  active: ACTIVE_FILTERS[filter],
+                }"
                 @click="filterJobByStatus(filter)"
               >
                 {{ formatJobStatus(filter) }}
-                <input
-                  type="checkbox"
-                  value="filter"
-                  :checked="ACTIVE_FILTERS[filter]"
-                />
               </button>
             </template>
           </div>
@@ -262,32 +259,34 @@ $sm-radius: 8px;
 }
 
 .table-collector-status-filter-wrapper {
-  padding: $sm-padding 0px;
+  padding: $sm-padding 0;
 }
 
 .table-collector-status-filters {
   display: flex;
   flex-direction: column;
+
+  button {
+    border: 1px solid #333;
+    border-radius: $sm-radius;
+    margin-right: $sm-padding;
+    padding: 5px 10px;
+
+    &.active {
+      font-weight: bold;
+      border-width: 2px;
+      border-color: #1b45e4;
+    }
+    &:hover {
+      box-shadow: inset 0 0 2px #1b45e4;
+    }
+  }
 }
 
 .table-collector-status-filter-btn-wrapper {
   padding-top: $sm-padding;
   display: flex;
   flex-direction: row;
-}
-
-.table-collector-status-filter-btn {
-  border: 1px solid #333;
-  border-radius: $sm-radius;
-  width: 100%;
-  margin-right: $sm-padding;
-}
-
-.table-collector-status-filter-btn:hover {
-  transition: 250ms;
-}
-
-.status {
 }
 
 .status.benchmarking {
@@ -313,7 +312,7 @@ $sm-radius: 8px;
 
 .table-collector-wrapper {
   padding: $sm-padding;
-  margin: $sm-padding 0px;
+  margin: $sm-padding 0;
   background-color: #eee;
   border-radius: $sm-radius;
 
@@ -336,31 +335,18 @@ $sm-radius: 8px;
     border-bottom: 1px solid black;
   }
 
-  .table-header-padding {
-    padding: $sm-padding $sm-padding 0px $sm-padding;
-    text-align: left;
+  th {
+    padding: $sm-padding $sm-padding 0 $sm-padding;
+    text-align: center;
   }
 
-  .table-cell-padding {
-    padding: $sm-padding $sm-padding 1px 0px;
-    text-align: left;
+  td {
+    padding: 5px 1px;
+    text-align: center;
   }
 }
 
-.collector-no-work {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 40px;
-  background-color: #eee;
-  margin: $sm-padding;
-  padding: $sm-padding;
-  border-radius: $sm-radius;
-
-  h3 {
-    font-variant: small-caps;
-    font-weight: 700;
-    font-size: 1.5em;
-  }
+.show-jobs {
+  margin-top: 10px;
 }
 </style>
