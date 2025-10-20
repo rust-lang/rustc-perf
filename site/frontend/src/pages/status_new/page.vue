@@ -123,6 +123,18 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
   );
 }
 
+function CommitSha({request}: {request: BenchmarkRequest}): string {
+  if (request.requestType === "Release") {
+    return request.tag;
+  }
+  const sha = request.tag;
+  return (
+    <a href={`https://github.com/rust-lang/rust/commit/${sha}`}>
+      {sha.substring(0, 13)}
+    </a>
+  );
+}
+
 function getJobCompletion(
   req: BenchmarkRequest,
   collectors: CollectorConfig[]
@@ -174,9 +186,7 @@ loadStatusData(loading);
               <tr :class="getRequestRowClassName(req)">
                 <td><PullRequestLink :request="req" /></td>
                 <td>{{ req.requestType }}</td>
-                <td>
-                  {{ shortenTag(req.tag) }}
-                </td>
+                <td><CommitSha :request="req" /></td>
                 <td>
                   {{ formatStatus(req.status)
                   }}{{
