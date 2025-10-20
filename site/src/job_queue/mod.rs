@@ -391,11 +391,25 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
     let mut requests_inserted = false;
     // Put the master commits into the `benchmark_requests` queue
     if insertion_enabled {
-        requests_inserted |= create_benchmark_request_master_commits(ctxt, &*conn, &index).await?;
+        match create_benchmark_request_master_commits(ctxt, &*conn, &index).await {
+            Ok(inserted) => requests_inserted |= inserted,
+            Err(error) => {
+                log::error!(
+                    "Could not insert master benchmark requests into the database: {error:?}"
+                );
+            }
+        }
     }
     // Put the releases into the `benchmark_requests` queue
     if insertion_enabled {
-        requests_inserted |= create_benchmark_request_releases(&*conn, &index).await?;
+        match create_benchmark_request_releases(&*conn, &index).await {
+            Ok(inserted) => requests_inserted |= inserted,
+            Err(error) => {
+                log::error!(
+                    "Could not insert release benchmark requests into the database: {error:?}"
+                );
+            }
+        }
     }
     // Enqueue waiting requests and try to complete in-progress ones
     let completed_reqs = process_benchmark_requests(&mut *conn).await?;
