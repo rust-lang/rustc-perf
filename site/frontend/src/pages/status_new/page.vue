@@ -173,7 +173,7 @@ loadStatusData(loading);
               <th>Tag</th>
               <th>Status</th>
               <th>Progress</th>
-              <th>Completed At</th>
+              <th>Complete at</th>
               <th>Duration</th>
               <th>Errors</th>
             </tr>
