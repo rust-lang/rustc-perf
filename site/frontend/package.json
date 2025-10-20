@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "install-perfetto": "./download_perfetto.sh",
-    "watch": "parcel watch --no-hmr",
+    "watch": "parcel watch",
     "build": "parcel build",
     "fmt": "prettier --write src",
     "check": "vue-tsc -p tsconfig.json --noEmit && prettier --check src"
