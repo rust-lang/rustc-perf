@@ -116,7 +116,7 @@ Stable benchmarks have `category` set to `primary` and `stabilized` set to `1`.
 Columns:
 
 * **name** (`text`): Name of the benchmark
-* **stablized** (`boolean`): Whether the benchmark supports stable
+* **stabilized** (`boolean`): Whether the benchmark supports stable
 * **category** (`category`): `primary` if this is a 'real-world' benchmark or `secondary` if a 'stress test'
 
 ### pstat_series
@@ -130,7 +130,7 @@ Columns:
 * **profile** (`text`): What type of compilation is happening - check build, optimized build (a.k.a. release build), debug build, or doc build.
 * **scenario** (`text`): Describes how much of the incremental cache is full. An empty incremental cache means that the compiler must do a full build.
 * **backend** (`text`): Codegen backend used for compilation, for example 'llvm'
-* metric: the type of metric being collected.
+* **metric** (`text`): the type of metric being collected.
 
 This corresponds to a [`statistic description`](../docs/glossary.md).
 
@@ -200,7 +200,7 @@ Columns:
 * **cid** (`integer`): Collection id, references the id in the collection table
 * **crate** (`text`):  The name of the crate
 * **profile** (`text`): What type of compilation is happening - check build, optimized build (a.k.a. release build), debug build, or doc build.
-* **cache** (`text`): ?
+* **cache** (`text`): The incremental scenario used for the benchmark
 
 ### pull_request_build
 
