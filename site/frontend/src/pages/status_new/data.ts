@@ -14,9 +14,11 @@ export type BenchmarkRequest = {
 };
 
 export type BenchmarkJobStatus = "Queued" | "InProgress" | "Success" | "Failed";
+export type BenchmarkJobKind = "compiletime" | "runtimeInProgress" | "rustc";
 
 export type BenchmarkJob = {
   requestTag: string;
+  kind: BenchmarkJobKind;
   target: string;
   backend: string;
   profile: string;

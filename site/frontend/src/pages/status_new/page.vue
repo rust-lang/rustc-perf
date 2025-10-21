@@ -4,39 +4,33 @@ import {h, ref, Ref} from "vue";
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_NEW_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {
-  formatSecondsAsDuration,
-  formatISODate,
-  shortenTag,
-} from "../../utils/formatting";
+import {formatISODate, formatSecondsAsDuration} from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
   BenchmarkRequestStatus,
   CollectorConfig,
-  StatusResponse,
   isJobComplete,
+  StatusResponse,
 } from "./data";
 import Collector from "./collector.vue";
+import CommitSha from "./commit-sha.vue";
 
 const loading = ref(true);
 
 const data: Ref<{
-  timeline: BenchmarkRequestWithWaterLine[];
+  timeline: BenchmarkRequestRow[];
   queueLength: number;
   collectors: CollectorConfig[];
 } | null> = ref(null);
 
-type BenchmarkRequestWithWaterLine = BenchmarkRequest & {
+type BenchmarkRequestRow = BenchmarkRequest & {
   isLastInProgress: boolean;
   hasPendingJobs: boolean;
 };
 
-function getRequestRowClassName(req: BenchmarkRequestWithWaterLine) {
-  const inProgress = req.status === "InProgress";
-  if (inProgress && req.isLastInProgress) {
-    return "timeline-waterline";
-  } else if (inProgress) {
+function getRequestRowClassName(req: BenchmarkRequestRow) {
+  if (req.status === "InProgress") {
     return "timeline-row-bold";
   }
   return "";
@@ -47,7 +41,7 @@ async function loadStatusData(loading: Ref<boolean>) {
     let resp: StatusResponse = await getJson<StatusResponse>(
       STATUS_DATA_NEW_URL
     );
-    let timeline: BenchmarkRequestWithWaterLine[] = [];
+    let timeline: BenchmarkRequestRow[] = [];
 
     let queueLength = 0;
 
@@ -123,27 +117,42 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
   );
 }
 
-function getJobCompletion(
-  req: BenchmarkRequest,
-  collectors: CollectorConfig[]
-) {
+function RequestProgress({
+  request,
+  collectors,
+}: {
+  request: BenchmarkRequest;
+  collectors: CollectorConfig[];
+}): string {
   const jobs = collectors
     .flatMap((c) => c.jobs)
-    .filter((j) => j.requestTag === req.tag);
-  if (jobs.length === 0) {
-    return "";
-  }
+    .filter((j) => j.requestTag === request.tag);
   const completed = jobs.reduce((acc, job) => {
     if (isJobComplete(job)) {
       acc += 1;
     }
     return acc;
   }, 0);
-  return `${completed} / ${jobs.length}`;
+
+  if (request.status === "Completed") {
+    return "✅";
+  } else if (request.status === "Queued") {
+    return "";
+  } else {
+    return (
+      <progress
+        title={`${completed} out of ${jobs.length} job(s) completed`}
+        max={jobs.length}
+        value={completed}
+      ></progress>
+    );
+  }
 }
 
 const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
   useExpandedStore();
+
+const tableWidth = 8;
 
 loadStatusData(loading);
 </script>
@@ -163,20 +172,21 @@ loadStatusData(loading);
               <th>Kind</th>
               <th>Tag</th>
               <th>Status</th>
-              <th>Jobs Complete</th>
-              <th>Completed At</th>
+              <th>Progress</th>
+              <th>Complete at</th>
               <th>Duration</th>
               <th>Errors</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="req in data.timeline">
+              <tr v-if="req.isLastInProgress">
+                <td :colspan="tableWidth"><hr /></td>
+              </tr>
               <tr :class="getRequestRowClassName(req)">
                 <td><PullRequestLink :request="req" /></td>
                 <td>{{ req.requestType }}</td>
-                <td>
-                  {{ shortenTag(req.tag) }}
-                </td>
+                <td><CommitSha :tag="req.tag"></CommitSha></td>
                 <td>
                   {{ formatStatus(req.status)
                   }}{{
@@ -184,36 +194,43 @@ loadStatusData(loading);
                   }}
                 </td>
                 <td>
-                  {{ getJobCompletion(req, data.collectors) }}
+                  <RequestProgress
+                    :request="req"
+                    :collectors="data.collectors"
+                  />
                 </td>
                 <td>
                   {{ formatISODate(req.completedAt) }}
                   <span v-if="req.endEstimated">(est.)</span>
                 </td>
-                <td>
+                <td style="text-align: right">
                   {{ getDuration(req) }}
                 </td>
 
-                <td v-if="hasErrors(req.errors)">
-                  <button @click="toggleExpandedErrors(req.tag)">
-                    {{ hasExpandedErrors(req.tag) ? "Hide" : "Show" }}
-                    {{ getErrorsLength(req.errors) }}
-                  </button>
+                <td>
+                  <template v-if="hasErrors(req.errors)">
+                    <button @click="toggleExpandedErrors(req.tag)">
+                      {{ getErrorsLength(req.errors) }}
+                      {{ hasExpandedErrors(req.tag) ? "(hide)" : "(show)" }}
+                    </button>
+                  </template>
                 </td>
-                <td v-else></td>
               </tr>
 
               <tr v-if="hasExpandedErrors(req.tag)">
-                <td colspan="7" style="padding: 10px 0">
-                  <div v-for="benchmark in Object.entries(req.errors)">
+                <td :colspan="tableWidth" style="padding: 10px 0">
+                  <div v-for="[context, error] in Object.entries(req.errors)">
                     <div>
-                      <details open>
-                        <summary>{{ benchmark[0] }}</summary>
-                        <pre class="error">{{ benchmark[1] }}</pre>
+                      <details>
+                        <summary>{{ context }}</summary>
+                        <pre class="error">{{ error }}</pre>
                       </details>
                     </div>
                   </div>
                 </td>
+              </tr>
+              <tr v-if="req.isLastInProgress">
+                <td :colspan="tableWidth"><hr /></td>
               </tr>
             </template>
           </tbody>
@@ -239,16 +256,10 @@ loadStatusData(loading);
 }
 
 .collector-wrapper {
-  width: 100%;
   display: flex;
   align-items: center;
   flex-direction: column;
   padding-left: 8px;
-}
-
-.timeline-waterline {
-  border-bottom: 1px solid black;
-  font-weight: bold;
 }
 
 .timeline-row-bold {
@@ -257,56 +268,37 @@ loadStatusData(loading);
 
 .timeline-wrapper {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  height: fit-content;
   flex-direction: column;
-  width: 100%;
-  padding-right: 8px;
+  align-items: center;
+  margin-bottom: 50px;
 
   table {
     border-collapse: collapse;
     font-size: 1.1em;
-    width: 100%;
+
+    @media screen and (max-width: 850px) {
+      align-self: start;
+    }
 
     th,
     td {
-      padding: 0.2em;
+      text-align: center;
     }
 
     th {
-      text-align: center;
+      padding: 1em 0.5em;
     }
-    td {
-      text-align: left;
-      padding: 0 0.5em;
 
-      &.centered {
-        text-align: center;
-      }
-      &.right-align {
-        text-align: right;
-      }
+    td {
+      padding: 1px 0.5em;
     }
+
     tr.active {
       font-weight: bold;
     }
   }
-
-  @media screen and (min-width: 1440px) {
-    width: 100%;
-  }
 }
 
-.wrapper {
-  display: grid;
-  column-gap: 100px;
-  grid-template-columns: 1fr;
-
-  @media screen and (min-width: 1440px) {
-    grid-template-columns: 4fr 6fr;
-  }
-}
 .current {
   max-width: 100%;
   width: fit-content;
@@ -350,7 +342,7 @@ loadStatusData(loading);
 .collectors-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(500px, 100%));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(800px, 1fr));
+  grid-gap: 20px;
 }
 </style>

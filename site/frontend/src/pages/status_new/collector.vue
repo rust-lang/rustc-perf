@@ -1,8 +1,14 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
 import {parseISO, differenceInHours} from "date-fns";
-import {formatISODate, shortenTag} from "../../utils/formatting";
-import {CollectorConfig, BenchmarkJobStatus, isJobComplete} from "./data";
+import {formatISODate} from "../../utils/formatting";
+import {
+  CollectorConfig,
+  BenchmarkJobStatus,
+  isJobComplete,
+  BenchmarkJob,
+} from "./data";
+import CommitSha from "./commit-sha.vue";
 
 const props = defineProps<{
   collector: CollectorConfig;
@@ -80,6 +86,21 @@ function ActiveStatus({collector}: {collector: CollectorConfig}) {
 function toggleShowJobs() {
   showJobs.value = !showJobs.value;
 }
+
+function formatBackend(job: BenchmarkJob): string {
+  if (job.kind === "compiletime") {
+    return job.backend;
+  } else {
+    return "";
+  }
+}
+function formatProfile(job: BenchmarkJob): string {
+  if (job.kind === "compiletime") {
+    return job.profile;
+  } else {
+    return "";
+  }
+}
 </script>
 
 <template>
@@ -120,7 +141,10 @@ function toggleShowJobs() {
         </span>
         <span>{{ formatISODate(collector.dateAdded) }}</span>
       </div>
-      <button @click="toggleShowJobs">show jobs</button>
+      <button @click="toggleShowJobs" class="show-jobs">
+        <template v-if="showJobs">Hide jobs</template>
+        <template v-else>Show jobs</template>
+      </button>
     </div>
 
     <div v-if="showJobs" class="table-collector-wrapper">
@@ -130,59 +154,57 @@ function toggleShowJobs() {
           <div class="table-collector-status-filter-btn-wrapper">
             <template v-for="filter in FILTERS">
               <button
-                class="table-collector-status-filter-btn"
+                :class="{
+                  active: ACTIVE_FILTERS[filter],
+                }"
                 @click="filterJobByStatus(filter)"
               >
                 {{ formatJobStatus(filter) }}
-                <input
-                  type="checkbox"
-                  value="filter"
-                  :checked="ACTIVE_FILTERS[filter]"
-                />
               </button>
             </template>
           </div>
         </div>
       </div>
       <table class="table-collector" style="border-collapse: collapse">
-        <caption>
-          current benchmark jobs
-        </caption>
         <thead>
           <tr class="table-header-row">
-            <th class="table-header-padding">Tag / Sha</th>
-            <th class="table-header-padding">State</th>
-            <th class="table-header-padding">Started At</th>
-            <th class="table-header-padding">Backend</th>
-            <th class="table-header-padding">Profile</th>
-            <th class="table-header-padding">Dequeue Counter</th>
+            <th>Tag</th>
+            <th>Status</th>
+            <th>Started at</th>
+            <th>Completed at</th>
+            <th>Kind</th>
+            <th>Backend</th>
+            <th>Profile</th>
+            <th>Attempts</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="job in collector.jobs">
             <tr v-if="ACTIVE_FILTERS[job.status]">
-              <td class="table-cell-padding">
-                {{ shortenTag(job.requestTag) }}
+              <td>
+                <CommitSha :tag="job.requestTag"></CommitSha>
               </td>
-              <td class="table-cell-padding">
+              <td>
                 {{ formatJobStatus(job.status) }}
               </td>
-              <td class="table-cell-padding">
+              <td>
                 {{ formatISODate(job.startedAt) }}
               </td>
-              <td class="table-cell-padding">{{ job.backend }}</td>
-              <td class="table-cell-padding">{{ job.profile }}</td>
-              <td class="table-cell-padding">
+              <td>
+                {{ formatISODate(job.completedAt) }}
+              </td>
+              <td>{{ job.kind }}</td>
+              <td>{{ formatBackend(job) }}</td>
+              <td>
+                {{ formatProfile(job) }}
+              </td>
+              <td>
                 {{ job.dequeCounter }}
               </td>
             </tr>
           </template>
         </tbody>
       </table>
-    </div>
-
-    <div class="collector-no-work" v-if="collector.jobs.length === 0">
-      <h3>no active benchmarks</h3>
     </div>
   </div>
 </template>
@@ -237,32 +259,34 @@ $sm-radius: 8px;
 }
 
 .table-collector-status-filter-wrapper {
-  padding: $sm-padding 0px;
+  padding: $sm-padding 0;
 }
 
 .table-collector-status-filters {
   display: flex;
   flex-direction: column;
+
+  button {
+    border: 1px solid #333;
+    border-radius: $sm-radius;
+    margin-right: $sm-padding;
+    padding: 5px 10px;
+
+    &.active {
+      font-weight: bold;
+      border-width: 2px;
+      border-color: #1b45e4;
+    }
+    &:hover {
+      box-shadow: inset 0 0 2px #1b45e4;
+    }
+  }
 }
 
 .table-collector-status-filter-btn-wrapper {
   padding-top: $sm-padding;
   display: flex;
   flex-direction: row;
-}
-
-.table-collector-status-filter-btn {
-  border: 1px solid #333;
-  border-radius: $sm-radius;
-  width: 100%;
-  margin-right: $sm-padding;
-}
-
-.table-collector-status-filter-btn:hover {
-  transition: 250ms;
-}
-
-.status {
 }
 
 .status.benchmarking {
@@ -288,7 +312,7 @@ $sm-radius: 8px;
 
 .table-collector-wrapper {
   padding: $sm-padding;
-  margin: $sm-padding 0px;
+  margin: $sm-padding 0;
   background-color: #eee;
   border-radius: $sm-radius;
 
@@ -311,31 +335,18 @@ $sm-radius: 8px;
     border-bottom: 1px solid black;
   }
 
-  .table-header-padding {
-    padding: $sm-padding $sm-padding 0px $sm-padding;
-    text-align: left;
+  th {
+    padding: $sm-padding $sm-padding 0 $sm-padding;
+    text-align: center;
   }
 
-  .table-cell-padding {
-    padding: $sm-padding $sm-padding 1px 0px;
-    text-align: left;
+  td {
+    padding: 5px 1px;
+    text-align: center;
   }
 }
 
-.collector-no-work {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 40px;
-  background-color: #eee;
-  margin: $sm-padding;
-  padding: $sm-padding;
-  border-radius: $sm-radius;
-
-  h3 {
-    font-variant: small-caps;
-    font-weight: 700;
-    font-size: 1.5em;
-  }
+.show-jobs {
+  margin-top: 10px;
 }
 </style>
