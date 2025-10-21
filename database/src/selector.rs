@@ -334,6 +334,7 @@ impl TestCase for CompileTestCase {}
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub struct RuntimeBenchmarkQuery {
     benchmark: Selector<String>,
+    target: Selector<Target>,
     metric: Selector<crate::Metric>,
 }
 
@@ -351,6 +352,7 @@ impl RuntimeBenchmarkQuery {
     pub fn all_for_metric(metric: Metric) -> Self {
         Self {
             benchmark: Selector::All,
+            target: Selector::All,
             metric: Selector::One(metric.as_str().into()),
         }
     }
@@ -360,6 +362,7 @@ impl Default for RuntimeBenchmarkQuery {
     fn default() -> Self {
         Self {
             benchmark: Selector::All,
+            target: Selector::All,
             metric: Selector::All,
         }
     }
@@ -376,8 +379,10 @@ impl BenchmarkQuery for RuntimeBenchmarkQuery {
     ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
         let mut statistic_descriptions: Vec<_> = index
             .runtime_statistic_descriptions()
-            .filter(|(&(b, m), _)| self.benchmark.matches(b) && self.metric.matches(m))
-            .map(|(&(benchmark, _), sid)| (RuntimeTestCase { benchmark }, sid))
+            .filter(|(&(b, t, m), _)| {
+                self.benchmark.matches(b) && self.target.matches(t) && self.metric.matches(m)
+            })
+            .map(|(&(benchmark, target, _), sid)| (RuntimeTestCase { benchmark, target }, sid))
             .collect();
 
         statistic_descriptions.sort_unstable();
@@ -409,6 +414,7 @@ impl BenchmarkQuery for RuntimeBenchmarkQuery {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RuntimeTestCase {
     pub benchmark: Benchmark,
+    pub target: Target,
 }
 
 impl TestCase for RuntimeTestCase {}

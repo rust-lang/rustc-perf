@@ -12,7 +12,7 @@ import MetricSelector from "../metric-selector.vue";
 import {BenchmarkInfo} from "../../../api";
 import {importantRuntimeMetrics} from "../metrics";
 import ComparisonsTable from "./comparisons-table.vue";
-import {getBoolOrDefault} from "../shared";
+import {getBoolOrDefault, loadTargetSetFromUrl} from "../shared";
 import {changeUrl, getUrlParams} from "../../../utils/navigation";
 import Filters from "./filters.vue";
 
@@ -28,6 +28,7 @@ function loadFilterFromUrl(
 ): RuntimeBenchmarkFilter {
   return {
     name: urlParams["runtimeName"] ?? defaultFilter.name,
+    target: loadTargetSetFromUrl(urlParams, defaultFilter.target),
     nonRelevant: getBoolOrDefault(
       urlParams,
       "nonRelevant",
@@ -65,6 +66,11 @@ function storeFilterToUrl(
   }
 
   storeOrReset("runtimeName", filter.name || null, defaultFilter.name);
+  storeOrReset(
+    "target-x86_64-unknown-linux-gnu",
+    filter.target.x86_64_unknown_linux_gnu,
+    defaultFilter.target.x86_64_unknown_linux_gnu
+  );
   storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
   storeOrReset("showRawData", filter.showRawData, defaultFilter.showRawData);
   changeUrl(urlParams);

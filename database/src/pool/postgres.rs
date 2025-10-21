@@ -432,6 +432,12 @@ static MIGRATIONS: &[&str] = &[
             benchmark_set
         );
     "#,
+    // Add target to runtime_pstat_series
+    r#"
+    ALTER TABLE runtime_pstat_series ADD target TEXT NOT NULL DEFAULT 'x86_64-unknown-linux-gnu';
+    ALTER TABLE runtime_pstat_series DROP CONSTRAINT runtime_pstat_series_benchmark_metric_key;
+    ALTER TABLE runtime_pstat_series ADD CONSTRAINT runtime_test_case UNIQUE(benchmark, target, metric);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -660,8 +666,8 @@ impl PostgresConnection {
                     select name, category
                     from benchmark
                 ").await.unwrap(),
-                insert_runtime_pstat_series: conn.prepare("insert into runtime_pstat_series (benchmark, metric) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
-                select_runtime_pstat_series: conn.prepare("select id from runtime_pstat_series where benchmark = $1 and metric = $2").await.unwrap(),
+                insert_runtime_pstat_series: conn.prepare("INSERT INTO runtime_pstat_series (benchmark, target, metric) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                select_runtime_pstat_series: conn.prepare("SELECT id FROM runtime_pstat_series WHERE benchmark = $1 AND target = $2 AND metric = $3").await.unwrap(),
                 insert_runtime_pstat: conn
                     .prepare("insert into runtime_pstat (series, aid, cid, value) VALUES ($1, $2, $3, $4)")
                     .await
@@ -883,7 +889,7 @@ where
             runtime_pstat_series: self
                 .conn()
                 .query(
-                    "select id, benchmark, metric from runtime_pstat_series;",
+                    "SELECT id, benchmark, target, metric FROM runtime_pstat_series;",
                     &[],
                 )
                 .await
@@ -893,8 +899,9 @@ where
                     (
                         row.get::<_, i32>(0) as u32,
                         (
-                            row.get::<_, String>(1).as_str().into(),
-                            row.get::<_, String>(2).as_str().into(),
+                            row.get::<_, &str>(1).into(),
+                            Target::from_str(row.get::<_, &str>(2)).unwrap(),
+                            row.get::<_, &str>(3).into(),
                         ),
                     )
                 })
@@ -1123,13 +1130,15 @@ where
         artifact: ArtifactIdNumber,
         benchmark: &str,
         metric: &str,
+        target: Target,
         value: f64,
     ) {
+        let target = target.to_string();
         let sid = self
             .conn()
             .query_opt(
                 &self.statements().select_runtime_pstat_series,
-                &[&benchmark, &metric],
+                &[&benchmark, &target, &metric],
             )
             .await
             .unwrap();
@@ -1139,14 +1148,14 @@ where
                 self.conn()
                     .query_opt(
                         &self.statements().insert_runtime_pstat_series,
-                        &[&benchmark, &metric],
+                        &[&benchmark, &target, &metric],
                     )
                     .await
                     .unwrap();
                 self.conn()
                     .query_one(
                         &self.statements().select_runtime_pstat_series,
-                        &[&benchmark, &metric],
+                        &[&benchmark, &target, &metric],
                     )
                     .await
                     .unwrap()

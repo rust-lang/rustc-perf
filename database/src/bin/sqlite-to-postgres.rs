@@ -543,6 +543,7 @@ struct RuntimePstatSeries;
 struct RuntimePstatSeriesRow<'a> {
     id: i32,
     benchmark: &'a str,
+    target: &'a str,
     metric: &'a str,
 }
 
@@ -552,11 +553,11 @@ impl Table for RuntimePstatSeries {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "id, benchmark, metric"
+        "id, benchmark, target, metric"
     }
 
     fn postgres_attributes() -> &'static str {
-        "id, benchmark, metric"
+        "id, benchmark, target, metric"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -568,7 +569,8 @@ impl Table for RuntimePstatSeries {
             .serialize(RuntimePstatSeriesRow {
                 id: row.get(0).unwrap(),
                 benchmark: row.get_ref(1).unwrap().as_str().unwrap(),
-                metric: row.get_ref(2).unwrap().as_str().unwrap(),
+                target: row.get_ref(2).unwrap().as_str().unwrap(),
+                metric: row.get_ref(3).unwrap().as_str().unwrap(),
             })
             .unwrap();
     }

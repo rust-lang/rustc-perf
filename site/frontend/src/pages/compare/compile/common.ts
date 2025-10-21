@@ -1,6 +1,11 @@
-import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
+import {
+  BenchmarkFilter,
+  CompareResponse,
+  StatComparison,
+  TargetSet,
+} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
-import {benchmarkNameMatchesFilter} from "../shared";
+import {benchmarkNameMatchesFilter, targetMatchesFilter} from "../shared";
 
 export type CompileBenchmarkFilter = {
   profile: {
@@ -19,9 +24,7 @@ export type CompileBenchmarkFilter = {
     llvm: boolean;
     cranelift: boolean;
   };
-  target: {
-    x86_64_unknown_linux_gnu: boolean;
-  };
+  target: TargetSet;
   category: {
     primary: boolean;
     secondary: boolean;
@@ -160,15 +163,6 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
-  function targetFilter(target: Target): boolean {
-    if (target === "x86_64-unknown-linux-gnu") {
-      return filter.target.x86_64_unknown_linux_gnu;
-    } else {
-      // Unknown, but by default we should show things
-      return true;
-    }
-  }
-
   function artifactFilter(metadata: CompileBenchmarkMetadata | null): boolean {
     if (metadata?.binary === null) return true;
 
@@ -201,7 +195,7 @@ export function computeCompileComparisonsWithNonRelevant(
       profileFilter(comparison.testCase.profile) &&
       scenarioFilter(comparison.testCase.scenario) &&
       backendFilter(comparison.testCase.backend) &&
-      targetFilter(comparison.testCase.target) &&
+      targetMatchesFilter(comparison.testCase.target, filter.target) &&
       categoryFilter(comparison.testCase.category) &&
       artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
       changeFilter(comparison) &&
