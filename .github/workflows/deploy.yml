@@ -8,6 +8,8 @@ on:
 env:
   AWS_ACCESS_KEY_ID: AKIA46X5W6CZBLO3VBND
 
+concurrency: deploy
+
 jobs:
   deploy:
     name: Deploy
