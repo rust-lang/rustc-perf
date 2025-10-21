@@ -1134,7 +1134,7 @@ impl HistoricalData {
     fn quartiles(&self) -> (f64, f64) {
         let pcs = self.percent_changes();
         fn median(data: &[f64]) -> f64 {
-            if data.len() % 2 == 0 {
+            if data.len().is_multiple_of(2) {
                 (data[(data.len() - 1) / 2] + data[data.len() / 2]) / 2.0
             } else {
                 data[data.len() / 2]
@@ -1144,7 +1144,7 @@ impl HistoricalData {
         let len = pcs.len();
         let (h1_end, h2_begin) = if len <= 2 {
             (0, std::cmp::min(len, 1))
-        } else if len % 2 == 0 {
+        } else if len.is_multiple_of(2) {
             (len / 2 - 2, len / 2 + 1)
         } else {
             (len / 2 - 1, len / 2 + 1)

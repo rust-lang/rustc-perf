@@ -11,7 +11,7 @@ use database::{
     Target,
 };
 use parking_lot::RwLock;
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 use tokio::time::{self, Duration, MissedTickBehavior};
 
 pub fn is_job_queue_enabled() -> bool {
