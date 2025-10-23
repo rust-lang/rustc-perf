@@ -35,32 +35,6 @@ The table below details a set of keywords, or a glossary of terms, that appear t
 | **Assigning a job** | The act of allocating one or more *jobs* to a collector. |
 | **website** | A standalone server responsible for inserting work into the queue. |
 
-### Master artifacts
-
-The website will go through all recent master commits, and check if they are done by looking at the `sha` and `status` column in the `benchmark_request` table.
-
-- If the request is already marked as `completed`, nothing happens.
-- If the request is `in progress`, check [request completion](#Checking-request-completion).
-- If the request is `waiting for parent` commit benchmark to be completed, nothing happens.
-- If the request is missing, we will recursively find a set of parent master commits that are missing data (by looking at their status in `benchmark_request`).
-    - If the set is non-empty, these commits will be handled recursively with the same logic as this commit.
-    - If the set is empty, the request will be *enqueued*.
-
-### Try artifacts
-
-> The logic for try artifacts can either happen both in cron and in the GH webhook listener (that receives `@rust-timer queue/build` notifications), or only in cron.
-
-The website will go through all try artifacts in `benchmark_request` that are not yet marked as `completed`.
-
-- If the request is `waiting for artifacts`, do nothing (sometime later a GH notification will switch the status to `waiting for parent` once the artifacts are ready).
-- If the request is `waiting for parent`:
-    - Recursively find a set of **grandparent** master commits that are missing data (by looking at their status in `benchmark_request`). This could happen on the edge switch from `waiting for artifacts` to `waiting for parent` in the GH webhook handler, or it could happen in each cron invocation.
-    - If that set is empty, generate all necessary **parent** jobs and check if they are all completed in the `job_queue`.
-        - If yes, *enqueue* the request.
-        - If not, insert these jobs into the jobqueue. This is where backfilling happens, as we can backfill e.g. new backends for a parent master commit that was only benchmarked for LLVM before.
-- If the request is `in progress`, check [request completion](#Checking-request-completion).
-
-
 ## Programs that need to be available
 
 `perf` with `/proc/sys/kernel/perf_event_paranoid` set to -1 else the collector will panic. Setting this to 4 is a convenient way for testing error cases however.
@@ -114,6 +88,29 @@ Once the collector has dequeued the job, the collector will proceed to lookup wh
 Step 4:
 
 The collectors health is monitored by updating a heartbeat column in the `collector_config` table. The UI will indicate the collector as offline if it is inactive for a specified period of time. This should be caught either by error logs or someone viewing the page and subsequently reporting the collector as offline in Zulip.
+
+### Master artifacts
+
+The website maintains a set of all master commits that have been completed in memory so it is able to quickly determine if the commit needs benchmarking.
+
+- If the request's sha is in the benchmark index, nothing happens.
+- If the request is `in_progress`, check [request completion](#Checking-request-completion).
+- If the request is `waiting_for_parent` commit benchmark to be completed, nothing happens.
+- If the request is missing, we will recursively find a set of parent master commits that are missing data (by looking at their status in `benchmark_request`).
+    - If the set is non-empty, these commits will be handled recursively with the same logic as this commit.
+    - If the set is empty, the request will be *enqueued*.
+
+### Try artifacts
+
+The website will go through all try artifacts in `benchmark_request` that are not yet marked as `completed`.
+
+- If the request is `waiting for artifacts`, do nothing (sometime later a GH notification will switch the status to `waiting for parent` once the artifacts are ready).
+- If the request is `waiting for parent`:
+    - Recursively find a set of **grandparent** master commits that are missing data (by looking at their status in `benchmark_request`). This could happen on the edge switch from `waiting for artifacts` to `waiting for parent` in the GH webhook handler, or it could happen in each cron invocation.
+    - If that set is empty, generate all necessary **parent** jobs and check if they are all completed in the `job_queue`.
+        - If yes, *enqueue* the request.
+        - If not, insert these jobs into the jobqueue. This is where backfilling happens, as we can backfill e.g. new backends for a parent master commit that was only benchmarked for LLVM before.
+- If the request is `in_progress`, check [request completion](#Checking-request-completion).
 
 ## Queue ordering
 The ordering of the queue is by priority, we assume that there is a collector online that is currently looking for work.
