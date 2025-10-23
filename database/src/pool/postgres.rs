@@ -773,7 +773,10 @@ impl PostgresConnection {
                         SELECT tag FROM parents
                     )
                     -- Only get the jobs of in_progress requests
-                    SELECT * FROM job_queue INNER JOIN requests ON job_queue.request_tag = requests.tag
+                    SELECT *
+                    FROM job_queue
+                    INNER JOIN requests ON job_queue.request_tag = requests.tag
+                    ORDER BY created_at ASC
                 ")).await.unwrap(),
                 // Load pending benchmark requests, along with information whether their parent is
                 // completed or not
