@@ -243,6 +243,7 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
     let mut backend_start = None;
     let mut backend_end = None;
     let mut linker_duration = None;
+    let mut linker_start = None;
 
     for event in profile.iter_full() {
         if first_event_start.is_none() {
@@ -258,34 +259,44 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
         } else if event.label == "link_crate" {
             // The "link" query overlaps codegen, so we want to look at the "link_crate" query
             // instead.
+            linker_start = event.payload.timestamp().map(|t| t.start());
             linker_duration = event.duration();
         }
     }
     let mut sections = vec![];
     // We consider "frontend" to be everything from the start of the compilation (the first event)
-    // to the start of the backend part.
-    if let (Some(start), Some(end)) = (first_event_start, backend_start) {
-        if let Ok(duration) = end.duration_since(start) {
-            sections.push(CompilationSection {
-                name: "Frontend".to_string(),
-                value: duration.as_nanos() as u64,
-            });
-        }
-    }
-    if let (Some(start), Some(end)) = (backend_start, backend_end) {
-        if let Ok(duration) = end.duration_since(start) {
-            sections.push(CompilationSection {
-                name: "Backend".to_string(),
-                value: duration.as_nanos() as u64,
-            });
-        }
-    }
-    if let Some(duration) = linker_duration {
-        sections.push(CompilationSection {
-            name: "Linker".to_string(),
-            value: duration.as_nanos() as u64,
-        });
-    }
+    // to the start of the backend part. If backend is missing, we use the start of the linker
+    // section instead.
+    let frontend_end = backend_start.or(linker_start);
+    let frontend_duration = if let (Some(start), Some(end)) = (first_event_start, frontend_end) {
+        end.duration_since(start)
+            .map(|duration| duration.as_nanos() as u64)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    sections.push(CompilationSection {
+        name: "Frontend".to_string(),
+        value: frontend_duration,
+    });
+
+    let backend_duration = if let (Some(start), Some(end)) = (backend_start, backend_end) {
+        end.duration_since(start)
+            .map(|duration| duration.as_nanos() as u64)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    sections.push(CompilationSection {
+        name: "Backend".to_string(),
+        value: backend_duration,
+    });
+
+    let linker_duration = linker_duration.unwrap_or_default();
+    sections.push(CompilationSection {
+        name: "Linker".to_string(),
+        value: linker_duration.as_nanos() as u64,
+    });
 
     sections
 }
