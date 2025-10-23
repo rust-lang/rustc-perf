@@ -34,6 +34,8 @@ The table below details a set of keywords, or a glossary of terms, that appear t
 | **MAX_JOB_FAILS** | Maximum number of failures before a job is marked as a failed. |
 | **Assigning a job** | The act of allocating one or more *jobs* to a collector. |
 | **website** | A standalone server responsible for inserting work into the queue. |
+| **backfilling** | Occurs when a commit's parent_sha does not have the same configuration as the request currently being enqueued. In this case, jobs with the requested configuration are added so that the commit can be benchmarked against its parent under matching conditions. |
+| **benchmark index** | A set off shas and release tags which have completed benchmark requests. Saves database lookups. |
 
 ## Programs that need to be available
 
@@ -51,11 +53,15 @@ There are two major components in the new system; the website (CRON) and the col
 
 It's simplest to show how the new system works by walking through it step by step. We will start with the website, which accepts requests as a web server and also has a cron job for managing the queue. This is the entry point for how work is queued.
 
-Step 1:
+Step 1 - Creating requests:
 
-The website also runs a CRON that will split a pending `benchmark_request` (request) into `benchmark_job`'s (jobs) and mark `in_progress` jobs as complete.
+The CRON will draw down all master commits and check the SHA's against the benchmark index, if the SHA does not exist in the index then it will be added to the database. The same process also happens for Releases with the same logic to determine if a request needs to be stored in the database.
 
-When a request is created through a web hook there will be a period of time where the artifact is not ready for benchmarking and will be in the state `waiting_for_artifacts`. Once the artifact is ready the request will move to `artifacts_ready`, indicating that the request is ready for benchmarking. This is updated through an endpoint on the webserver.
+Try commits are added on an adhoc basis by rustc developers manually making an http request to benchmark a commit. There will be a period of time where the artifact, for a Try, is not ready for benchmarking and will be in the state `waiting_for_artifacts`. Once the artifact is ready the request will move to `artifacts_ready`, indicating that the request is ready for benchmarking. This is updated through a web hook on the webserver.
+
+Step 2 - Creating jobs:
+
+The CRON will create a queue and if the first request in the queue is not `in_progress`, will dequeue the request and split the request into `benchmark_job`'s (jobs). If the request has a parent tag, a request will be make and jobs will also be enqueued for the parent. If the jobs for the parent already exist then the database will simply ignore them. This process of finding jobs which need to be populated for the parent is "backfilling".
 
 The states go as follows;
 
@@ -63,7 +69,9 @@ The states go as follows;
 
 Only one request can presently be `in_progress` at any one time. If a request is in progress the CRON does not start splitting up other requests into jobs.
 
-Step 2:
+Step 3 - Completing requests:
+
+If the request at the head of the queue is `in_progress` the CRON will check to see if all the jobs associated with the request are in the state `failure` or `success` if they are the request will be marked as `completed`.
 
 From here if a request is marked as `completed` then the next request that is in the state `artifacts_ready` will be expanded into the jobs needed to fulfil the request. This will be all the combinations of target, profile,
 
@@ -88,29 +96,6 @@ Once the collector has dequeued the job, the collector will proceed to lookup wh
 Step 4:
 
 The collectors health is monitored by updating a heartbeat column in the `collector_config` table. The UI will indicate the collector as offline if it is inactive for a specified period of time. This should be caught either by error logs or someone viewing the page and subsequently reporting the collector as offline in Zulip.
-
-### Master artifacts
-
-The website maintains a set of all master commits that have been completed in memory so it is able to quickly determine if the commit needs benchmarking.
-
-- If the request's sha is in the benchmark index, nothing happens.
-- If the request is `in_progress`, check [request completion](#Checking-request-completion).
-- If the request is `waiting_for_parent` commit benchmark to be completed, nothing happens.
-- If the request is missing, we will recursively find a set of parent master commits that are missing data (by looking at their status in `benchmark_request`).
-    - If the set is non-empty, these commits will be handled recursively with the same logic as this commit.
-    - If the set is empty, the request will be *enqueued*.
-
-### Try artifacts
-
-The website will go through all try artifacts in `benchmark_request` that are not yet marked as `completed`.
-
-- If the request is `waiting for artifacts`, do nothing (sometime later a GH notification will switch the status to `waiting for parent` once the artifacts are ready).
-- If the request is `waiting for parent`:
-    - Recursively find a set of **grandparent** master commits that are missing data (by looking at their status in `benchmark_request`). This could happen on the edge switch from `waiting for artifacts` to `waiting for parent` in the GH webhook handler, or it could happen in each cron invocation.
-    - If that set is empty, generate all necessary **parent** jobs and check if they are all completed in the `job_queue`.
-        - If yes, *enqueue* the request.
-        - If not, insert these jobs into the jobqueue. This is where backfilling happens, as we can backfill e.g. new backends for a parent master commit that was only benchmarked for LLVM before.
-- If the request is `in_progress`, check [request completion](#Checking-request-completion).
 
 ## Queue ordering
 The ordering of the queue is by priority, we assume that there is a collector online that is currently looking for work.
