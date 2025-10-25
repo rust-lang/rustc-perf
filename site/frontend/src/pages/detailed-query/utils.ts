@@ -2,6 +2,7 @@ import {
   chromeProfileUrl,
   processedSelfProfileRelativeUrl,
 } from "../../self-profile";
+import {cargo_collector_command} from "../../utils/cargo";
 
 export interface Selector {
   commit: string;
@@ -198,7 +199,7 @@ export function createDownloadLinksData(selector: Selector | null): {
 
   const localCommands = {
     base: state.base_commit
-      ? `cargo run --release --bin collector profile_local cachegrind
+      ? `${cargo_collector_command()} profile_local cachegrind
                     +${state.base_commit} --exact-match ${benchName(
           state.benchmark
         )} --profiles
@@ -206,7 +207,7 @@ export function createDownloadLinksData(selector: Selector | null): {
           state.scenario
         )}`
       : "",
-    new: `cargo run --release --bin collector profile_local cachegrind
+    new: `${cargo_collector_command()} profile_local cachegrind
                 +${state.commit} --exact-match ${benchName(
       state.benchmark
     )} --profiles
@@ -214,7 +215,7 @@ export function createDownloadLinksData(selector: Selector | null): {
       state.scenario
     )}`,
     diff: state.base_commit
-      ? `cargo run --release --bin collector profile_local cachegrind
+      ? `${cargo_collector_command()} profile_local cachegrind
                 +${state.base_commit} --rustc2 +${
           state.commit
         } --exact-match ${benchName(state.benchmark)} --profiles
