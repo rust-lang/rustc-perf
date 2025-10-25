@@ -6,6 +6,7 @@
 import {CompileTestCase} from "../../common";
 import {computed} from "vue";
 import {normalizeProfile} from "./utils";
+import {cargo_collector_command} from "../../../../../utils/cargo";
 
 const props = defineProps<{
   commit: string;
@@ -36,7 +37,7 @@ function normalizeScenario(scenario: string): string {
 </script>
 
 <template>
-  <pre><code>cargo run --release --bin collector \
+  <pre><code>{{ cargo_collector_command() }} \
     profile_local cachegrind \
     +{{ firstCommit }} \<template v-if="props.baselineCommit !== undefined">
     --rustc2 +{{ props.commit }} \</template>

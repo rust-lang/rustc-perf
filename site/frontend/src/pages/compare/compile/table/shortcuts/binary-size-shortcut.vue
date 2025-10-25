@@ -8,6 +8,7 @@ import {CompileTestCase} from "../../common";
 import {ArtifactDescription} from "../../../types";
 import Tooltip from "../../../tooltip.vue";
 import {normalizeProfile} from "./utils";
+import {cargo_collector_command} from "../../../../../utils/cargo";
 
 const props = defineProps<{
   artifact: ArtifactDescription;
@@ -30,13 +31,12 @@ function normalizeBackend(backend: string): string {
     Command for analyzing binary size locally
     <Tooltip>
       Execute this command in a checkout of
-      <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>, after a
-      `cargo build --release`, to compare binary section sizes. Add `--symbols`
-      to include a diff of symbol sizes.
+      <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>. Add
+      `--symbols` to include a diff of symbol sizes.
     </Tooltip>
   </div>
 
-  <pre><code>cargo run --release --bin collector \
+  <pre><code>{{ cargo_collector_command() }} \
     binary_stats compile \
     +{{ props.baseArtifact.commit }} \
     --rustc2 +{{ props.artifact.commit }} \
