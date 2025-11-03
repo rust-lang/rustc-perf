@@ -24,7 +24,7 @@ while : ; do
         target/release/collector benchmark_job_queue \
           --db "${DATABASE}" \
           --check_git_sha \
-          --git_sha "${CURRENT_SHA}"
+          --git_sha "${CURRENT_SHA}" \
           --collector_name "${COLLECTOR_NAME}"
 
         STATUS=$?
