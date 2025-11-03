@@ -1,66 +1,50 @@
-export interface Commit {
-  sha: string;
-  date: string;
-  type: "Try" | "Master";
-}
+export type BenchmarkRequestType = "Release" | "Master" | "Try";
+export type BenchmarkRequestStatus = "Queued" | "InProgress" | "Completed";
 
-export interface BenchmarkError {
-  name: string;
-  error: string;
-}
-
-interface Step {
-  step: string;
-  is_done: boolean;
-  expected_duration: number;
-  current_progress: number;
-}
-
-export type Artifact =
-  | {
-      Commit: Commit;
-    }
-  | {
-      Tag: string;
-    };
-
-export type MissingReason =
-  | {
-      Master: {
-        pr: number;
-        parent_sha: string;
-        is_try_parent: boolean;
-      };
-    }
-  | {
-      Try: {
-        pr: number;
-        parent_sha: string;
-        include: string | null;
-        exclude: string | null;
-        runs: number | null;
-        backends: string | null;
-      };
-    }
-  | {
-      InProgress: MissingReason;
-    };
-
-interface CurrentState {
-  artifact: Artifact;
-  progress: Step[];
-}
-
-export interface FinishedRun {
-  artifact: Artifact;
+export type BenchmarkRequest = {
+  tag: string;
   pr: number | null;
-  errors: BenchmarkError[];
-  duration: number;
-  finished_at: number;
-}
+  status: BenchmarkRequestStatus;
+  requestType: BenchmarkRequestType;
+  createdAt: string;
+  completedAt: string | null;
+  endEstimated: boolean;
+  durationS: number | null;
+  errors: Dict<string>;
+};
 
-export interface StatusResponse {
-  finished_runs: FinishedRun[];
-  current: CurrentState | null;
-  missing: Array<[Commit, MissingReason]>;
+export type BenchmarkJobStatus = "Queued" | "InProgress" | "Success" | "Failed";
+export type BenchmarkJobKind = "compiletime" | "runtimeInProgress" | "rustc";
+
+export type BenchmarkJob = {
+  requestTag: string;
+  kind: BenchmarkJobKind;
+  target: string;
+  backend: string;
+  profile: string;
+  benchmarkSet: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: BenchmarkJobStatus;
+  dequeCounter: number;
+};
+
+export type CollectorConfig = {
+  name: string;
+  target: string;
+  benchmarkSet: number;
+  isActive: boolean;
+  lastHeartbeatAt: string;
+  dateAdded: string;
+  jobs: BenchmarkJob[];
+};
+
+export type StatusResponse = {
+  requests: BenchmarkRequest[];
+  collectors: CollectorConfig[];
+};
+
+export function isJobComplete(job: BenchmarkJob): boolean {
+  return job.status === "Failed" || job.status === "Success";
 }

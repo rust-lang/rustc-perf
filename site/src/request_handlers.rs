@@ -19,8 +19,8 @@ pub use self_profile::{
     handle_self_profile, handle_self_profile_processed_download, handle_self_profile_raw,
     handle_self_profile_raw_download,
 };
-pub use status_page::handle_status_page;
-pub use status_page_new::handle_status_page_new;
+pub use status_page::handle_status_page_old;
+pub use status_page_new::handle_status_page;
 
 use crate::api::{info, ServerResult};
 use crate::load::SiteCtxt;
