@@ -5,6 +5,7 @@ use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
+use database::pool::Transaction;
 use database::{
     BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
     BenchmarkRequestType, CodegenBackend, Date, PendingBenchmarkRequests, Profile, QueuedCommit,
@@ -219,15 +220,13 @@ pub async fn enqueue_benchmark_request(
     let backends = request.backends()?;
     let profiles = request.profiles()?;
 
-    // Prevent the error from spamming the logs
-    // let mut has_emitted_parent_sha_error = false;
-
-    let mut enqueue_job_required = async |request_tag,
-                                          target,
-                                          backend,
-                                          profile,
-                                          benchmark_set,
-                                          kind| {
+    let enqueue_job_required = async |tx: &mut Box<dyn Transaction>,
+                                      request_tag,
+                                      target,
+                                      backend,
+                                      profile,
+                                      benchmark_set,
+                                      kind| {
         let created_job = tx
             .conn()
             .enqueue_benchmark_job(request_tag, target, backend, profile, benchmark_set, kind)
@@ -246,6 +245,7 @@ pub async fn enqueue_benchmark_request(
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
                     enqueue_job_required(
+                        &mut tx,
                         request_tag,
                         target,
                         backend,
@@ -260,36 +260,34 @@ pub async fn enqueue_benchmark_request(
                     // but was already benchmarked then the collector will ignore
                     // it as it will see it already has results.
 
-                    // Do not enqueue parent jobs to allow parallel execution with the old system
-                    // If the parent artifact wouldn't be benchmarked yet, we would benchmark the
-                    // parent with the new system.
-                    // if let Some(parent_sha) = request.parent_sha() {
-                    //     let (is_foreign_key_violation, result) = tx
-                    //         .conn()
-                    //         .enqueue_parent_benchmark_job(
-                    //             parent_sha,
-                    //             target,
-                    //             backend,
-                    //             profile,
-                    //             benchmark_set as u32,
-                    //             BenchmarkJobKind::Compiletime,
-                    //         )
-                    //         .await;
-                    //
-                    //     // At some point in time the parent_sha may not refer
-                    //     // to a `benchmark_request` and we want to be able to
-                    //     // see that error.
-                    //     if let Err(e) = result {
-                    //         if is_foreign_key_violation && !has_emitted_parent_sha_error {
-                    //             log::error!("Failed to create job for parent sha {e:?}");
-                    //             has_emitted_parent_sha_error = true;
-                    //         } else if has_emitted_parent_sha_error && is_foreign_key_violation {
-                    //             continue;
-                    //         } else {
-                    //             return Err(e);
-                    //         }
-                    //     }
-                    // }
+                    if let Some(parent_sha) = request.parent_sha() {
+                        // If the parent is in the old system, do not backfill it
+                        if tx.conn().parent_of(parent_sha).await.is_some() {
+                            continue;
+                        }
+                        let (is_foreign_key_violation, result) = tx
+                            .conn()
+                            .enqueue_parent_benchmark_job(
+                                parent_sha,
+                                target,
+                                backend,
+                                profile,
+                                benchmark_set as u32,
+                                BenchmarkJobKind::Compiletime,
+                            )
+                            .await;
+
+                        // At some point in time the parent_sha may not refer
+                        // to a `benchmark_request` and we want to be able to
+                        // see that error.
+                        if let Err(e) = result {
+                            if is_foreign_key_violation {
+                                log::error!("Failed to create job for parent sha {e:?}");
+                            } else {
+                                return Err(e);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -297,6 +295,7 @@ pub async fn enqueue_benchmark_request(
         // Enqueue Runtime job for all targets using LLVM as the backend for
         // runtime benchmarks
         enqueue_job_required(
+            &mut tx,
             request_tag,
             target,
             CodegenBackend::Llvm,
@@ -312,6 +311,7 @@ pub async fn enqueue_benchmark_request(
     // assumed that if the compilation of other rust project improve then this
     // too would improve.
     enqueue_job_required(
+        &mut tx,
         request_tag,
         Target::X86_64UnknownLinuxGnu,
         CodegenBackend::Llvm,
