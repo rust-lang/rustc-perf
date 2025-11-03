@@ -2,8 +2,9 @@ pub mod client;
 pub mod comparison_summary;
 
 use crate::api::github::Commit;
-use crate::job_queue::should_use_job_queue;
-use crate::load::{MissingReason, SiteCtxt, TryCommit};
+use crate::job_queue::{build_queue, should_use_job_queue};
+use crate::load::{SiteCtxt, TryCommit};
+use chrono::Utc;
 use serde::Deserialize;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -22,7 +23,7 @@ pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 pub const COMMENT_MARK_ROLLUP: &str = "<!-- rust-timer: rollup -->";
 
 pub use comparison_summary::post_finished;
-use database::Connection;
+use database::{BenchmarkJobStatus, BenchmarkRequestStatus, Connection};
 
 /// Enqueues try build artifacts and posts a message about them on the original rollup PR
 pub async fn unroll_rollup(
@@ -283,7 +284,9 @@ pub async fn enqueue_shas(
             }
 
             let (preceding_artifacts, expected_duration) =
-                estimate_queue_info(ctxt, conn.as_ref(), &try_commit).await;
+                estimate_queue_info(conn.as_ref(), &try_commit)
+                    .await
+                    .map_err(|e| format!("{e:?}"))?;
 
             let verb = if preceding_artifacts == 1 {
                 "is"
@@ -317,35 +320,44 @@ It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
 /// Counts how many artifacts are in the queue before the specified commit, and what is the expected
 /// duration until the specified commit will be finished.
 async fn estimate_queue_info(
-    ctxt: &SiteCtxt,
     conn: &dyn Connection,
     commit: &TryCommit,
-) -> (u64, Duration) {
-    let queue = ctxt.missing_commits().await;
+) -> anyhow::Result<(u64, Duration)> {
+    let queue = build_queue(conn).await?;
 
     // Queue without in-progress artifacts
-    let queue_waiting: Vec<_> = queue
-        .into_iter()
-        .filter_map(|(c, reason)| match reason {
-            MissingReason::InProgress(_) if c.sha != commit.sha => None,
-            _ => Some(c),
+    let queue_waiting = queue
+        .iter()
+        .filter(|req| match req.status() {
+            BenchmarkRequestStatus::WaitingForArtifacts
+            | BenchmarkRequestStatus::ArtifactsReady => true,
+            BenchmarkRequestStatus::Completed { .. } | BenchmarkRequestStatus::InProgress => false,
         })
-        .collect();
+        .collect::<Vec<_>>();
 
     // Measure expected duration of waiting artifacts
     // How many commits are waiting (i.e. not running) in the queue before the specified commit?
     let preceding_waiting = queue_waiting
         .iter()
-        .position(|c| c.sha == commit.sha())
+        .position(|c| c.tag() == Some(commit.sha()))
         .unwrap_or(queue_waiting.len().saturating_sub(1)) as u64;
 
     // Guess the expected full run duration of a waiting commit
     let last_duration = conn
-        .last_n_artifact_collections(1)
-        .await
+        .get_last_n_completed_benchmark_requests(1)
+        .await?
         .into_iter()
         .next()
-        .map(|collection| collection.duration)
+        .map(|collection| match collection.request.status() {
+            BenchmarkRequestStatus::WaitingForArtifacts
+            | BenchmarkRequestStatus::ArtifactsReady
+            | BenchmarkRequestStatus::InProgress => {
+                unreachable!(
+                    "Non-completed request returned from `get_last_n_completed_benchmark_requests`"
+                )
+            }
+            BenchmarkRequestStatus::Completed { duration, .. } => duration,
+        })
         .unwrap_or(Duration::ZERO);
 
     // Guess that the duration will take about an hour if we don't have data or it's
@@ -355,17 +367,46 @@ async fn estimate_queue_info(
     let mut expected_duration = last_duration * (preceding_waiting + 1) as u32;
     let mut preceding = preceding_waiting;
 
-    // Add in-progress artifact duration and count (if any)
-    if let Some(aid) = conn.in_progress_artifacts().await.pop() {
+    // Add in-progress artifact duration and count
+    let now = Utc::now();
+    let jobs = conn.get_jobs_of_in_progress_benchmark_requests().await?;
+    for req in queue
+        .into_iter()
+        .filter(|req| matches!(req.status(), BenchmarkRequestStatus::InProgress))
+    {
+        let Some(tag) = req.tag() else {
+            continue;
+        };
+        if tag == commit.sha {
+            continue;
+        }
+        let Some(jobs) = jobs.get(tag) else {
+            preceding += 1;
+            expected_duration += last_duration;
+            continue;
+        };
+        let duration_elapsed = jobs
+            .iter()
+            .map(|j| match j.status() {
+                BenchmarkJobStatus::Queued => Duration::ZERO,
+                BenchmarkJobStatus::InProgress { started_at, .. } => now
+                    .signed_duration_since(started_at)
+                    .to_std()
+                    .unwrap_or_default(),
+                BenchmarkJobStatus::Completed {
+                    completed_at,
+                    started_at,
+                    ..
+                } => completed_at
+                    .signed_duration_since(started_at)
+                    .to_std()
+                    .unwrap_or_default(),
+            })
+            .sum::<Duration>();
         preceding += 1;
-        expected_duration += conn
-            .in_progress_steps(&aid)
-            .await
-            .into_iter()
-            .map(|s| s.expected.saturating_sub(s.duration))
-            .sum();
+        expected_duration += last_duration.saturating_sub(duration_elapsed);
     }
-    (preceding, expected_duration)
+    Ok((preceding, expected_duration))
 }
 
 #[derive(Debug, Deserialize)]
