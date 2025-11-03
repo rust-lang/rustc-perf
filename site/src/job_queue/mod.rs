@@ -3,6 +3,7 @@ mod utils;
 use crate::github::comparison_summary::post_comparison_comment;
 use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
+use anyhow::Context;
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
 use database::pool::Transaction;
@@ -230,13 +231,14 @@ pub async fn enqueue_benchmark_request(
         let created_job = tx
             .conn()
             .enqueue_benchmark_job(request_tag, target, backend, profile, benchmark_set, kind)
-            .await?;
+            .await
+            .with_context(|| anyhow::anyhow!("Enqueuing job for request {request_tag} (target={target}, backend={backend}, profile={profile}, set={benchmark_set}, kind={kind})"))?;
         match created_job {
-                Some(_) => Ok(()),
-                None => Err(anyhow::anyhow!(
-                    "Cannot created job for tag {request_tag} (target={target}, backend={backend}, profile={profile}, set={benchmark_set}, kind={kind}): job already exists in the DB"
-                )),
-            }
+            Some(_) => Ok(()),
+            None => Err(anyhow::anyhow!(
+                "Cannot create job for tag {request_tag} (target={target}, backend={backend}, profile={profile}, set={benchmark_set}, kind={kind}): job already exists in the DB"
+            )),
+        }
     };
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
@@ -284,7 +286,9 @@ pub async fn enqueue_benchmark_request(
                             if is_foreign_key_violation {
                                 log::error!("Failed to create job for parent sha {e:?}");
                             } else {
-                                return Err(e);
+                                return Err(anyhow::anyhow!(
+                                    "Cannot enqueue parent benchmark job: {e:?}"
+                                ));
                             }
                         }
                     }
@@ -323,8 +327,12 @@ pub async fn enqueue_benchmark_request(
 
     tx.conn()
         .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
-        .await?;
-    tx.commit().await?;
+        .await
+        .context("Updating benchmark request status to in progress")?;
+    tx.commit().await.context("Transaction commit")?;
+
+    log::info!("Jobs enqueued");
+
     Ok(())
 }
 
@@ -346,7 +354,11 @@ async fn process_benchmark_requests(
         match request.status() {
             BenchmarkRequestStatus::InProgress => {
                 let tag = request.tag().expect("In progress request without a tag");
-                if conn.maybe_mark_benchmark_request_as_completed(tag).await? {
+                if conn
+                    .maybe_mark_benchmark_request_as_completed(tag)
+                    .await
+                    .context("cannot mark benchmark request as completed")?
+                {
                     log::info!("Request {tag} marked as completed");
                     completed.push(request);
                     continue;
@@ -354,7 +366,9 @@ async fn process_benchmark_requests(
                 break;
             }
             BenchmarkRequestStatus::ArtifactsReady => {
-                enqueue_benchmark_request(conn, &request).await?;
+                enqueue_benchmark_request(conn, &request)
+                    .await
+                    .context("cannot enqueue benchmark request")?;
                 break;
             }
             BenchmarkRequestStatus::WaitingForArtifacts

@@ -1874,9 +1874,9 @@ where
             .await
             .context("failed to insert benchmark_job")?;
         if let Some(row) = rows.first() {
-            return Ok(Some(row.get::<_, i32>(0) as u32));
+            Ok(Some(row.get::<_, i32>(0) as u32))
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 

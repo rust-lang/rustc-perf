@@ -1028,7 +1028,7 @@ impl BenchmarkRequest {
             .split(',')
             .map(Profile::from_str)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| anyhow::anyhow!("Invalid backend: {e}"))
+            .map_err(|e| anyhow::anyhow!("Invalid profile: {e}"))
     }
 
     pub fn is_completed(&self) -> bool {
