@@ -27,7 +27,7 @@ const ACTIVE_FILTERS: Ref<Record<BenchmarkJobStatus, boolean>> = ref({
   Failed: true,
 });
 
-const showJobs: Ref<boolean> = ref(false);
+const showJobs: Ref<boolean> = ref(true);
 
 function filterJobByStatus(status: string) {
   ACTIVE_FILTERS.value[status] = !ACTIVE_FILTERS.value[status];
