@@ -1,4 +1,4 @@
-import Status from "./status_new/page.vue";
+import Status from "./status_old/page.vue";
 import {createApp} from "vue";
 import WithSuspense from "../components/with-suspense.vue";
 

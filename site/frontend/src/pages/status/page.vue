@@ -1,463 +1,302 @@
-<script setup lang="ts">
+<script setup lang="tsx">
+import {h, ref, Ref} from "vue";
+
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {formatSecondsAsDuration} from "../../utils/formatting";
-import {computed, ref, Ref} from "vue";
+import {formatISODate, formatSecondsAsDuration} from "../../utils/formatting";
+import {useExpandedStore} from "../../utils/expansion";
 import {
-  Artifact,
-  BenchmarkError,
-  Commit,
-  FinishedRun,
-  MissingReason,
+  BenchmarkRequest,
+  BenchmarkRequestStatus,
+  CollectorConfig,
+  isJobComplete,
   StatusResponse,
 } from "./data";
-import {
-  addSeconds,
-  differenceInSeconds,
-  format,
-  fromUnixTime,
-  subSeconds,
-} from "date-fns";
-import {useExpandedStore} from "./expansion";
+import Collector from "./collector.vue";
+import CommitSha from "./commit-sha.vue";
 
-async function loadStatus(loading: Ref<boolean>) {
-  data.value = await withLoading(loading, () =>
-    getJson<StatusResponse>(STATUS_DATA_URL)
-  );
+const loading = ref(true);
+
+const data: Ref<{
+  timeline: BenchmarkRequestRow[];
+  queueLength: number;
+  collectors: CollectorConfig[];
+} | null> = ref(null);
+
+type BenchmarkRequestRow = BenchmarkRequest & {
+  isLastInProgress: boolean;
+  hasPendingJobs: boolean;
+};
+
+function getRequestRowClassName(req: BenchmarkRequestRow) {
+  if (req.status === "InProgress") {
+    return "timeline-row-bold";
+  }
+  return "";
 }
 
-function getArtifactPr(reason: MissingReason): number {
-  if (reason.hasOwnProperty("InProgress")) {
-    return getArtifactPr(reason["InProgress"]);
-  } else if (reason.hasOwnProperty("Master")) {
-    return reason["Master"].pr;
-  } else if (reason.hasOwnProperty("Try")) {
-    return reason["Try"].pr;
+async function loadStatusData(loading: Ref<boolean>) {
+  data.value = await withLoading(loading, async () => {
+    let resp: StatusResponse = await getJson<StatusResponse>(STATUS_DATA_URL);
+    let timeline: BenchmarkRequestRow[] = [];
+
+    let queueLength = 0;
+
+    let requests_with_pending_jobs = new Set();
+    for (const job of resp.collectors.flatMap((c) => c.jobs)) {
+      if (job.status === "Queued" || job.status === "InProgress") {
+        requests_with_pending_jobs.add(job.requestTag);
+      }
+    }
+
+    // Figure out where to draw the line.
+    for (let i = 0; i < resp.requests.length; i++) {
+      let request = resp.requests[i];
+      let isLastInProgress =
+        request.status === "InProgress" &&
+        (i == resp.requests.length - 1 ||
+          resp.requests[i + 1].status !== "InProgress");
+      timeline.push({
+        ...request,
+        isLastInProgress,
+        hasPendingJobs: requests_with_pending_jobs.has(request.tag),
+      });
+
+      if (request.status !== "Completed") {
+        queueLength += 1;
+      }
+    }
+
+    return {
+      timeline,
+      collectors: resp.collectors,
+      queueLength,
+    };
+  });
+}
+
+function getDuration(request: BenchmarkRequest): string {
+  if (request.status === "Completed") {
+    return formatSecondsAsDuration(request.durationS);
+  }
+  return "";
+}
+
+function formatStatus(status: BenchmarkRequestStatus): string {
+  if (status === "Completed") {
+    return "Finished";
+  } else if (status === "InProgress") {
+    return "In progress";
+  } else if (status === "Queued") {
+    return "Queued";
   } else {
-    throw new Error(`Unknown missing reason ${reason}`);
+    return "Unknown";
   }
 }
 
-function getArtifactSha(artifact: Artifact): string {
-  if (artifact.hasOwnProperty("Commit")) {
-    return artifact["Commit"].sha;
-  } else if (artifact.hasOwnProperty("Tag")) {
-    return artifact["Tag"];
-  } else {
-    throw new Error(`Unknown artifact ${artifact}`);
-  }
+function hasErrors(errors: Dict<string>) {
+  return Object.keys(errors).length !== 0;
 }
 
-function commitUrlAsHtml(sha: string): string {
-  return `<a href="https://github.com/rust-lang/rust/commit/${sha}">${sha.substring(
-    0,
-    13
-  )}</a>`;
+function getErrorsLength(errors: Dict<string>) {
+  const errorsLen = Object.keys(errors).length;
+  return `${errorsLen} ${errorsLen > 1 ? "s" : ""}`;
 }
 
-function pullRequestUrlAsHtml(pr: number | null): string {
-  if (pr === null) {
+function PullRequestLink({request}: {request: BenchmarkRequest}) {
+  if (request.requestType === "Release") {
     return "";
   }
-  return `<a href="https://github.com/rust-lang/rust/pull/${pr}">#${pr}</a>`;
-}
-
-function formatCommitAsHtml(commit: Commit, reason: MissingReason): string {
-  const url = commitUrlAsHtml(commit.sha);
-  const type = commit.type === "Try" ? "Try" : "Master";
-  const pr = getArtifactPr(reason);
-
-  return `${type} commit ${url} (${pullRequestUrlAsHtml(pr)})`;
-}
-
-interface CurrentRun {
-  commit: Commit;
-  missing_reason: MissingReason;
-  start: Date;
-  expected_end: Date;
-  expected_total: number;
-  progress: number;
-}
-
-interface TimelineEntry {
-  pr: number | null;
-  kind: string;
-  sha: string;
-  status: string;
-  end_time: Date;
-  end_estimated: boolean;
-  duration: number | null;
-  errors: BenchmarkError[];
-  warning: string | null;
-  current: boolean;
-}
-
-const timeLeft = computed(() => {
-  const steps = data.value?.current?.progress ?? [];
-  let left = 0;
-  for (const step of steps) {
-    if (!step.is_done) {
-      left += Math.max(0, step.expected_duration - step.current_progress);
-    }
-  }
-  return left;
-});
-
-const currentRun: Ref<CurrentRun | null> = computed(() => {
-  const current = data.value?.current ?? null;
-  if (current === null) return null;
-  const sha = getArtifactSha(current.artifact);
-
-  const elapsed = current.progress.reduce(
-    (prev, current) => prev + current.current_progress,
-    0
+  return (
+    <a href={`https://github.com/rust-lang/rust/pull/${request.pr}`}>
+      #{request.pr}
+    </a>
   );
-  const start = subSeconds(new Date(), elapsed);
-  const expected_total = current.progress.reduce(
-    (prev, current) => prev + current.expected_duration,
-    0
-  );
-  const progress = Math.min(1, elapsed / Math.max(1, expected_total));
+}
 
-  for (const [commit, reason] of data.value.missing) {
-    if (commit.sha === sha && reason.hasOwnProperty("InProgress")) {
-      return {
-        commit,
-        missing_reason: reason["InProgress"],
-        start,
-        expected_end: addSeconds(new Date(), timeLeft.value),
-        expected_total,
-        progress,
-      };
+function RequestProgress({
+  request,
+  collectors,
+}: {
+  request: BenchmarkRequest;
+  collectors: CollectorConfig[];
+}): string {
+  const jobs = collectors
+    .flatMap((c) => c.jobs)
+    .filter((j) => j.requestTag === request.tag);
+  const completed = jobs.reduce((acc, job) => {
+    if (isJobComplete(job)) {
+      acc += 1;
     }
-  }
-  return null;
-});
-const lastFinishedRun: Ref<FinishedRun | null> = computed(() => {
-  const finished = data.value?.finished_runs;
-  if (finished.length === 0) return null;
-  return finished[0];
-});
-const expectedDuration: Ref<number | null> = computed(() => {
-  if (data.value === null) return null;
-  const current = currentRun.value;
-  if (current !== null) {
-    return current.expected_total;
+    return acc;
+  }, 0);
+
+  if (request.status === "Completed") {
+    return "✅";
+  } else if (request.status === "Queued") {
+    return "";
   } else {
-    return lastFinishedRun.value?.duration;
-  }
-});
-
-// Timeline of past, current and future runs.
-// Ordered from future to past - at the beginning is the item with the least
-// priority in the queue, and at the end is the oldest finished run.
-const timeline: Ref<TimelineEntry[]> = computed(() => {
-  if (data.value === null) return [];
-  const timeline: TimelineEntry[] = [];
-
-  const current = currentRun.value;
-  const currentTimeLeft = timeLeft.value ?? 0;
-  const expectedRunDuration = expectedDuration.value;
-
-  // The next commit to be benchmarked will be at last position of `queued`
-  const queued = data.value.missing
-    .filter(([_, reason]) => !reason.hasOwnProperty("InProgress"))
-    .reverse();
-  let queued_before = queued.length - 1;
-  const currentRunEnd =
-    current?.expected_end ?? addSeconds(new Date(), currentTimeLeft);
-  for (const [commit, reason] of queued) {
-    const expected_end = addSeconds(
-      currentRunEnd,
-      queued_before * expectedRunDuration + expectedRunDuration
+    return (
+      <progress
+        title={`${completed} out of ${jobs.length} job(s) completed`}
+        max={jobs.length}
+        value={completed}
+      ></progress>
     );
-
-    let kind = commit.type;
-    if (reason.hasOwnProperty("Master") && reason["Master"].is_try_parent) {
-      kind += " (try parent)";
-    }
-
-    timeline.push({
-      pr: getArtifactPr(reason),
-      kind,
-      sha: commit.sha,
-      status: `Queued (#${queued_before + 1})`,
-      end_time: expected_end,
-      end_estimated: true,
-      errors: [],
-      duration: null,
-      warning: null,
-      current: false,
-    });
-    queued_before -= 1;
   }
-
-  if (current !== null) {
-    timeline.push({
-      pr: getArtifactPr(current.missing_reason),
-      kind: current.commit.type,
-      sha: current.commit.sha,
-      status: "In progress",
-      end_time: current.expected_end,
-      end_estimated: true,
-      errors: [],
-      duration: null,
-      warning: null,
-      current: true,
-    });
-  }
-
-  for (const run of data.value.finished_runs) {
-    const kind = run.artifact.hasOwnProperty("Tag")
-      ? run.artifact["Tag"]
-      : run.artifact["Commit"].type;
-
-    let warning = null;
-    if (kind !== "Try" && run.errors.length > 0) {
-      warning = "Master commit with errors";
-    }
-    timeline.push({
-      pr: run.pr,
-      kind,
-      sha: getArtifactSha(run.artifact),
-      status: "Finished",
-      end_time: fromUnixTime(run.finished_at),
-      end_estimated: false,
-      errors: run.errors,
-      duration: run.duration,
-      warning,
-      current: false,
-    });
-  }
-
-  return timeline;
-});
+}
 
 const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
   useExpandedStore();
 
-const loading = ref(true);
+const tableWidth = 8;
 
-const data: Ref<StatusResponse | null> = ref(null);
-loadStatus(loading);
+loadStatusData(loading);
 </script>
 
 <template>
-  <div class="wrapper" v-if="data !== null">
-    <div class="current column-centered">
-      <h3><b>Current collection</b></h3>
-      <div class="column-centered" v-if="currentRun !== null">
-        <div
-          class="benchmark"
-          v-html="
-            formatCommitAsHtml(currentRun.commit, currentRun.missing_reason)
-          "
-        ></div>
-        <table class="current-table">
-          <thead>
-            <tr>
-              <th>Start</th>
-              <th>Progress</th>
-              <th>Expected end</th>
-              <th>Time left</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>{{ format(currentRun.start, "HH:mm") }}</td>
-              <td>
-                <progress
-                  max="100"
-                  :value="currentRun.progress * 100"
-                ></progress>
-              </td>
-              <td>
-                {{ format(currentRun.expected_end, "HH:mm") }}
-              </td>
-              <td>
-                {{ timeLeft <= 0 ? "?" : formatSecondsAsDuration(timeLeft) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <h4 style="margin-top: 20px">Detailed progress</h4>
+  <div v-if="data !== null">
+    <div class="status-page-wrapper">
+      <div class="timeline-wrapper">
+        <h1>Timeline</h1>
+        <div style="margin-bottom: 10px">
+          Queue length: {{ data.queueLength }}
+        </div>
         <table>
           <thead>
             <tr>
-              <th>Step</th>
-              <th></th>
-              <th>Took</th>
-              <th>Expected</th>
+              <th>PR</th>
+              <th>Kind</th>
+              <th>Tag</th>
+              <th>Status</th>
+              <th>Progress</th>
+              <th>Complete at</th>
+              <th>Duration</th>
+              <th>Errors</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="step in data.current.progress">
-              <td>{{ step.step }}</td>
-              <td>
-                <progress
-                  :max="step.expected_duration.toString()"
-                  :value="
-                    (step.is_done
-                      ? step.expected_duration
-                      : step.current_progress
-                    ).toString()
-                  "
-                ></progress>
-              </td>
-              <td class="aligned">
-                {{
-                  step.current_progress == 0
-                    ? ""
-                    : formatSecondsAsDuration(step.current_progress)
-                }}
-              </td>
-              <td class="aligned">
-                {{ formatSecondsAsDuration(step.expected_duration) }}
-              </td>
-            </tr>
+            <template v-for="req in data.timeline">
+              <tr v-if="req.isLastInProgress">
+                <td :colspan="tableWidth"><hr /></td>
+              </tr>
+              <tr :class="getRequestRowClassName(req)">
+                <td><PullRequestLink :request="req" /></td>
+                <td>{{ req.requestType }}</td>
+                <td><CommitSha :tag="req.tag"></CommitSha></td>
+                <td>
+                  {{ formatStatus(req.status)
+                  }}{{
+                    req.status === "Completed" && req.hasPendingJobs ? "*" : ""
+                  }}
+                </td>
+                <td>
+                  <RequestProgress
+                    :request="req"
+                    :collectors="data.collectors"
+                  />
+                </td>
+                <td>
+                  {{ formatISODate(req.completedAt) }}
+                  <span v-if="req.endEstimated">(est.)</span>
+                </td>
+                <td style="text-align: right">
+                  {{ getDuration(req) }}
+                </td>
+
+                <td>
+                  <template v-if="hasErrors(req.errors)">
+                    <button @click="toggleExpandedErrors(req.tag)">
+                      {{ getErrorsLength(req.errors) }}
+                      {{ hasExpandedErrors(req.tag) ? "(hide)" : "(show)" }}
+                    </button>
+                  </template>
+                </td>
+              </tr>
+
+              <tr v-if="hasExpandedErrors(req.tag)">
+                <td :colspan="tableWidth" style="padding: 10px 0">
+                  <div v-for="[context, error] in Object.entries(req.errors)">
+                    <div>
+                      <details>
+                        <summary>{{ context }}</summary>
+                        <pre class="error">{{ error }}</pre>
+                      </details>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="req.isLastInProgress">
+                <td :colspan="tableWidth"><hr /></td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
-      <div class="column-centered" v-else>
-        <div>No benchmark in progress.</div>
-        <div>
-          Last collection finished at
-          {{ fromUnixTime(lastFinishedRun.finished_at).toLocaleString() }} ({{
-            formatSecondsAsDuration(
-              differenceInSeconds(
-                new Date(),
-                fromUnixTime(lastFinishedRun.finished_at)
-              )
-            )
-          }}
-          ago)
+      <div class="collector-wrapper">
+        <h1>Collectors</h1>
+        <div class="collectors-grid">
+          <div v-for="collector in data.collectors" :key="collector.name">
+            <Collector :collector="collector" />
+          </div>
         </div>
       </div>
     </div>
-    <div class="column-centered timeline">
-      <h3><b>Timeline</b></h3>
-      <div style="margin-bottom: 10px">
-        Queue length: {{ data.missing.length }}
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>PR</th>
-            <th>Kind</th>
-            <th>SHA</th>
-            <th>Status</th>
-            <th>Run end</th>
-            <th>Duration</th>
-            <th>Errors</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="item in timeline">
-            <tr v-if="item.current">
-              <td colspan="7"><hr /></td>
-            </tr>
-            <tr :class="{active: item.sha === currentRun?.commit?.sha}">
-              <td
-                class="right-align"
-                v-html="pullRequestUrlAsHtml(item.pr)"
-              ></td>
-              <td class="centered">
-                {{ item.kind
-                }}<span v-if="item.warning !== null" :title="item.warning"
-                  >❗</span
-                >
-              </td>
-              <td class="right-align" v-html="commitUrlAsHtml(item.sha)"></td>
-              <td class="centered">{{ item.status }}</td>
-              <td>
-                {{ item.end_time.toLocaleString()
-                }}<template v-if="item.end_estimated"> (est.)</template>
-              </td>
-              <td v-if="item.duration !== null">
-                {{ formatSecondsAsDuration(item.duration) }}
-              </td>
-              <td v-else class="centered">-</td>
-              <td v-if="item.errors.length > 0">
-                <button @click="toggleExpandedErrors(item.sha)">
-                  {{ hasExpandedErrors(item.sha) ? "Hide" : "Show" }}
-                  {{ item.errors.length }} error{{
-                    item.errors.length !== 1 ? "s" : ""
-                  }}
-                </button>
-              </td>
-              <td v-else></td>
-            </tr>
-            <tr v-if="hasExpandedErrors(item.sha)">
-              <td colspan="7" style="padding: 10px 0">
-                <div v-for="benchmark in item.errors">
-                  <div>
-                    <details open>
-                      <summary>{{ benchmark.name }}</summary>
-                      <pre class="error">{{ benchmark.error }}</pre>
-                    </details>
-                  </div>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="item.current">
-              <td colspan="7"><hr /></td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
   </div>
   <div v-else>Loading status…</div>
-  <div style="margin-top: 10px">Times are local.</div>
 </template>
 
 <style scoped lang="scss">
-.timeline {
-  max-width: 100%;
-  width: fit-content;
+.status-page-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.collector-wrapper {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding-left: 8px;
+}
+
+.timeline-row-bold {
+  font-weight: bold;
+}
+
+.timeline-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 50px;
 
   table {
     border-collapse: collapse;
     font-size: 1.1em;
 
+    @media screen and (max-width: 850px) {
+      align-self: start;
+    }
+
     th,
     td {
-      padding: 0.2em;
+      text-align: center;
     }
 
     th {
-      text-align: center;
+      padding: 1em 0.5em;
     }
-    td {
-      text-align: left;
-      padding: 0 0.5em;
 
-      &.centered {
-        text-align: center;
-      }
-      &.right-align {
-        text-align: right;
-      }
+    td {
+      padding: 1px 0.5em;
     }
+
     tr.active {
       font-weight: bold;
     }
   }
-
-  @media screen and (min-width: 1440px) {
-    width: 100%;
-  }
 }
-.wrapper {
-  display: grid;
-  column-gap: 100px;
-  grid-template-columns: 1fr;
 
-  @media screen and (min-width: 1440px) {
-    grid-template-columns: 4fr 6fr;
-  }
-}
 .current {
   max-width: 100%;
   width: fit-content;
@@ -496,5 +335,12 @@ loadStatus(loading);
   max-width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.collectors-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(800px, 1fr));
+  grid-gap: 20px;
 }
 </style>

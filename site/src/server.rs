@@ -378,13 +378,8 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 .await;
         }
         "/perf/status_page" => {
-            return server
-                .handle_get_async(&req, request_handlers::handle_status_page)
-                .await;
-        }
-        "/perf/status_page_new" => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-            let result = request_handlers::handle_status_page_new(ctxt).await;
+            let result = request_handlers::handle_status_page(ctxt).await;
             return match result {
                 Ok(result) => Ok(http::Response::builder()
                     .header_typed(ContentType::json())
@@ -397,6 +392,11 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .body(hyper::Body::from(format!("{err:?}")))
                     .unwrap()),
             };
+        }
+        "/perf/status_page_old" => {
+            return server
+                .handle_get_async(&req, request_handlers::handle_status_page_old)
+                .await;
         }
         "/perf/next_artifact" => {
             return server
@@ -658,7 +658,7 @@ async fn handle_fs_path(
         | "/dashboard.html"
         | "/detailed-query.html"
         | "/help.html"
-        | "/status_new.html"
+        | "/status_old.html"
         | "/status.html" => resolve_template(relative_path).await,
         _ => match TEMPLATES.get_static_asset(relative_path, use_compression)? {
             Payload::Compressed(data) => {

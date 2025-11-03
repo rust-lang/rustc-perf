@@ -10,7 +10,7 @@ use database::{ArtifactId, Lookup};
 // How many historical (finished) runs should be returned from the status API.
 const FINISHED_RUN_COUNT: u64 = 5;
 
-pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
+pub async fn handle_status_page_old(ctxt: Arc<SiteCtxt>) -> status::Response {
     let missing = ctxt.missing_commits().await;
 
     // FIXME: no current builds

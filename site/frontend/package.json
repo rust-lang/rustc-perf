@@ -39,8 +39,8 @@
       "source": "src/pages/status.ts",
       "distDir": "dist/scripts"
     },
-    "status_new": {
-      "source": "src/pages/status_new.ts",
+    "status_old": {
+      "source": "src/pages/status_old.ts",
       "distDir": "dist/scripts"
     },
     "bootstrap": {
