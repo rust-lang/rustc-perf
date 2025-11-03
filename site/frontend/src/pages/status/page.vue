@@ -216,7 +216,7 @@ loadStatusData(loading);
               </tr>
 
               <tr v-if="hasExpandedErrors(req.tag)">
-                <td :colspan="tableWidth" style="padding: 10px 0">
+                <td :colspan="tableWidth" class="error-row">
                   <div v-for="[context, error] in Object.entries(req.errors)">
                     <div>
                       <details>
@@ -273,6 +273,7 @@ loadStatusData(loading);
   table {
     border-collapse: collapse;
     font-size: 1.1em;
+    max-width: 1200px;
 
     @media screen and (max-width: 850px) {
       align-self: start;
@@ -329,12 +330,27 @@ loadStatusData(loading);
 .aligned {
   text-align: right;
 }
+.error-row {
+  padding: 20px 0;
+  text-align: left;
+
+  summary {
+    padding: 5px;
+
+    &:hover {
+      cursor: pointer;
+      background-color: #f7f7f7;
+    }
+  }
+}
 .error {
   padding: 10px;
   background-color: #f7f7f7;
   max-width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
+  text-align: left;
+  margin-top: 0;
 }
 
 .collectors-grid {
