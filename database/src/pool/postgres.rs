@@ -1717,21 +1717,21 @@ where
         sha: &str,
         parent_sha: &str,
         commit_date: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
-        self.conn()
+    ) -> anyhow::Result<bool> {
+        let modified_rows = self
+            .conn()
             .execute(
-                "UPDATE
-                benchmark_request
-            SET
-                tag = $1,
-                parent_sha = $2,
-                status = $3,
-                commit_date = $6
-            WHERE
-                pr = $4
-                AND commit_type = 'try'
-                AND tag IS NULL
-                AND status = $5;",
+                "UPDATE benchmark_request
+                SET
+                    tag = $1,
+                    parent_sha = $2,
+                    status = $3,
+                    commit_date = $6
+                WHERE
+                    pr = $4
+                    AND commit_type = 'try'
+                    AND tag IS NULL
+                    AND status = $5;",
                 &[
                     &sha,
                     &parent_sha,
@@ -1744,7 +1744,7 @@ where
             .await
             .context("failed to attach SHAs to try benchmark request")?;
 
-        Ok(())
+        Ok(modified_rows > 0)
     }
 
     async fn load_pending_benchmark_requests(&self) -> anyhow::Result<PendingBenchmarkRequests> {

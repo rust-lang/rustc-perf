@@ -4,7 +4,6 @@ pub mod comparison_summary;
 use crate::api::github::Commit;
 use crate::job_queue::should_use_job_queue;
 use crate::load::{MissingReason, SiteCtxt, TryCommit};
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -234,25 +233,6 @@ pub async fn rollup_pr_number(
         .then_some(issue.number))
 }
 
-async fn attach_shas_to_try_benchmark_request(
-    conn: &dyn database::pool::Connection,
-    pr_number: u32,
-    commit: &TryCommit,
-    commit_date: DateTime<Utc>,
-) {
-    if let Err(e) = conn
-        .attach_shas_to_try_benchmark_request(
-            pr_number,
-            &commit.sha,
-            &commit.parent_sha,
-            commit_date,
-        )
-        .await
-    {
-        log::error!("Failed to add shas to try commit: {e:?}");
-    }
-}
-
 pub async fn enqueue_shas(
     ctxt: &SiteCtxt,
     gh_client: &client::Client,
@@ -280,14 +260,14 @@ pub async fn enqueue_shas(
         let conn = ctxt.conn().await;
 
         let queued = if should_use_job_queue(pr_number) {
-            attach_shas_to_try_benchmark_request(
-                &*conn,
+            conn.attach_shas_to_try_benchmark_request(
                 pr_number,
-                &try_commit,
+                &try_commit.sha,
+                &try_commit.parent_sha,
                 commit_response.commit.committer.date,
             )
-            .await;
-            true
+            .await
+            .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?
         } else {
             conn.pr_attach_commit(
                 pr_number,
