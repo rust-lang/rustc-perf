@@ -219,14 +219,17 @@ pub trait Connection: Send + Sync {
     ) -> anyhow::Result<()>;
 
     /// Update a Try commit to have a `sha` and `parent_sha`. Will update the
-    /// status of the request too a ready state.
+    /// status of the request to the "artifacts_ready" state.
+    ///
+    /// Returns `true` if any benchmark request that was waiting for artifacts was found for the
+    /// given PR.
     async fn attach_shas_to_try_benchmark_request(
         &self,
         pr: u32,
         sha: &str,
         parent_sha: &str,
         commit_date: DateTime<Utc>,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<bool>;
 
     /// Add a benchmark job to the job queue and returns its ID, if it was not
     /// already in the DB previously.
@@ -658,9 +661,10 @@ mod tests {
             let req = BenchmarkRequest::create_try_without_artifacts(42, "", "");
 
             db.insert_benchmark_request(&req).await.unwrap();
-            db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
+            assert!(db
+                .attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
                 .await
-                .unwrap();
+                .unwrap());
 
             let req_db = db
                 .load_pending_benchmark_requests()
@@ -684,6 +688,21 @@ mod tests {
             assert_eq!(req_db.tag(), Some("sha1"));
             assert_eq!(req_db.parent_sha(), Some("sha-parent-1"));
             assert_eq!(req_db.pr(), Some(42));
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn attach_shas_missing_try_request() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db();
+
+            assert!(!db
+                .attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
+                .await
+                .unwrap());
 
             Ok(ctx)
         })

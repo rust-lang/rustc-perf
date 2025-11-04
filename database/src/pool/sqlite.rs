@@ -1344,7 +1344,7 @@ impl Connection for SqliteConnection {
         _sha: &str,
         _parent_sha: &str,
         _commit_date: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<bool> {
         no_queue_implementation_abort!()
     }
 
