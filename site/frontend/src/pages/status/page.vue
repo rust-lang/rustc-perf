@@ -8,7 +8,6 @@ import {formatISODate, formatSecondsAsDuration} from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
-  BenchmarkRequestStatus,
   CollectorConfig,
   isJobComplete,
   StatusResponse,
@@ -83,7 +82,8 @@ function getDuration(request: BenchmarkRequest): string {
   return "";
 }
 
-function formatStatus(status: BenchmarkRequestStatus): string {
+function formatStatus(request: BenchmarkRequest): string {
+  const status = request.status;
   if (status === "Completed") {
     return "Finished";
   } else if (status === "InProgress") {
@@ -95,8 +95,8 @@ function formatStatus(status: BenchmarkRequestStatus): string {
   }
 }
 
-function hasErrors(errors: Dict<string>) {
-  return Object.keys(errors).length !== 0;
+function hasErrors(request: BenchmarkRequest) {
+  return Object.keys(request.errors).length !== 0;
 }
 
 function getErrorsLength(errors: Dict<string>) {
@@ -133,7 +133,11 @@ function RequestProgress({
   }, 0);
 
   if (request.status === "Completed") {
-    return "✅";
+    if (hasErrors(request)) {
+      return "❌";
+    } else {
+      return "✅";
+    }
   } else if (request.status === "Queued") {
     return "";
   } else {
@@ -186,7 +190,7 @@ loadStatusData(loading);
                 <td>{{ req.requestType }}</td>
                 <td><CommitSha :tag="req.tag"></CommitSha></td>
                 <td>
-                  {{ formatStatus(req.status)
+                  {{ formatStatus(req)
                   }}{{
                     req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
@@ -206,7 +210,7 @@ loadStatusData(loading);
                 </td>
 
                 <td>
-                  <template v-if="hasErrors(req.errors)">
+                  <template v-if="hasErrors(req)">
                     <button @click="toggleExpandedErrors(req.tag)">
                       {{ getErrorsLength(req.errors) }}
                       {{ hasExpandedErrors(req.tag) ? "(hide)" : "(show)" }}

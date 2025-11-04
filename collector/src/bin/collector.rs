@@ -1722,9 +1722,10 @@ async fn run_benchmark_job(
                 Ok(sysroot) => sysroot,
                 Err(SysrootDownloadError::SysrootShaNotFound) => {
                     return Err(BenchmarkJobError::Permanent(anyhow::anyhow!(
-                        "Artifacts for SHA {} and target {} were not found on CI servers",
+                        "Artifacts for SHA `{}`, target `{}` and backend `{}` were not found on CI servers",
                         commit.sha,
-                        job.target().as_str()
+                        job.target().as_str(),
+                        job.backend().as_str()
                     )))
                 }
                 Err(SysrootDownloadError::IO(error)) => return Err(error.into()),
