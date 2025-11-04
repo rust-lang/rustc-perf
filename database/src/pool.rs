@@ -15,6 +15,14 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 pub mod postgres;
 pub mod sqlite;
 
+#[derive(Debug)]
+pub enum JobEnqueueResult {
+    JobCreated(u32),
+    JobAlreadyExisted,
+    RequestShaNotFound { error: String },
+    Other(anyhow::Error),
+}
+
 #[async_trait::async_trait]
 pub trait Connection: Send + Sync {
     async fn maybe_create_indices(&mut self);
@@ -241,20 +249,7 @@ pub trait Connection: Send + Sync {
         profile: Profile,
         benchmark_set: u32,
         kind: BenchmarkJobKind,
-    ) -> anyhow::Result<Option<u32>>;
-
-    /// Add a benchmark job which is explicitly using a `parent_sha` we split
-    /// this out to improve our error handling. A `parent_sha` may not have
-    /// an associated request in the `benchmarek`
-    async fn enqueue_parent_benchmark_job(
-        &self,
-        parent_sha: &str,
-        target: Target,
-        backend: CodegenBackend,
-        profile: Profile,
-        benchmark_set: u32,
-        kind: BenchmarkJobKind,
-    ) -> (bool, anyhow::Result<u32>);
+    ) -> JobEnqueueResult;
 
     /// Returns a set of compile-time benchmark test cases that were already computed for the
     /// given artifact.
@@ -460,6 +455,15 @@ mod tests {
             sha: commit_sha.into(),
             date: Date(time),
             r#type,
+        }
+    }
+
+    impl JobEnqueueResult {
+        pub fn unwrap(self) -> u32 {
+            match self {
+                JobEnqueueResult::JobCreated(id) => id,
+                error => panic!("Unexpected job enqueue result: {error:?}"),
+            }
         }
     }
 
@@ -734,7 +738,10 @@ mod tests {
                     BenchmarkJobKind::Runtime,
                 )
                 .await;
-            assert!(result.is_ok());
+            match result {
+                JobEnqueueResult::JobCreated(_) => {}
+                error => panic!("Invalid result: {error:?}"),
+            }
 
             Ok(ctx)
         })
@@ -880,16 +887,20 @@ mod tests {
                 .unwrap();
 
             // Now we can insert the job
-            db.enqueue_benchmark_job(
-                benchmark_request.tag().unwrap(),
-                Target::X86_64UnknownLinuxGnu,
-                CodegenBackend::Llvm,
-                Profile::Opt,
-                1u32,
-                BenchmarkJobKind::Runtime,
-            )
-            .await
-            .unwrap();
+            match db
+                .enqueue_benchmark_job(
+                    benchmark_request.tag().unwrap(),
+                    Target::X86_64UnknownLinuxGnu,
+                    CodegenBackend::Llvm,
+                    Profile::Opt,
+                    1u32,
+                    BenchmarkJobKind::Runtime,
+                )
+                .await
+            {
+                JobEnqueueResult::JobCreated(_) => {}
+                error => panic!("Invalid result: {error:?}"),
+            };
 
             let (benchmark_job, artifact_id) = db
                 .dequeue_benchmark_job(
@@ -1225,29 +1236,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enqueue_parent_benchmark_job() {
-        run_postgres_test(|ctx| async {
-            let db = ctx.db();
-
-            let (violates_foreign_key, _) = db
-                .enqueue_parent_benchmark_job(
-                    "sha-0",
-                    Target::X86_64UnknownLinuxGnu,
-                    CodegenBackend::Llvm,
-                    Profile::Debug,
-                    0,
-                    BenchmarkJobKind::Runtime,
-                )
-                .await;
-
-            assert!(violates_foreign_key);
-
-            Ok(ctx)
-        })
-        .await;
-    }
-
-    #[tokio::test]
     async fn purge_artifact() {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
@@ -1263,7 +1251,6 @@ mod tests {
                 BenchmarkJobKind::Compiletime,
             )
             .await
-            .unwrap()
             .unwrap();
             db.purge_artifact(&ArtifactId::Tag("foo".to_string())).await;
 

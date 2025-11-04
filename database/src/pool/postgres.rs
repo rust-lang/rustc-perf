@@ -1,4 +1,6 @@
-use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::pool::{
+    Connection, ConnectionManager, JobEnqueueResult, ManagedConnection, Transaction,
+};
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
@@ -1773,67 +1775,6 @@ where
         })
     }
 
-    async fn enqueue_parent_benchmark_job(
-        &self,
-        parent_sha: &str,
-        target: Target,
-        backend: CodegenBackend,
-        profile: Profile,
-        benchmark_set: u32,
-        kind: BenchmarkJobKind,
-    ) -> (bool, anyhow::Result<u32>) {
-        let row_result = self
-            .conn()
-            .query_one(
-                r#"
-            INSERT INTO job_queue(
-                request_tag,
-                target,
-                backend,
-                profile,
-                benchmark_set,
-                status,
-                kind
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT DO NOTHING
-            RETURNING job_queue.id
-                "#,
-                &[
-                    &parent_sha,
-                    &target,
-                    &backend,
-                    &profile,
-                    &(benchmark_set as i32),
-                    &BENCHMARK_JOB_STATUS_QUEUED_STR,
-                    &kind,
-                ],
-            )
-            .await;
-
-        match row_result {
-            Ok(row) => (false, Ok(row.get::<_, i32>(0) as u32)),
-            Err(e) => {
-                if let Some(db_err) = e.as_db_error() {
-                    if db_err.code() == &SqlState::FOREIGN_KEY_VIOLATION {
-                        let constraint = db_err.constraint().unwrap_or("benchmark_tag constraint");
-                        let detail = db_err.detail().unwrap_or("");
-                        return (
-                            true,
-                            Err(anyhow::anyhow!(
-                                "Foreign key violation on {} for request_tag='{}'. {}",
-                                constraint,
-                                parent_sha,
-                                detail
-                            )),
-                        );
-                    }
-                }
-                (false, Err(e.into()))
-            }
-        }
-    }
-
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
@@ -1842,9 +1783,9 @@ where
         profile: Profile,
         benchmark_set: u32,
         kind: BenchmarkJobKind,
-    ) -> anyhow::Result<Option<u32>> {
+    ) -> JobEnqueueResult {
         // This will return zero rows if the job already exists
-        let rows = self
+        let result = self
             .conn()
             .query(
                 r#"
@@ -1871,12 +1812,27 @@ where
                     &kind,
                 ],
             )
-            .await
-            .context("failed to insert benchmark_job")?;
-        if let Some(row) = rows.first() {
-            Ok(Some(row.get::<_, i32>(0) as u32))
-        } else {
-            Ok(None)
+            .await;
+
+        match result {
+            Ok(rows) => {
+                let Some(row) = rows.into_iter().next() else {
+                    return JobEnqueueResult::JobAlreadyExisted;
+                };
+                JobEnqueueResult::JobCreated(row.get::<_, i32>(0) as u32)
+            }
+            Err(e) => {
+                if let Some(db_err) = e.as_db_error() {
+                    if db_err.code() == &SqlState::FOREIGN_KEY_VIOLATION {
+                        let constraint = db_err.constraint().unwrap_or("benchmark_tag constraint");
+                        let detail = db_err.detail().unwrap_or("");
+                        return JobEnqueueResult::RequestShaNotFound {
+                            error: format!("Foreign key violation on `{constraint}`: {detail}"),
+                        };
+                    }
+                }
+                JobEnqueueResult::Other(e.into())
+            }
         }
     }
 

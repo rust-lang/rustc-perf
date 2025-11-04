@@ -1,3 +1,4 @@
+use crate::pool::JobEnqueueResult;
 use crate::{
     BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest,
     BenchmarkRequestStatus, BenchmarkSet, CodegenBackend, CollectorConfig, Connection, Profile,
@@ -40,7 +41,7 @@ impl RequestBuilder {
 
     pub async fn add_jobs(mut self, db: &dyn Connection, jobs: &[JobBuilder]) -> Self {
         for job in jobs {
-            let id = db
+            let id = match db
                 .enqueue_benchmark_job(
                     self.tag(),
                     job.target,
@@ -50,8 +51,11 @@ impl RequestBuilder {
                     job.kind,
                 )
                 .await
-                .unwrap();
-            self.jobs.push((job.clone(), id.unwrap()));
+            {
+                JobEnqueueResult::JobCreated(id) => id,
+                error => panic!("Unexpected job enqueue result: {error:?}"),
+            };
+            self.jobs.push((job.clone(), id));
         }
         self
     }
