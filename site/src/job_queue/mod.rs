@@ -170,7 +170,14 @@ fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRe
 /// after an in-progress request is finished, the ordering of the rest of the queue does not
 /// change (unless some other request was added to the queue in the meantime).
 ///
-/// Does not consider requests that are waiting for artifacts or that are alredy completed.
+/// Does not consider requests that are waiting for artifacts or that are already completed.
+///
+/// The returned order is:
+/// - In progress (if present)
+/// - First to be benchmarked
+/// - Second to be benchmarked
+/// - Third to be benchmarked
+/// - ...
 pub async fn build_queue(
     conn: &dyn database::pool::Connection,
 ) -> anyhow::Result<Vec<BenchmarkRequest>> {
