@@ -34,7 +34,7 @@ async fn create_benchmark_request_master_commits(
     ctxt: &SiteCtxt,
     conn: &dyn database::pool::Connection,
     index: &BenchmarkRequestIndex,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<()> {
     let now = Utc::now();
 
     let master_commits = ctxt.get_master_commits();
@@ -44,7 +44,6 @@ async fn create_benchmark_request_master_commits(
         .iter()
         .filter(|c| now.signed_duration_since(c.time) < chrono::Duration::days(29));
 
-    let mut inserted = false;
     for master_commit in master_commits {
         if !index.contains_tag(&master_commit.sha) && conn.pr_of(&master_commit.sha).await.is_none()
         {
@@ -59,12 +58,10 @@ async fn create_benchmark_request_master_commits(
 
             if let Err(error) = conn.insert_benchmark_request(&benchmark).await {
                 log::error!("Failed to insert master benchmark request: {error:?}");
-            } else {
-                inserted = true;
             }
         }
     }
-    Ok(inserted)
+    Ok(())
 }
 
 /// Store the latest release commits or do nothing if all of them are
@@ -73,7 +70,7 @@ async fn create_benchmark_request_master_commits(
 async fn create_benchmark_request_releases(
     conn: &dyn database::pool::Connection,
     index: &BenchmarkRequestIndex,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<()> {
     let releases: String = reqwest::get("https://static.rust-lang.org/manifests.txt")
         .await?
         .text()
@@ -85,7 +82,6 @@ async fn create_benchmark_request_releases(
         .filter_map(parse_release_string)
         .take(20);
 
-    let mut inserted = false;
     for (name, commit_date) in releases {
         if !index.contains_tag(&name) && conn.artifact_by_name(&name).await.is_none() {
             let release_request = BenchmarkRequest::create_release(&name, commit_date);
@@ -93,12 +89,10 @@ async fn create_benchmark_request_releases(
 
             if let Err(error) = conn.insert_benchmark_request(&release_request).await {
                 log::error!("Failed to insert release benchmark request: {error}");
-            } else {
-                inserted = true;
             }
         }
     }
-    Ok(inserted)
+    Ok(())
 }
 
 /// Sorts try and master requests that are in the `ArtifactsReady` status and return them in the
@@ -414,23 +408,18 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let index = ctxt.known_benchmark_requests.load();
-
-    let mut requests_inserted = false;
+    let index = conn
+        .load_benchmark_request_index()
+        .await
+        .context("Failed to load benchmark request index")?;
 
     // Put the master commits into the `benchmark_requests` queue
-    match create_benchmark_request_master_commits(ctxt, &*conn, &index).await {
-        Ok(inserted) => requests_inserted |= inserted,
-        Err(error) => {
-            log::error!("Could not insert master benchmark requests into the database: {error:?}");
-        }
+    if let Err(error) = create_benchmark_request_master_commits(ctxt, &*conn, &index).await {
+        log::error!("Could not insert master benchmark requests into the database: {error:?}");
     }
     // Put the releases into the `benchmark_requests` queue
-    match create_benchmark_request_releases(&*conn, &index).await {
-        Ok(inserted) => requests_inserted |= inserted,
-        Err(error) => {
-            log::error!("Could not insert release benchmark requests into the database: {error:?}");
-        }
+    if let Err(error) = create_benchmark_request_releases(&*conn, &index).await {
+        log::error!("Could not insert release benchmark requests into the database: {error:?}");
     }
 
     let mut completed_benchmarks = vec![];
@@ -448,22 +437,6 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
                 .await
                 .context("Failed to send comparison comment(s)"),
         );
-    }
-
-    // If some change happened, reload the benchmark request index
-    if requests_inserted {
-        match conn
-            .load_benchmark_request_index()
-            .await
-            .context("Failed to load benchmark request index")
-        {
-            Ok(index) => {
-                ctxt.known_benchmark_requests.store(Arc::new(index));
-            }
-            Err(error) => {
-                result = combine_result(result, Err(error));
-            }
-        };
     }
 
     // Propagate the error
