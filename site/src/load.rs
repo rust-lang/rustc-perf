@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit};
+use database::Pool;
 pub use database::{ArtifactId, Benchmark, Commit};
-use database::{BenchmarkRequestIndex, Pool};
 use database::{CommitType, Date};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -128,8 +128,6 @@ pub struct SiteCtxt {
     pub landing_page: ArcSwap<Option<Arc<crate::api::graphs::Response>>>,
     /// Index of various common queries
     pub index: ArcSwap<database::Index>,
-    /// Index of all benchmark requests that we have in the DB
-    pub known_benchmark_requests: ArcSwap<BenchmarkRequestIndex>,
     /// Cached master-branch Rust commits
     pub master_commits: Arc<ArcSwap<MasterCommitCache>>, // outer Arc enables mutation in background task
     /// Cache for self profile data
@@ -162,7 +160,6 @@ impl SiteCtxt {
 
         let mut conn = pool.connection().await;
         let index = database::Index::load(&mut *conn).await;
-        let benchmark_request_index = conn.load_benchmark_request_index().await?;
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
@@ -180,7 +177,6 @@ impl SiteCtxt {
         Ok(Self {
             config,
             index: ArcSwap::new(Arc::new(index)),
-            known_benchmark_requests: ArcSwap::new(Arc::new(benchmark_request_index)),
             master_commits: Arc::new(ArcSwap::new(Arc::new(master_commits))),
             pool,
             landing_page: ArcSwap::new(Arc::new(None)),
