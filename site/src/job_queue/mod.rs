@@ -9,8 +9,8 @@ use collector::benchmark_set::benchmark_set_count;
 use database::pool::{JobEnqueueResult, Transaction};
 use database::{
     BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
-    BenchmarkRequestType, CodegenBackend, Date, PendingBenchmarkRequests, Profile, QueuedCommit,
-    Target,
+    BenchmarkRequestType, CodegenBackend, Connection, Date, PendingBenchmarkRequests, Profile,
+    QueuedCommit, Target,
 };
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -370,12 +370,12 @@ pub async fn enqueue_benchmark_request(
 /// Returns benchmark requests that were completed.
 async fn process_benchmark_requests(
     conn: &mut dyn database::pool::Connection,
-) -> anyhow::Result<Vec<BenchmarkRequest>> {
+    completed_benchmarks: &mut Vec<BenchmarkRequest>,
+) -> anyhow::Result<()> {
     let queue = build_queue(conn).await?;
 
     log::debug!("Current queue: {queue:?}");
 
-    let mut completed = vec![];
     for request in queue {
         match request.status() {
             BenchmarkRequestStatus::InProgress => {
@@ -386,7 +386,7 @@ async fn process_benchmark_requests(
                     .context("cannot mark benchmark request as completed")?
                 {
                     log::info!("Request {tag} marked as completed");
-                    completed.push(request);
+                    completed_benchmarks.push(request);
                     continue;
                 }
                 break;
@@ -403,7 +403,7 @@ async fn process_benchmark_requests(
             }
         }
     }
-    Ok(completed)
+    Ok(())
 }
 
 /// Creates new benchmark requests, enqueues jobs for ready benchmark requests and
@@ -432,73 +432,108 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
             log::error!("Could not insert release benchmark requests into the database: {error:?}");
         }
     }
+
+    let mut completed_benchmarks = vec![];
     // Enqueue waiting requests and try to complete in-progress ones
-    let completed_reqs = process_benchmark_requests(&mut *conn)
+    let mut result = process_benchmark_requests(&mut *conn, &mut completed_benchmarks)
         .await
-        .context("Failed to process benchmark requests")?;
+        .context("Failed to process benchmark requests");
+
+    // Send a comment to GitHub for completed requests and reload the DB index,
+    // regardless whether there was an error when processing the requests or not.
+    if !completed_benchmarks.is_empty() {
+        result = combine_result(
+            result,
+            handle_completed_requests(ctxt, &mut *conn, completed_benchmarks)
+                .await
+                .context("Failed to send comparison comment(s)"),
+        );
+    }
 
     // If some change happened, reload the benchmark request index
     if requests_inserted {
-        ctxt.known_benchmark_requests.store(Arc::new(
-            conn.load_benchmark_request_index()
-                .await
-                .context("Failed to load benchmark request index")?,
-        ));
+        match conn
+            .load_benchmark_request_index()
+            .await
+            .context("Failed to load benchmark request index")
+        {
+            Ok(index) => {
+                ctxt.known_benchmark_requests.store(Arc::new(index));
+            }
+            Err(error) => {
+                result = combine_result(result, Err(error));
+            }
+        };
     }
 
-    // Send a comment to GitHub for completed requests and reload the DB index
-    if !completed_reqs.is_empty() {
-        let index = database::Index::load(&mut *conn).await;
-        log::info!("index has {} commits", index.commits().len());
-        ctxt.index.store(Arc::new(index));
+    // Propagate the error
+    result
+}
 
-        // Refresh the landing page
-        ctxt.landing_page.store(Arc::new(None));
+fn combine_result<T>(a: anyhow::Result<T>, b: anyhow::Result<T>) -> anyhow::Result<T> {
+    match (a, b) {
+        (Ok(v), Ok(_)) => Ok(v),
+        (Err(e), Ok(_)) | (Ok(_), Err(e)) => Err(e),
+        (Err(e1), Err(e2)) => Err(anyhow::anyhow!("{e2:?}\n\nPreceded by: {e1:?}")),
+    }
+}
 
-        // Send comments to GitHub
-        for request in completed_reqs {
-            let (is_master, pr, sha, parent_sha) = match request.commit_type() {
-                BenchmarkRequestType::Try {
-                    pr,
-                    parent_sha,
-                    sha,
-                } => (
-                    false,
-                    *pr,
-                    sha.clone().expect("Completed try commit without a SHA"),
-                    parent_sha
-                        .clone()
-                        .expect("Completed try commit without a parent SHA"),
-                ),
-                BenchmarkRequestType::Master {
-                    pr,
-                    sha,
-                    parent_sha,
-                } => (true, *pr, sha.clone(), parent_sha.clone()),
-                BenchmarkRequestType::Release { .. } => continue,
-            };
-            let commit = QueuedCommit {
+/// Reload the main index and send GitHub comments.
+async fn handle_completed_requests(
+    ctxt: &SiteCtxt,
+    conn: &mut dyn Connection,
+    completed_benchmarks: Vec<BenchmarkRequest>,
+) -> anyhow::Result<()> {
+    // Reload the index, so that it has the new results
+    let index = database::Index::load(conn).await;
+    log::info!("Index has {} commits", index.commits().len());
+    ctxt.index.store(Arc::new(index));
+
+    // Refresh the landing page
+    ctxt.landing_page.store(Arc::new(None));
+
+    // Send comments to GitHub
+    for request in completed_benchmarks {
+        let (is_master, pr, sha, parent_sha) = match request.commit_type() {
+            BenchmarkRequestType::Try {
+                pr,
+                parent_sha,
+                sha,
+            } => (
+                false,
+                *pr,
+                sha.clone().expect("Completed try commit without a SHA"),
+                parent_sha
+                    .clone()
+                    .expect("Completed try commit without a parent SHA"),
+            ),
+            BenchmarkRequestType::Master {
                 pr,
                 sha,
                 parent_sha,
-                include: None,
-                exclude: None,
-                runs: None,
-                commit_date: request.commit_date().map(Date),
-                backends: Some(
-                    request
-                        .backends()?
-                        .into_iter()
-                        .map(|b| b.as_str())
-                        .collect::<Vec<_>>()
-                        .join(","),
-                ),
-            };
-            log::debug!("Posting comparison comment to {pr}");
-            post_comparison_comment(ctxt, commit, is_master).await?;
-        }
+            } => (true, *pr, sha.clone(), parent_sha.clone()),
+            BenchmarkRequestType::Release { .. } => continue,
+        };
+        let commit = QueuedCommit {
+            pr,
+            sha,
+            parent_sha,
+            include: None,
+            exclude: None,
+            runs: None,
+            commit_date: request.commit_date().map(Date),
+            backends: Some(
+                request
+                    .backends()?
+                    .into_iter()
+                    .map(|b| b.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+        };
+        log::debug!("Posting comparison comment to {pr}");
+        post_comparison_comment(ctxt, commit, is_master).await?;
     }
-
     Ok(())
 }
 
@@ -743,7 +778,7 @@ mod tests {
             ctx.complete_request("bar").await;
             ctx.insert_master_request("foo", "bar", 1).await;
 
-            process_benchmark_requests(ctx.db_mut()).await?;
+            process_benchmark_requests(ctx.db_mut(), &mut vec![]).await?;
             let jobs = ctx
                 .db()
                 .get_jobs_of_in_progress_benchmark_requests()
