@@ -1055,6 +1055,7 @@ impl BenchmarkRequestIndex {
 
 /// Contains pending (ArtifactsReady or InProgress) benchmark requests, and a set of their parents
 /// that are already completed.
+#[derive(Debug)]
 pub struct PendingBenchmarkRequests {
     pub requests: Vec<BenchmarkRequest>,
     pub completed_parent_tags: HashSet<String>,
