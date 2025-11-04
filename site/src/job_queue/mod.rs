@@ -6,7 +6,7 @@ use crate::load::{partition_in_place, SiteCtxt};
 use anyhow::Context;
 use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
-use database::pool::Transaction;
+use database::pool::{JobEnqueueResult, Transaction};
 use database::{
     BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
     BenchmarkRequestType, CodegenBackend, Date, PendingBenchmarkRequests, Profile, QueuedCommit,
@@ -221,23 +221,51 @@ pub async fn enqueue_benchmark_request(
     let backends = request.backends()?;
     let profiles = request.profiles()?;
 
-    let enqueue_job_required = async |tx: &mut Box<dyn Transaction>,
-                                      request_tag,
-                                      target,
-                                      backend,
-                                      profile,
-                                      benchmark_set,
-                                      kind| {
-        let created_job = tx
+    #[derive(PartialEq, Debug)]
+    enum EnqueueMode {
+        Commit,
+        Parent,
+    }
+
+    let enqueue_job = async |tx: &mut Box<dyn Transaction>,
+                             request_tag,
+                             target,
+                             backend,
+                             profile,
+                             benchmark_set,
+                             kind,
+                             mode: EnqueueMode| {
+        let result = tx
             .conn()
             .enqueue_benchmark_job(request_tag, target, backend, profile, benchmark_set, kind)
-            .await
-            .with_context(|| anyhow::anyhow!("Enqueuing job for request {request_tag} (target={target}, backend={backend}, profile={profile}, set={benchmark_set}, kind={kind})"))?;
-        match created_job {
-            Some(_) => Ok(()),
-            None => Err(anyhow::anyhow!(
-                "Cannot create job for tag {request_tag} (target={target}, backend={backend}, profile={profile}, set={benchmark_set}, kind={kind}): job already exists in the DB"
-            )),
+            .await;
+
+        let make_error = |msg| {
+            anyhow::anyhow!(
+                "Cannot create job for tag {request_tag} (target={target}, backend={backend}, profile={profile}, set={benchmark_set}, kind={kind}, mode={mode:?}): {msg}"
+            )
+        };
+
+        match result {
+            JobEnqueueResult::JobCreated(_) => Ok(()),
+            JobEnqueueResult::JobAlreadyExisted => {
+                match mode {
+                    EnqueueMode::Commit => Err(make_error("job already exists in the DB")),
+                    EnqueueMode::Parent => {
+                        // For parents this is expected
+                        Ok(())
+                    }
+                }
+            }
+            JobEnqueueResult::RequestShaNotFound { error } => match mode {
+                EnqueueMode::Commit => Err(make_error(&format!("request SHA not found: {error}"))),
+                EnqueueMode::Parent => {
+                    // This should not happen often, but we do not want to block the queue on it
+                    log::error!("{}", make_error(&format!("parent SHA not found: {error}")));
+                    Ok(())
+                }
+            },
+            JobEnqueueResult::Other(error) => Err(error),
         }
     };
 
@@ -246,7 +274,7 @@ pub async fn enqueue_benchmark_request(
         for benchmark_set in 0..benchmark_set_count(target.into()) {
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
-                    enqueue_job_required(
+                    enqueue_job(
                         &mut tx,
                         request_tag,
                         target,
@@ -254,8 +282,10 @@ pub async fn enqueue_benchmark_request(
                         profile,
                         benchmark_set as u32,
                         BenchmarkJobKind::Compiletime,
+                        EnqueueMode::Commit,
                     )
                     .await?;
+
                     // If there is a parent, we create a job for it too. The
                     // database will ignore it if there is already a job there.
                     // If the parent job has been deleted from the database
@@ -267,30 +297,17 @@ pub async fn enqueue_benchmark_request(
                         if tx.conn().parent_of(parent_sha).await.is_some() {
                             continue;
                         }
-                        let (is_foreign_key_violation, result) = tx
-                            .conn()
-                            .enqueue_parent_benchmark_job(
-                                parent_sha,
-                                target,
-                                backend,
-                                profile,
-                                benchmark_set as u32,
-                                BenchmarkJobKind::Compiletime,
-                            )
-                            .await;
-
-                        // At some point in time the parent_sha may not refer
-                        // to a `benchmark_request` and we want to be able to
-                        // see that error.
-                        if let Err(e) = result {
-                            if is_foreign_key_violation {
-                                log::error!("Failed to create job for parent sha {e:?}");
-                            } else {
-                                return Err(anyhow::anyhow!(
-                                    "Cannot enqueue parent benchmark job: {e:?}"
-                                ));
-                            }
-                        }
+                        enqueue_job(
+                            &mut tx,
+                            parent_sha,
+                            target,
+                            backend,
+                            profile,
+                            benchmark_set as u32,
+                            BenchmarkJobKind::Compiletime,
+                            EnqueueMode::Parent,
+                        )
+                        .await?;
                     }
                 }
             }
@@ -298,7 +315,7 @@ pub async fn enqueue_benchmark_request(
 
         // Enqueue Runtime job for all targets using LLVM as the backend for
         // runtime benchmarks
-        enqueue_job_required(
+        enqueue_job(
             &mut tx,
             request_tag,
             target,
@@ -306,6 +323,7 @@ pub async fn enqueue_benchmark_request(
             Profile::Opt,
             0u32,
             BenchmarkJobKind::Runtime,
+            EnqueueMode::Commit,
         )
         .await?;
     }
@@ -314,7 +332,7 @@ pub async fn enqueue_benchmark_request(
     // it takes to build the rust compiler. It takes a while to run and is
     // assumed that if the compilation of other rust project improve then this
     // too would improve.
-    enqueue_job_required(
+    enqueue_job(
         &mut tx,
         request_tag,
         Target::X86_64UnknownLinuxGnu,
@@ -322,6 +340,7 @@ pub async fn enqueue_benchmark_request(
         Profile::Opt,
         0u32,
         BenchmarkJobKind::Rustc,
+        EnqueueMode::Commit,
     )
     .await?;
 
@@ -407,12 +426,17 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
         }
     }
     // Enqueue waiting requests and try to complete in-progress ones
-    let completed_reqs = process_benchmark_requests(&mut *conn).await?;
+    let completed_reqs = process_benchmark_requests(&mut *conn)
+        .await
+        .context("Failed to process benchmark requests")?;
 
     // If some change happened, reload the benchmark request index
     if requests_inserted {
-        ctxt.known_benchmark_requests
-            .store(Arc::new(conn.load_benchmark_request_index().await?));
+        ctxt.known_benchmark_requests.store(Arc::new(
+            conn.load_benchmark_request_index()
+                .await
+                .context("Failed to load benchmark request index")?,
+        ));
     }
 
     // Send a comment to GitHub for completed requests and reload the DB index
@@ -463,6 +487,7 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
                         .join(","),
                 ),
             };
+            log::debug!("Posting comparison comment to {pr}");
             post_comparison_comment(ctxt, commit, is_master).await?;
         }
     }
@@ -507,6 +532,7 @@ pub async fn create_job_queue_process(
 mod tests {
     use crate::job_queue::{build_queue, process_benchmark_requests};
     use chrono::Utc;
+    use database::pool::JobEnqueueResult;
     use database::tests::run_postgres_test;
     use database::{
         BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestStatus,
@@ -542,16 +568,20 @@ mod tests {
         target: Target,
     ) {
         /* Create job for the request */
-        db.enqueue_benchmark_job(
-            request_tag,
-            target,
-            CodegenBackend::Llvm,
-            Profile::Opt,
-            benchmark_set,
-            BenchmarkJobKind::Compiletime,
-        )
-        .await
-        .unwrap();
+        match db
+            .enqueue_benchmark_job(
+                request_tag,
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                benchmark_set,
+                BenchmarkJobKind::Compiletime,
+            )
+            .await
+        {
+            JobEnqueueResult::JobCreated(_) => {}
+            error => panic!("Unexpected result: {error:?}"),
+        }
 
         let (job, _) = db
             .dequeue_benchmark_job(collector_name, target, BenchmarkSet::new(benchmark_set))

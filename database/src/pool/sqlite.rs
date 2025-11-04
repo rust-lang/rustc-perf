@@ -1,4 +1,6 @@
-use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::pool::{
+    Connection, ConnectionManager, JobEnqueueResult, ManagedConnection, Transaction,
+};
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
@@ -1356,19 +1358,7 @@ impl Connection for SqliteConnection {
         _profile: Profile,
         _benchmark_set: u32,
         _kind: BenchmarkJobKind,
-    ) -> anyhow::Result<Option<u32>> {
-        no_queue_implementation_abort!()
-    }
-
-    async fn enqueue_parent_benchmark_job(
-        &self,
-        _parent_sha: &str,
-        _target: Target,
-        _backend: CodegenBackend,
-        _profile: Profile,
-        _benchmark_set: u32,
-        _kind: BenchmarkJobKind,
-    ) -> (bool, anyhow::Result<u32>) {
+    ) -> JobEnqueueResult {
         no_queue_implementation_abort!()
     }
 
