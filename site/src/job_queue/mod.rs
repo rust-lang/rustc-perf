@@ -105,6 +105,7 @@ async fn create_benchmark_request_releases(
 /// correct queue order, where the first returned request will be the first to be benchmarked next.
 /// Doesn't consider in-progress requests or release artifacts.
 fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRequest> {
+    log::debug!("Sorting benchmark requests. Pending requests: {pending:?}");
     let PendingBenchmarkRequests {
         requests: mut pending,
         completed_parent_tags: mut done,
@@ -162,6 +163,7 @@ fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRe
         }
         finished += level_len;
     }
+    log::debug!("Sorted pending requests: {pending:?}");
     pending
 }
 
@@ -189,8 +191,23 @@ pub async fn build_queue(
         matches!(request.status(), BenchmarkRequestStatus::InProgress)
     });
 
-    // We sort the in-progress ones based on the started date
+    // We sort the in-progress ones based on their created date
     queue.sort_unstable_by_key(|req| req.created_at());
+
+    // Treat in-progress requests as completed for the purposes of sorting.
+    // Otherwise, if no requests in `pending` have a completed parent, queue sorting would
+    // end in an error due to no parents being ready.
+    // This can happen if all pending requests have a parent that is either also pending or
+    // in-progress, but not completed.
+    //
+    // This also allows us to make the queue more stable, because the "future order" will be based
+    // on what will happen once the currently in-progress request finishes.
+    for in_progress in &queue {
+        let tag = in_progress
+            .tag()
+            .expect("In progress request without a tag");
+        pending.completed_parent_tags.insert(tag.to_string());
+    }
 
     // Add release artifacts ordered by the release tag (1.87.0 before 1.88.0) and `created_at`.
     let mut release_artifacts: Vec<BenchmarkRequest> = pending
@@ -575,6 +592,7 @@ mod tests {
     use crate::job_queue::{build_queue, process_benchmark_requests};
     use chrono::Utc;
     use database::pool::JobEnqueueResult;
+    use database::tests::builder::CollectorBuilder;
     use database::tests::run_postgres_test;
     use database::{
         BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestStatus,
@@ -766,6 +784,39 @@ mod tests {
             let sorted: Vec<BenchmarkRequest> = build_queue(db).await.unwrap();
 
             queue_order_matches(&sorted, &["try1", "v1.2.3", "123", "foo", "mmm", "baz"]);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    /// Make sure that queue ordering still works even when all pending requests have a parent
+    /// that is either also pending or in-progress.
+    #[tokio::test]
+    async fn queue_ordering_deps_in_queue() {
+        run_postgres_test(|mut ctx| async {
+            ctx.add_collector(CollectorBuilder::default()).await;
+
+            ctx.insert_master_request("parent", "parent2", 1).await;
+            ctx.complete_request("parent").await;
+
+            // In progress
+            ctx.insert_master_request("1f88", "parent", 148446).await;
+            process_benchmark_requests(ctx.db_mut(), &mut vec![]).await?;
+
+            // Artifacts ready
+            ctx.insert_master_request("5f9d", "2038", 148456).await;
+            ctx.insert_master_request("90b6", "5f9d", 148462).await;
+            ctx.insert_try_request(112049).await;
+
+            let db = ctx.db();
+            assert!(db
+                .attach_shas_to_try_benchmark_request(112049, "60ce", "1f88", Utc::now())
+                .await
+                .unwrap());
+            ctx.insert_master_request("2038", "1f88", 148350).await;
+
+            let queue = build_queue(db).await?;
+            queue_order_matches(&queue, &["1f88", "60ce", "2038", "5f9d", "90b6"]);
             Ok(ctx)
         })
         .await;
