@@ -10,7 +10,7 @@ env:
 
 jobs:
   test-linux:
-    name: Test and deploy
+    name: Test on Linux
     runs-on: ubuntu-22.04
     env:
       TEST_DB_URL: postgres://postgres:testpass@localhost:5432/postgres
