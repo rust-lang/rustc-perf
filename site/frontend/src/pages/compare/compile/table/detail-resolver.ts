@@ -13,6 +13,7 @@ export interface CompileDetailGraphsSelector {
   benchmark: string;
   scenario: string;
   profile: string;
+  backend: string;
   kinds: GraphKind[];
 }
 
@@ -62,7 +63,7 @@ export const COMPILE_DETAIL_GRAPHS_RESOLVER: CachedDataLoader<
   CompileDetailGraphs
 > = new CachedDataLoader(
   (key: CompileDetailGraphsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.start};${key.end};${key.stat};${key.kinds}`,
+    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.start};${key.end};${key.stat};${key.kinds}`,
   loadGraphsDetail
 );
 
@@ -76,6 +77,7 @@ async function loadGraphsDetail(
     benchmark: selector.benchmark,
     scenario: selector.scenario,
     profile: selector.profile,
+    backend: selector.backend,
     kinds: selector.kinds.join(","),
   };
   return await getJson<CompileDetailGraphs>(
@@ -89,7 +91,7 @@ export const COMPILE_DETAIL_SECTIONS_RESOLVER: CachedDataLoader<
   CompileDetailSectionsSelector,
   CompileDetailSections
 > = new CachedDataLoader(
-  (key: CompileDetailGraphsSelector) =>
+  (key: CompileDetailSectionsSelector) =>
     `${key.benchmark};${key.profile};${key.scenario};${key.start};${key.end}`,
   loadSectionsDetail
 );

@@ -36,6 +36,7 @@ pub async fn handle_compile_detail_graphs(
                 .benchmark(Selector::One(request.benchmark.clone()))
                 .profile(Selector::One(request.profile.parse()?))
                 .scenario(Selector::One(scenario))
+                .backend(Selector::One(request.backend.parse()?))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )

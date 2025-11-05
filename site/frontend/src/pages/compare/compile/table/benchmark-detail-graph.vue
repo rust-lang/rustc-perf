@@ -38,6 +38,7 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
+    backend: props.testCase.backend,
     stat: props.metric,
     start,
     end,
