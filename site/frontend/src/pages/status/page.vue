@@ -10,6 +10,7 @@ import {
   BenchmarkRequest,
   CollectorConfig,
   isJobComplete,
+  isRequestInProgress,
   StatusResponse,
 } from "./data";
 import Collector from "./collector.vue";
@@ -104,6 +105,23 @@ function getErrorsLength(errors: Dict<string>) {
   return `${errorsLen} ${errorsLen > 1 ? "s" : ""}`;
 }
 
+function ExpectedCurrentRequestCompletion() {
+  const req = data.value.timeline.find(isRequestInProgress);
+  if (!req) return "";
+  if (!req.endEstimated) return "";
+  if (!req.completedAt) return "";
+  const formattedDate = formatISODate(req.completedAt);
+  return (
+    <span>
+      Current Benchmark for{" "}
+      <strong>
+        <CommitSha tag={req.tag}></CommitSha>
+      </strong>{" "}
+      expected to end at {formattedDate}{" "}
+    </span>
+  );
+}
+
 function PullRequestLink({request}: {request: BenchmarkRequest}) {
   if (request.requestType === "Release") {
     return "";
@@ -165,6 +183,7 @@ loadStatusData(loading);
       <div class="timeline-wrapper">
         <h1>Timeline</h1>
         <strong>Times are local.</strong>
+        <ExpectedCurrentRequestCompletion />
         <div style="margin-bottom: 10px">
           Queue length: {{ data.queueLength }}
         </div>
@@ -189,7 +208,7 @@ loadStatusData(loading);
               <tr :class="getRequestRowClassName(req)">
                 <td><PullRequestLink :request="req" /></td>
                 <td>{{ req.requestType }}</td>
-                <td><CommitSha :tag="req.tag"></CommitSha></td>
+                <td><CommitSha :truncate="true" :tag="req.tag"></CommitSha></td>
                 <td>
                   {{ formatStatus(req)
                   }}{{

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import {computed} from "vue";
+import {tagLooksLikeSha} from "./data";
 
 const props = defineProps<{
   tag: string;
+  truncate?: boolean;
 }>();
 
-const looksLikeSha = computed(() => props.tag.length === 40);
+const looksLikeSha = computed(() => tagLooksLikeSha(props.tag));
 </script>
 
 <template>
@@ -14,7 +16,7 @@ const looksLikeSha = computed(() => props.tag.length === 40);
     :title="tag"
     :href="'https://github.com/rust-lang/rust/commit/' + tag"
   >
-    {{ tag.substring(0, 13) }}
+    {{ truncate ? tag.substring(0, 13) : tag }}
   </a>
   <template v-else>
     {{ tag }}

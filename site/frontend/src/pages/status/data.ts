@@ -48,3 +48,11 @@ export type StatusResponse = {
 export function isJobComplete(job: BenchmarkJob): boolean {
   return job.status === "Failed" || job.status === "Success";
 }
+
+export function isRequestInProgress(req: BenchmarkRequest): boolean {
+  return req.status === "InProgress";
+}
+
+export function tagLooksLikeSha(tag: string): boolean {
+  return tag.length === 40;
+}
