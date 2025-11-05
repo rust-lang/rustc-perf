@@ -11,6 +11,7 @@ const looksLikeSha = computed(() => props.tag.length === 40);
 <template>
   <a
     v-if="looksLikeSha"
+    :title="tag"
     :href="'https://github.com/rust-lang/rust/commit/' + tag"
   >
     {{ tag.substring(0, 13) }}
