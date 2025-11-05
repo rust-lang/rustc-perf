@@ -212,6 +212,11 @@ impl CompileBenchmarkQuery {
         self
     }
 
+    pub fn backend(mut self, selector: Selector<CodegenBackend>) -> Self {
+        self.backend = selector;
+        self
+    }
+
     pub fn metric(mut self, selector: Selector<Metric>) -> Self {
         self.metric = selector.map(|v| v.as_str().into());
         self

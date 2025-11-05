@@ -158,6 +158,7 @@ pub mod detail_graphs {
         pub benchmark: String,
         pub scenario: String,
         pub profile: String,
+        pub backend: String,
         #[serde(deserialize_with = "vec_from_comma_separated")]
         pub kinds: Vec<GraphKind>,
     }
