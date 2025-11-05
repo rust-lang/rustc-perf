@@ -164,6 +164,7 @@ loadStatusData(loading);
     <div class="status-page-wrapper">
       <div class="timeline-wrapper">
         <h1>Timeline</h1>
+        <strong>Times are local.</strong>
         <div style="margin-bottom: 10px">
           Queue length: {{ data.queueLength }}
         </div>
