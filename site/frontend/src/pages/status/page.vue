@@ -1,10 +1,15 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
+import {differenceInSeconds} from "date-fns";
 
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {formatISODate, formatSecondsAsDuration} from "../../utils/formatting";
+import {
+  formatISODate,
+  formatSecondsAsDuration,
+  parseDateIsoStringOrNull,
+} from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
@@ -110,14 +115,22 @@ function ExpectedCurrentRequestCompletion() {
   if (!req) return "";
   if (!req.endEstimated) return "";
   if (!req.completedAt) return "";
-  const formattedDate = formatISODate(req.completedAt);
+  const estimatedCompleted = parseDateIsoStringOrNull(req.completedAt);
+  if (!estimatedCompleted) {
+    return null;
+  }
+
+  const now = new Date();
+  const diffSeconds = differenceInSeconds(estimatedCompleted, now);
+  const prettyDisplay = formatSecondsAsDuration(diffSeconds);
+
   return (
     <span>
       Current Benchmark for{" "}
       <strong>
         <CommitSha tag={req.tag}></CommitSha>
       </strong>{" "}
-      expected to end at {formattedDate}{" "}
+      expected to end in approximately {prettyDisplay}
     </span>
   );
 }

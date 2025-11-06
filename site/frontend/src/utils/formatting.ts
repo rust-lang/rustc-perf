@@ -27,3 +27,14 @@ export function formatISODate(dateString?: string): string {
   }
   return "";
 }
+
+export function parseDateIsoStringOrNull(dateString?: string): Date | null {
+  if (dateString) {
+    try {
+      return parseISO(dateString);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
