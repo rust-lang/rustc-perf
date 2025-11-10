@@ -101,7 +101,7 @@ function hasErrors(request: BenchmarkRequest) {
 
 function getErrorsLength(errors: Dict<string>) {
   const errorsLen = Object.keys(errors).length;
-  return `${errorsLen} ${errorsLen > 1 ? "s" : ""}`;
+  return `${errorsLen}`;
 }
 
 function PullRequestLink({request}: {request: BenchmarkRequest}) {
