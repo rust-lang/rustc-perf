@@ -1803,6 +1803,21 @@ async fn create_benchmark_configs(
         }
     }
 
+    let is_release = match artifact_id {
+        ArtifactId::Commit(_) => false,
+        ArtifactId::Tag(_) => true,
+    };
+    if is_release {
+        bench_rustc = false;
+        bench_compile_benchmarks.retain(|benchmark| {
+            all_compile_benchmarks
+                .iter()
+                .find(|b| b.name == *benchmark)
+                .map(|b| b.category().is_stable())
+                .unwrap_or(false)
+        });
+    }
+
     let compile_config = if bench_rustc || !bench_compile_benchmarks.is_empty() {
         Some(CompileBenchmarkConfig {
             benchmarks: all_compile_benchmarks
@@ -1813,8 +1828,8 @@ async fn create_benchmark_configs(
             profiles: vec![job.profile().into()],
             scenarios: Scenario::all(),
             backends: vec![job.backend().into()],
-            iterations: None,
-            is_self_profile: true,
+            iterations: if is_release { Some(3) } else { None },
+            is_self_profile: !is_release,
             bench_rustc,
             targets: vec![job.target().into()],
         })
