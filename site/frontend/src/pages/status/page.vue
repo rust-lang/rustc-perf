@@ -195,8 +195,12 @@ loadStatusData(loading);
     <div class="status-page-wrapper">
       <div class="timeline-wrapper">
         <h1>Timeline</h1>
-        <strong>Times are local.</strong>
-        <ExpectedCurrentRequestCompletion />
+        <span class="small-padding-bottom">
+          <strong>Times are local.</strong>
+        </span>
+        <span class="small-padding-bottom">
+          <ExpectedCurrentRequestCompletion />
+        </span>
         <div style="margin-bottom: 10px">
           Queue length: {{ data.queueLength }}
         </div>
@@ -395,5 +399,9 @@ loadStatusData(loading);
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(800px, 1fr));
   grid-gap: 20px;
+}
+
+.small-padding-bottom {
+  padding-bottom: 8px;
 }
 </style>
