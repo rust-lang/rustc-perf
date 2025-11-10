@@ -124,15 +124,30 @@ function ExpectedCurrentRequestCompletion() {
   const diffSeconds = differenceInSeconds(estimatedCompleted, now);
   const prettyDisplay = formatSecondsAsDuration(diffSeconds);
 
-  return (
-    <span>
-      Current Benchmark for{" "}
-      <strong>
-        <CommitSha tag={req.tag}></CommitSha>
-      </strong>{" "}
-      expected to end in approximately {prettyDisplay}
-    </span>
-  );
+  if (req.requestType === "Release") {
+    return (
+      <span>
+        Current Benchmark for{" "}
+        <strong>
+          <CommitSha tag={req.tag}></CommitSha>
+        </strong>{" "}
+        expected to end in approximately {prettyDisplay}
+      </span>
+    );
+  } else {
+    const url = `https://github.com/rust-lang/rust/pull/${req.pr}`;
+    return (
+      <span>
+        Current Benchmark for PR{" "}
+        <strong>
+          <a href={url} target="_blank">
+            #{req.pr}
+          </a>{" "}
+        </strong>
+        expected to end in approximately {prettyDisplay}
+      </span>
+    );
+  }
 }
 
 function PullRequestLink({request}: {request: BenchmarkRequest}) {
