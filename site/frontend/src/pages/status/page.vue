@@ -102,12 +102,11 @@ function formatStatus(request: BenchmarkRequest): string {
 }
 
 function hasErrors(request: BenchmarkRequest) {
-  return Object.keys(request.errors).length !== 0;
+  return getErrorsLength(request.errors) !== 0;
 }
 
 function getErrorsLength(errors: Dict<string>) {
-  const errorsLen = Object.keys(errors).length;
-  return `${errorsLen} ${errorsLen > 1 ? "s" : ""}`;
+  return Object.keys(errors).length;
 }
 
 function ExpectedCurrentRequestCompletion() {
