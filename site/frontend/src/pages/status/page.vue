@@ -1,15 +1,21 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
+import {differenceInSeconds} from "date-fns";
 
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {formatISODate, formatSecondsAsDuration} from "../../utils/formatting";
+import {
+  formatISODate,
+  formatSecondsAsDuration,
+  parseDateIsoStringOrNull,
+} from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
   BenchmarkRequest,
   CollectorConfig,
   isJobComplete,
+  isRequestInProgress,
   StatusResponse,
 } from "./data";
 import Collector from "./collector.vue";
@@ -104,6 +110,46 @@ function getErrorsLength(errors: Dict<string>) {
   return `${errorsLen} ${errorsLen > 1 ? "s" : ""}`;
 }
 
+function ExpectedCurrentRequestCompletion() {
+  const req = data.value.timeline.find(isRequestInProgress);
+  if (!req) return "";
+  if (!req.endEstimated) return "";
+  if (!req.completedAt) return "";
+  const estimatedCompleted = parseDateIsoStringOrNull(req.completedAt);
+  if (!estimatedCompleted) {
+    return null;
+  }
+
+  const now = new Date();
+  const diffSeconds = differenceInSeconds(estimatedCompleted, now);
+  const prettyDisplay = formatSecondsAsDuration(diffSeconds);
+
+  if (req.requestType === "Release") {
+    return (
+      <span>
+        Current Benchmark for{" "}
+        <strong>
+          <CommitSha tag={req.tag}></CommitSha>
+        </strong>{" "}
+        expected to end in approximately {prettyDisplay}
+      </span>
+    );
+  } else {
+    const url = `https://github.com/rust-lang/rust/pull/${req.pr}`;
+    return (
+      <span>
+        Current Benchmark for PR{" "}
+        <strong>
+          <a href={url} target="_blank">
+            #{req.pr}
+          </a>{" "}
+        </strong>
+        expected to end in approximately {prettyDisplay}
+      </span>
+    );
+  }
+}
+
 function PullRequestLink({request}: {request: BenchmarkRequest}) {
   if (request.requestType === "Release") {
     return "";
@@ -164,7 +210,12 @@ loadStatusData(loading);
     <div class="status-page-wrapper">
       <div class="timeline-wrapper">
         <h1>Timeline</h1>
-        <strong>Times are local.</strong>
+        <span class="small-padding-bottom">
+          <strong>Times are local.</strong>
+        </span>
+        <span class="small-padding-bottom">
+          <ExpectedCurrentRequestCompletion />
+        </span>
         <div style="margin-bottom: 10px">
           Queue length: {{ data.queueLength }}
         </div>
@@ -189,7 +240,7 @@ loadStatusData(loading);
               <tr :class="getRequestRowClassName(req)">
                 <td><PullRequestLink :request="req" /></td>
                 <td>{{ req.requestType }}</td>
-                <td><CommitSha :tag="req.tag"></CommitSha></td>
+                <td><CommitSha :truncate="true" :tag="req.tag"></CommitSha></td>
                 <td>
                   {{ formatStatus(req)
                   }}{{
@@ -363,5 +414,9 @@ loadStatusData(loading);
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(800px, 1fr));
   grid-gap: 20px;
+}
+
+.small-padding-bottom {
+  padding-bottom: 8px;
 }
 </style>
