@@ -1785,6 +1785,11 @@ async fn create_benchmark_configs(
     let mut bench_runtime = false;
     let mut bench_compile_benchmarks = HashSet::new();
 
+    let is_release = match artifact_id {
+        ArtifactId::Commit(_) => false,
+        ArtifactId::Tag(_) => true,
+    };
+
     match job.kind() {
         database::BenchmarkJobKind::Runtime => {
             bench_runtime = true;
@@ -1799,32 +1804,27 @@ async fn create_benchmark_configs(
             }
         }
         database::BenchmarkJobKind::Rustc => {
-            bench_rustc = true;
+            bench_rustc = !is_release;
         }
     }
 
-    let is_release = match artifact_id {
-        ArtifactId::Commit(_) => false,
-        ArtifactId::Tag(_) => true,
-    };
-    if is_release {
-        bench_rustc = false;
-        bench_compile_benchmarks.retain(|benchmark| {
-            all_compile_benchmarks
-                .iter()
-                .find(|b| b.name == *benchmark)
-                .map(|b| b.category().is_stable())
-                .unwrap_or(false)
-        });
-    }
+    let benchmarks: Vec<Benchmark> = all_compile_benchmarks
+        .iter()
+        .filter(|b| {
+            if !bench_compile_benchmarks.contains(&b.name) {
+                return false;
+            }
+            // Run stable benchmarks for releases and non-stable benchmarks for everything
+            // else.
+            let is_stable = b.category().is_stable();
+            is_release == is_stable
+        })
+        .cloned()
+        .collect();
 
-    let compile_config = if bench_rustc || !bench_compile_benchmarks.is_empty() {
+    let compile_config = if bench_rustc || !benchmarks.is_empty() {
         Some(CompileBenchmarkConfig {
-            benchmarks: all_compile_benchmarks
-                .iter()
-                .filter(|b| bench_compile_benchmarks.contains(&b.name))
-                .cloned()
-                .collect(),
+            benchmarks,
             profiles: vec![job.profile().into()],
             scenarios: Scenario::all(),
             backends: vec![job.backend().into()],
