@@ -1,8 +1,20 @@
-//! This file contains an exhaustive list of all **non-stable** compile-time benchmarks
+//! This file contains an exhaustive list of all compile-time benchmarks
 //! located in the `collector/compile-benchmarks` directory that are benchmarked in production.
 //! If new benchmarks are added/removed, they have to also be added/removed here, and in
 //! the [super::expand_benchmark_set] function.
 
+// Stable benchmarks
+pub(super) const CARGO: &str = "cargo";
+pub(super) const ENCODING: &str = "encoding";
+pub(super) const FUTURES: &str = "futures";
+pub(super) const HTML5EVER: &str = "html5ever";
+pub(super) const INFLATE: &str = "inflate";
+pub(super) const PISTON_IMAGE: &str = "piston-image";
+pub(super) const REGEX: &str = "regex";
+pub(super) const SYN: &str = "syn";
+pub(super) const TOKIO_WEBPUSH_SIMPLE: &str = "tokio-webpush-simple";
+
+// Non-stable benchmarks
 pub(super) const AWAIT_CALL_TREE: &str = "await-call-tree";
 pub(super) const BITMAPS_3_2_1: &str = "bitmaps-3.2.1";
 pub(super) const BITMAPS_3_2_1_NEW_SOLVER: &str = "bitmaps-3.2.1-new-solver";
