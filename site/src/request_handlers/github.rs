@@ -158,6 +158,11 @@ async fn handle_rust_timer(
             Err(error) => errors.push_str(&format!("Cannot parse build command: {error}\n")),
         }
     }
+
+    if valid_build_cmds.is_empty() {
+        errors.push_str("@rust-timer command cannot be empty\n");
+    }
+
     if !errors.is_empty() {
         main_client.post_comment(issue.number, errors).await;
         return Ok(github::Response);
