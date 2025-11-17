@@ -159,8 +159,8 @@ async fn handle_rust_timer(
         }
     }
 
-    if valid_build_cmds.is_empty() {
-        errors.push_str("@rust-timer command cannot be empty\n");
+    if valid_build_cmds.is_empty() && errors.is_empty() {
+        errors.push_str("Command cannot be empty\n");
     }
 
     if !errors.is_empty() {
