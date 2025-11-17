@@ -97,6 +97,11 @@ async fn handle_rust_timer(
     comment: github::Comment,
     issue: github::Issue,
 ) -> ServerResult<github::Response> {
+    // Avoid reacting to the bot's comments
+    if comment.user.login == "rust-timer" {
+        return Ok(github::Response);
+    }
+
     if comment.author_association != github::Association::Owner
         && !get_authorized_users().await?.contains(&comment.user.id)
     {
@@ -159,8 +164,8 @@ async fn handle_rust_timer(
         }
     }
 
-    if valid_build_cmds.is_empty() {
-        errors.push_str("@rust-timer command cannot be empty\n");
+    if valid_build_cmds.is_empty() && errors.is_empty() {
+        errors.push_str("Command cannot be empty\n");
     }
 
     if !errors.is_empty() {
