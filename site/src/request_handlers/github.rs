@@ -97,6 +97,11 @@ async fn handle_rust_timer(
     comment: github::Comment,
     issue: github::Issue,
 ) -> ServerResult<github::Response> {
+    // Avoid reacting to the bot's comments
+    if comment.user.login == "rust-timer" {
+        return Ok(github::Response);
+    }
+
     if comment.author_association != github::Association::Owner
         && !get_authorized_users().await?.contains(&comment.user.id)
     {

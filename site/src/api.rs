@@ -616,6 +616,7 @@ pub mod github {
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct User {
         pub id: u64,
+        pub login: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
