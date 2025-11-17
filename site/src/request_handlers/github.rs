@@ -69,7 +69,7 @@ async fn handle_issue(
         }
     }
 
-    if comment.body.contains("@rust-timer ") {
+    if comment.body.contains("@rust-timer") {
         return handle_rust_timer(ctxt, &gh_client, comment, issue).await;
     }
 
