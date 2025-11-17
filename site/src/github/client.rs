@@ -226,7 +226,7 @@ impl Client {
         let resp = self.send(req).await;
 
         if let Err(e) = resp {
-            eprintln!("failed to post comment: {e:?}");
+            log::error!("failed to post GitHub comment: {e:?}");
         }
     }
 
