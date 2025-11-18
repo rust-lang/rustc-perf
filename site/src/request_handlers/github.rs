@@ -96,8 +96,9 @@ async fn record_try_benchmark_request_without_artifacts(
     conn: &dyn database::pool::Connection,
     pr: u32,
     backends: &str,
+    profiles: &str,
 ) -> String {
-    let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, "");
+    let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, profiles);
     log::info!("Inserting try benchmark request {try_request:?}");
 
     match conn.insert_benchmark_request(&try_request).await {
@@ -155,6 +156,7 @@ async fn handle_rust_timer(
                         &*conn,
                         issue.number,
                         cmd.params.backends.unwrap_or(""),
+                        cmd.params.profiles.unwrap_or(""),
                     )
                     .await
                 } else {
@@ -203,6 +205,7 @@ async fn handle_rust_timer(
                     &*conn,
                     issue.number,
                     command.params.backends.unwrap_or(""),
+                    command.params.profiles.unwrap_or(""),
                 )
                 .await;
             } else {
