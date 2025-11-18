@@ -21,10 +21,10 @@
   <h3><b><code>@rust-timer</code> commands</b></h3>
   <p><code>@rust-timer</code> supports several commands, the most common (and simple) being
     <code>@rust-timer queue</code>. This command is usually invoked as <code>@bors try @rust-timer
-      queue</code>,
-    which starts a bors "try" run (not a merge). <code>@rust-timer</code> will wait for the try run
-    to finish,
-    and if it succeeds will then queue a perf run.
+      queue</code>, which starts a bors <a
+      href="https://rustc-dev-guide.rust-lang.org/tests/ci.html#try-builds">"try build"</a> (not a
+    merge). <code>@rust-timer</code> will wait for the try run to finish, and if it succeeds will
+    then queue a perf run.
   </p>
   <p><code>@rust-timer queue</code> has a few extra options that can be useful:</p>
   <ul>
