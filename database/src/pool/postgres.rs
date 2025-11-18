@@ -1634,9 +1634,9 @@ where
         &self,
         benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<BenchmarkRequestInsertResult> {
-        let rows = self
+        let row_insert_count = self
             .conn()
-            .query(
+            .execute(
                 r#"
                 INSERT INTO benchmark_request(
                     tag,
@@ -1650,8 +1650,7 @@ where
                     commit_date
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                ON CONFLICT DO NOTHING
-                RETURNING id;
+                ON CONFLICT DO NOTHING;
             "#,
                 &[
                     &benchmark_request.tag(),
@@ -1667,7 +1666,7 @@ where
             )
             .await
             .context("Failed to insert benchmark request")?;
-        if rows.is_empty() {
+        if row_insert_count == 0 {
             // Allows us to handle duplicated cases without the database auto
             // erroring
             Ok(BenchmarkRequestInsertResult::NothingInserted)
