@@ -6,7 +6,7 @@ use crate::github::{
 use crate::job_queue::should_use_job_queue;
 use crate::load::SiteCtxt;
 
-use database::BenchmarkRequest;
+use database::{parse_backends, BenchmarkRequest, CodegenBackend};
 use hashbrown::HashMap;
 use std::sync::Arc;
 
@@ -264,6 +264,19 @@ fn parse_benchmark_parameters<'a>(
             return Err(format!("Cannot parse runs {runs} as a number"));
         };
         params.runs = Some(runs as i32);
+    }
+    if let Some(backends) = &params.backends {
+        // Make sure that the backends are correct
+        parse_backends(backends).map_err(|e| {
+            format!(
+                "Cannot parse backends: {e}. Valid values are: {}",
+                CodegenBackend::all_values()
+                    .iter()
+                    .map(|b| b.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
     }
 
     if !args.is_empty() {
