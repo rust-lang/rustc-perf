@@ -406,6 +406,10 @@ impl CodegenBackend {
             CodegenBackend::Cranelift => "cranelift",
         }
     }
+
+    pub fn all_values() -> &'static [Self] {
+        &[Self::Llvm, Self::Cranelift]
+    }
 }
 
 impl FromStr for CodegenBackend {
@@ -1009,12 +1013,7 @@ impl BenchmarkRequest {
             return Ok(vec![CodegenBackend::Llvm]);
         }
 
-        self.backends
-            .split(',')
-            .map(|s| {
-                CodegenBackend::from_str(s).map_err(|_| anyhow::anyhow!("Invalid backend: {s}"))
-            })
-            .collect()
+        parse_backends(&self.backends).map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     /// Get the profiles for the request
@@ -1038,6 +1037,13 @@ impl BenchmarkRequest {
     pub fn is_in_progress(&self) -> bool {
         matches!(self.status, BenchmarkRequestStatus::InProgress)
     }
+}
+
+pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
+    backends
+        .split(',')
+        .map(|s| CodegenBackend::from_str(s).map_err(|_| format!("Invalid backend: {s}")))
+        .collect()
 }
 
 /// Cached information about benchmark requests in the DB
