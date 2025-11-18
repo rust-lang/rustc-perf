@@ -56,12 +56,12 @@ async fn create_benchmark_request_master_commits(
             log::info!("Inserting master benchmark request {benchmark:?}");
 
             match conn.insert_benchmark_request(&benchmark).await {
-                Ok(BenchmarkRequestInsertResult::AlreadyQueued) => {
+                Ok(BenchmarkRequestInsertResult::NothingInserted) => {
                     log::error!(
                         "Failed to insert master benchmark request, request for PR`#{pr}` already exists",
                     );
                 }
-                Ok(BenchmarkRequestInsertResult::Queued) => {}
+                Ok(BenchmarkRequestInsertResult::Inserted) => {}
                 Err(e) => {
                     log::error!("Failed to insert master benchmark request: {e:?}");
                 }
@@ -95,12 +95,12 @@ async fn create_benchmark_request_releases(
             log::info!("Inserting release benchmark request {release_request:?}");
 
             match conn.insert_benchmark_request(&release_request).await {
-                Ok(BenchmarkRequestInsertResult::AlreadyQueued) => {
+                Ok(BenchmarkRequestInsertResult::NothingInserted) => {
                     log::error!(
                         "Failed to insert release benchmark request, release with tag `{name}` already exists"
                     );
                 }
-                Ok(BenchmarkRequestInsertResult::Queued) => {}
+                Ok(BenchmarkRequestInsertResult::Inserted) => {}
                 Err(e) => {
                     log::error!("Failed to insert release benchmark request: {e}");
                 }

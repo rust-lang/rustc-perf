@@ -543,7 +543,10 @@ mod tests {
                 .await;
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), BenchmarkRequestInsertResult::AlreadyQueued);
+            assert_eq!(
+                result.unwrap(),
+                BenchmarkRequestInsertResult::NothingInserted
+            );
 
             Ok(ctx)
         })
@@ -576,7 +579,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(result, BenchmarkRequestInsertResult::AlreadyQueued);
+            assert_eq!(result, BenchmarkRequestInsertResult::NothingInserted);
             Ok(ctx)
         })
         .await;
@@ -607,7 +610,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(result, BenchmarkRequestInsertResult::AlreadyQueued);
+            assert_eq!(result, BenchmarkRequestInsertResult::NothingInserted);
 
             Ok(ctx)
         })

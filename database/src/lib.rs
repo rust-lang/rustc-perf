@@ -1041,8 +1041,8 @@ impl BenchmarkRequest {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BenchmarkRequestInsertResult {
-    Queued,
-    AlreadyQueued,
+    Inserted,
+    NothingInserted,
 }
 
 pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {

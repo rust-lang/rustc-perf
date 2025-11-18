@@ -1670,9 +1670,9 @@ where
         if rows.is_empty() {
             // Allows us to handle duplicated cases without the database auto
             // erroring
-            Ok(BenchmarkRequestInsertResult::AlreadyQueued)
+            Ok(BenchmarkRequestInsertResult::NothingInserted)
         } else {
-            Ok(BenchmarkRequestInsertResult::Queued)
+            Ok(BenchmarkRequestInsertResult::Inserted)
         }
     }
 

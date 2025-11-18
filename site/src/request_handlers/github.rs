@@ -90,34 +90,26 @@ fn get_awaiting_on_bors_message() -> String {
 /// of this commit existing. The DB ensures that there is only one non-completed
 /// try benchmark request per `pr`.
 async fn record_try_benchmark_request_without_artifacts(
-    client: &client::Client,
     conn: &dyn database::pool::Connection,
     pr: u32,
     backends: &str,
-) -> ServerResult<github::Response> {
+) -> String {
     let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, "");
     log::info!("Inserting try benchmark request {try_request:?}");
 
     match conn.insert_benchmark_request(&try_request).await {
-        Ok(BenchmarkRequestInsertResult::AlreadyQueued) => {
-            log::error!(
+        Ok(BenchmarkRequestInsertResult::NothingInserted) => {
+            log::info!(
                 "Failed to insert try benchmark request, a request for PR`#{pr}` already exists"
             );
-            client.post_comment(pr, format!("Failed to insert try benchmark request, a request for PR`#{pr}` already exists")).await;
+            format!("This pull request was already queued before and is awaiting a try build to finish.")
         }
-        Ok(BenchmarkRequestInsertResult::Queued) => {
-            client
-                .post_comment(pr, get_awaiting_on_bors_message())
-                .await;
-        }
+        Ok(BenchmarkRequestInsertResult::Inserted) => get_awaiting_on_bors_message(),
         Err(e) => {
             log::error!("Failed to insert release benchmark request: {e}");
-            client
-                .post_comment(pr, "Something went wrong! This is most likely an internal failure, please message on Zulip".to_string())
-                .await;
+            "Something went wrong! This is most likely an internal failure, please let us know on [Zulip](https://rust-lang.zulipchat.com/#narrow/channel/247081-t-compiler.2Fperformance)".to_string()
         }
     }
-    Ok(github::Response)
 }
 
 async fn handle_rust_timer(
@@ -152,13 +144,12 @@ async fn handle_rust_timer(
                 let conn = ctxt.conn().await;
 
                 if should_use_job_queue(issue.number) {
-                    return record_try_benchmark_request_without_artifacts(
-                        main_client,
+                    record_try_benchmark_request_without_artifacts(
                         &*conn,
                         issue.number,
                         cmd.params.backends.unwrap_or(""),
                     )
-                    .await;
+                    .await
                 } else {
                     conn.queue_pr(
                         issue.number,
@@ -168,8 +159,8 @@ async fn handle_rust_timer(
                         cmd.params.backends,
                     )
                     .await;
+                    get_awaiting_on_bors_message()
                 }
-                get_awaiting_on_bors_message()
             }
             Err(error) => {
                 format!("Error occurred while parsing comment: {error}")
@@ -201,8 +192,7 @@ async fn handle_rust_timer(
         let conn = ctxt.conn().await;
         for command in &valid_build_cmds {
             if should_use_job_queue(issue.number) {
-                return record_try_benchmark_request_without_artifacts(
-                    main_client,
+                record_try_benchmark_request_without_artifacts(
                     &*conn,
                     issue.number,
                     command.params.backends.unwrap_or(""),
