@@ -1039,6 +1039,12 @@ impl BenchmarkRequest {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchmarkRequestInsertResult {
+    Queued,
+    AlreadyQueued,
+}
+
 pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
     backends
         .split(',')

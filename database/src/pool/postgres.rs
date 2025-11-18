@@ -5,10 +5,10 @@ use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
     BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest,
-    BenchmarkRequestIndex, BenchmarkRequestStatus, BenchmarkRequestType,
-    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests, Profile,
-    QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
+    BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests,
+    Profile, QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
     BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
     BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -1633,9 +1633,10 @@ where
     async fn insert_benchmark_request(
         &self,
         benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<()> {
-        self.conn()
-            .execute(
+    ) -> anyhow::Result<BenchmarkRequestInsertResult> {
+        let rows = self
+            .conn()
+            .query(
                 r#"
                 INSERT INTO benchmark_request(
                     tag,
@@ -1648,7 +1649,9 @@ where
                     profiles,
                     commit_date
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT DO NOTHING
+                RETURNING id;
             "#,
                 &[
                     &benchmark_request.tag(),
@@ -1664,7 +1667,13 @@ where
             )
             .await
             .context("Failed to insert benchmark request")?;
-        Ok(())
+        if rows.is_empty() {
+            // Allows us to handle duplicated cases without the database auto
+            // erroring
+            Ok(BenchmarkRequestInsertResult::AlreadyQueued)
+        } else {
+            Ok(BenchmarkRequestInsertResult::Queued)
+        }
     }
 
     async fn load_benchmark_request_index(&self) -> anyhow::Result<BenchmarkRequestIndex> {

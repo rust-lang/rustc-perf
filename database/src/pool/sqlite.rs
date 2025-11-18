@@ -4,9 +4,10 @@ use crate::pool::{
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
-    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, PendingBenchmarkRequests, Profile, Target,
+    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
+    BenchmarkRequestStatus, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, PendingBenchmarkRequests, Profile,
+    Target,
 };
 use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
@@ -1318,7 +1319,7 @@ impl Connection for SqliteConnection {
     async fn insert_benchmark_request(
         &self,
         _benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<BenchmarkRequestInsertResult> {
         no_queue_implementation_abort!()
     }
 
