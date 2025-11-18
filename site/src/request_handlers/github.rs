@@ -102,7 +102,8 @@ async fn record_try_benchmark_request_without_artifacts(
             log::info!(
                 "Failed to insert try benchmark request, a request for PR`#{pr}` already exists"
             );
-            format!("This pull request was already queued before and is awaiting a try build to finish.")
+            "This pull request was already queued before and is awaiting a try build to finish."
+                .to_string()
         }
         Ok(BenchmarkRequestInsertResult::Inserted) => get_awaiting_on_bors_message(),
         Err(e) => {
