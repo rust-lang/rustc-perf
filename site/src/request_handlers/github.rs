@@ -6,7 +6,10 @@ use crate::github::{
 use crate::job_queue::should_use_job_queue;
 use crate::load::SiteCtxt;
 
-use database::{parse_backends, BenchmarkRequest, BenchmarkRequestInsertResult, CodegenBackend};
+use database::{
+    parse_backends, parse_profiles, BenchmarkRequest, BenchmarkRequestInsertResult, CodegenBackend,
+    Profile,
+};
 use hashbrown::HashMap;
 use std::sync::Arc;
 
@@ -277,6 +280,7 @@ fn parse_benchmark_parameters<'a>(
         exclude: args.remove("exclude").filter(|s| !s.is_empty()),
         runs: None,
         backends: args.remove("backends").filter(|s| !s.is_empty()),
+        profiles: args.remove("profiles").filter(|s| !s.is_empty()),
     };
     if let Some(runs) = args.remove("runs").filter(|s| !s.is_empty()) {
         let Ok(runs) = runs.parse::<u32>() else {
@@ -290,6 +294,19 @@ fn parse_benchmark_parameters<'a>(
             format!(
                 "Cannot parse backends: {e}. Valid values are: {}",
                 CodegenBackend::all_values()
+                    .iter()
+                    .map(|b| b.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+    }
+    if let Some(profiles) = &params.profiles {
+        // Make sure that the profiles are correct
+        parse_profiles(profiles).map_err(|e| {
+            format!(
+                "Cannot parse profiles: {e}. Valid values are: {}",
+                Profile::all_values()
                     .iter()
                     .map(|b| b.as_str())
                     .collect::<Vec<_>>()
@@ -346,6 +363,7 @@ struct BenchmarkParameters<'a> {
     exclude: Option<&'a str>,
     runs: Option<i32>,
     backends: Option<&'a str>,
+    profiles: Option<&'a str>,
 }
 
 pub async fn get_authorized_users() -> Result<Vec<u64>, String> {
