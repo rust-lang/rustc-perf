@@ -1039,6 +1039,16 @@ impl BenchmarkRequest {
     }
 }
 
+/// Result of inserting into the database
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchmarkRequestInsertResult {
+    /// The request was inserted into the database and is a unique instance
+    Inserted,
+    /// The request was not inserted into the database as something else already
+    /// existed that clashed with the unique clause
+    NothingInserted,
+}
+
 pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
     backends
         .split(',')

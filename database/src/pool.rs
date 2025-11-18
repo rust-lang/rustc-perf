@@ -1,9 +1,9 @@
 use crate::selector::CompileTestCase;
 use crate::{
     ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
-    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark,
-    PendingBenchmarkRequests, Target,
+    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
+    BenchmarkRequestStatus, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend,
+    CollectorConfig, CompileBenchmark, PendingBenchmarkRequests, Target,
 };
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
@@ -207,7 +207,7 @@ pub trait Connection: Send + Sync {
     async fn insert_benchmark_request(
         &self,
         benchmark_request: &BenchmarkRequest,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<BenchmarkRequestInsertResult>;
 
     /// Load all known benchmark request SHAs and all completed benchmark requests.
     async fn load_benchmark_request_index(&self) -> anyhow::Result<BenchmarkRequestIndex>;
@@ -538,9 +538,15 @@ mod tests {
             .await
             .unwrap();
 
-            db.insert_benchmark_request(&BenchmarkRequest::create_release("a-sha-1", Utc::now()))
-                .await
-                .expect_err("it was possible to insert a second commit with the same SHA");
+            let result = db
+                .insert_benchmark_request(&BenchmarkRequest::create_release("a-sha-1", Utc::now()))
+                .await;
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap(),
+                BenchmarkRequestInsertResult::NothingInserted
+            );
 
             Ok(ctx)
         })
@@ -566,12 +572,14 @@ mod tests {
             // This should be fine, because the previous request was already completed
             ctx.insert_try_request(42).await;
             // But this should fail, as we can't have two queued requests at once
-            db.insert_benchmark_request(&BenchmarkRequest::create_try_without_artifacts(
-                42, "", "",
-            ))
-            .await
-            .expect_err("It was possible to record two try benchmark requests without artifacts");
+            let result = db
+                .insert_benchmark_request(&BenchmarkRequest::create_try_without_artifacts(
+                    42, "", "",
+                ))
+                .await
+                .unwrap();
 
+            assert_eq!(result, BenchmarkRequestInsertResult::NothingInserted);
             Ok(ctx)
         })
         .await;
@@ -592,14 +600,17 @@ mod tests {
             .await
             .unwrap();
 
-            db.insert_benchmark_request(&BenchmarkRequest::create_master(
-                "a-sha-2",
-                "parent-sha-2",
-                42,
-                Utc::now(),
-            ))
-            .await
-            .expect_err("it was possible to insert a second master commit on the same PR");
+            let result = db
+                .insert_benchmark_request(&BenchmarkRequest::create_master(
+                    "a-sha-2",
+                    "parent-sha-2",
+                    42,
+                    Utc::now(),
+                ))
+                .await
+                .unwrap();
+
+            assert_eq!(result, BenchmarkRequestInsertResult::NothingInserted);
 
             Ok(ctx)
         })

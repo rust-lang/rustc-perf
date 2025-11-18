@@ -8,9 +8,9 @@ use chrono::Utc;
 use collector::benchmark_set::benchmark_set_count;
 use database::pool::{JobEnqueueResult, Transaction};
 use database::{
-    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestStatus,
-    BenchmarkRequestType, CodegenBackend, Connection, Date, PendingBenchmarkRequests, Profile,
-    QueuedCommit, Target,
+    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
+    BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, Connection, Date,
+    PendingBenchmarkRequests, Profile, QueuedCommit, Target,
 };
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -29,7 +29,6 @@ pub fn should_use_job_queue(_pr: u32) -> bool {
 
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database.
-/// Returns `true` if at least one benchmark request was inserted.
 async fn create_benchmark_request_master_commits(
     ctxt: &SiteCtxt,
     conn: &dyn database::pool::Connection,
@@ -56,8 +55,16 @@ async fn create_benchmark_request_master_commits(
             );
             log::info!("Inserting master benchmark request {benchmark:?}");
 
-            if let Err(error) = conn.insert_benchmark_request(&benchmark).await {
-                log::error!("Failed to insert master benchmark request: {error:?}");
+            match conn.insert_benchmark_request(&benchmark).await {
+                Ok(BenchmarkRequestInsertResult::NothingInserted) => {
+                    log::error!(
+                        "Failed to insert master benchmark request, request for PR`#{pr}` already exists",
+                    );
+                }
+                Ok(BenchmarkRequestInsertResult::Inserted) => {}
+                Err(e) => {
+                    log::error!("Failed to insert master benchmark request: {e:?}");
+                }
             }
         }
     }
@@ -87,8 +94,16 @@ async fn create_benchmark_request_releases(
             let release_request = BenchmarkRequest::create_release(&name, commit_date);
             log::info!("Inserting release benchmark request {release_request:?}");
 
-            if let Err(error) = conn.insert_benchmark_request(&release_request).await {
-                log::error!("Failed to insert release benchmark request: {error}");
+            match conn.insert_benchmark_request(&release_request).await {
+                Ok(BenchmarkRequestInsertResult::NothingInserted) => {
+                    log::error!(
+                        "Failed to insert release benchmark request, release with tag `{name}` already exists"
+                    );
+                }
+                Ok(BenchmarkRequestInsertResult::Inserted) => {}
+                Err(e) => {
+                    log::error!("Failed to insert release benchmark request: {e}");
+                }
             }
         }
     }

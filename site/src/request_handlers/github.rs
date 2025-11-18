@@ -6,7 +6,7 @@ use crate::github::{
 use crate::job_queue::should_use_job_queue;
 use crate::load::SiteCtxt;
 
-use database::{parse_backends, BenchmarkRequest, CodegenBackend};
+use database::{parse_backends, BenchmarkRequest, BenchmarkRequestInsertResult, CodegenBackend};
 use hashbrown::HashMap;
 use std::sync::Arc;
 
@@ -76,6 +76,16 @@ async fn handle_issue(
     Ok(github::Response)
 }
 
+fn get_awaiting_on_bors_message() -> String {
+    format!(
+        "Awaiting bors try build completion.
+
+@rustbot label: +S-waiting-on-perf
+
+{COMMENT_MARK_TEMPORARY}"
+    )
+}
+
 /// The try request does not have a `sha` or a `parent_sha` but we need to keep a record
 /// of this commit existing. The DB ensures that there is only one non-completed
 /// try benchmark request per `pr`.
@@ -83,11 +93,23 @@ async fn record_try_benchmark_request_without_artifacts(
     conn: &dyn database::pool::Connection,
     pr: u32,
     backends: &str,
-) {
+) -> String {
     let try_request = BenchmarkRequest::create_try_without_artifacts(pr, backends, "");
     log::info!("Inserting try benchmark request {try_request:?}");
-    if let Err(e) = conn.insert_benchmark_request(&try_request).await {
-        log::error!("Failed to insert try benchmark request: {}", e);
+
+    match conn.insert_benchmark_request(&try_request).await {
+        Ok(BenchmarkRequestInsertResult::NothingInserted) => {
+            log::info!(
+                "Failed to insert try benchmark request, a request for PR`#{pr}` already exists"
+            );
+            "This pull request was already queued before and is awaiting a try build to finish."
+                .to_string()
+        }
+        Ok(BenchmarkRequestInsertResult::Inserted) => get_awaiting_on_bors_message(),
+        Err(e) => {
+            log::error!("Failed to insert release benchmark request: {e}");
+            "Something went wrong! This is most likely an internal failure, please let us know on [Zulip](https://rust-lang.zulipchat.com/#narrow/channel/242791-t-infra)".to_string()
+        }
     }
 }
 
@@ -128,7 +150,7 @@ async fn handle_rust_timer(
                         issue.number,
                         cmd.params.backends.unwrap_or(""),
                     )
-                    .await;
+                    .await
                 } else {
                     conn.queue_pr(
                         issue.number,
@@ -138,14 +160,8 @@ async fn handle_rust_timer(
                         cmd.params.backends,
                     )
                     .await;
+                    get_awaiting_on_bors_message()
                 }
-                format!(
-                    "Awaiting bors try build completion.
-
-@rustbot label: +S-waiting-on-perf
-
-{COMMENT_MARK_TEMPORARY}"
-                )
             }
             Err(error) => {
                 format!("Error occurred while parsing comment: {error}")
