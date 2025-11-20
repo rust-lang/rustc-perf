@@ -232,6 +232,17 @@ impl Profile {
     pub fn default_profiles() -> Vec<Self> {
         vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
     }
+
+    pub fn all_values() -> &'static [Self] {
+        &[
+            Self::Check,
+            Self::Debug,
+            Self::Opt,
+            Self::Doc,
+            Self::DocJson,
+            Self::Clippy,
+        ]
+    }
 }
 
 impl std::str::FromStr for Profile {
@@ -1023,11 +1034,7 @@ impl BenchmarkRequest {
             return Ok(Profile::default_profiles());
         }
 
-        self.profiles
-            .split(',')
-            .map(Profile::from_str)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| anyhow::anyhow!("Invalid profile: {e}"))
+        parse_profiles(&self.profiles).map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn is_completed(&self) -> bool {
@@ -1053,6 +1060,13 @@ pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
     backends
         .split(',')
         .map(|s| CodegenBackend::from_str(s).map_err(|_| format!("Invalid backend: {s}")))
+        .collect()
+}
+
+pub fn parse_profiles(profiles: &str) -> Result<Vec<Profile>, String> {
+    profiles
+        .split(',')
+        .map(|s| Profile::from_str(s).map_err(|_| format!("Invalid profile: {s}")))
         .collect()
 }
 
