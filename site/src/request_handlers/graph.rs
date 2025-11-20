@@ -231,6 +231,7 @@ async fn create_graphs(
                 .profile(profile_selector)
                 .scenario(scenario_selector)
                 .backend(Selector::One(CodegenBackend::Llvm))
+                .target(Selector::One(Target::X86_64UnknownLinuxGnu))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
