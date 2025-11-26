@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use collector::Bound;
@@ -13,7 +14,7 @@ use database::interpolate::IsInterpolated;
 use database::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
-use database::{self, ArtifactId, Profile, Scenario};
+use database::{self, ArtifactId, CodegenBackend, Profile, Scenario, Target};
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.
@@ -209,17 +210,19 @@ async fn create_graphs(
     ));
     let mut benchmarks = HashMap::new();
 
-    let create_selector = |filter: &Option<String>| -> Selector<String> {
+    fn create_selector<T: FromStr>(filter: &Option<String>) -> Option<Result<Selector<T>, T::Err>> {
         filter
             .as_ref()
             .map(|value| Selector::One(value.clone()))
-            .unwrap_or(Selector::All)
-    };
+            .map(|s| s.try_map(|v| v.parse::<T>()))
+    }
 
-    let benchmark_selector = create_selector(&request.benchmark);
-    let profile_selector = create_selector(&request.profile).try_map(|v| v.parse::<Profile>())?;
-    let scenario_selector =
-        create_selector(&request.scenario).try_map(|v| v.parse::<Scenario>())?;
+    let benchmark_selector = create_selector(&request.benchmark)
+        .unwrap_or(Ok(Selector::All))
+        .unwrap();
+    let profile_selector = create_selector(&request.profile)
+        .unwrap_or_else(|| Ok(Selector::Subset(Profile::default_profiles())))?;
+    let scenario_selector = create_selector(&request.scenario).unwrap_or(Ok(Selector::All))?;
 
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
@@ -227,6 +230,8 @@ async fn create_graphs(
                 .benchmark(benchmark_selector)
                 .profile(profile_selector)
                 .scenario(scenario_selector)
+                .backend(Selector::One(CodegenBackend::Llvm))
+                .target(Selector::One(Target::X86_64UnknownLinuxGnu))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
@@ -302,10 +307,7 @@ fn create_summary(
     let mut summary_benchmark = HashMap::new();
     let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
-        profile.map_or_else(
-            || vec![Profile::Check, Profile::Debug, Profile::Opt, Profile::Doc],
-            |p| vec![p]
-        )
+        profile.map_or_else(Profile::default_profiles, |p| vec![p])
     );
     for (scenario, profile) in summary_query_cases {
         let baseline = match baselines.entry((profile, scenario)) {
