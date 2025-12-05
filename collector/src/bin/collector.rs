@@ -1804,7 +1804,8 @@ async fn create_benchmark_configs(
             }
         }
         database::BenchmarkJobKind::Rustc => {
-            bench_rustc = !is_release;
+            assert!(!is_release, "Release job should not benchmark rustc");
+            bench_rustc = true;
         }
     }
 
