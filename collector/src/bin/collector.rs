@@ -34,7 +34,7 @@ use collector::api::next_artifact::NextArtifact;
 use collector::artifact_stats::{
     compile_and_get_stats, ArtifactStats, ArtifactWithStats, CargoProfile,
 };
-use collector::benchmark_set::{expand_benchmark_set, BenchmarkSetId, BenchmarkSetMember};
+use collector::benchmark_set::{get_benchmark_set, BenchmarkSetId, BenchmarkSetMember};
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
@@ -1777,9 +1777,12 @@ async fn create_benchmark_configs(
     Option<RuntimeBenchmarkConfig>,
 )> {
     // Expand the benchmark set and figure out which benchmarks should be executed
-    let benchmark_set = BenchmarkSetId::new(job.target().into(), job.benchmark_set().get_id());
-    let benchmark_set_members = expand_benchmark_set(benchmark_set);
-    log::debug!("Expanded benchmark set members: {benchmark_set_members:?}");
+    let benchmark_set_id = BenchmarkSetId::new(job.target().into(), job.benchmark_set().get_id());
+    let benchmark_set = get_benchmark_set(benchmark_set_id);
+    log::debug!(
+        "Expanded benchmark set members: {:?}",
+        benchmark_set.members()
+    );
 
     let mut bench_rustc = false;
     let mut bench_runtime = false;
@@ -1795,7 +1798,7 @@ async fn create_benchmark_configs(
             bench_runtime = true;
         }
         database::BenchmarkJobKind::Compiletime => {
-            for member in benchmark_set_members {
+            for member in benchmark_set.members() {
                 match member {
                     BenchmarkSetMember::CompileBenchmark(benchmark) => {
                         bench_compile_benchmarks.insert(benchmark);
