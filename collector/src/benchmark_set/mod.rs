@@ -53,14 +53,30 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
         BenchmarkSetMember::CompileBenchmark(BenchmarkName::from(name))
     }
 
+    let stable = vec![
+        compile(CARGO),
+        compile(ENCODING),
+        compile(FUTURES),
+        compile(HTML5EVER),
+        compile(INFLATE),
+        compile(PISTON_IMAGE),
+        compile(REGEX),
+        compile(SYN),
+        compile(TOKIO_WEBPUSH_SIMPLE),
+    ];
+
     match target {
         Target::X86_64UnknownLinuxGnu => {
-            let all = vec![
+            // Set 0 automatically runs runtime benchmarks and the rustc benchmark, so it should
+            // receive less compile-time benchmarks to balance.
+            // Set 0 also runs all stable benchmarks, but those are separate and we don't
+            // really care about benchmarking "performance" for them, so we don't bother splitting
+            // them up.
+            let set_0 = vec![
                 compile(AWAIT_CALL_TREE),
+                compile(CARGO_0_87_1),
                 compile(BITMAPS_3_2_1),
                 compile(BITMAPS_3_2_1_NEW_SOLVER),
-                compile(CARGO),
-                compile(CARGO_0_87_1),
                 compile(CLAP_DERIVE_4_5_32),
                 compile(COERCIONS),
                 compile(CRANELIFT_CODEGEN_0_119_0),
@@ -69,19 +85,17 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(DEEPLY_NESTED_MULTI),
                 compile(DERIVE),
                 compile(DIESEL_2_2_10),
-                compile(ENCODING),
                 compile(EXTERNS),
                 compile(EZA_0_21_2),
-                compile(FUTURES),
+            ];
+            let set_1 = vec![
                 compile(HELLOWORLD),
                 compile(HELLOWORLD_TINY),
-                compile(HTML5EVER),
                 compile(HTML5EVER_0_31_0),
                 compile(HTML5EVER_0_31_0_NEW_SOLVER),
                 compile(HYPER_1_6_0),
                 compile(IMAGE_0_25_6),
                 compile(INCLUDE_BLOB),
-                compile(INFLATE),
                 compile(ISSUE_46449),
                 compile(ISSUE_58319),
                 compile(ISSUE_88862),
@@ -91,9 +105,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(MATCH_STRESS),
                 compile(NALGEBRA_0_33_0),
                 compile(NALGEBRA_0_33_0_NEW_SOLVER),
-                compile(PISTON_IMAGE),
                 compile(PROJECTION_CACHING),
-                compile(REGEX),
                 compile(REGEX_AUTOMATA_0_4_8),
                 compile(REGRESSION_31157),
                 compile(RIPGREP_14_1_1),
@@ -103,11 +115,9 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(SERDE_1_0_219_THREADS4),
                 compile(SERDE_DERIVE_1_0_219),
                 compile(STM32F4_0_15_1),
-                compile(SYN),
                 compile(SYN_2_0_101),
                 compile(SYN_2_0_101_NEW_SOLVER),
                 compile(TOKEN_STREAM_STRESS),
-                compile(TOKIO_WEBPUSH_SIMPLE),
                 compile(TT_MUNCHER),
                 compile(TUPLE_STRESS),
                 compile(TYPENUM_1_18_0),
@@ -118,7 +128,12 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(WF_PROJECTION_STRESS_65510),
                 compile(WG_GRAMMAR),
             ];
-            vec![BenchmarkSet { members: all }]
+            vec![
+                BenchmarkSet {
+                    members: stable.into_iter().chain(set_0).collect(),
+                },
+                BenchmarkSet { members: set_1 },
+            ]
         }
     }
 }
