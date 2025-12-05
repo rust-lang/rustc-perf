@@ -136,6 +136,16 @@ function formatTime(dateString: string | null): string {
   }
   return format(date, "HH:mm:ss");
 }
+
+function jobDuration(job: BenchmarkJob): string {
+  if (!isJobComplete(job)) {
+    return "";
+  }
+  const start = parseDateIsoStringOrNull(job.startedAt);
+  const end = parseDateIsoStringOrNull(job.completedAt);
+  const diff = differenceInSeconds(end, start);
+  return `Job took ${formatSecondsAsDuration(diff)}`;
+}
 </script>
 
 <template>
@@ -225,7 +235,7 @@ function formatTime(dateString: string | null): string {
               <td :title="`Started ${timeSince(job.startedAt)} ago`">
                 {{ formatTime(job.startedAt) }}
               </td>
-              <td>
+              <td :title="jobDuration(job)">
                 {{ formatTime(job.completedAt) }}
               </td>
               <td>{{ formatJobKind(job.kind) }}</td>
