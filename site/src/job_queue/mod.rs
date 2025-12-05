@@ -130,22 +130,35 @@ fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRe
         // The next level is those elements in the unordered queue which
         // are ready to be benchmarked (i.e., those with parent in done or no
         // parent).
-        let level_len = partition_in_place(pending[finished..].iter_mut(), |bmr| {
+        let mut level_len = partition_in_place(pending[finished..].iter_mut(), |bmr| {
             bmr.parent_sha().is_none_or(|parent| done.contains(parent))
         });
 
         // No commit is ready for benchmarking. This can happen e.g. when a try parent commit
-        // was forcefully removed from the master branch of rust-lang/rust. In this case, just
-        // let the commits be benchmarked in the current order that we have, these benchmark runs
-        // just won't have a parent result available.
+        // was forcefully removed from the master branch of rust-lang/rust.
+        // In this case, some benchmark runs just won't have a parent result available.
         if level_len == 0 {
-            if cfg!(test) {
-                panic!("No master/try commit is ready for benchmarking");
+            // As a last-resort attempt, prioritize commits whose parent is unknown.
+            // If we have commits C1(parent=C2) and C2(parent=C3) and we do not know anything about
+            // C3, it still makes to benchmark C2 before C1, because C1 depends on C2.
+            let pending2 = pending.clone();
+            let level2_len = partition_in_place(pending[finished..].iter_mut(), |bmr| {
+                bmr.parent_sha()
+                    .is_none_or(|parent| !pending2.iter().any(|p| p.tag() == Some(parent)))
+            });
+            if level2_len > 0 {
+                level_len = level2_len;
             } else {
-                log::warn!("No master/try commit is ready for benchmarking");
-                return pending;
+                // If that doesn't work just let the commits be benchmarked in the current order
+                // that we have.
+                if cfg!(test) {
+                    panic!("No master/try commit is ready for benchmarking");
+                } else {
+                    log::warn!("No master/try commit is ready for benchmarking");
+                    return pending;
+                }
             }
-        }
+        };
 
         // Everything in level has the same topological order, then we sort based on heuristics
         let level = &mut pending[finished..][..level_len];
@@ -808,6 +821,21 @@ mod tests {
 
             let queue = build_queue(db).await?;
             queue_order_matches(&queue, &["1f88", "60ce", "2038", "5f9d", "90b6"]);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn queue_two_master_commits() {
+        run_postgres_test(|ctx| async {
+            ctx.add_collector(CollectorBuilder::default()).await;
+
+            ctx.insert_master_request("sha1", "sha2", 1).await;
+            ctx.insert_master_request("sha2", "sha3", 2).await;
+
+            let queue = build_queue(ctx.db()).await?;
+            queue_order_matches(&queue, &["sha2", "sha1"]);
             Ok(ctx)
         })
         .await;

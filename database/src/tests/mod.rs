@@ -10,8 +10,8 @@ use tokio_postgres::Config;
 use crate::pool::postgres::make_client;
 use crate::tests::builder::CollectorBuilder;
 use crate::{
-    ArtifactId, ArtifactIdNumber, BenchmarkRequest, CollectorConfig, Commit, CommitType,
-    Connection, Date, Pool,
+    ArtifactId, ArtifactIdNumber, BenchmarkRequest, BenchmarkRequestInsertResult, CollectorConfig,
+    Commit, CommitType, Connection, Date, Pool,
 };
 
 enum TestDb {
@@ -139,7 +139,8 @@ impl TestContext {
         pr: u32,
     ) -> BenchmarkRequest {
         let req = BenchmarkRequest::create_master(sha, parent, pr, Utc::now());
-        self.db().insert_benchmark_request(&req).await.unwrap();
+        let result = self.db().insert_benchmark_request(&req).await.unwrap();
+        assert!(matches!(result, BenchmarkRequestInsertResult::Inserted));
         req
     }
 
