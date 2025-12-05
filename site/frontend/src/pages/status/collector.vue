@@ -1,7 +1,11 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
-import {parseISO, differenceInHours} from "date-fns";
-import {formatISODate} from "../../utils/formatting";
+import {parseISO, differenceInHours, differenceInSeconds} from "date-fns";
+import {
+  formatISODate,
+  formatSecondsAsDuration,
+  parseDateIsoStringOrNull,
+} from "../../utils/formatting";
 import {
   CollectorConfig,
   BenchmarkJobStatus,
@@ -101,6 +105,15 @@ function formatProfile(job: BenchmarkJob): string {
     return "";
   }
 }
+function timeSince(timestamp: string): string {
+  const date = parseDateIsoStringOrNull(timestamp);
+  if (date === null) {
+    return "";
+  }
+  const now = new Date();
+  const diffSeconds = differenceInSeconds(now, date);
+  return formatSecondsAsDuration(diffSeconds);
+}
 </script>
 
 <template>
@@ -187,7 +200,7 @@ function formatProfile(job: BenchmarkJob): string {
               <td>
                 {{ formatJobStatus(job.status) }}
               </td>
-              <td>
+              <td :title="`Started ${timeSince(job.startedAt)} ago`">
                 {{ formatISODate(job.startedAt) }}
               </td>
               <td>
