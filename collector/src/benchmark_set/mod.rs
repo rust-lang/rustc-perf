@@ -42,6 +42,9 @@ impl BenchmarkSet {
     }
 }
 
+pub const BENCHMARK_SET_RUNTIME_BENCHMARKS: u32 = 0;
+pub const BENCHMARK_SET_RUSTC: u32 = 0;
+
 /// Return all benchmark sets for the given target.
 pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
     use compile_benchmarks::*;
