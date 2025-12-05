@@ -11,6 +11,7 @@ import {
   BenchmarkJobStatus,
   isJobComplete,
   BenchmarkJob,
+  BenchmarkJobKind,
 } from "./data";
 import CommitSha from "./commit-sha.vue";
 
@@ -48,6 +49,12 @@ function formatJobStatus(status: BenchmarkJobStatus): string {
     default:
       return "Unknown";
   }
+}
+function formatJobKind(kind: BenchmarkJobKind): string {
+  if (kind === "compiletime") {
+    return "compile";
+  }
+  return kind;
 }
 
 function ActiveStatus({collector}: {collector: CollectorConfig}) {
@@ -206,7 +213,7 @@ function timeSince(timestamp: string): string {
               <td>
                 {{ formatISODate(job.completedAt) }}
               </td>
-              <td>{{ job.kind }}</td>
+              <td>{{ formatJobKind(job.kind) }}</td>
               <td>{{ formatBackend(job) }}</td>
               <td>
                 {{ formatProfile(job) }}
