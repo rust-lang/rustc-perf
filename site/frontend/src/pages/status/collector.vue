@@ -182,7 +182,7 @@ function formatProfile(job: BenchmarkJob): string {
           <template v-for="job in collector.jobs">
             <tr v-if="ACTIVE_FILTERS[job.status]">
               <td>
-                <CommitSha :tag="job.requestTag"></CommitSha>
+                <CommitSha :tag="job.requestTag" :truncate="true"></CommitSha>
               </td>
               <td>
                 {{ formatJobStatus(job.status) }}
