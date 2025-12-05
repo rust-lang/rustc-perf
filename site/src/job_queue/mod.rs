@@ -361,21 +361,24 @@ pub async fn enqueue_benchmark_request(
         .await?;
     }
 
-    // Enqueue Rustc job for only for x86_64 & llvm. This benchmark is how long
-    // it takes to build the rust compiler. It takes a while to run and is
-    // assumed that if the compilation of other rust project improve then this
-    // too would improve.
-    enqueue_job(
-        &mut tx,
-        request_tag,
-        Target::X86_64UnknownLinuxGnu,
-        CodegenBackend::Llvm,
-        Profile::Opt,
-        0u32,
-        BenchmarkJobKind::Rustc,
-        EnqueueMode::Commit,
-    )
-    .await?;
+    // Enqueue Rustc job only for x86_64 & LLVM, and if we're not benchmarking a release commit.
+    // This benchmark measures how long it takes to build the rust compiler.
+    match request.commit_type() {
+        BenchmarkRequestType::Try { .. } | BenchmarkRequestType::Master { .. } => {
+            enqueue_job(
+                &mut tx,
+                request_tag,
+                Target::X86_64UnknownLinuxGnu,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                0u32,
+                BenchmarkJobKind::Rustc,
+                EnqueueMode::Commit,
+            )
+            .await?;
+        }
+        BenchmarkRequestType::Release { .. } => {}
+    }
 
     tx.conn()
         .update_benchmark_request_status(request_tag, BenchmarkRequestStatus::InProgress)
