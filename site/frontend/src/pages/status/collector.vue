@@ -1,6 +1,11 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
-import {parseISO, differenceInHours, differenceInSeconds} from "date-fns";
+import {
+  parseISO,
+  differenceInHours,
+  differenceInSeconds,
+  format,
+} from "date-fns";
 import {
   formatISODate,
   formatSecondsAsDuration,
@@ -121,6 +126,16 @@ function timeSince(timestamp: string): string {
   const diffSeconds = differenceInSeconds(now, date);
   return formatSecondsAsDuration(diffSeconds);
 }
+
+// Takes a date like `2025-09-10T08:22:47.161348Z` and shows just the time
+// portion (`08:22:47`).
+function formatTime(dateString: string | null): string {
+  const date = parseDateIsoStringOrNull(dateString);
+  if (date === null) {
+    return "";
+  }
+  return format(date, "HH:mm:ss");
+}
 </script>
 
 <template>
@@ -208,10 +223,10 @@ function timeSince(timestamp: string): string {
                 {{ formatJobStatus(job.status) }}
               </td>
               <td :title="`Started ${timeSince(job.startedAt)} ago`">
-                {{ formatISODate(job.startedAt) }}
+                {{ formatTime(job.startedAt) }}
               </td>
               <td>
-                {{ formatISODate(job.completedAt) }}
+                {{ formatTime(job.completedAt) }}
               </td>
               <td>{{ formatJobKind(job.kind) }}</td>
               <td>{{ formatBackend(job) }}</td>
