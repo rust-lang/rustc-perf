@@ -5,7 +5,9 @@ use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use anyhow::Context;
 use chrono::Utc;
-use collector::benchmark_set::get_benchmark_sets_for_target;
+use collector::benchmark_set::{
+    get_benchmark_sets_for_target, BENCHMARK_SET_RUNTIME_BENCHMARKS, BENCHMARK_SET_RUSTC,
+};
 use database::pool::{JobEnqueueResult, Transaction};
 use database::{
     BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
@@ -354,7 +356,7 @@ pub async fn enqueue_benchmark_request(
             target,
             CodegenBackend::Llvm,
             Profile::Opt,
-            0u32,
+            BENCHMARK_SET_RUNTIME_BENCHMARKS,
             BenchmarkJobKind::Runtime,
             EnqueueMode::Commit,
         )
@@ -371,7 +373,7 @@ pub async fn enqueue_benchmark_request(
         Target::X86_64UnknownLinuxGnu,
         CodegenBackend::Llvm,
         Profile::Opt,
-        0u32,
+        BENCHMARK_SET_RUSTC,
         BenchmarkJobKind::Rustc,
         EnqueueMode::Commit,
     )
@@ -450,9 +452,9 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
         log::error!("Could not insert master benchmark requests into the database: {error:?}");
     }
     // Put the releases into the `benchmark_requests` queue
-    if let Err(error) = create_benchmark_request_releases(&*conn, &index).await {
-        log::error!("Could not insert release benchmark requests into the database: {error:?}");
-    }
+    // if let Err(error) = create_benchmark_request_releases(&*conn, &index).await {
+    //     log::error!("Could not insert release benchmark requests into the database: {error:?}");
+    // }
 
     let mut completed_benchmarks = vec![];
     // Enqueue waiting requests and try to complete in-progress ones

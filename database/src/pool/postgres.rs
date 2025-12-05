@@ -1970,11 +1970,15 @@ where
         // We take the oldest job from the job_queue matching the benchmark_set,
         // target and status of 'queued' or 'in_progress'
         // If a job was dequeued, we increment its retry (dequeue) count
+
         let row_opt = self
             .conn()
             .query_opt(
                 "
-                WITH picked AS (
+                -- We use the AS MATERIALIZED clause to ensure that Postgres will run each CTE only once,
+                -- and not do any optimizer magic that could run the CTE query multiple times.
+                -- See https://stackoverflow.com/a/73967537/1107768
+                WITH picked AS MATERIALIZED (
                     SELECT
                         id
                     FROM
