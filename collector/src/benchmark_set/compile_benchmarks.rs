@@ -1,7 +1,7 @@
 //! This file contains an exhaustive list of all compile-time benchmarks
 //! located in the `collector/compile-benchmarks` directory that are benchmarked in production.
 //! If new benchmarks are added/removed, they have to also be added/removed here, and in
-//! the [super::expand_benchmark_set] function.
+//! the [super::get_benchmark_sets_for_target] function.
 
 // Stable benchmarks
 pub(super) const CARGO: &str = "cargo";

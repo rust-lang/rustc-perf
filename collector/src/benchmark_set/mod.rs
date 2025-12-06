@@ -31,20 +31,31 @@ pub enum BenchmarkSetMember {
     CompileBenchmark(BenchmarkName),
 }
 
-/// Return the number of benchmark sets for the given target.
-pub fn benchmark_set_count(target: Target) -> usize {
-    match target {
-        Target::X86_64UnknownLinuxGnu => 1,
+#[derive(Debug)]
+pub struct BenchmarkSet {
+    members: Vec<BenchmarkSetMember>,
+}
+
+impl BenchmarkSet {
+    pub fn members(&self) -> &[BenchmarkSetMember] {
+        &self.members
     }
 }
 
-/// Expand all the benchmarks that should be performed by a single collector.
-pub fn expand_benchmark_set(id: BenchmarkSetId) -> Vec<BenchmarkSetMember> {
+pub const BENCHMARK_SET_RUNTIME_BENCHMARKS: u32 = 0;
+pub const BENCHMARK_SET_RUSTC: u32 = 0;
+
+/// Return all benchmark sets for the given target.
+pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
     use compile_benchmarks::*;
 
-    match (id.target, id.index) {
-        (Target::X86_64UnknownLinuxGnu, 0) => {
-            vec![
+    fn compile(name: &str) -> BenchmarkSetMember {
+        BenchmarkSetMember::CompileBenchmark(BenchmarkName::from(name))
+    }
+
+    match target {
+        Target::X86_64UnknownLinuxGnu => {
+            let all = vec![
                 compile(AWAIT_CALL_TREE),
                 compile(BITMAPS_3_2_1),
                 compile(BITMAPS_3_2_1_NEW_SOLVER),
@@ -106,24 +117,21 @@ pub fn expand_benchmark_set(id: BenchmarkSetId) -> Vec<BenchmarkSetMember> {
                 compile(UNUSED_WARNINGS),
                 compile(WF_PROJECTION_STRESS_65510),
                 compile(WG_GRAMMAR),
-            ]
-        }
-        (Target::X86_64UnknownLinuxGnu, 1..) => {
-            panic!("Unknown benchmark set id {id:?}");
+            ];
+            vec![BenchmarkSet { members: all }]
         }
     }
 }
 
-/// Helper function for creating compile-time benchmark member sets.
-fn compile(name: &str) -> BenchmarkSetMember {
-    BenchmarkSetMember::CompileBenchmark(BenchmarkName::from(name))
+/// Expand all the benchmarks that should be performed by a single collector.
+pub fn get_benchmark_set(id: BenchmarkSetId) -> BenchmarkSet {
+    let mut sets = get_benchmark_sets_for_target(id.target);
+    sets.remove(id.index as usize)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::benchmark_set::{
-        benchmark_set_count, expand_benchmark_set, BenchmarkSetId, BenchmarkSetMember,
-    };
+    use crate::benchmark_set::{get_benchmark_sets_for_target, BenchmarkSetMember};
     use crate::compile::benchmark::target::Target;
     use crate::compile::benchmark::{
         get_compile_benchmarks, BenchmarkName, CompileBenchmarkFilter,
@@ -135,21 +143,13 @@ mod tests {
     /// complete, i.e. they don't miss any benchmarks.
     #[test]
     fn check_benchmark_set_x64() {
-        let target = Target::X86_64UnknownLinuxGnu;
-        let sets = (0..benchmark_set_count(target))
-            .map(|index| {
-                expand_benchmark_set(BenchmarkSetId {
-                    target,
-                    index: index as u32,
-                })
-            })
-            .collect::<Vec<Vec<BenchmarkSetMember>>>();
+        let sets = get_benchmark_sets_for_target(Target::X86_64UnknownLinuxGnu);
 
         // Assert set is unique
         for set in &sets {
-            let hashset = set.iter().collect::<HashSet<_>>();
+            let hashset = set.members().iter().collect::<HashSet<_>>();
             assert_eq!(
-                set.len(),
+                set.members().len(),
                 hashset.len(),
                 "Benchmark set {set:?} contains duplicates"
             );
@@ -160,8 +160,8 @@ mod tests {
             for j in i + 1..sets.len() {
                 let set_a = &sets[i];
                 let set_b = &sets[j];
-                let hashset_a = set_a.iter().collect::<HashSet<_>>();
-                let hashset_b = set_b.iter().collect::<HashSet<_>>();
+                let hashset_a = set_a.members().iter().collect::<HashSet<_>>();
+                let hashset_b = set_b.members().iter().collect::<HashSet<_>>();
                 assert!(
                     hashset_a.is_disjoint(&hashset_b),
                     "Benchmark sets {set_a:?} and {set_b:?} overlap"
@@ -170,7 +170,10 @@ mod tests {
         }
 
         // Check that the union of all sets contains all the required benchmarks
-        let all_members = sets.iter().flatten().collect::<HashSet<_>>();
+        let all_members = sets
+            .iter()
+            .flat_map(|s| s.members())
+            .collect::<HashSet<_>>();
 
         const BENCHMARK_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/compile-benchmarks");
         let all_compile_benchmarks =
@@ -189,7 +192,7 @@ mod tests {
             let BenchmarkSetMember::CompileBenchmark(name) = benchmark;
             assert!(
                 all_compile_benchmarks.contains(name),
-                "Compile-time benchmark {name} does not exist on disk or is a stable benchmark"
+                "Compile-time benchmark {name} does not exist on disk"
             );
         }
         assert_eq!(all_members.len(), all_compile_benchmarks.len());
