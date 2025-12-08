@@ -1,12 +1,22 @@
 <script setup lang="tsx">
 import {h, ref, Ref} from "vue";
-import {parseISO, differenceInHours} from "date-fns";
-import {formatISODate} from "../../utils/formatting";
+import {
+  parseISO,
+  differenceInHours,
+  differenceInSeconds,
+  format,
+} from "date-fns";
+import {
+  formatISODate,
+  formatSecondsAsDuration,
+  parseDateIsoStringOrNull,
+} from "../../utils/formatting";
 import {
   CollectorConfig,
   BenchmarkJobStatus,
   isJobComplete,
   BenchmarkJob,
+  BenchmarkJobKind,
 } from "./data";
 import CommitSha from "./commit-sha.vue";
 
@@ -44,6 +54,12 @@ function formatJobStatus(status: BenchmarkJobStatus): string {
     default:
       return "Unknown";
   }
+}
+function formatJobKind(kind: BenchmarkJobKind): string {
+  if (kind === "compiletime") {
+    return "compile";
+  }
+  return kind;
 }
 
 function ActiveStatus({collector}: {collector: CollectorConfig}) {
@@ -100,6 +116,35 @@ function formatProfile(job: BenchmarkJob): string {
   } else {
     return "";
   }
+}
+function timeSince(timestamp: string): string {
+  const date = parseDateIsoStringOrNull(timestamp);
+  if (date === null) {
+    return "";
+  }
+  const now = new Date();
+  const diffSeconds = differenceInSeconds(now, date);
+  return formatSecondsAsDuration(diffSeconds);
+}
+
+// Takes a date like `2025-09-10T08:22:47.161348Z` and shows just the time
+// portion (`08:22:47`).
+function formatTime(dateString: string | null): string {
+  const date = parseDateIsoStringOrNull(dateString);
+  if (date === null) {
+    return "";
+  }
+  return format(date, "HH:mm:ss");
+}
+
+function jobDuration(job: BenchmarkJob): string {
+  if (!isJobComplete(job)) {
+    return "";
+  }
+  const start = parseDateIsoStringOrNull(job.startedAt);
+  const end = parseDateIsoStringOrNull(job.completedAt);
+  const diff = differenceInSeconds(end, start);
+  return `Job took ${formatSecondsAsDuration(diff)}`;
 }
 </script>
 
@@ -182,18 +227,18 @@ function formatProfile(job: BenchmarkJob): string {
           <template v-for="job in collector.jobs">
             <tr v-if="ACTIVE_FILTERS[job.status]">
               <td>
-                <CommitSha :tag="job.requestTag"></CommitSha>
+                <CommitSha :tag="job.requestTag" :truncate="true"></CommitSha>
               </td>
               <td>
                 {{ formatJobStatus(job.status) }}
               </td>
-              <td>
-                {{ formatISODate(job.startedAt) }}
+              <td :title="`Started ${timeSince(job.startedAt)} ago`">
+                {{ formatTime(job.startedAt) }}
               </td>
-              <td>
-                {{ formatISODate(job.completedAt) }}
+              <td :title="jobDuration(job)">
+                {{ formatTime(job.completedAt) }}
               </td>
-              <td>{{ job.kind }}</td>
+              <td>{{ formatJobKind(job.kind) }}</td>
               <td>{{ formatBackend(job) }}</td>
               <td>
                 {{ formatProfile(job) }}
