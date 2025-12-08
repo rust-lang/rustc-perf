@@ -49,6 +49,7 @@ impl RequestBuilder {
                     job.profile,
                     job.benchmark_set,
                     job.kind,
+                    false,
                 )
                 .await
             {
@@ -116,11 +117,17 @@ pub struct JobBuilder {
     benchmark_set: u32,
     conclusion: BenchmarkJobConclusion,
     kind: BenchmarkJobKind,
+    is_optional: bool,
 }
 
 impl JobBuilder {
     pub fn profile(mut self, profile: Profile) -> Self {
         self.profile = profile;
+        self
+    }
+
+    pub fn is_optional(mut self, is_optional: bool) -> Self {
+        self.is_optional = is_optional;
         self
     }
 }
@@ -134,6 +141,7 @@ impl Default for JobBuilder {
             benchmark_set: 0,
             conclusion: BenchmarkJobConclusion::Success,
             kind: BenchmarkJobKind::Compiletime,
+            is_optional: false,
         }
     }
 }
