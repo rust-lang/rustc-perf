@@ -5,7 +5,9 @@ use crate::job_queue::utils::{parse_release_string, ExtractIf};
 use crate::load::{partition_in_place, SiteCtxt};
 use anyhow::Context;
 use chrono::Utc;
-use collector::benchmark_set::benchmark_set_count;
+use collector::benchmark_set::{
+    get_benchmark_sets_for_target, BENCHMARK_SET_RUNTIME_BENCHMARKS, BENCHMARK_SET_RUSTC,
+};
 use database::pool::{JobEnqueueResult, Transaction};
 use database::{
     BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
@@ -317,7 +319,7 @@ pub async fn enqueue_benchmark_request(
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
-        for benchmark_set in 0..benchmark_set_count(target.into()) {
+        for benchmark_set in 0..get_benchmark_sets_for_target(target.into()).len() {
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
                     enqueue_job(
@@ -367,7 +369,7 @@ pub async fn enqueue_benchmark_request(
             target,
             CodegenBackend::Llvm,
             Profile::Opt,
-            0u32,
+            BENCHMARK_SET_RUNTIME_BENCHMARKS,
             BenchmarkJobKind::Runtime,
             EnqueueMode::Commit,
         )
@@ -384,7 +386,7 @@ pub async fn enqueue_benchmark_request(
                 Target::X86_64UnknownLinuxGnu,
                 CodegenBackend::Llvm,
                 Profile::Opt,
-                0u32,
+                BENCHMARK_SET_RUSTC,
                 BenchmarkJobKind::Rustc,
                 EnqueueMode::Commit,
             )
