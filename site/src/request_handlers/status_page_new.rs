@@ -20,7 +20,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status_ne
     // Figure out approximately how long was the most recent master benchmark request
     let expected_duration = completed
         .iter()
-        .filter(|req| req.request.is_master())
+        .filter(|req| req.request.is_master() && req.errors.is_empty())
         .filter_map(|req| match req.request.status() {
             BenchmarkRequestStatus::Completed { duration, .. } => Some(duration),
             _ => None,
