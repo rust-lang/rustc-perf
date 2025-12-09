@@ -1359,6 +1359,7 @@ impl Connection for SqliteConnection {
         _profile: Profile,
         _benchmark_set: u32,
         _kind: BenchmarkJobKind,
+        _is_optional: bool,
     ) -> JobEnqueueResult {
         no_queue_implementation_abort!()
     }

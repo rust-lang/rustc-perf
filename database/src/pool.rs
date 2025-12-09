@@ -241,6 +241,7 @@ pub trait Connection: Send + Sync {
 
     /// Add a benchmark job to the job queue and returns its ID, if it was not
     /// already in the DB previously.
+    #[allow(clippy::too_many_arguments)]
     async fn enqueue_benchmark_job(
         &self,
         request_tag: &str,
@@ -249,6 +250,7 @@ pub trait Connection: Send + Sync {
         profile: Profile,
         benchmark_set: u32,
         kind: BenchmarkJobKind,
+        is_optional: bool,
     ) -> JobEnqueueResult;
 
     /// Returns a set of compile-time benchmark test cases that were already computed for the
@@ -747,6 +749,7 @@ mod tests {
                     Profile::Opt,
                     0u32,
                     BenchmarkJobKind::Runtime,
+                    false,
                 )
                 .await;
             match result {
@@ -906,6 +909,7 @@ mod tests {
                     Profile::Opt,
                     1u32,
                     BenchmarkJobKind::Runtime,
+                    false,
                 )
                 .await
             {
@@ -1006,6 +1010,7 @@ mod tests {
                 Profile::Opt,
                 benchmark_set.0,
                 BenchmarkJobKind::Runtime,
+                false,
             )
             .await
             .unwrap();
@@ -1260,6 +1265,7 @@ mod tests {
                 Profile::Check,
                 0,
                 BenchmarkJobKind::Compiletime,
+                false,
             )
             .await
             .unwrap();
@@ -1281,6 +1287,100 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none());
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn optional_jobs_should_not_block_benchmark_request_from_being_completed() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db();
+            let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+            let benchmark_set = BenchmarkSet(0u32);
+            let tag = "sha-1";
+            let collector_name = "collector-1";
+            let target = Target::X86_64UnknownLinuxGnu;
+
+            let insert_result = db
+                .add_collector_config(collector_name, target, 1, true)
+                .await;
+            assert!(insert_result.is_ok());
+
+            /* Create the request */
+            let benchmark_request = BenchmarkRequest::create_release(tag, time);
+            db.insert_benchmark_request(&benchmark_request)
+                .await
+                .unwrap();
+
+            /* Create job for the request */
+            db.enqueue_benchmark_job(
+                benchmark_request.tag().unwrap(),
+                target,
+                CodegenBackend::Llvm,
+                Profile::Opt,
+                benchmark_set.0,
+                BenchmarkJobKind::Runtime,
+                false,
+            )
+            .await
+            .unwrap();
+
+            /* Create optional job for the request, this is somewhat unrealsitic
+             * as we're only going to make specific targets jobs optional */
+            db.enqueue_benchmark_job(
+                benchmark_request.tag().unwrap(),
+                target,
+                CodegenBackend::Llvm,
+                Profile::Doc,
+                benchmark_set.0,
+                BenchmarkJobKind::Runtime,
+                true,
+            )
+            .await
+            .unwrap();
+
+            let (job, _) = db
+                .dequeue_benchmark_job(collector_name, target, benchmark_set)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
+
+            /* Make the job take some amount of time */
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+
+            /* Mark the job as complete */
+            db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)
+                .await
+                .unwrap();
+
+            db.maybe_mark_benchmark_request_as_completed(tag)
+                .await
+                .unwrap();
+
+            /* From the status page view we can see that the duration has been
+             * updated. Albeit that it will be a very short duration. */
+            let completed = db.get_last_n_completed_benchmark_requests(1).await.unwrap();
+            let req = &completed
+                .iter()
+                .find(|it| it.request.tag() == Some(tag))
+                .unwrap()
+                .request;
+
+            assert!(matches!(
+                req.status(),
+                BenchmarkRequestStatus::Completed { .. }
+            ));
+            let BenchmarkRequestStatus::Completed { duration, .. } = req.status() else {
+                unreachable!();
+            };
+            assert!(duration >= Duration::from_millis(1000));
+
+            let completed_index = db.load_benchmark_request_index().await.unwrap();
+            assert!(completed_index.contains_tag("sha-1"));
 
             Ok(ctx)
         })

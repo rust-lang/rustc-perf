@@ -1164,6 +1164,7 @@ pub struct BenchmarkJob {
     status: BenchmarkJobStatus,
     deque_counter: u32,
     kind: BenchmarkJobKind,
+    is_optional: bool,
 }
 
 impl BenchmarkJob {
@@ -1214,6 +1215,10 @@ impl BenchmarkJob {
 
     pub fn kind(&self) -> BenchmarkJobKind {
         self.kind
+    }
+
+    pub fn is_optional(&self) -> bool {
+        self.is_optional
     }
 }
 

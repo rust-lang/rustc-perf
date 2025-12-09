@@ -440,6 +440,7 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE runtime_pstat_series DROP CONSTRAINT runtime_pstat_series_benchmark_metric_key;
     ALTER TABLE runtime_pstat_series ADD CONSTRAINT runtime_test_case UNIQUE(benchmark, target, metric);
     "#,
+    r#"ALTER TABLE job_queue ADD COLUMN is_optional BOOLEAN NOT NULL DEFAULT FALSE"#,
 ];
 
 #[async_trait::async_trait]
@@ -1791,6 +1792,7 @@ where
         profile: Profile,
         benchmark_set: u32,
         kind: BenchmarkJobKind,
+        is_optional: bool,
     ) -> JobEnqueueResult {
         // This will return zero rows if the job already exists
         let result = self
@@ -1804,9 +1806,10 @@ where
                 profile,
                 benchmark_set,
                 status,
-                kind
+                kind,
+                is_optional
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT DO NOTHING
             RETURNING job_queue.id
                 "#,
@@ -1818,6 +1821,7 @@ where
                     &(benchmark_set as i32),
                     &BENCHMARK_JOB_STATUS_QUEUED_STR,
                     &kind,
+                    &is_optional,
                 ],
             )
             .await;
@@ -1985,8 +1989,8 @@ where
                         AND target = $2
                         AND benchmark_set = $3
                     ORDER BY
-                        -- Prefer in-progress jobs that have not been finished previously, so that
-                        -- we can finish them.
+                        -- Prefer in-progress jobs that have not been finished
+                        -- previously, so that we can finish them.
                         CASE
                             WHEN status = $5 THEN 0
                             WHEN status = $1 THEN 1
@@ -2019,6 +2023,7 @@ where
                     updated.started_at,
                     updated.retry,
                     updated.kind,
+                    updated.is_optional,
                     br.commit_type,
                     br.commit_date
                 FROM updated
@@ -2054,9 +2059,10 @@ where
                     deque_counter: row.get::<_, i32>(6) as u32,
                     kind: BenchmarkJobKind::from_str(row.get::<_, &str>(7))
                         .map_err(|e| anyhow::anyhow!(e))?,
+                    is_optional: row.get::<_, bool>(8),
                 };
-                let commit_type = row.get::<_, &str>(8);
-                let commit_date = row.get::<_, Option<DateTime<Utc>>>(9);
+                let commit_type = row.get::<_, &str>(9);
+                let commit_date = row.get::<_, Option<DateTime<Utc>>>(10);
 
                 let commit_date = Date(commit_date.ok_or_else(|| {
                     anyhow::anyhow!("Dequeuing job for a benchmark request without commit date")
@@ -2114,6 +2120,7 @@ where
                         WHERE
                             job_queue.request_tag = benchmark_request.tag
                             AND job_queue.status NOT IN ($3, $4)
+                            AND job_queue.is_optional = FALSE
                     )
                     AND (
                         benchmark_request.parent_sha IS NULL
@@ -2264,6 +2271,7 @@ where
                 deque_counter: row.get::<_, i32>(10) as u32,
                 kind: BenchmarkJobKind::from_str(row.get::<_, &str>(12))
                     .map_err(|e| anyhow::anyhow!(e))?,
+                is_optional: row.get::<_, bool>(13),
             };
             request_to_jobs
                 .entry(job.request_tag.clone())

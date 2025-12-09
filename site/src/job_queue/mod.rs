@@ -282,10 +282,19 @@ pub async fn enqueue_benchmark_request(
                              profile,
                              benchmark_set,
                              kind,
-                             mode: EnqueueMode| {
+                             mode: EnqueueMode,
+                             is_optional: bool| {
         let result = tx
             .conn()
-            .enqueue_benchmark_job(request_tag, target, backend, profile, benchmark_set, kind)
+            .enqueue_benchmark_job(
+                request_tag,
+                target,
+                backend,
+                profile,
+                benchmark_set,
+                kind,
+                is_optional,
+            )
             .await;
 
         let make_error = |msg| {
@@ -319,6 +328,12 @@ pub async fn enqueue_benchmark_request(
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
     for target in Target::all() {
+        // We only have X86_64 at the moment and when we add other targets do
+        // not want to block the Benchmark request from completing to wait on
+        // other targets. Essentially, for the time being, other targets will
+        // run in the background
+        let is_optional = target != Target::X86_64UnknownLinuxGnu;
+
         for benchmark_set in 0..get_benchmark_sets_for_target(target.into()).len() {
             for &backend in backends.iter() {
                 for &profile in profiles.iter() {
@@ -331,6 +346,7 @@ pub async fn enqueue_benchmark_request(
                         benchmark_set as u32,
                         BenchmarkJobKind::Compiletime,
                         EnqueueMode::Commit,
+                        is_optional,
                     )
                     .await?;
 
@@ -354,6 +370,7 @@ pub async fn enqueue_benchmark_request(
                             benchmark_set as u32,
                             BenchmarkJobKind::Compiletime,
                             EnqueueMode::Parent,
+                            is_optional,
                         )
                         .await?;
                     }
@@ -372,6 +389,7 @@ pub async fn enqueue_benchmark_request(
             BENCHMARK_SET_RUNTIME_BENCHMARKS,
             BenchmarkJobKind::Runtime,
             EnqueueMode::Commit,
+            is_optional,
         )
         .await?;
     }
@@ -389,6 +407,7 @@ pub async fn enqueue_benchmark_request(
                 BENCHMARK_SET_RUSTC,
                 BenchmarkJobKind::Rustc,
                 EnqueueMode::Commit,
+                false,
             )
             .await?;
         }
@@ -642,6 +661,7 @@ mod tests {
                 Profile::Opt,
                 benchmark_set,
                 BenchmarkJobKind::Compiletime,
+                false,
             )
             .await
         {
