@@ -1749,6 +1749,10 @@ async fn run_benchmark_job(
                     "Cannot prepare benchmark configs: {error:?}"
                 ))
             })?;
+    if compile_config.is_none() && runtime_config.is_none() {
+        log::warn!("Nothing to benchmark");
+        return Ok(());
+    }
 
     let shared = SharedBenchmarkConfig {
         artifact_id,
