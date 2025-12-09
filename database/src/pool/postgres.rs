@@ -1990,8 +1990,7 @@ where
                         AND benchmark_set = $3
                     ORDER BY
                         -- Prefer in-progress jobs that have not been finished
-                        -- previously, so that we can finish them. Also prefer
-                        -- mandatory jobs over optional ones.
+                        -- previously, so that we can finish them.
                         CASE
                             WHEN status = $5 THEN 0
                             WHEN status = $1 THEN 1
