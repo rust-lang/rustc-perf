@@ -25,6 +25,9 @@ The following is a glossary of domain specific terminology. Although benchmarks 
   - `incr-patched`: incremental compilation is used, with a full incremental cache and some code changes made.
 * **backend**: the codegen backend used for compiling Rust code.
   - `llvm`: the default codegen backend
+  - `cranelift`: experimental backend designed for quicker non-optimized builds
+* **target**: compilation target for which the benchmark is compiled.
+  - `x86_64-unknown-linux-gnu`: the default x64 Linux target
 * **category**: a high-level group of benchmarks. Currently, there are three categories, primary (mostly real-world crates), secondary (mostly stress tests), and stable (old real-world crates, only used for the dashboard).
 * **artifact type**: describes what kind of artifact does the benchmark build. Either `library` or `binary`.
 
@@ -41,15 +44,15 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 ## Testing
 
 * **test case**: a combination of parameters that describe the measurement of a single (compile-time or runtime) benchmark - a single `test`
-    - For compile-time benchmarks, it is a combination of a benchmark, a profile, and a scenario.
-    - For runtime benchmarks, it is currently only the benchmark name.
+    - For compile-time benchmarks, it is a combination of a benchmark, a profile, a scenario, a codegen backend and a target.
+    - For runtime benchmarks, it a combination of a benchmark and a target.
 * **test**: the act of running an artifact under a test case. Each test is composed of many iterations.
 * **test iteration**: a single iteration that makes up a test. Note: we currently normally run 3 test iterations for each test. 
-* **test result**: the result of the collection of all statistics from running a test. Currently, the minimum value of a statistic from all the test iterations is used for analysis calculations and the website.
-* **statistic**: a single measured value of a metric in a test result
+* **test result**: the set of all gathered statistics from running a test. Currently, the minimum value of a statistic from all the test iterations is used for analysis calculations and the website.
+* **statistic**: a single measured value of a metric in a test iteration
 * **statistic description**: the combination of a metric and a test case which describes a statistic.
 * **statistic series**: statistics for the same statistic description over time.
-* **run**: a set of tests for all currently available test cases measured on a given artifact. 
+* **run**: a set of tests for all currently available test cases measured on a given artifact.
 
 ## Analysis
 
@@ -60,7 +63,17 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **relevant test result comparison**: a test result comparison can be significant but still not be relevant (i.e., worth paying attention to). Relevance is a factor of the test result comparison's significance and magnitude. Comparisons are considered relevant if they are significant and have at least a small magnitude .
 * **test result comparison magnitude**: how "large" the delta is between the two test result's under comparison. This is determined by the average of two factors: the absolute size of the change (i.e., a change of 5% is larger than a change of 1%) and the amount above the significance threshold (i.e., a change that is 5x the significance threshold is larger than a change 1.5x the significance threshold).
 
-## Other 
+## Job queue
+
+These terms are related to the [job queue system](./job-queue.md) that distributes benchmarking jobs across available collectors.
+
+- **benchmark request**: a request for a benchmarking a *run* on a given *artifact*. Can be either created from a try build on a PR, or it is automatically created from merged master/release *artifacts*. 
+- **collector**: a machine that performs benchmarks.
+- **benchmark set**: a subset of a compile/runtime/bootstrap benchmark suite that is executed by a collector in a single job. 
+- **job**: a high-level "work item" that defines a set of *test cases* that should be benchmarked on a specific collector.
+- **job queue**: a queue of *jobs*.
+
+## Other
 
 * **bootstrap**: the process of building the compiler from a previous version of the compiler
 * **compiler query**: a query used inside the [compiler query system](https://rustc-dev-guide.rust-lang.org/overview.html#queries).

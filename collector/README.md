@@ -34,6 +34,8 @@ This crate is only compatible with OpenSSL 1.0.1, 1.0.2, and 1.1.0, or LibreSSL
 aborting due to this version mismatch.
 ```
 
+For benchmarking using `perf`, you will also need to set `/proc/sys/kernel/perf_event_paranoid` to `-1`.
+
 ## Benchmarking
 
 This section is about benchmarking rustc, i.e. measuring its performance on the
