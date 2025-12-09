@@ -126,7 +126,7 @@ impl JobBuilder {
         self
     }
 
-    pub fn is_optional(mut self, is_optional: bool) -> Self {
+    pub fn make_optional(mut self, is_optional: bool) -> Self {
         self.is_optional = is_optional;
         self
     }

@@ -1350,7 +1350,7 @@ mod tests {
             assert_eq!(job.request_tag(), benchmark_request.tag().unwrap());
 
             /* Make the job take some amount of time */
-            std::thread::sleep(Duration::from_millis(1000));
+            tokio::time::sleep(Duration::from_millis(1000)).await;
 
             /* Mark the job as complete */
             db.mark_benchmark_job_as_completed(job.id(), BenchmarkJobConclusion::Success)

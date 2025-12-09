@@ -1993,8 +1993,8 @@ where
                         -- previously, so that we can finish them. Also prefer
                         -- mandatory jobs over optional ones.
                         CASE
-                            WHEN (status = $5 AND is_optional = FALSE) THEN 0
-                            WHEN (status = $1 AND is_optional = FALSE) THEN 1
+                            WHEN status = $5 THEN 0
+                            WHEN status = $1 THEN 1
                             ELSE 2
                         END,
                         request_tag,
