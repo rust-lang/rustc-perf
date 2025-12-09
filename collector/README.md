@@ -1,7 +1,7 @@
 # Rust Compiler Performance Benchmarking and Profiling
 
 Hardware and software details of the machine that executes the CI details can be found
-[here](../docs/perf-runner.md). A glossary of relevant terms can be found
+[here](../docs/deployment.md). A glossary of relevant terms can be found
 [here](../docs/glossary.md).
 
 ## The benchmarks

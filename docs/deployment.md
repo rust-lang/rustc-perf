@@ -1,7 +1,23 @@
-# Benchmarking machine
-The machine that actually executes the benchmarks is the `AX-42` server running on [Hetzner](https://www.hetzner.com/dedicated-rootserver/). It has the following configuration.
+# Deployment
+
+The machines that actually execute the benchmarks ("collectors") are dedicated machines running on [Hetzner](https://www.hetzner.com/dedicated-rootserver/). The [web server](http://perf.rust-lang.org/) runs on [ECS](https://github.com/rust-lang/infra-team/blob/HEAD/service-catalog/rustc-perf/README.md).
+
+## Debugging
+This section documents what to do in case benchmarking doesn't work or something is stuck. The status of the collectors can be found on the [status page](https://perf.rust-lang.org/status.html). In particular, it shows the last heartbeat of each collector. If that date is very old (>1 hour), then something bad has probably happened with the collector.
+
+You can SSH into the machines directly and examine what is going on there. The currently active machines have the following domain names:
+
+- `rustc-perf-one.infra.rust-lang.org`
+- `rustc-perf-two.infra.rust-lang.org`
+
+The benchmarking process runs as a systemd service called `collector`. You can start/stop/inspect it using the usual commands:
+- Start/restart/stop: `sudo systemctl start/restart/stop collector.service`
+- See logs: `sudo journalctl --utc -n 10000 -u collector -f`
+
+The user account under which the benchmarks execute is called `collector`, you can switch to it using `su` and examine the `/home/collector/rustc-perf` checkout, from where are the benchmarks executed.
 
 ## Hardware
+- The collectors run on `AX-42` Hetzner server instances.
 - 8-core AMD Ryzen 7 PRO 8700GE with HyperThreading (16 hardware threads total)
     <details>
     <summary>Output of `lscpu`</summary>
