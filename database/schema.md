@@ -238,17 +238,9 @@ Columns:
 * **job_id** (`INTEGER`): A nullable job_id which, if it exists it will inform
   us as to which job this error is part of.
 
-## New benchmarking design
-We are currently implementing a new design for dispatching benchmarks to collector(s) and storing
-them in the database. It will support new use-cases, like backfilling of new benchmarks into a parent
-commit and primarily benchmarking with multiple collectors (and multiple hardware architectures) in
-parallel.
-
-The tables below are a part of the new scheme.
-
 ### benchmark_request
 
-Represents a single request for performing a benchmark collection. Each request can be one of three types:
+Represents a single request for performing a benchmark run. Each request can be one of three types:
 
 * Master: benchmark a merged master commit
 * Release: benchmark a published stable or beta compiler toolchain
@@ -297,15 +289,13 @@ Columns:
 
 ### job_queue
 
-This table stores ephemeral benchmark jobs, which specifically tell the
-collector which benchmarks it should execute. The jobs will be kept in the
-table for ~30 days after being completed, so that we can quickly figure out
-what master parent jobs we need to backfill when handling try builds.
+This table stores benchmark jobs, which specifically tell the
+collector which benchmarks it should execute.
 
 Columns:
 
-* **id** (`bigint` / `serial`): Primary*key identifier for the job row;
-  auto*increments with each new job.
+* **id** (`bigint` / `serial`): Primary key identifier for the job row;
+  autoincrements with each new job.
 * **request_tag** (`text`): References the parent benchmark request that
   spawned this job.
 * **target** (`text NOT NULL`): Hardware/ISA the benchmarks must run on
@@ -325,3 +315,5 @@ Columns:
   `success`, or `failure`.
 * **retry** (`int NOT NULL`): Number of times the job has been re*queued after
   a failure; 0 on the first attempt.
+* **kind** (`text NOT NULL`): What benchmark suite should be executed in the job (`compiletime`, `runtime` or `rustc`).
+* **is_optional** (`boolean NOT NULL`): Whether a request should wait for this job to finish before it will become completed.

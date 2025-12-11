@@ -1,7 +1,7 @@
 # Rust Compiler Performance Benchmarking and Profiling
 
 Hardware and software details of the machine that executes the CI details can be found
-[here](../docs/perf-runner.md). A glossary of relevant terms can be found
+[here](../docs/deployment.md). A glossary of relevant terms can be found
 [here](../docs/glossary.md).
 
 ## The benchmarks
@@ -33,6 +33,8 @@ This crate is only compatible with OpenSSL 1.0.1, 1.0.2, and 1.1.0, or LibreSSL
 2.5 and 2.6.0, but a different version of OpenSSL was found. The build is now
 aborting due to this version mismatch.
 ```
+
+For benchmarking using `perf`, you will also need to set `/proc/sys/kernel/perf_event_paranoid` to `-1`.
 
 ## Benchmarking
 
