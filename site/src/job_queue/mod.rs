@@ -268,6 +268,7 @@ pub async fn enqueue_benchmark_request(
 
     let backends = request.backends()?;
     let profiles = request.profiles()?;
+    let targets = request.targets()?;
 
     #[derive(PartialEq, Debug)]
     enum EnqueueMode {
@@ -327,12 +328,12 @@ pub async fn enqueue_benchmark_request(
     };
 
     // Target x benchmark_set x backend x profile -> BenchmarkJob
-    for target in Target::all() {
+    for &target in targets.iter() {
         // We only have X86_64 at the moment and when we add other targets do
         // not want to block the Benchmark request from completing to wait on
         // other targets. Essentially, for the time being, other targets will
         // run in the background
-        let is_optional = target != Target::X86_64UnknownLinuxGnu;
+        let is_optional = target.is_optional();
 
         for benchmark_set in 0..get_benchmark_sets_for_target(target.into()).len() {
             for &backend in backends.iter() {
@@ -629,7 +630,7 @@ mod tests {
     }
 
     fn create_try(pr: u32) -> BenchmarkRequest {
-        BenchmarkRequest::create_try_without_artifacts(pr, "", "")
+        BenchmarkRequest::create_try_without_artifacts(pr, "", "", "")
     }
 
     fn create_release(tag: &str) -> BenchmarkRequest {

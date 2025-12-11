@@ -441,6 +441,7 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE runtime_pstat_series ADD CONSTRAINT runtime_test_case UNIQUE(benchmark, target, metric);
     "#,
     r#"ALTER TABLE job_queue ADD COLUMN is_optional BOOLEAN NOT NULL DEFAULT FALSE"#,
+    r#"ALTER TABLE benchmark_request ADD COLUMN targets TEXT NOT NULL DEFAULT 'x86_64-unknown-linux-gnu'"#,
 ];
 
 #[async_trait::async_trait]
@@ -801,7 +802,7 @@ impl PostgresConnection {
 
 // `tag` should be kept as the first column
 const BENCHMARK_REQUEST_COLUMNS: &str =
-    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms";
+    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets";
 
 #[async_trait::async_trait]
 impl<P> Connection for P
@@ -2193,8 +2194,8 @@ where
 
         for row in rows {
             let tag = row.get::<_, &str>(0);
-            let error_benchmark = row.get::<_, Option<String>>(11);
-            let error_content = row.get::<_, Option<String>>(12);
+            let error_benchmark = row.get::<_, Option<String>>(12);
+            let error_content = row.get::<_, Option<String>>(13);
 
             // We already saw this request, just add errors
             if let Some(errors) = errors.get_mut(tag) {
@@ -2350,6 +2351,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
     let profiles = row.get::<_, String>(8 + row_offset);
     let commit_date = row.get::<_, Option<DateTime<Utc>>>(9 + row_offset);
     let duration_ms = row.get::<_, Option<i32>>(10 + row_offset);
+    let targets = row.get::<_, Option<String>>(11 + row_offset);
 
     let pr = pr.map(|v| v as u32);
 
@@ -2371,6 +2373,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
             status,
             backends,
             profiles,
+            targets,
         },
         BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
             commit_type: BenchmarkRequestType::Master {
@@ -2383,6 +2386,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
             status,
             backends,
             profiles,
+            targets,
         },
         BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
             commit_type: BenchmarkRequestType::Release {
@@ -2393,6 +2397,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
             status,
             backends,
             profiles,
+            targets,
         },
         _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
     }
