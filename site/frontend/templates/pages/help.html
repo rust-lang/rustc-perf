@@ -53,6 +53,10 @@
       If you select a non-default profile, rustc-perf will also gather data for this profile for the
       parent/baseline commit, so that we have something to compare to.
     </li>
+    <li><code>targets=&lt;TARGETS&gt;</code> configures which targets should be benchmarked.
+        If no targets are provided <code>x86_64-unknown-linux-gnu</code> is the default.
+        Please note presently the only valid option is <code>x86_64-unknown-linux-gnu</code>.
+    </li>
   </ul>
   <p><code>@rust-timer build $commit</code> will queue a perf run for the given commit
     <code>$commit</code>.

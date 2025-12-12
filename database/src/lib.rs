@@ -383,6 +383,14 @@ impl Target {
     pub fn all() -> Vec<Self> {
         vec![Self::X86_64UnknownLinuxGnu]
     }
+
+    pub fn default_targets() -> Vec<Self> {
+        vec![Self::X86_64UnknownLinuxGnu]
+    }
+
+    pub fn is_optional(self) -> bool {
+        self != Target::X86_64UnknownLinuxGnu
+    }
 }
 
 impl FromStr for Target {
@@ -913,6 +921,7 @@ pub struct BenchmarkRequest {
     status: BenchmarkRequestStatus,
     backends: String,
     profiles: String,
+    targets: String,
 }
 
 impl BenchmarkRequest {
@@ -927,11 +936,17 @@ impl BenchmarkRequest {
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
+            targets: String::new(),
         }
     }
 
     /// Create a try request that is in the `WaitingForArtifacts` status.
-    pub fn create_try_without_artifacts(pr: u32, backends: &str, profiles: &str) -> Self {
+    pub fn create_try_without_artifacts(
+        pr: u32,
+        backends: &str,
+        profiles: &str,
+        targets: &str,
+    ) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Try {
                 pr,
@@ -943,6 +958,7 @@ impl BenchmarkRequest {
             status: BenchmarkRequestStatus::WaitingForArtifacts,
             backends: backends.to_string(),
             profiles: profiles.to_string(),
+            targets: targets.to_string(),
         }
     }
 
@@ -959,6 +975,7 @@ impl BenchmarkRequest {
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
+            targets: String::new(),
         }
     }
 
@@ -1037,6 +1054,15 @@ impl BenchmarkRequest {
         parse_profiles(&self.profiles).map_err(|e| anyhow::anyhow!("{e}"))
     }
 
+    /// Get the targets for the request
+    pub fn targets(&self) -> anyhow::Result<Vec<Target>> {
+        if self.targets.trim().is_empty() {
+            return Ok(Target::default_targets());
+        }
+
+        parse_targets(&self.targets).map_err(|e| anyhow::anyhow!("{e}"))
+    }
+
     pub fn is_completed(&self) -> bool {
         matches!(self.status, BenchmarkRequestStatus::Completed { .. })
     }
@@ -1056,18 +1082,26 @@ pub enum BenchmarkRequestInsertResult {
     NothingInserted,
 }
 
-pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
-    backends
+fn parse_comma_separated<T>(raw_string: &str, name: &str) -> Result<Vec<T>, String>
+where
+    T: FromStr,
+{
+    raw_string
         .split(',')
-        .map(|s| CodegenBackend::from_str(s).map_err(|_| format!("Invalid backend: {s}")))
+        .map(|s| T::from_str(s).map_err(|_| format!("Invalid {name}: {s}")))
         .collect()
 }
 
+pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
+    parse_comma_separated(backends, "backend")
+}
+
 pub fn parse_profiles(profiles: &str) -> Result<Vec<Profile>, String> {
-    profiles
-        .split(',')
-        .map(|s| Profile::from_str(s).map_err(|_| format!("Invalid profile: {s}")))
-        .collect()
+    parse_comma_separated(profiles, "profile")
+}
+
+pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
+    parse_comma_separated(targets, "target")
 }
 
 /// Cached information about benchmark requests in the DB
