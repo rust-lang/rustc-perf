@@ -9,6 +9,10 @@ import {
   formatISODate,
   formatSecondsAsDuration,
   parseDateIsoStringOrNull,
+  setDateFmt,
+  getDateFmt,
+  DATE_FMT_12HR,
+  DATE_FMT_24HR,
 } from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
@@ -20,6 +24,7 @@ import {
 } from "./data";
 import Collector from "./collector.vue";
 import CommitSha from "./commit-sha.vue";
+import DateFmtPicker from "./date-format-selection.vue";
 
 const loading = ref(true);
 
@@ -27,6 +32,7 @@ const data: Ref<{
   timeline: BenchmarkRequestRow[];
   queueLength: number;
   collectors: CollectorConfig[];
+  dateFmt: string;
 } | null> = ref(null);
 
 type BenchmarkRequestRow = BenchmarkRequest & {
@@ -77,6 +83,7 @@ async function loadStatusData(loading: Ref<boolean>) {
       timeline,
       collectors: resp.collectors,
       queueLength,
+      dateFmt: getDateFmt(),
     };
   });
 }
@@ -99,6 +106,11 @@ function formatStatus(request: BenchmarkRequest): string {
   } else {
     return "Unknown";
   }
+}
+
+function formatDate(dateString?: string): string {
+  const fmt = data.value.dateFmt;
+  return formatISODate(dateString, fmt);
 }
 
 function hasErrors(request: BenchmarkRequest) {
@@ -204,6 +216,17 @@ const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
 
 const tableWidth = 8;
 
+function toggleDate() {
+  let dateFmt: string;
+  if (data.value.dateFmt === DATE_FMT_24HR) {
+    dateFmt = DATE_FMT_12HR;
+  } else {
+    dateFmt = DATE_FMT_24HR;
+  }
+  setDateFmt(dateFmt);
+  data.value.dateFmt = dateFmt;
+}
+
 loadStatusData(loading);
 </script>
 
@@ -212,8 +235,9 @@ loadStatusData(loading);
     <div class="status-page-wrapper">
       <div class="timeline-wrapper">
         <h1>Timeline</h1>
-        <span class="small-padding-bottom">
+        <span class="local-time-message small-padding-bottom">
           <strong>Times are local.</strong>
+          <DateFmtPicker :toggleDate="toggleDate" :dateFmt="data.dateFmt" />
         </span>
         <span class="small-padding-bottom">
           <ExpectedCurrentRequestCompletion />
@@ -256,7 +280,7 @@ loadStatusData(loading);
                   />
                 </td>
                 <td>
-                  {{ formatISODate(req.completedAt) }}
+                  {{ formatDate(req.completedAt) }}
                   <span v-if="req.endEstimated">(est.)</span>
                 </td>
                 <td style="text-align: right">
@@ -420,5 +444,12 @@ loadStatusData(loading);
 
 .small-padding-bottom {
   padding-bottom: 8px;
+}
+
+.local-time-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 12px;
 }
 </style>
