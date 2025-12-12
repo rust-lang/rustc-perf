@@ -2351,7 +2351,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
     let profiles = row.get::<_, String>(8 + row_offset);
     let commit_date = row.get::<_, Option<DateTime<Utc>>>(9 + row_offset);
     let duration_ms = row.get::<_, Option<i32>>(10 + row_offset);
-    let targets = row.get::<_, Option<String>>(11 + row_offset);
+    let targets = row.get::<_, String>(11 + row_offset);
 
     let pr = pr.map(|v| v as u32);
 

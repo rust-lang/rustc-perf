@@ -921,7 +921,7 @@ pub struct BenchmarkRequest {
     status: BenchmarkRequestStatus,
     backends: String,
     profiles: String,
-    targets: Option<String>,
+    targets: String,
 }
 
 impl BenchmarkRequest {
@@ -936,7 +936,7 @@ impl BenchmarkRequest {
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
-            targets: None,
+            targets: String::new(),
         }
     }
 
@@ -958,7 +958,7 @@ impl BenchmarkRequest {
             status: BenchmarkRequestStatus::WaitingForArtifacts,
             backends: backends.to_string(),
             profiles: profiles.to_string(),
-            targets: Some(targets.to_string()),
+            targets: targets.to_string(),
         }
     }
 
@@ -975,7 +975,7 @@ impl BenchmarkRequest {
             status: BenchmarkRequestStatus::ArtifactsReady,
             backends: String::new(),
             profiles: String::new(),
-            targets: None,
+            targets: String::new(),
         }
     }
 
@@ -1056,14 +1056,11 @@ impl BenchmarkRequest {
 
     /// Get the targets for the request
     pub fn targets(&self) -> anyhow::Result<Vec<Target>> {
-        if let Some(targets) = &self.targets {
-            if targets.trim().is_empty() {
-                return Ok(Target::default_targets());
-            }
-            parse_targets(targets).map_err(|e| anyhow::anyhow!("{e}"))
-        } else {
-            Ok(Target::default_targets())
+        if self.targets.trim().is_empty() {
+            return Ok(Target::default_targets());
         }
+
+        parse_targets(&self.targets).map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn is_completed(&self) -> bool {
@@ -1085,7 +1082,7 @@ pub enum BenchmarkRequestInsertResult {
     NothingInserted,
 }
 
-fn parse_raw_string<T>(raw_string: &str, name: &str) -> Result<Vec<T>, String>
+fn parse_comma_separated<T>(raw_string: &str, name: &str) -> Result<Vec<T>, String>
 where
     T: FromStr,
 {
@@ -1096,15 +1093,15 @@ where
 }
 
 pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
-    parse_raw_string(backends, "backend")
+    parse_comma_separated(backends, "backend")
 }
 
 pub fn parse_profiles(profiles: &str) -> Result<Vec<Profile>, String> {
-    parse_raw_string(profiles, "profile")
+    parse_comma_separated(profiles, "profile")
 }
 
 pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
-    parse_raw_string(targets, "target")
+    parse_comma_separated(targets, "target")
 }
 
 /// Cached information about benchmark requests in the DB
