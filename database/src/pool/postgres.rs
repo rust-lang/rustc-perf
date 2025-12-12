@@ -441,7 +441,7 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE runtime_pstat_series ADD CONSTRAINT runtime_test_case UNIQUE(benchmark, target, metric);
     "#,
     r#"ALTER TABLE job_queue ADD COLUMN is_optional BOOLEAN NOT NULL DEFAULT FALSE"#,
-    r#"ALTER TABLE benchmark_request ADD COLUMN targets TEXT NOT NULL DEFAULT 'x86_64-unknown-linux-gnu'"#,
+    r#"ALTER TABLE benchmark_request ADD COLUMN targets TEXT NOT NULL DEFAULT ''"#,
 ];
 
 #[async_trait::async_trait]
