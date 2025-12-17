@@ -134,31 +134,43 @@ pub struct CargoProcess<'a> {
     pub target: Target,
     pub workspace_package: Option<String>,
 }
-/// Returns an optional list of Performance CPU cores, if the system has P and E cores.
+
+/// Returns an optional list of P-cores, if the system has P-cores and E-cores.
 /// This list *should* be in a format suitable for the `taskset` command.
 #[cfg(target_os = "linux")]
 fn performance_cores() -> Option<&'static String> {
     use std::sync::LazyLock;
     static PERFORMANCE_CORES: LazyLock<Option<String>> = LazyLock::new(|| {
-        if std::fs::exists("/sys/devices/cpu").expect("Could not check the CPU architecture details: could not check if `/sys/devices/cpu` exists!") {
-        	// If /sys/devices/cpu exists, then this is not a "Performance-hybrid" CPU.
-		    None
-	    }
-	    else if std::fs::exists("/sys/devices/cpu_core").expect("Could not check the CPU architecture detali: could not check if `/sys/devices/cpu_core` exists!") {
-		    // If /sys/devices/cpu_core exists, then this is a "Performance-hybrid" CPU.
-		    eprintln!("WARNING: Performance-Hybrid CPU detected. `rustc-perf` can't run properly on Efficency cores: test suite will only use Performance cores!");
-		    Some(std::fs::read_to_string("/sys/devices/cpu_core/cpus").unwrap().trim().to_string())
-	    } else {
-		    // If neither dir exists, then something is wrong - `/sys/devices/cpu` has been in Linux for over a decade.
-		    eprintln!("WARNING: neither `/sys/devices/cpu` nor `/sys/devices/cpu_core` present, unable to determine if this CPU has a Performance-Hybrid architecture.");
-		    None
-	    }
+        if std::fs::exists("/sys/devices/cpu")
+            .expect("Could not check if `/sys/devices/cpu` exists")
+        {
+            // If /sys/devices/cpu exists, then this is not a hybrid CPU.
+            None
+        } else if std::fs::exists("/sys/devices/cpu_core")
+            .expect("Could not check if `/sys/devices/cpu_core` exists!")
+        {
+            // If /sys/devices/cpu_core exists, then this is a hybrid CPU.
+            eprintln!("WARNING: hybrid Intel CPU detected.");
+            eprintln!("WARNING: test suite will only use P-cores, not E-cores");
+            Some(
+                std::fs::read_to_string("/sys/devices/cpu_core/cpus")
+                    .unwrap()
+                    .trim()
+                    .to_string(),
+            )
+        } else {
+            // If neither dir exists, then something is wrong, because `/sys/devices/cpu` has been
+            // in Linux for over a decade.
+            eprintln!("WARNING: neither `/sys/devices/cpu` nor `/sys/devices/cpu_core` present");
+            eprintln!("WARNING: unable to determine if CPU has a hybrid architecture");
+            None
+        }
     });
     (*PERFORMANCE_CORES).as_ref()
 }
 
 #[cfg(not(target_os = "linux"))]
-// Modify this stub if you want to add support for P/E cores on more OSs
+// Modify this stub if you want to add support for P-/E-cores on more OSs
 fn performance_cores() -> Option<&'static String> {
     None
 }
@@ -166,24 +178,27 @@ fn performance_cores() -> Option<&'static String> {
 #[cfg(target_os = "linux")]
 /// Makes the benchmark run only on Performance cores.
 fn run_on_p_cores(path: &Path, cpu_list: &str) -> Command {
-    // Parse CPU list to extract the number of P cores!
-    // This assumes the P core id's are countinus, in format `fisrt_id-last_id`
+    // Parse CPU list to extract the number of P-cores!
+    // This assumes the P-core id's are continuous, in format `first_id-last_id`
     let (core_start, core_end) = cpu_list
         .split_once("-")
-        .unwrap_or_else(|| panic!("Unsuported P core list format: {cpu_list:?}."));
+        .unwrap_or_else(|| panic!("Unsupported P-core list format: {cpu_list:?}."));
     let core_start: u32 = core_start
         .parse()
-        .expect("Expected a number when parsing the start of the P core list!");
+        .expect("Expected a number when parsing the start of the P-core list!");
     let core_end: u32 = core_end
         .parse()
-        .expect("Expected a number when parsing the end of the P core list!");
+        .expect("Expected a number when parsing the end of the P-core list!");
     let core_count = core_end - core_start;
     let mut cmd = Command::new("taskset");
-    // Set job count to P core count - this is done for 2 reasons:
-    // 1. The instruction count info for E core is often very incompleate - a substantial chunk of events is lost.
-    // 2. The performance charcteristics of E cores are less reliable, so excluding them from the benchmark makes things easier.
+    // Set job count to P-core count. This is done for 3 reasons:
+    // 1. The instruction count info for E-cores is often incomplete, and a substantial chunk of
+    //    events is lost.
+    // 2. The performance characteristics of E-cores are less reliable, so excluding them from the
+    //    benchmark makes things easier.
+    // 3. An unpredictable mix of P-core and E-core execution will give inconsistent results.
     cmd.env("CARGO_BUILD_JOBS", format!("{core_count}"));
-    // pass the P core list to taskset to pin task to the P core.
+    // Pass the P-core list to taskset to pin task to the P-core.
     cmd.arg("--cpu-list");
     cmd.arg(cpu_list);
     cmd.arg(path);
@@ -191,9 +206,9 @@ fn run_on_p_cores(path: &Path, cpu_list: &str) -> Command {
 }
 
 #[cfg(not(target_os = "linux"))]
-// Modify this stub if you want to add support for P/E cores on more OSs
+// Modify this stub if you want to add support for P-cores/E-cores on more OSs.
 fn run_on_p_cores(_path: &Path, _cpu_list: &str) -> Command {
-    todo!("Can't run commands on the P cores on this platform");
+    todo!("Can't run commands on the P-cores on this platform");
 }
 
 impl<'a> CargoProcess<'a> {
@@ -214,7 +229,7 @@ impl<'a> CargoProcess<'a> {
     }
 
     fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
-        // Processors with P and E cores require special handling
+        // Processors with P-core and E-cores require special handling.
         let mut cmd = if let Some(p_cores) = performance_cores() {
             run_on_p_cores(Path::new(&self.toolchain.components.cargo), p_cores)
         } else {
