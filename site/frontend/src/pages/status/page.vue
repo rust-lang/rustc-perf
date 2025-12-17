@@ -32,8 +32,12 @@ const data: Ref<{
   timeline: BenchmarkRequestRow[];
   queueLength: number;
   collectors: CollectorConfig[];
-  dateFmt: string;
 } | null> = ref(null);
+
+// This state exists so the UI immediately update when a user changes their
+// date format preference. As only setting Local Storage does not trigger a
+// re-render.
+const dateFmt: Ref<string> = ref(getDateFmt());
 
 type BenchmarkRequestRow = BenchmarkRequest & {
   isLastInProgress: boolean;
@@ -83,7 +87,6 @@ async function loadStatusData(loading: Ref<boolean>) {
       timeline,
       collectors: resp.collectors,
       queueLength,
-      dateFmt: getDateFmt(),
     };
   });
 }
@@ -106,11 +109,6 @@ function formatStatus(request: BenchmarkRequest): string {
   } else {
     return "Unknown";
   }
-}
-
-function formatDate(dateString?: string): string {
-  const fmt = data.value.dateFmt;
-  return formatISODate(dateString, fmt);
 }
 
 function hasErrors(request: BenchmarkRequest) {
@@ -217,14 +215,14 @@ const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
 const tableWidth = 8;
 
 function toggleDate() {
-  let dateFmt: string;
-  if (data.value.dateFmt === DATE_FMT_24HR) {
-    dateFmt = DATE_FMT_12HR;
+  let nextDateFmt: string;
+  if (dateFmt.value === DATE_FMT_24HR) {
+    nextDateFmt = DATE_FMT_12HR;
   } else {
-    dateFmt = DATE_FMT_24HR;
+    nextDateFmt = DATE_FMT_24HR;
   }
-  setDateFmt(dateFmt);
-  data.value.dateFmt = dateFmt;
+  setDateFmt(nextDateFmt);
+  dateFmt.value = nextDateFmt;
 }
 
 loadStatusData(loading);
@@ -237,7 +235,7 @@ loadStatusData(loading);
         <h1>Timeline</h1>
         <span class="local-time-message small-padding-bottom">
           <strong>Times are local.</strong>
-          <DateFmtPicker :toggleDate="toggleDate" :dateFmt="data.dateFmt" />
+          <DateFmtPicker :toggleDate="toggleDate" :dateFmt="dateFmt" />
         </span>
         <span class="small-padding-bottom">
           <ExpectedCurrentRequestCompletion />
@@ -280,7 +278,7 @@ loadStatusData(loading);
                   />
                 </td>
                 <td>
-                  {{ formatDate(req.completedAt) }}
+                  {{ formatISODate(req.completedAt) }}
                   <span v-if="req.endEstimated">(est.)</span>
                 </td>
                 <td style="text-align: right">
