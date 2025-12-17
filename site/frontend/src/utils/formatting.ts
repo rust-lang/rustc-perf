@@ -21,8 +21,9 @@ export function formatSecondsAsDuration(time: number): string {
 }
 
 export const DATE_FMT_KEY = "__rustc-perf-user-date-fmt-preference__";
+// Date formats taken from https://date-fns.org/v4.1.0/docs/format
 export const DATE_FMT_24HR = "yyyy-MM-dd HH:mm:ss";
-export const DATE_FMT_12HR = "yyyy-MM-dd pp";
+export const DATE_FMT_12HR = "yyyy-MM-dd hh:mm:ss a";
 
 export function setDateFmt(dateFmt: string) {
   window.localStorage.setItem(DATE_FMT_KEY, dateFmt);
@@ -32,10 +33,11 @@ export function getDateFmt() {
   return window.localStorage.getItem(DATE_FMT_KEY) ?? DATE_FMT_24HR;
 }
 
-// Takes a date like `2025-09-10T08:22:47.161348Z` -> `"2025-09-10 08:22:47"`
-export function formatISODate(dateString?: string, fmt?: string): string {
+// Takes a date like `2025-09-10T08:22:47.161348Z` and formats it according to
+// the user preference stored in local storage (either 12 hour or 24 hour format).
+export function formatISODate(dateString?: string): string {
   if (dateString) {
-    const dateFmt = fmt ?? getDateFmt();
+    const dateFmt = getDateFmt();
     return format(parseISO(dateString), dateFmt);
   }
   return "";
