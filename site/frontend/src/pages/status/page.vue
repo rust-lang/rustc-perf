@@ -9,10 +9,9 @@ import {
   formatISODate,
   formatSecondsAsDuration,
   parseDateIsoStringOrNull,
-  setDateFmt,
-  getDateFmt,
   DATE_FMT_12HR,
   DATE_FMT_24HR,
+  preferredDateTimeFormat,
 } from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
@@ -33,11 +32,6 @@ const data: Ref<{
   queueLength: number;
   collectors: CollectorConfig[];
 } | null> = ref(null);
-
-// This state exists so the UI immediately update when a user changes their
-// date format preference. As only setting Local Storage does not trigger a
-// re-render.
-const dateFmt: Ref<string> = ref(getDateFmt());
 
 type BenchmarkRequestRow = BenchmarkRequest & {
   isLastInProgress: boolean;
@@ -216,13 +210,12 @@ const tableWidth = 8;
 
 function toggleDate() {
   let nextDateFmt: string;
-  if (dateFmt.value === DATE_FMT_24HR) {
+  if (preferredDateTimeFormat.value === DATE_FMT_24HR) {
     nextDateFmt = DATE_FMT_12HR;
   } else {
     nextDateFmt = DATE_FMT_24HR;
   }
-  setDateFmt(nextDateFmt);
-  dateFmt.value = nextDateFmt;
+  preferredDateTimeFormat.value = nextDateFmt;
 }
 
 loadStatusData(loading);
@@ -235,7 +228,10 @@ loadStatusData(loading);
         <h1>Timeline</h1>
         <span class="local-time-message small-padding-bottom">
           <strong>Times are local.</strong>
-          <DateFmtPicker :toggleDate="toggleDate" :dateFmt="dateFmt" />
+          <DateFmtPicker
+            :toggleDate="toggleDate"
+            :dateFmt="preferredDateTimeFormat"
+          />
         </span>
         <span class="small-padding-bottom">
           <ExpectedCurrentRequestCompletion />

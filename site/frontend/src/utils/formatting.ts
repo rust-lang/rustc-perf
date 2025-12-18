@@ -1,4 +1,6 @@
 import {parseISO, format} from "date-fns";
+import {createPersistedRef} from "../storage";
+import {PREF_DATETIME_FORMAT} from "../pages/compare/prefs";
 
 // `time` has to be in seconds
 export function formatSecondsAsDuration(time: number): string {
@@ -20,24 +22,17 @@ export function formatSecondsAsDuration(time: number): string {
   return s;
 }
 
-export const DATE_FMT_KEY = "__rustc-perf-user-date-fmt-preference__";
 // Date formats taken from https://date-fns.org/v4.1.0/docs/format
 export const DATE_FMT_24HR = "yyyy-MM-dd HH:mm:ss";
 export const DATE_FMT_12HR = "yyyy-MM-dd hh:mm:ss a";
 
-export function setDateFmt(dateFmt: string) {
-  window.localStorage.setItem(DATE_FMT_KEY, dateFmt);
-}
-
-export function getDateFmt() {
-  return window.localStorage.getItem(DATE_FMT_KEY) ?? DATE_FMT_24HR;
-}
+export const preferredDateTimeFormat = createPersistedRef(PREF_DATETIME_FORMAT);
 
 // Takes a date like `2025-09-10T08:22:47.161348Z` and formats it according to
 // the user preference stored in local storage (either 12 hour or 24 hour format).
 export function formatISODate(dateString?: string): string {
   if (dateString) {
-    const dateFmt = getDateFmt();
+    const dateFmt = preferredDateTimeFormat.value;
     return format(parseISO(dateString), dateFmt);
   }
   return "";

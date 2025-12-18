@@ -1,4 +1,5 @@
 import {createStoredValue} from "../../storage";
+import {DATE_FMT_24HR} from "../../utils/formatting";
 
 export const PREF_FILTERS_OPENED = createStoredValue(
   "compare.filters-opened",
@@ -7,4 +8,8 @@ export const PREF_FILTERS_OPENED = createStoredValue(
 export const PREF_AGGREGATIONS_OPENED = createStoredValue(
   "compare.aggregations-opened",
   false
+);
+export const PREF_DATETIME_FORMAT = createStoredValue(
+  "general.date-time-format",
+  DATE_FMT_24HR
 );
