@@ -189,7 +189,8 @@ fn run_on_p_cores(path: &Path, cpu_list: &str) -> Command {
     let core_end: u32 = core_end
         .parse()
         .expect("Expected a number when parsing the end of the P-core list!");
-    let core_count = core_end - core_start;
+    let core_count = core_end - core_start + 1; // e.g. "0-3" is four cores: [0, 1, 2, 3]
+
     let mut cmd = Command::new("taskset");
     // Set job count to P-core count. This is done for 3 reasons:
     // 1. The instruction count info for E-cores is often incomplete, and a substantial chunk of
