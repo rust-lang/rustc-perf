@@ -5,6 +5,7 @@ use std::{fmt, str::FromStr};
 /// https://doc.rust-lang.org/nightly/rustc/platform-support.html
 ///
 /// Presently we only support x86_64
+/// FIXME: we actually support Windows and aarch64, but that isn't captured here.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize)]
 pub enum Target {
     /// `x86_64-unknown-linux-gnu`

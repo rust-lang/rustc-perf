@@ -399,6 +399,7 @@ dependencies = [
  "anyhow",
  "benchlib",
  "cargo_metadata",
+ "cfg-if",
  "chrono",
  "clap",
  "console",
