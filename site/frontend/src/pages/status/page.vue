@@ -9,6 +9,9 @@ import {
   formatISODate,
   formatSecondsAsDuration,
   parseDateIsoStringOrNull,
+  DATE_FMT_12HR,
+  DATE_FMT_24HR,
+  preferredDateTimeFormat,
 } from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
 import {
@@ -20,6 +23,7 @@ import {
 } from "./data";
 import Collector from "./collector.vue";
 import CommitSha from "./commit-sha.vue";
+import DateFmtPicker from "./date-format-selection.vue";
 
 const loading = ref(true);
 
@@ -204,6 +208,16 @@ const {toggleExpanded: toggleExpandedErrors, isExpanded: hasExpandedErrors} =
 
 const tableWidth = 8;
 
+function toggleDate() {
+  let nextDateFmt: string;
+  if (preferredDateTimeFormat.value === DATE_FMT_24HR) {
+    nextDateFmt = DATE_FMT_12HR;
+  } else {
+    nextDateFmt = DATE_FMT_24HR;
+  }
+  preferredDateTimeFormat.value = nextDateFmt;
+}
+
 loadStatusData(loading);
 </script>
 
@@ -212,8 +226,12 @@ loadStatusData(loading);
     <div class="status-page-wrapper">
       <div class="timeline-wrapper">
         <h1>Timeline</h1>
-        <span class="small-padding-bottom">
+        <span class="local-time-message small-padding-bottom">
           <strong>Times are local.</strong>
+          <DateFmtPicker
+            :toggleDate="toggleDate"
+            :dateFmt="preferredDateTimeFormat"
+          />
         </span>
         <span class="small-padding-bottom">
           <ExpectedCurrentRequestCompletion />
@@ -420,5 +438,12 @@ loadStatusData(loading);
 
 .small-padding-bottom {
   padding-bottom: 8px;
+}
+
+.local-time-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 12px;
 }
 </style>
