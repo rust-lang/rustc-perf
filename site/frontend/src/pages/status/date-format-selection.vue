@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {DATE_FMT_12HR} from "../../utils/formatting";
+import {DATE_FMT_12HR} from "../../utils/date-formats";
 
 const props = defineProps<{
   dateFmt: string;

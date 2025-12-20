@@ -1,5 +1,5 @@
 import {createStoredValue} from "../../storage";
-import {DATE_FMT_24HR} from "../../utils/formatting";
+import {DATE_FMT_24HR} from "../../utils/date-formats";
 
 export const PREF_FILTERS_OPENED = createStoredValue(
   "compare.filters-opened",

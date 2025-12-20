@@ -9,8 +9,6 @@ import {
   formatISODate,
   formatSecondsAsDuration,
   parseDateIsoStringOrNull,
-  DATE_FMT_12HR,
-  DATE_FMT_24HR,
   preferredDateTimeFormat,
 } from "../../utils/formatting";
 import {useExpandedStore} from "../../utils/expansion";
@@ -24,6 +22,7 @@ import {
 import Collector from "./collector.vue";
 import CommitSha from "./commit-sha.vue";
 import DateFmtPicker from "./date-format-selection.vue";
+import {DATE_FMT_12HR, DATE_FMT_24HR} from "../../utils/date-formats";
 
 const loading = ref(true);
 
