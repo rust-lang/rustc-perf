@@ -393,11 +393,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .unwrap()),
             };
         }
-        "/perf/status_page_old" => {
-            return server
-                .handle_get_async(&req, request_handlers::handle_status_page_old)
-                .await;
-        }
         "/perf/next_artifact" => {
             return server
                 .handle_get_async(&req, request_handlers::handle_next_artifact)
@@ -658,7 +653,6 @@ async fn handle_fs_path(
         | "/dashboard.html"
         | "/detailed-query.html"
         | "/help.html"
-        | "/status_old.html"
         | "/status.html" => resolve_template(relative_path).await,
         _ => match TEMPLATES.get_static_asset(relative_path, use_compression)? {
             Payload::Compressed(data) => {
