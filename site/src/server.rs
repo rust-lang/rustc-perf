@@ -6,17 +6,15 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, LazyLock};
-use std::time::Instant;
 use std::{fmt, str};
 
 use futures::{future::FutureExt, stream::StreamExt};
 use headers::{Authorization, CacheControl, ContentType, ETag, Header, HeaderMapExt, IfNoneMatch};
 use http::header::CACHE_CONTROL;
 use hyper::StatusCode;
-use log::{debug, error, info};
-use parking_lot::{Mutex, RwLock};
+use log::{error, info};
+use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use uuid::Uuid;
@@ -49,52 +47,11 @@ macro_rules! check_http_method {
 #[derive(Clone)]
 struct Server {
     ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>,
-    updating: UpdatingStatus,
 }
 
 impl Server {
     fn new(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>) -> Self {
-        Self {
-            ctxt,
-            updating: UpdatingStatus::new(),
-        }
-    }
-}
-
-#[derive(Clone)]
-struct UpdatingStatus(Arc<AtomicBool>);
-
-struct IsUpdating(Arc<AtomicBool>, hyper::body::Sender);
-
-impl Drop for IsUpdating {
-    fn drop(&mut self) {
-        self.0.store(false, AtomicOrdering::SeqCst);
-        if std::thread::panicking() {
-            let _ = self.1.try_send_data("panicked, try again".into());
-        } else {
-            let _ = self.1.try_send_data("done".into());
-        }
-    }
-}
-
-impl UpdatingStatus {
-    fn new() -> Self {
-        UpdatingStatus(Arc::new(AtomicBool::new(false)))
-    }
-
-    // Returns previous state
-    fn set_updating(&self) -> bool {
-        match self
-            .0
-            .compare_exchange(false, true, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
-        {
-            Ok(b) => b,
-            Err(b) => b,
-        }
-    }
-
-    fn release_on_drop(&self, channel: hyper::body::Sender) -> IsUpdating {
-        IsUpdating(self.0.clone(), channel)
+        Self { ctxt }
     }
 }
 
@@ -256,59 +213,6 @@ impl Server {
 
         Response::new(buffer.into())
     }
-
-    async fn handle_push(&self, _req: Request) -> Response {
-        static LAST_UPDATE: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
-
-        let last = *LAST_UPDATE.lock();
-        if let Some(last) = last {
-            let min = 60; // 1 minutes
-            let elapsed = last.elapsed();
-            if elapsed < std::time::Duration::from_secs(min) {
-                return http::Response::builder()
-                    .status(StatusCode::OK)
-                    .header_typed(ContentType::text_utf8())
-                    .body(hyper::Body::from(format!(
-                        "Refreshed too recently ({elapsed:?} ago). Please wait."
-                    )))
-                    .unwrap();
-            }
-        }
-        *LAST_UPDATE.lock() = Some(Instant::now());
-
-        // set to updating
-        let was_updating = self.updating.set_updating();
-
-        if was_updating {
-            return http::Response::builder()
-                .status(StatusCode::OK)
-                .header_typed(ContentType::text_utf8())
-                .body(hyper::Body::from("Already updating!"))
-                .unwrap();
-        }
-
-        debug!("received onpush hook");
-
-        let (channel, body) = hyper::Body::channel();
-
-        let ctxt: Arc<SiteCtxt> = self.ctxt.read().as_ref().unwrap().clone();
-        let _updating = self.updating.release_on_drop(channel);
-        let mut conn = ctxt.conn().await;
-        let index = database::Index::load(&mut *conn).await;
-        eprintln!("index has {} commits", index.commits().len());
-        ctxt.index.store(Arc::new(index));
-
-        // Refresh the landing page
-        ctxt.landing_page.store(Arc::new(None));
-
-        // Spawn off a task to post the results of any commit results that we
-        // are now aware of.
-        tokio::spawn(async move {
-            crate::github::post_finished(&ctxt).await;
-        });
-
-        Response::new(body)
-    }
 }
 
 #[derive(Debug)]
@@ -434,9 +338,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         }
         "/perf/metrics" => {
             return Ok(server.handle_metrics(req).await);
-        }
-        "/perf/onpush" => {
-            return Ok(server.handle_push(req).await);
         }
         "/perf/download-raw-self-profile" => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();

@@ -22,7 +22,6 @@ pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 /// Used for comment that contains unrolled commits for merged rolled-up PRs.
 pub const COMMENT_MARK_ROLLUP: &str = "<!-- rust-timer: rollup -->";
 
-pub use comparison_summary::post_finished;
 use database::{BenchmarkJobStatus, BenchmarkRequestStatus, Connection};
 
 /// Enqueues try build artifacts and posts a message about them on the original rollup PR

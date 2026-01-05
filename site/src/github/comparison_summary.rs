@@ -4,68 +4,11 @@ use crate::comparison::{
 };
 use crate::load::SiteCtxt;
 
-use database::{metric::Metric, ArtifactId, QueuedCommit};
+use database::{metric::Metric, QueuedCommit};
 
 use crate::github::{COMMENT_MARK_ROLLUP, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;
-use std::collections::HashSet;
 use std::fmt::Write;
-
-/// Post messages to GitHub for all queued commits that have
-/// not yet been marked as completed.
-pub async fn post_finished(ctxt: &SiteCtxt) {
-    // If the github token is not configured, do not run this -- we don't want
-    // to mark things as complete without posting the comment.
-    if ctxt.config.keys.github_api_token.is_none() {
-        return;
-    }
-    let conn = ctxt.conn().await;
-    let index = ctxt.index.load();
-    let mut known_commits = index
-        .commits()
-        .into_iter()
-        .map(|c| c.sha)
-        .collect::<HashSet<_>>();
-    let (master_commits, queued_pr_commits, in_progress_artifacts) = futures::join!(
-        collector::master_commits(),
-        conn.queued_commits(),
-        conn.in_progress_artifacts()
-    );
-    let master_commits = match master_commits {
-        Ok(mcs) => mcs.into_iter().map(|c| c.sha).collect::<HashSet<_>>(),
-        Err(e) => {
-            log::error!("posting finished did not load master commits: {:?}", e);
-            // If we can't fetch master commits, return.
-            // We'll eventually try again later
-            return;
-        }
-    };
-
-    for aid in in_progress_artifacts {
-        match aid {
-            ArtifactId::Commit(c) => {
-                known_commits.remove(&c.sha);
-            }
-            ArtifactId::Tag(_) => {
-                // do nothing, for now, though eventually we'll want an artifact queue
-            }
-        }
-    }
-    for queued_commit in queued_pr_commits
-        .into_iter()
-        .filter(|c| known_commits.contains(&c.sha))
-    {
-        if let Some(completed) = conn.mark_complete(&queued_commit.sha).await {
-            assert_eq!(completed, queued_commit);
-
-            let is_master_commit = master_commits.contains(&queued_commit.sha);
-            if let Err(error) = post_comparison_comment(ctxt, queued_commit, is_master_commit).await
-            {
-                log::error!("Cannot post comparison comment: {error:?}");
-            }
-        }
-    }
-}
 
 /// Posts a comment to GitHub summarizing the comparison of the queued commit with its parent
 ///
