@@ -2,7 +2,7 @@ pub mod client;
 pub mod comparison_summary;
 
 use crate::api::github::Commit;
-use crate::job_queue::{build_queue, should_use_job_queue};
+use crate::job_queue::build_queue;
 use crate::load::{SiteCtxt, TryCommit};
 use chrono::Utc;
 use serde::Deserialize;
@@ -260,24 +260,14 @@ pub async fn enqueue_shas(
         };
         let conn = ctxt.conn().await;
 
-        let queued = if should_use_job_queue(pr_number) {
-            conn.attach_shas_to_try_benchmark_request(
+        let queued = conn.attach_shas_to_try_benchmark_request(
                 pr_number,
                 &try_commit.sha,
                 &try_commit.parent_sha,
                 commit_response.commit.committer.date,
             )
             .await
-            .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?
-        } else {
-            conn.pr_attach_commit(
-                pr_number,
-                &try_commit.sha,
-                &try_commit.parent_sha,
-                Some(commit_response.commit.committer.date),
-            )
-            .await
-        };
+            .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?;
         if queued {
             if !msg.is_empty() {
                 msg.push('\n');

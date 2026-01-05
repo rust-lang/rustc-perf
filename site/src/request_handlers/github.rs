@@ -3,7 +3,6 @@ use crate::github::{
     client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
-use crate::job_queue::should_use_job_queue;
 use crate::load::SiteCtxt;
 
 use database::{
@@ -79,16 +78,6 @@ async fn handle_issue(
     Ok(github::Response)
 }
 
-fn get_awaiting_on_bors_message() -> String {
-    format!(
-        "Awaiting bors try build completion.
-
-@rustbot label: +S-waiting-on-perf
-
-{COMMENT_MARK_TEMPORARY}"
-    )
-}
-
 /// The try request does not have a `sha` or a `parent_sha` but we need to keep a record
 /// of this commit existing. The DB ensures that there is only one non-completed
 /// try benchmark request per `pr`.
@@ -114,7 +103,15 @@ async fn record_try_benchmark_request_without_artifacts(
 {COMMENT_MARK_TEMPORARY}"
             )
         }
-        Ok(BenchmarkRequestInsertResult::Inserted) => get_awaiting_on_bors_message(),
+        Ok(BenchmarkRequestInsertResult::Inserted) => {
+            format!(
+                "Awaiting bors try build completion.
+
+@rustbot label: +S-waiting-on-perf
+
+{COMMENT_MARK_TEMPORARY}"
+            )
+        }
         Err(e) => {
             log::error!("Failed to insert release benchmark request: {e}");
             "Something went wrong! This is most likely an internal failure, please let us know on [Zulip](https://rust-lang.zulipchat.com/#narrow/channel/242791-t-infra)".to_string()
@@ -153,26 +150,14 @@ async fn handle_rust_timer(
             Ok(cmd) => {
                 let conn = ctxt.conn().await;
 
-                if should_use_job_queue(issue.number) {
-                    record_try_benchmark_request_without_artifacts(
-                        &*conn,
-                        issue.number,
-                        cmd.params.backends.unwrap_or(""),
-                        cmd.params.profiles.unwrap_or(""),
-                        cmd.params.targets.unwrap_or(""),
-                    )
-                    .await
-                } else {
-                    conn.queue_pr(
-                        issue.number,
-                        cmd.params.include,
-                        cmd.params.exclude,
-                        cmd.params.runs,
-                        cmd.params.backends,
-                    )
-                    .await;
-                    get_awaiting_on_bors_message()
-                }
+                record_try_benchmark_request_without_artifacts(
+                    &*conn,
+                    issue.number,
+                    cmd.params.backends.unwrap_or(""),
+                    cmd.params.profiles.unwrap_or(""),
+                    cmd.params.targets.unwrap_or(""),
+                )
+                .await
             }
             Err(error) => {
                 format!("Error occurred while parsing comment: {error}")
@@ -203,25 +188,14 @@ async fn handle_rust_timer(
     {
         let conn = ctxt.conn().await;
         for command in &valid_build_cmds {
-            if should_use_job_queue(issue.number) {
-                record_try_benchmark_request_without_artifacts(
-                    &*conn,
-                    issue.number,
-                    command.params.backends.unwrap_or(""),
-                    command.params.profiles.unwrap_or(""),
-                    command.params.targets.unwrap_or(""),
-                )
-                .await;
-            } else {
-                conn.queue_pr(
-                    issue.number,
-                    command.params.include,
-                    command.params.exclude,
-                    command.params.runs,
-                    command.params.backends,
-                )
-                .await;
-            }
+            record_try_benchmark_request_without_artifacts(
+                &*conn,
+                issue.number,
+                command.params.backends.unwrap_or(""),
+                command.params.profiles.unwrap_or(""),
+                command.params.targets.unwrap_or(""),
+            )
+            .await;
         }
     }
 
@@ -383,7 +357,9 @@ struct BuildCommand<'a> {
 
 #[derive(Debug)]
 struct BenchmarkParameters<'a> {
+    #[allow(unused)]
     include: Option<&'a str>,
+    #[allow(unused)]
     exclude: Option<&'a str>,
     runs: Option<i32>,
     backends: Option<&'a str>,

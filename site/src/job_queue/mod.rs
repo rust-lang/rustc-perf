@@ -18,17 +18,6 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::time::{self, Duration, MissedTickBehavior};
 
-pub fn is_job_queue_enabled() -> bool {
-    std::env::var("USE_JOB_QUEUE")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(true)
-}
-
-pub fn should_use_job_queue(_pr: u32) -> bool {
-    is_job_queue_enabled()
-}
-
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database.
 async fn create_benchmark_request_master_commits(

@@ -1,6 +1,6 @@
 use futures::future::FutureExt;
 use parking_lot::RwLock;
-use site::job_queue::{create_job_queue_process, is_job_queue_enabled};
+use site::job_queue::create_job_queue_process;
 use site::load;
 use std::env;
 use std::sync::Arc;
@@ -61,12 +61,8 @@ async fn main() {
 
     let create_job_queue_handler = |ctxt: Arc<RwLock<Option<Arc<load::SiteCtxt>>>>| {
         task::spawn(async move {
-            if is_job_queue_enabled() {
-                create_job_queue_process(ctxt, Duration::from_secs(queue_update_interval_seconds))
-                    .await;
-            } else {
-                futures::future::pending::<()>().await;
-            }
+            create_job_queue_process(ctxt, Duration::from_secs(queue_update_interval_seconds))
+                .await;
         })
         .fuse()
     };
