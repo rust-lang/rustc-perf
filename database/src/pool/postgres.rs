@@ -3,14 +3,14 @@ use crate::pool::{
 };
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
-    BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest,
-    BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
-    BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId,
-    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests,
-    Profile, QueuedCommit, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
-    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
-    BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
+    BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
+    BenchmarkRequestInsertResult, BenchmarkRequestStatus, BenchmarkRequestType,
+    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
+    Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests, Profile, Scenario,
+    Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
+    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
     BENCHMARK_REQUEST_TRY_STR,
@@ -514,8 +514,6 @@ pub struct CachedStatements {
     select_pstat_series: Statement,
     get_error: Statement,
     collection_id: Statement,
-    record_duration: Statement,
-    in_progress_steps: Statement,
     get_benchmarks: Statement,
     insert_runtime_pstat_series: Statement,
     select_runtime_pstat_series: Statement,
@@ -637,35 +635,6 @@ impl PostgresConnection {
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, target, metric) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and target = $5 and metric = $6").await.unwrap(),
                 collection_id: conn.prepare("insert into collection (perf_commit) VALUES ($1) returning id").await.unwrap(),
-                record_duration: conn.prepare("
-                    insert into artifact_collection_duration (
-                        aid,
-                        date_recorded,
-                        duration
-                    ) VALUES ($1, CURRENT_TIMESTAMP, $2)
-                    ON CONFLICT DO NOTHING
-                ").await.unwrap(),
-                in_progress_steps: conn.prepare("
-                select step,
-                    end_time is not null,
-                    extract(epoch from interval '0 seconds'::interval +
-                        coalesce(end_time, statement_timestamp()) - start_time)::int4,
-                    extract(
-                        epoch from interval '0 seconds'::interval +
-                        (select cp.end_time - cp.start_time
-                        from collector_progress as cp
-                        join artifact on artifact.id = cp.aid
-                            where
-                                cp.aid != $1
-                                and cp.step = collector_progress.step
-                                and cp.start_time is not null
-                                and cp.end_time is not null
-                                and artifact.type = 'master'
-                            order by start_time desc
-                            limit 1
-                        ))::int4
-                from collector_progress where aid = $1 order by step
-                ").await.unwrap(),
                 get_benchmarks: conn.prepare("
                     select name, category
                     from benchmark
@@ -817,16 +786,6 @@ where
             statements,
             conn: tx,
         })
-    }
-
-    async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration) {
-        self.conn()
-            .execute(
-                &self.statements().record_duration,
-                &[&(artifact.0 as i32), &(duration.as_secs() as i32)],
-            )
-            .await
-            .unwrap();
     }
 
     async fn load_index(&mut self) -> Index {
@@ -988,86 +947,6 @@ where
         rows.into_iter()
             .map(|row| (row.get(0), row.get(1)))
             .collect()
-    }
-    async fn queue_pr(
-        &self,
-        pr: u32,
-        include: Option<&str>,
-        exclude: Option<&str>,
-        runs: Option<i32>,
-        backends: Option<&str>,
-    ) {
-        if let Err(e) = self.conn()
-            .execute(
-                "insert into pull_request_build (pr, complete, requested, include, exclude, runs, backends) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4, $5)",
-                &[&(pr as i32), &include, &exclude, &runs, &backends],
-            )
-            .await {
-            log::error!("failed to queue_pr({}, {:?}, {:?}, {:?}, {:?}): {:?}", pr, include, exclude, runs, backends, e);
-        }
-    }
-    async fn pr_attach_commit(
-        &self,
-        pr: u32,
-        sha: &str,
-        parent_sha: &str,
-        commit_date: Option<DateTime<Utc>>,
-    ) -> bool {
-        self.conn()
-            .execute(
-                "update pull_request_build SET bors_sha = $1, parent_sha = $2, commit_date = $4
-                where pr = $3 and bors_sha is null",
-                &[&sha, &parent_sha, &(pr as i32), &commit_date],
-            )
-            .await
-            .unwrap()
-            > 0
-    }
-    async fn queued_commits(&self) -> Vec<QueuedCommit> {
-        let rows = self
-            .conn()
-            .query(
-                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
-                where complete is false and bors_sha is not null
-                order by requested asc",
-                &[],
-            )
-            .await
-            .unwrap();
-        rows.into_iter()
-            .map(|row| QueuedCommit {
-                pr: row.get::<_, i32>(0) as u32,
-                sha: row.get(1),
-                parent_sha: row.get(2),
-                include: row.get(3),
-                exclude: row.get(4),
-                runs: row.get(5),
-                commit_date: row.get::<_, Option<_>>(6).map(Date),
-                backends: row.get(7),
-            })
-            .collect()
-    }
-    async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit> {
-        let row = self
-            .conn()
-            .query_opt(
-                "update pull_request_build SET complete = true
-                where bors_sha = $1
-                returning pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends",
-                &[&sha],
-            )
-            .await
-            .unwrap()?;
-        Some(QueuedCommit {
-            pr: row.get::<_, i32>(0) as u32,
-            sha: row.get(1),
-            parent_sha: row.get(2),
-            include: row.get(3),
-            exclude: row.get(4),
-            runs: row.get(5),
-            commit_date: row.get::<_, Option<_>>(6).map(Date),
-            backends: row.get(7),
-        })
     }
     async fn collection_id(&self, version: &str) -> CollectionId {
         CollectionId(
@@ -1367,102 +1246,6 @@ where
             .await
             .unwrap();
     }
-    async fn in_progress_artifacts(&self) -> Vec<ArtifactId> {
-        let rows = self
-            .conn()
-            .query(
-                "select distinct aid from collector_progress where end_time is null order by aid limit 1",
-                &[],
-            )
-            .await
-            .unwrap();
-        let aids = rows
-            .into_iter()
-            .map(|row| row.get::<_, i32>(0))
-            .collect::<Vec<_>>();
-
-        let mut artifacts = Vec::new();
-        for aid in aids {
-            let row = self
-                .conn()
-                .query_one(
-                    "select name, date, type from artifact where id = $1",
-                    &[&aid],
-                )
-                .await;
-
-            let row = match row {
-                Ok(row) => row,
-                Err(err) => {
-                    log::error!("skipping aid={} -- no such artifact: {:?}", aid, err);
-                    continue;
-                }
-            };
-
-            let ty = row.get::<_, String>(2);
-            artifacts.push(match ty.as_str() {
-                "try" | "master" => ArtifactId::Commit(Commit {
-                    sha: row.get(0),
-                    date: row
-                        .get::<_, Option<_>>(1)
-                        .map(Date)
-                        .unwrap_or_else(|| Date::ymd_hms(2001, 1, 1, 0, 0, 0)),
-                    r#type: CommitType::from_str(&ty).unwrap(),
-                }),
-                "release" => ArtifactId::Tag(row.get(0)),
-                _ => {
-                    log::error!("unknown ty {:?}", ty);
-                    continue;
-                }
-            });
-        }
-        artifacts
-    }
-    async fn in_progress_steps(&self, artifact: &ArtifactId) -> Vec<crate::Step> {
-        let aid = self.artifact_id(artifact).await;
-
-        let steps = self
-            .conn()
-            .query(&self.statements().in_progress_steps, &[&(aid.0 as i32)])
-            .await
-            .unwrap();
-
-        steps
-            .into_iter()
-            .map(|row| crate::Step {
-                name: row.get(0),
-                is_done: row.get(1),
-                duration: Duration::from_secs(row.get::<_, Option<i32>>(2).unwrap_or(0) as u64),
-                expected: Duration::from_secs(row.get::<_, Option<i32>>(3).unwrap_or(0) as u64),
-            })
-            .collect()
-    }
-    async fn last_n_artifact_collections(&self, n: u32) -> Vec<ArtifactCollection> {
-        self.conn()
-            .query(
-                "select art.name, art.date, art.type, acd.date_recorded, acd.duration \
-                from artifact_collection_duration as acd \
-                join artifact as art on art.id = acd.aid \
-                order by date_recorded desc \
-                limit $1;",
-                &[&(n as i64)],
-            )
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|r| {
-                let sha = r.get::<_, String>(0);
-                let date = r.get::<_, Option<DateTime<Utc>>>(1);
-                let ty = r.get::<_, String>(2);
-
-                ArtifactCollection {
-                    artifact: parse_artifact_id(&ty, &sha, date),
-                    end_time: r.get(3),
-                    duration: Duration::from_secs(r.get::<_, i32>(4) as u64),
-                }
-            })
-            .collect()
-    }
     async fn parent_of(&self, sha: &str) -> Option<String> {
         self.conn()
             .query_opt(
@@ -1614,13 +1397,6 @@ where
         let info = aid.info();
         self.conn()
             .execute("DELETE FROM artifact WHERE name = $1", &[&info.name])
-            .await
-            .unwrap();
-        self.conn()
-            .execute(
-                "DELETE FROM pull_request_build WHERE bors_sha = $1",
-                &[&info.name],
-            )
             .await
             .unwrap();
         self.conn()

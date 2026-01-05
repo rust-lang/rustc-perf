@@ -2087,8 +2087,6 @@ async fn run_benchmarks(
 
     let collector = init_collection(connection, &shared, compile.as_ref(), runtime.as_ref()).await;
 
-    let start = Instant::now();
-
     // Compile benchmarks
     let compile_result = if let Some(compile) = compile {
         let errors = bench_compile(connection, &shared, compile, &collector).await;
@@ -2114,13 +2112,6 @@ async fn run_benchmarks(
     } else {
         Ok(())
     };
-
-    if shared.job_id.is_none() {
-        let end = start.elapsed();
-        connection
-            .record_duration(collector.artifact_row_id, end)
-            .await;
-    }
 
     compile_result.and(runtime_result)
 }

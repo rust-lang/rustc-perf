@@ -28,7 +28,6 @@ use crate::request_handlers;
 use crate::resources::{Payload, ResourceResolver};
 
 use crate::job_queue::build_queue;
-use database::{self, ArtifactId};
 
 pub type Request = http::Request<hyper::Body>;
 pub type Response = http::Response<hyper::Body>;
@@ -149,7 +148,6 @@ impl Server {
     async fn handle_metrics(&self, _req: Request) -> Response {
         use prometheus::Encoder;
         let ctxt: Arc<SiteCtxt> = self.ctxt.read().as_ref().unwrap().clone();
-        let idx = ctxt.index.load();
 
         let mut buffer = Vec::new();
         let r = prometheus::Registry::new();
@@ -187,27 +185,6 @@ impl Server {
             .unwrap();
             self_profile_cache_misses.set(self_profile_stats.get_misses() as i64);
             r.register(Box::new(self_profile_cache_misses)).unwrap();
-        }
-        if let Some(last_commit) = idx.commits().last().cloned() {
-            let conn = ctxt.conn().await;
-            let steps = conn.in_progress_steps(&ArtifactId::from(last_commit)).await;
-            let g = prometheus::IntGaugeVec::new(
-                prometheus::core::Opts {
-                    namespace: "rustc_perf".to_string(),
-                    subsystem: String::new(),
-                    name: String::from("step_duration_seconds"),
-                    help: String::from("step duration"),
-                    const_labels: HashMap::new(),
-                    variable_labels: vec![],
-                },
-                &["step"],
-            )
-            .unwrap();
-            for step in steps {
-                g.with_label_values(&[&step.name])
-                    .set(step.expected.as_secs() as i64);
-            }
-            r.register(Box::new(g)).unwrap();
         }
 
         let encoder = prometheus::TextEncoder::new();
