@@ -27,6 +27,7 @@ use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
 use crate::resources::{Payload, ResourceResolver};
 
+use crate::job_queue::build_queue;
 use database::{self, ArtifactId};
 
 pub type Request = http::Request<hyper::Body>;
@@ -153,16 +154,18 @@ impl Server {
         let mut buffer = Vec::new();
         let r = prometheus::Registry::new();
 
-        let missing_commits = ctxt.missing_commits().await;
+        let queue = build_queue(ctxt.pool.connection().await.as_mut())
+            .await
+            .unwrap_or_default();
         let queue_length =
             prometheus::IntGauge::new("rustc_perf_queue_length", "queue length").unwrap();
-        queue_length.set(missing_commits.len() as i64);
+        queue_length.set(queue.len() as i64);
         r.register(Box::new(queue_length)).unwrap();
 
         let queue_try_commits =
             prometheus::IntGauge::new("rustc_perf_queue_try_commits", "queued try commits")
                 .unwrap();
-        queue_try_commits.set(missing_commits.iter().filter(|(c, _)| c.is_try()).count() as i64);
+        queue_try_commits.set(queue.iter().filter(|req| req.is_try()).count() as i64);
         r.register(Box::new(queue_try_commits)).unwrap();
 
         // Stores cache hits and misses of the self profile cache

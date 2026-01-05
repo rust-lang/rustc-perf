@@ -1,8 +1,8 @@
 mod utils;
 
 use crate::github::comparison_summary::post_comparison_comment;
-use crate::job_queue::utils::{parse_release_string, ExtractIf};
-use crate::load::{partition_in_place, SiteCtxt};
+use crate::job_queue::utils::{parse_release_string, partition_in_place, ExtractIf};
+use crate::load::SiteCtxt;
 use anyhow::Context;
 use chrono::Utc;
 use collector::benchmark_set::{

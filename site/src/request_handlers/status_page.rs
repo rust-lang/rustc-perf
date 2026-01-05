@@ -1,4 +1,4 @@
-use crate::api::status_new;
+use crate::api::status;
 use crate::job_queue::build_queue;
 use crate::load::SiteCtxt;
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use hashbrown::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status_new::Response> {
+pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::Response> {
     let conn = ctxt.conn().await;
 
     // The queue contains any in-progress request(s) and then the following requests in queue order
@@ -69,7 +69,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status_ne
     // here.
     let current_request_end = current_request_start + expected_duration;
 
-    let mut requests: Vec<status_new::BenchmarkRequest> = queue
+    let mut requests: Vec<status::BenchmarkRequest> = queue
         .into_iter()
         .enumerate()
         .map(|(index, req)| {
@@ -93,7 +93,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status_ne
 
     let collectors = build_collectors(conn.as_ref(), &in_progress_jobs).await?;
 
-    Ok(status_new::Response {
+    Ok(status::Response {
         requests,
         collectors,
     })
@@ -102,14 +102,14 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status_ne
 async fn build_collectors(
     conn: &dyn Connection,
     in_progress_jobs: &HashMap<String, Vec<BenchmarkJob>>,
-) -> anyhow::Result<Vec<status_new::Collector>> {
+) -> anyhow::Result<Vec<status::Collector>> {
     let collectors = conn.get_collector_configs().await?;
-    let mut collector_map: HashMap<String, status_new::Collector> = collectors
+    let mut collector_map: HashMap<String, status::Collector> = collectors
         .into_iter()
         .map(|c| {
             (
                 c.name().to_string(),
-                status_new::Collector {
+                status::Collector {
                     name: c.name().to_string(),
                     target: c.target().to_string(),
                     benchmark_set: c.benchmark_set().get_id(),
@@ -148,7 +148,7 @@ async fn build_collectors(
             collector.jobs.push(job_to_ui(job));
         }
     }
-    let mut collectors: Vec<status_new::Collector> = collector_map.into_values().collect();
+    let mut collectors: Vec<status::Collector> = collector_map.into_values().collect();
     collectors.sort_by(|c1, c2| c1.name.cmp(&c2.name));
     for collector in &mut collectors {
         collector.jobs.sort_by(|j1, j2| {
@@ -171,12 +171,12 @@ async fn build_collectors(
     Ok(collectors)
 }
 
-fn job_status_to_priority(status: status_new::BenchmarkJobStatus) -> u32 {
+fn job_status_to_priority(status: status::BenchmarkJobStatus) -> u32 {
     match status {
-        status_new::BenchmarkJobStatus::InProgress => 0,
-        status_new::BenchmarkJobStatus::Queued => 1,
-        status_new::BenchmarkJobStatus::Failed => 2,
-        status_new::BenchmarkJobStatus::Success => 3,
+        status::BenchmarkJobStatus::InProgress => 0,
+        status::BenchmarkJobStatus::Queued => 1,
+        status::BenchmarkJobStatus::Failed => 2,
+        status::BenchmarkJobStatus::Success => 3,
     }
 }
 
@@ -184,7 +184,7 @@ fn request_to_ui(
     req: &BenchmarkRequest,
     errors: HashMap<String, String>,
     estimated_end: Option<DateTime<Utc>>,
-) -> status_new::BenchmarkRequest {
+) -> status::BenchmarkRequest {
     let (completed_at, duration_s) = match req.status() {
         BenchmarkRequestStatus::WaitingForArtifacts => (estimated_end, None),
         BenchmarkRequestStatus::ArtifactsReady => (estimated_end, None),
@@ -194,21 +194,19 @@ fn request_to_ui(
             duration,
         } => (Some(completed_at), Some(duration.as_secs())),
     };
-    status_new::BenchmarkRequest {
+    status::BenchmarkRequest {
         tag: req.tag().expect("Missing request tag").to_string(),
         pr: req.pr(),
         status: match req.status() {
             BenchmarkRequestStatus::WaitingForArtifacts => unreachable!(),
-            BenchmarkRequestStatus::ArtifactsReady => status_new::BenchmarkRequestStatus::Queued,
-            BenchmarkRequestStatus::InProgress => status_new::BenchmarkRequestStatus::InProgress,
-            BenchmarkRequestStatus::Completed { .. } => {
-                status_new::BenchmarkRequestStatus::Completed
-            }
+            BenchmarkRequestStatus::ArtifactsReady => status::BenchmarkRequestStatus::Queued,
+            BenchmarkRequestStatus::InProgress => status::BenchmarkRequestStatus::InProgress,
+            BenchmarkRequestStatus::Completed { .. } => status::BenchmarkRequestStatus::Completed,
         },
         request_type: match req.commit_type() {
-            BenchmarkRequestType::Try { .. } => status_new::BenchmarkRequestType::Try,
-            BenchmarkRequestType::Master { .. } => status_new::BenchmarkRequestType::Master,
-            BenchmarkRequestType::Release { .. } => status_new::BenchmarkRequestType::Release,
+            BenchmarkRequestType::Try { .. } => status::BenchmarkRequestType::Try,
+            BenchmarkRequestType::Master { .. } => status::BenchmarkRequestType::Master,
+            BenchmarkRequestType::Release { .. } => status::BenchmarkRequestType::Release,
         },
         created_at: req.created_at(),
         completed_at,
@@ -218,7 +216,7 @@ fn request_to_ui(
     }
 }
 
-fn job_to_ui(job: &BenchmarkJob) -> status_new::BenchmarkJob {
+fn job_to_ui(job: &BenchmarkJob) -> status::BenchmarkJob {
     let (started_at, completed_at) = match job.status() {
         BenchmarkJobStatus::Queued => (None, None),
         BenchmarkJobStatus::InProgress { started_at, .. } => (Some(*started_at), None),
@@ -229,7 +227,7 @@ fn job_to_ui(job: &BenchmarkJob) -> status_new::BenchmarkJob {
         } => (Some(*started_at), Some(*completed_at)),
     };
 
-    status_new::BenchmarkJob {
+    status::BenchmarkJob {
         request_tag: job.request_tag().to_string(),
         kind: job.kind().to_string(),
         target: job.target().as_str().to_string(),
@@ -240,13 +238,13 @@ fn job_to_ui(job: &BenchmarkJob) -> status_new::BenchmarkJob {
         started_at,
         completed_at,
         status: match job.status() {
-            BenchmarkJobStatus::Queued => status_new::BenchmarkJobStatus::Queued,
-            BenchmarkJobStatus::InProgress { .. } => status_new::BenchmarkJobStatus::InProgress,
+            BenchmarkJobStatus::Queued => status::BenchmarkJobStatus::Queued,
+            BenchmarkJobStatus::InProgress { .. } => status::BenchmarkJobStatus::InProgress,
             BenchmarkJobStatus::Completed { success: true, .. } => {
-                status_new::BenchmarkJobStatus::Success
+                status::BenchmarkJobStatus::Success
             }
             BenchmarkJobStatus::Completed { success: false, .. } => {
-                status_new::BenchmarkJobStatus::Failed
+                status::BenchmarkJobStatus::Failed
             }
         },
         deque_counter: job.deque_count(),
