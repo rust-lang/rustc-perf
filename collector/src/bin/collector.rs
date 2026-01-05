@@ -30,7 +30,6 @@ use tabled::settings::style::Border;
 use tabled::settings::{Alignment, Color, Modify, Width};
 use tokio::runtime::Runtime;
 
-use collector::api::next_artifact::NextArtifact;
 use collector::artifact_stats::{
     compile_and_get_stats, ArtifactStats, ArtifactWithStats, CargoProfile,
 };
@@ -601,21 +600,6 @@ enum Commands {
         purge: PurgeOption,
     },
 
-    /// Benchmarks the next commit or release for perf.rust-lang.org
-    BenchNext {
-        /// Site URL
-        site_url: String,
-
-        #[command(flatten)]
-        db: DbOption,
-
-        #[command(flatten)]
-        bench_rustc: BenchRustcOption,
-
-        #[command(flatten)]
-        self_profile: SelfProfileOption,
-    },
-
     /// Benchmarks a published toolchain for perf.rust-lang.org's dashboard
     BenchPublished {
         /// Toolchain (e.g. stable, beta, 1.26.0)
@@ -822,7 +806,6 @@ fn main_result() -> anyhow::Result<i32> {
             mode: BinaryStatsMode::Local(_),
             ..
         }
-        | Commands::BenchNext { .. }
         | Commands::BenchPublished { .. }
         | Commands::InstallNext { .. }
         | Commands::Download(_)
@@ -1061,169 +1044,6 @@ fn main_result() -> anyhow::Result<i32> {
             };
 
             rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
-            Ok(0)
-        }
-
-        Commands::BenchNext {
-            site_url,
-            db,
-            bench_rustc,
-            self_profile,
-        } => {
-            log_db(&db);
-            println!("processing artifacts");
-            let client = reqwest::blocking::Client::new();
-            let response: collector::api::next_artifact::Response = client
-                .get(format!("{site_url}/perf/next_artifact"))
-                .send()?
-                .json()?;
-            let next = if let Some(c) = response.artifact {
-                c
-            } else {
-                println!("no artifact to benchmark");
-
-                // Sleep for a bit to avoid spamming the perf server too much
-                // This sleep serves to remove a needless sleep in `collector/collect.sh` when
-                // a benchmark was actually executed.
-                std::thread::sleep(Duration::from_secs(60 * 2));
-
-                // no missing artifacts
-                return Ok(0);
-            };
-
-            let res = std::panic::catch_unwind(|| {
-                let pool = database::Pool::open(&db.db);
-                let rt = build_async_runtime();
-
-                match next {
-                    NextArtifact::Release(tag) => {
-                        let toolchain = create_toolchain_from_published_version(
-                            &tag,
-                            &require_host_target_tuple(),
-                        )?;
-                        let conn = rt.block_on(pool.connection());
-                        rt.block_on(bench_published_artifact(
-                            conn,
-                            toolchain,
-                            &benchmark_dirs,
-                            None,
-                        ))
-                    }
-                    NextArtifact::Commit {
-                        commit,
-                        include,
-                        exclude,
-                        runs,
-                        backends: requested_backends,
-                    } => {
-                        // Parse the requested backends, with LLVM as a fallback if none or no valid
-                        // ones were explicitly specified, which will be the case for the vast
-                        // majority of cases.
-                        let mut backends = vec![];
-                        if let Some(requested_backends) = requested_backends {
-                            let requested_backends = requested_backends.to_lowercase();
-                            if requested_backends.contains("llvm") {
-                                backends.push(CodegenBackend::Llvm);
-                            }
-                            if requested_backends.contains("cranelift") {
-                                backends.push(CodegenBackend::Cranelift);
-                            }
-                        }
-
-                        if backends.is_empty() {
-                            backends.push(CodegenBackend::Llvm);
-                        }
-
-                        // FIXME: remove this when/if NextArtifact::Commit's include/exclude
-                        // changed from Option<String> to Vec<String>
-                        // to not to manually parse args
-                        let split_args = |l: Option<String>| -> Vec<String> {
-                            if let Some(l) = l {
-                                l.split(',').map(|arg| arg.trim().to_owned()).collect()
-                            } else {
-                                vec![]
-                            }
-                        };
-                        let sha = commit.sha.to_string();
-                        let sysroot = rt
-                            .block_on(Sysroot::install(
-                                Path::new(TOOLCHAIN_CACHE_DIRECTORY),
-                                sha.clone(),
-                                &require_host_target_tuple(),
-                                &backends,
-                            ))
-                            .map_err(SysrootDownloadError::as_anyhow_error)
-                            .with_context(|| format!("failed to install sysroot for {commit:?}"))?;
-
-                        let mut benchmarks = get_compile_benchmarks(
-                            &compile_benchmark_dir,
-                            CompileBenchmarkFilter::Fuzzy {
-                                include: &split_args(include),
-                                exclude: &split_args(exclude),
-                                exclude_suffix: &[],
-                            },
-                        )?;
-                        benchmarks.retain(|b| b.category().is_primary_or_secondary());
-
-                        let artifact_id = ArtifactId::Commit(commit);
-                        let mut conn = rt.block_on(pool.connection());
-                        let toolchain = Toolchain::from_sysroot(&sysroot, sha);
-
-                        let compile_config = CompileBenchmarkConfig {
-                            benchmarks,
-                            profiles: vec![
-                                Profile::Check,
-                                Profile::Debug,
-                                Profile::Doc,
-                                Profile::Opt,
-                            ],
-                            scenarios: Scenario::all(),
-                            backends,
-                            iterations: runs.map(|v| v as usize),
-                            is_self_profile: self_profile.self_profile,
-                            bench_rustc: bench_rustc.bench_rustc,
-                            targets: vec![Target::default()],
-                        };
-                        let runtime_suite = rt.block_on(load_runtime_benchmarks(
-                            conn.as_mut(),
-                            &runtime_benchmark_dir,
-                            CargoIsolationMode::Isolated,
-                            None,
-                            &toolchain,
-                            &artifact_id,
-                            None,
-                        ))?;
-
-                        let runtime_config = RuntimeBenchmarkConfig {
-                            runtime_suite,
-                            filter: RuntimeBenchmarkFilter::keep_all(),
-                            iterations: DEFAULT_RUNTIME_ITERATIONS,
-                            target: Target::default(),
-                        };
-                        let shared = SharedBenchmarkConfig {
-                            artifact_id,
-                            toolchain,
-                            job_id: None,
-                        };
-
-                        rt.block_on(run_benchmarks(
-                            conn.as_mut(),
-                            shared,
-                            Some(compile_config),
-                            Some(runtime_config),
-                        ))
-                    }
-                }
-            });
-            // We need to send a message to this endpoint even if the collector panics
-            client.post(format!("{site_url}/perf/onpush")).send()?;
-
-            match res {
-                Ok(res) => res?,
-                Err(error) => {
-                    log::error!("The collector has crashed\n{error:?}");
-                }
-            }
             Ok(0)
         }
 
