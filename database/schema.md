@@ -82,27 +82,6 @@ Columns:
 * **id** (`integer`): Unique identifier
 * **perf_commit** (`text`): Commit sha / tag
 
-### collector_progress
-
-Keeps track of the collector's start and finish time as well as which step it's currently on.
-
-Columns:
-
-* **aid** (`integer`): Artifact id, references the id in the artifact table
-* **step** (`text`): The step the collector is currently benchmarking
-* **start** (`timestamptz`): When the collector started
-* **end** (`timestamptz`): When the collector finished
-
-### artifact_collection_duration
-
-Records how long benchmarking takes in seconds.
-
-Columns:
-
-* **aid** (`integer`): Artifact id, references the id in the artifact table
-* **date_recorded** (`timestamptz`): When this was recorded
-* **duration** (`integer`): How long the benchmarking took in seconds
-
 ### benchmark
 
 The different types of compile-time benchmarks that are run. 
@@ -201,24 +180,6 @@ Columns:
 * **crate** (`text`):  The name of the crate
 * **profile** (`text`): What type of compilation is happening - check build, optimized build (a.k.a. release build), debug build, or doc build.
 * **cache** (`text`): The incremental scenario used for the benchmark
-
-### pull_request_build
-
-Records a pull request commit that is waiting in a queue to be benchmarked.
-
-First a merge commit is queued, then its artifacts are built by bors, and once the commit
-is attached to the entry in this table, it can be benchmarked.
-
-* **bors_sha** (`text`): SHA of the commit that should be benchmarked
-* **pr** (`integer`): number of the PR
-* **parent_sha** (`text`): SHA of the parent commit, to which will the PR be compared
-* **complete** (`boolean`): Specifies whether this commit has been already benchmarked or not
-* **requested** (`timestamptz`): When was the commit queued
-* **include** (`text`): Which benchmarks should be included (corresponds to the `--include` benchmark parameter), comma separated strings
-* **exclude** (`text`): Which benchmarks should be excluded (corresponds to the `--exclude` benchmark parameter), comma separated strings
-* **runs** (`integer`): How many iterations should be used by default for the benchmark run
-* **commit_date** (`timestamptz`): When was the commit created
-* **backends** (`text`): The codegen backends to use for the benchmarks (corresponds to the `--backends` benchmark parameter)
 
 ### error
 
