@@ -138,6 +138,9 @@ pub trait Connection: Send + Sync {
 
     // Collector status API
 
+    // TODO: these functions should be removed. The only useful user of them currently are runtime
+    // benchmarks, which should switch to something similar to
+    // `get_compile_test_cases_with_measurements`.
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]);
 
     // Returns `true` if the step was started, i.e., it did not previously have
