@@ -77,33 +77,6 @@ impl Table for Artifact {
     }
 }
 
-struct ArtifactCollectionDuration;
-
-impl Table for ArtifactCollectionDuration {
-    fn name(&self) -> &'static str {
-        "artifact_collection_duration"
-    }
-
-    fn postgres_select_statement(&self, since_weeks_ago: Option<u32>) -> String {
-        let s = "select aid, date_recorded, duration from ".to_string() + self.name();
-        with_filter_clause_maybe(s, ARTIFACT_JOIN_AND_WHERE, since_weeks_ago)
-    }
-
-    fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into artifact_collection_duration (aid, date_recorded, duration) VALUES (?, ?, ?)"
-    }
-
-    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
-        statement
-            .execute(params![
-                row.get::<_, i32>(0),
-                row.get::<_, DateTime<Utc>>(1).timestamp(),
-                row.get::<_, i32>(2)
-            ])
-            .unwrap();
-    }
-}
-
 struct Benchmark;
 
 impl Table for Benchmark {
@@ -149,36 +122,6 @@ impl Table for Collection {
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
         statement
             .execute(params![row.get::<_, i32>(0), row.get::<_, Option<&str>>(1)])
-            .unwrap();
-    }
-}
-
-struct CollectorProgress;
-
-impl Table for CollectorProgress {
-    fn name(&self) -> &'static str {
-        "collector_progress"
-    }
-
-    fn postgres_select_statement(&self, since_weeks_ago: Option<u32>) -> String {
-        let s = "select aid, step, start_time, end_time from ".to_string() + self.name();
-        with_filter_clause_maybe(s, ARTIFACT_JOIN_AND_WHERE, since_weeks_ago)
-    }
-
-    fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into collector_progress (aid, step, start, end) VALUES (?, ?, ?, ?)"
-    }
-
-    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
-        statement
-            .execute(params![
-                row.get::<_, i32>(0),
-                row.get::<_, &str>(1),
-                row.get::<_, Option<DateTime<Utc>>>(2)
-                    .map(|d| d.timestamp()),
-                row.get::<_, Option<DateTime<Utc>>>(3)
-                    .map(|d| d.timestamp()),
-            ])
             .unwrap();
     }
 }
@@ -264,41 +207,6 @@ impl Table for PstatSeries {
                 row.get::<_, &str>(4),
                 row.get::<_, &str>(5),
                 row.get::<_, &str>(6),
-            ])
-            .unwrap();
-    }
-}
-
-struct PullRequestBuild;
-
-impl Table for PullRequestBuild {
-    fn name(&self) -> &'static str {
-        "pull_request_build"
-    }
-
-    fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
-        "select bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, backends from "
-            .to_string()
-            + self.name()
-    }
-
-    fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into pull_request_build (bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, backends) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    }
-
-    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
-        statement
-            .execute(params![
-                row.get::<_, Option<&str>>(0),
-                row.get::<_, i32>(1),
-                row.get::<_, Option<&str>>(2),
-                row.get::<_, Option<bool>>(3),
-                row.get::<_, Option<DateTime<Utc>>>(4)
-                    .map(|d| d.timestamp()),
-                row.get::<_, Option<&str>>(5),
-                row.get::<_, Option<&str>>(6),
-                row.get::<_, Option<i32>>(7),
-                row.get::<_, Option<&str>>(8),
             ])
             .unwrap();
     }
@@ -450,14 +358,11 @@ async fn main() -> anyhow::Result<()> {
     // Order matters to the extent necessary to satisfy foreign key constraints.
     let tables: &[&dyn Table] = &[
         &Artifact,
-        &ArtifactCollectionDuration,
         &Benchmark,
         &Collection,
-        &CollectorProgress,
         &Error,
         &PstatSeries,
         &Pstat,
-        &PullRequestBuild,
         &RawSelfProfile,
         &RustcCompilation,
         &RuntimePstatSeries,
