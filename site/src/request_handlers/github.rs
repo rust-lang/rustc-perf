@@ -256,20 +256,11 @@ fn get_command_lines<'a>(body: &'a str, command: &'a str) -> impl Iterator<Item 
 fn parse_benchmark_parameters<'a>(
     mut args: HashMap<&'a str, &'a str>,
 ) -> Result<BenchmarkParameters<'a>, String> {
-    let mut params = BenchmarkParameters {
-        include: args.remove("include").filter(|s| !s.is_empty()),
-        exclude: args.remove("exclude").filter(|s| !s.is_empty()),
-        runs: None,
+    let params = BenchmarkParameters {
         backends: args.remove("backends").filter(|s| !s.is_empty()),
         profiles: args.remove("profiles").filter(|s| !s.is_empty()),
         targets: args.remove("targets").filter(|s| !s.is_empty()),
     };
-    if let Some(runs) = args.remove("runs").filter(|s| !s.is_empty()) {
-        let Ok(runs) = runs.parse::<u32>() else {
-            return Err(format!("Cannot parse runs {runs} as a number"));
-        };
-        params.runs = Some(runs as i32);
-    }
 
     if let Some(backends) = &params.backends {
         // Make sure that the backends are correct
@@ -357,11 +348,6 @@ struct BuildCommand<'a> {
 
 #[derive(Debug)]
 struct BenchmarkParameters<'a> {
-    #[allow(unused)]
-    include: Option<&'a str>,
-    #[allow(unused)]
-    exclude: Option<&'a str>,
-    runs: Option<i32>,
     backends: Option<&'a str>,
     profiles: Option<&'a str>,
     targets: Option<&'a str>,
@@ -406,7 +392,7 @@ mod tests {
     #[test]
     fn build_command() {
         insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952"),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } })]"#);
+            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
     }
 
     #[test]
@@ -415,7 +401,7 @@ mod tests {
 @rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952
 @rust-timer build 23936af287657fa4148aeab40cc2a780810fae52
 "#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } }), Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae52", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } })]"#);
+            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }), Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae52", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
     }
 
     #[test]
@@ -425,16 +411,10 @@ mod tests {
     }
 
     #[test]
-    fn build_command_complex() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("  @rust-timer  build    sha123456  exclude=baz    include=foo,bar runs=4"),
-            @r#"[Ok(BuildCommand { sha: "sha123456", params: BenchmarkParameters { include: Some("foo,bar"), exclude: Some("baz"), runs: Some(4), backends: None, profiles: None, targets: None } })]"#);
-    }
-
-    #[test]
     fn build_command_link() {
         insta::assert_compact_debug_snapshot!(get_build_commands(r#"
 @rust-timer build https://github.com/rust-lang/rust/commit/323f521bc6d8f2b966ba7838a3f3ee364e760b7e"#),
-            @r#"[Ok(BuildCommand { sha: "323f521bc6d8f2b966ba7838a3f3ee364e760b7e", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } })]"#);
+            @r#"[Ok(BuildCommand { sha: "323f521bc6d8f2b966ba7838a3f3ee364e760b7e", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
     }
 
     #[test]
@@ -450,7 +430,7 @@ mod tests {
     #[test]
     fn queue_command() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue"),
-            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } }))");
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
     }
 
     #[test]
@@ -461,62 +441,32 @@ mod tests {
 
     #[test]
     fn queue_command_duplicate_arg() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=a exclude=c include=b"),
-            @r###"Some(Err("Duplicate command argument `include`"))"###);
-    }
-
-    #[test]
-    fn queue_command_include() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=abcd,feih"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("abcd,feih"), exclude: None, runs: None, backends: None, profiles: None, targets: None } }))"#);
-    }
-
-    #[test]
-    fn queue_command_exclude() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue exclude=foo134,barzbaz41baf"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: Some("foo134,barzbaz41baf"), runs: None, backends: None, profiles: None, targets: None } }))"#);
-    }
-
-    #[test]
-    fn queue_command_runs() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=5"),
-            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: Some(5), backends: None, profiles: None, targets: None } }))");
-    }
-
-    #[test]
-    fn queue_command_runs_nan() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=xxx"),
-            @r###"Some(Err("Cannot parse runs xxx as a number"))"###);
-    }
-
-    #[test]
-    fn queue_command_combination() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=acda,13asd exclude=c13,DA runs=5"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("acda,13asd"), exclude: Some("c13,DA"), runs: Some(5), backends: None, profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue backends=a targets=c backends=b"),
+            @r#"Some(Err("Duplicate command argument `backends`"))"#);
     }
 
     #[test]
     fn queue_command_argument_spaces() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include  =  abcd,das"),
-            @r###"Some(Err("Invalid command argument `include` (there may be no spaces around the `=` character)"))"###);
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue backends  =  llvm"),
+            @r#"Some(Err("Invalid command argument `backends` (there may be no spaces around the `=` character)"))"#);
     }
 
     #[test]
     fn queue_command_spaces() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer     queue     include=abcd,das   "),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("abcd,das"), exclude: None, runs: None, backends: None, profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer     queue     backends=llvm   "),
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: Some("llvm"), profiles: None, targets: None } }))"#);
     }
 
     #[test]
     fn queue_command_with_bors() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@bors try @rust-timer queue include=foo,bar"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("foo,bar"), exclude: None, runs: None, backends: None, profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@bors try @rust-timer queue backends=llvm"),
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: Some("llvm"), profiles: None, targets: None } }))"#);
     }
 
     #[test]
     fn queue_command_parameter_order() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs=3 exclude=c,a include=b"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("b"), exclude: Some("c,a"), runs: Some(3), backends: None, profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue profiles=Doc backends=llvm"),
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: Some("llvm"), profiles: Some("Doc"), targets: None } }))"#);
     }
 
     #[test]
@@ -524,10 +474,10 @@ mod tests {
         insta::assert_compact_debug_snapshot!(parse_queue_command(r#"Ok, this looks good now.
 Let's do a perf run quickly and then we can merge it.
 
-@bors try @rust-timer queue include=foo,bar
+@bors try @rust-timer queue
 
 Otherwise LGTM."#),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("foo,bar"), exclude: None, runs: None, backends: None, profiles: None, targets: None } }))"#);
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
     }
 
     fn get_build_commands(body: &str) -> Vec<Result<BuildCommand<'_>, String>> {
@@ -537,66 +487,56 @@ Otherwise LGTM."#),
     #[test]
     fn build_command_with_backends() {
         insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995G"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995G", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } })]"#);
+            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995G", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
         insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995A backends=Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995A", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: Some("Llvm"), profiles: None, targets: None } })]"#);
+            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995A", params: BenchmarkParameters { backends: Some("Llvm"), profiles: None, targets: None } })]"#);
         insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5B backends=Cranelift"#),
-            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5B", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: Some("Cranelift"), profiles: None, targets: None } })]"#);
+            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5B", params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None } })]"#);
         insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C backends=Cranelift,Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: Some("Cranelift,Llvm"), profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995D include=hello backends=Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995D", params: BenchmarkParameters { include: Some("hello"), exclude: None, runs: None, backends: Some("Llvm"), profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995E runs=10 backends=Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995E", params: BenchmarkParameters { include: None, exclude: None, runs: Some(10), backends: Some("Llvm"), profiles: None, targets: None } })]"#);
+            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None } })]"#);
     }
 
     #[test]
     fn queue_command_with_backends() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue backends=Llvm"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: Some("Llvm"), profiles: None, targets: None } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: Some("Llvm"), profiles: None, targets: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue backends=Cranelift"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: Some("Cranelift"), profiles: None, targets: None } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue backends=Cranelift,Llvm"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: Some("Cranelift,Llvm"), profiles: None, targets: None } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue"),
-            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } }))");
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=hello backends=Llvm"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("hello"), exclude: None, runs: None, backends: Some("Llvm"), profiles: None, targets: None } }))"#);
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include=hello exclude=ripgrep runs=3 backends=Llvm"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: Some("hello"), exclude: Some("ripgrep"), runs: Some(3), backends: Some("Llvm"), profiles: None, targets: None } }))"#);
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
     }
 
     #[test]
     fn queue_command_with_profiles() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue profiles=Doc"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: Some("Doc"), targets: None } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: Some("Doc"), targets: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue profiles=Check,Clippy"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: Some("Check,Clippy"), targets: None } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: Some("Check,Clippy"), targets: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue profiles=Doc,Clippy,Opt backends=Cranelift,Llvm"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: Some("Cranelift,Llvm"), profiles: Some("Doc,Clippy,Opt"), targets: None } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: Some("Doc,Clippy,Opt"), targets: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue profiles=Foo"),
             @r#"Some(Err("Cannot parse profiles: Invalid profile: Foo. Valid values are: check, debug, opt, doc, doc-json, clippy"))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue profiles=check"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: Some("check"), targets: None } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: Some("check"), targets: None } }))"#);
     }
 
     #[test]
     fn queue_command_with_targets() {
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue targets=x86_64-unknown-linux-gnu"),
-            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: Some("x86_64-unknown-linux-gnu") } }))"#);
+            @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: Some("x86_64-unknown-linux-gnu") } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue targets=x86_64-unknown-linux-gnu,67-unknown-none"),
             @r#"Some(Err("Cannot parse targets: Invalid target: 67-unknown-none. Valid values are: x86_64-unknown-linux-gnu"))"#);
     }
 
     #[test]
     fn no_empty_arguments_thank_you() {
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue include="),
-            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } }))");
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue exclude="),
-            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } }))");
-        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue runs="),
-            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } }))");
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue backends="),
-            @"Some(Ok(QueueCommand { params: BenchmarkParameters { include: None, exclude: None, runs: None, backends: None, profiles: None, targets: None } }))");
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue targets="),
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
+        insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue profiles="),
+            @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
     }
 }
