@@ -189,7 +189,7 @@ function storeSortToUrl() {
 
 async function loadData() {
   const params = getUrlParams();
-  const {commit, base_commit, benchmark, scenario} = params;
+  const {commit, base_commit, benchmark, scenario, backend, target} = params;
 
   // Load sort state from URL
   loadSortFromUrl(params);
@@ -199,6 +199,8 @@ async function loadData() {
     base_commit: base_commit ?? null,
     benchmark,
     scenario,
+    backend,
+    target,
   };
   selector.value = currentSelector;
 

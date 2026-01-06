@@ -490,6 +490,8 @@ pub mod self_profile {
         pub benchmark: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
+        pub backend: String,
+        pub target: String,
     }
 
     #[derive(Debug, Clone, Serialize)]

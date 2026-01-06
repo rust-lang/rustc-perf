@@ -52,8 +52,8 @@ function detailedQueryLink(
   commit: ArtifactDescription,
   baseCommit?: ArtifactDescription
 ): string {
-  const {benchmark, profile, scenario} = props.testCase;
-  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}`;
+  const {benchmark, profile, scenario, backend, target} = props.testCase;
+  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&backend=${backend}&target=${target}`;
   if (baseCommit !== undefined) {
     link += `&base_commit=${baseCommit.commit}`;
   }
