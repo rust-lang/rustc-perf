@@ -602,7 +602,6 @@ pub mod github {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Push {
         pub r#ref: String,
-        pub sender: Sender,
         pub head_commit: HeadCommit,
         pub before: String,
         pub commits: Vec<Commit>,
@@ -624,11 +623,6 @@ pub mod github {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct HeadCommit {
         pub message: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Sender {
-        pub login: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
