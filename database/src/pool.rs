@@ -1,11 +1,11 @@
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
-    BenchmarkRequestStatus, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend,
-    CollectorConfig, CompileBenchmark, PendingBenchmarkRequests, Target,
+    ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
+    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark,
+    PendingBenchmarkRequests, Target,
 };
-use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
+use crate::{CollectionId, Index, Profile, Scenario};
 use chrono::{DateTime, Utc};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -44,10 +44,6 @@ pub trait Connection: Send + Sync {
     async fn get_compile_benchmarks(&self) -> Vec<CompileBenchmark>;
 
     async fn artifact_by_name(&self, artifact: &str) -> Option<ArtifactId>;
-
-    /// This records the duration of a collection run, i.e., collecting all of
-    /// the statistics for a particular artifact.
-    async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration);
 
     /// One collection corresponds to all gathered metrics for a single iteration of a test case.
     async fn collection_id(&self, version: &str) -> CollectionId;
@@ -140,27 +136,11 @@ pub trait Connection: Send + Sync {
     ) -> Vec<Vec<Option<f64>>>;
     async fn get_error(&self, artifact_row_id: ArtifactIdNumber) -> HashMap<String, String>;
 
-    async fn queue_pr(
-        &self,
-        pr: u32,
-        include: Option<&str>,
-        exclude: Option<&str>,
-        runs: Option<i32>,
-        backends: Option<&str>,
-    );
-    /// Returns true if this PR was queued waiting for a commit
-    async fn pr_attach_commit(
-        &self,
-        pr: u32,
-        sha: &str,
-        parent_sha: &str,
-        commit_date: Option<DateTime<Utc>>,
-    ) -> bool;
-    async fn queued_commits(&self) -> Vec<QueuedCommit>;
-    async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit>;
-
     // Collector status API
 
+    // TODO: these functions should be removed. The only useful user of them currently are runtime
+    // benchmarks, which should switch to something similar to
+    // `get_compile_test_cases_with_measurements`.
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]);
 
     // Returns `true` if the step was started, i.e., it did not previously have
@@ -170,12 +150,7 @@ pub trait Connection: Send + Sync {
 
     async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str);
 
-    async fn in_progress_artifacts(&self) -> Vec<ArtifactId>;
-
-    async fn in_progress_steps(&self, aid: &ArtifactId) -> Vec<Step>;
-
-    async fn last_n_artifact_collections(&self, n: u32) -> Vec<ArtifactCollection>;
-
+    // TODO: the following two functions do not work anymore and should not be used!
     /// Returns the sha of the parent commit, if available.
     ///
     /// (Currently only works for try commits)

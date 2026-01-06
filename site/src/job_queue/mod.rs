@@ -1,8 +1,8 @@
 mod utils;
 
 use crate::github::comparison_summary::post_comparison_comment;
-use crate::job_queue::utils::{parse_release_string, ExtractIf};
-use crate::load::{partition_in_place, SiteCtxt};
+use crate::job_queue::utils::{parse_release_string, partition_in_place, ExtractIf};
+use crate::load::SiteCtxt;
 use anyhow::Context;
 use chrono::Utc;
 use collector::benchmark_set::{
@@ -17,17 +17,6 @@ use database::{
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::time::{self, Duration, MissedTickBehavior};
-
-pub fn is_job_queue_enabled() -> bool {
-    std::env::var("USE_JOB_QUEUE")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(true)
-}
-
-pub fn should_use_job_queue(_pr: u32) -> bool {
-    is_job_queue_enabled()
-}
 
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database.

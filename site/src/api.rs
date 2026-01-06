@@ -347,54 +347,6 @@ pub mod comparison {
 }
 
 pub mod status {
-    use crate::load::MissingReason;
-    use database::ArtifactId;
-    use database::Commit;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct BenchmarkError {
-        pub name: String,
-        pub error: String,
-    }
-
-    #[derive(Serialize, Debug)]
-    pub struct Step {
-        pub step: String,
-        pub is_done: bool,
-        // Seconds
-        pub expected_duration: u64,
-        // Seconds since start
-        pub current_progress: u64,
-    }
-
-    #[derive(Serialize, Debug)]
-    pub struct CurrentState {
-        pub artifact: ArtifactId,
-        pub progress: Vec<Step>,
-    }
-
-    #[derive(Serialize, Debug)]
-    pub struct FinishedRun {
-        pub artifact: ArtifactId,
-        pub pr: Option<u32>,
-        pub errors: Vec<BenchmarkError>,
-        // In seconds
-        pub duration: u64,
-        // Unix timestamp
-        pub finished_at: u64,
-    }
-
-    #[derive(Serialize, Debug)]
-    pub struct Response {
-        // Ordered from newest to oldest
-        pub finished_runs: Vec<FinishedRun>,
-        pub current: Option<CurrentState>,
-        pub missing: Vec<(Commit, MissingReason)>,
-    }
-}
-
-pub mod status_new {
     use chrono::{DateTime, Utc};
     use hashbrown::HashMap;
     use serde::Serialize;

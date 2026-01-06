@@ -3,13 +3,12 @@ use crate::pool::{
 };
 use crate::selector::CompileTestCase;
 use crate::{
-    ArtifactCollection, ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
-    BenchmarkRequestStatus, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId,
-    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, PendingBenchmarkRequests, Profile,
-    Target,
+    ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
+    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
+    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
+    Commit, CommitType, CompileBenchmark, Date, PendingBenchmarkRequests, Profile, Target,
 };
-use crate::{ArtifactIdNumber, Index, QueuedCommit};
+use crate::{ArtifactIdNumber, Index};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::{HashMap, HashSet};
 use rusqlite::params;
@@ -680,15 +679,6 @@ impl Connection for SqliteConnection {
         Some(parse_artifact_id(ty.as_str(), artifact, date))
     }
 
-    async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration) {
-        self.raw_ref()
-            .prepare_cached(
-                "insert or ignore into artifact_collection_duration (aid, date_recorded, duration) VALUES (?, strftime('%s','now'), ?)",
-            )
-            .unwrap()
-            .execute(params![artifact.0, duration.as_secs() as i64])
-            .unwrap();
-    }
     async fn collection_id(&self, version: &str) -> CollectionId {
         let raw = self.raw_ref();
         raw.execute(
@@ -997,98 +987,6 @@ impl Connection for SqliteConnection {
             .collect::<Result<_, _>>()
             .unwrap()
     }
-    async fn queue_pr(
-        &self,
-        pr: u32,
-        include: Option<&str>,
-        exclude: Option<&str>,
-        runs: Option<i32>,
-        backends: Option<&str>,
-    ) {
-        self.raw_ref()
-            .prepare_cached(
-                "insert into pull_request_build (pr, complete, requested, include, exclude, runs, backends) VALUES (?, 0, strftime('%s','now'), ?, ?, ?, ?)",
-            )
-            .unwrap()
-            .execute(params![pr, include, exclude, &runs, backends])
-            .unwrap();
-    }
-    async fn pr_attach_commit(
-        &self,
-        pr: u32,
-        sha: &str,
-        parent_sha: &str,
-        commit_date: Option<DateTime<Utc>>,
-    ) -> bool {
-        let timestamp = commit_date.map(|d| d.timestamp());
-        self.raw_ref()
-            .prepare_cached(
-                "update pull_request_build SET bors_sha = ?, parent_sha = ?, commit_date = ?
-                where pr = ? and bors_sha is null",
-            )
-            .unwrap()
-            .execute(params![sha, parent_sha, timestamp, pr])
-            .unwrap()
-            > 0
-    }
-    async fn queued_commits(&self) -> Vec<QueuedCommit> {
-        self.raw_ref()
-            .prepare_cached(
-                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
-                where complete is false and bors_sha is not null
-                order by requested asc",
-            )
-            .unwrap()
-            .query(params![])
-            .unwrap()
-            .mapped(|row| {
-                Ok(QueuedCommit {
-                    pr: row.get(0).unwrap(),
-                    sha: row.get(1).unwrap(),
-                    parent_sha: row.get(2).unwrap(),
-                    include: row.get(3).unwrap(),
-                    exclude: row.get(4).unwrap(),
-                    runs: row.get(5).unwrap(),
-                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_timestamp(timestamp, 0).unwrap())),
-                    backends: row.get(7).unwrap(),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
-    }
-    async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit> {
-        let count = self
-            .raw_ref()
-            .execute(
-                "update pull_request_build SET complete = 1 where bors_sha = ? and complete = 0",
-                params![sha],
-            )
-            .unwrap();
-        if count == 0 {
-            return None;
-        }
-        assert_eq!(count, 1, "sha is unique column");
-        self.raw_ref()
-            .query_row(
-                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date, backends from pull_request_build
-            where bors_sha = ?",
-                params![sha],
-                |row| {
-                    Ok(QueuedCommit {
-                        pr: row.get(0).unwrap(),
-                        sha: row.get(1).unwrap(),
-                        parent_sha: row.get(2).unwrap(),
-                        include: row.get(3).unwrap(),
-                        exclude: row.get(4).unwrap(),
-                        runs: row.get(5).unwrap(),
-                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_timestamp(timestamp, 0).unwrap())),
-                        backends: row.get(7).unwrap(),
-                    })
-                },
-            )
-            .optional()
-            .unwrap()
-    }
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
         // Clean out any leftover unterminated steps.
         self.raw_ref()
@@ -1134,114 +1032,6 @@ impl Connection for SqliteConnection {
                 params![&aid.0, &step],
             )
             .unwrap();
-    }
-
-    async fn in_progress_artifacts(&self) -> Vec<ArtifactId> {
-        let conn = self.raw_ref();
-        let mut aids = conn
-            .prepare(
-                "select distinct aid from collector_progress \
-                where end is null order by aid limit 1",
-            )
-            .unwrap();
-
-        let aids = aids.query_map(params![], |r| r.get::<_, i32>(0)).unwrap();
-
-        let mut artifacts = Vec::new();
-        for aid in aids {
-            let aid = aid.unwrap();
-            let (name, date, ty) = conn
-                .query_row(
-                    "select name, date, type from artifact where id = ?",
-                    params![&aid],
-                    |r| {
-                        Ok((
-                            r.get::<_, String>(0)?,
-                            r.get::<_, Option<i64>>(1)?,
-                            r.get::<_, String>(2)?,
-                        ))
-                    },
-                )
-                .unwrap();
-
-            artifacts.push(match ty.as_str() {
-                "try" | "master" => ArtifactId::Commit(Commit {
-                    sha: name,
-                    date: date
-                        .map(|d| Utc.timestamp_opt(d, 0).unwrap())
-                        .map(Date)
-                        .unwrap_or_else(|| Date::ymd_hms(2001, 1, 1, 0, 0, 0)),
-                    r#type: CommitType::from_str(&ty).unwrap(),
-                }),
-                "release" => ArtifactId::Tag(name),
-                _ => {
-                    log::error!("unknown ty {:?}", ty);
-                    continue;
-                }
-            });
-        }
-        artifacts
-    }
-    async fn in_progress_steps(&self, artifact: &ArtifactId) -> Vec<crate::Step> {
-        let aid = self.artifact_id(artifact).await;
-
-        self.raw_ref()
-            .prepare(
-                "
-                select
-                    step,
-                    end is not null,
-                    coalesce(end, strftime('%s', 'now')) - start,
-                    (select end - start
-                        from collector_progress as cp
-                            where
-                                cp.step = collector_progress.step
-                                and cp.start is not null
-                                and cp.end is not null
-                            limit 1
-                    )
-                from collector_progress where aid = ? order by step
-            ",
-            )
-            .unwrap()
-            .query_map(params![&aid.0], |row| {
-                Ok(crate::Step {
-                    name: row.get(0)?,
-                    is_done: row.get(1)?,
-                    duration: Duration::from_secs(row.get::<_, i64>(2).unwrap_or_default() as u64),
-                    expected: Duration::from_secs(row.get::<_, i64>(3).unwrap_or_default() as u64),
-                })
-            })
-            .unwrap()
-            .map(|r| r.unwrap())
-            .collect()
-    }
-
-    async fn last_n_artifact_collections(&self, n: u32) -> Vec<ArtifactCollection> {
-        self.raw_ref()
-            .prepare_cached(
-                "select art.name, art.date, art.type, acd.date_recorded, acd.duration \
-                from artifact_collection_duration as acd \
-                join artifact as art on art.id = acd.aid \
-                order by date_recorded desc \
-                limit ?;",
-            )
-            .unwrap()
-            .query(params![&n])
-            .unwrap()
-            .mapped(|r| {
-                let sha = r.get::<_, String>(0)?;
-                let date = r.get::<_, Option<i64>>(1)?;
-                let ty = r.get::<_, String>(2)?;
-
-                Ok(ArtifactCollection {
-                    artifact: parse_artifact_id(&ty, &sha, date),
-                    end_time: Utc.timestamp_opt(r.get(3)?, 0).unwrap(),
-                    duration: Duration::from_secs(r.get(4)?),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
     }
 
     async fn parent_of(&self, sha: &str) -> Option<String> {
@@ -1307,12 +1097,6 @@ impl Connection for SqliteConnection {
         let info = aid.info();
         self.raw_ref()
             .execute("delete from artifact where name = ?1", [info.name])
-            .unwrap();
-        self.raw_ref()
-            .execute(
-                "delete from pull_request_build where bors_sha = ?1",
-                [info.name],
-            )
             .unwrap();
     }
 

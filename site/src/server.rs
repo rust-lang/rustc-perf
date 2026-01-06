@@ -6,17 +6,15 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, LazyLock};
-use std::time::Instant;
 use std::{fmt, str};
 
 use futures::{future::FutureExt, stream::StreamExt};
 use headers::{Authorization, CacheControl, ContentType, ETag, Header, HeaderMapExt, IfNoneMatch};
 use http::header::CACHE_CONTROL;
 use hyper::StatusCode;
-use log::{debug, error, info};
-use parking_lot::{Mutex, RwLock};
+use log::{error, info};
+use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use uuid::Uuid;
@@ -29,7 +27,7 @@ use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
 use crate::resources::{Payload, ResourceResolver};
 
-use database::{self, ArtifactId};
+use crate::job_queue::build_queue;
 
 pub type Request = http::Request<hyper::Body>;
 pub type Response = http::Response<hyper::Body>;
@@ -49,52 +47,11 @@ macro_rules! check_http_method {
 #[derive(Clone)]
 struct Server {
     ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>,
-    updating: UpdatingStatus,
 }
 
 impl Server {
     fn new(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>) -> Self {
-        Self {
-            ctxt,
-            updating: UpdatingStatus::new(),
-        }
-    }
-}
-
-#[derive(Clone)]
-struct UpdatingStatus(Arc<AtomicBool>);
-
-struct IsUpdating(Arc<AtomicBool>, hyper::body::Sender);
-
-impl Drop for IsUpdating {
-    fn drop(&mut self) {
-        self.0.store(false, AtomicOrdering::SeqCst);
-        if std::thread::panicking() {
-            let _ = self.1.try_send_data("panicked, try again".into());
-        } else {
-            let _ = self.1.try_send_data("done".into());
-        }
-    }
-}
-
-impl UpdatingStatus {
-    fn new() -> Self {
-        UpdatingStatus(Arc::new(AtomicBool::new(false)))
-    }
-
-    // Returns previous state
-    fn set_updating(&self) -> bool {
-        match self
-            .0
-            .compare_exchange(false, true, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
-        {
-            Ok(b) => b,
-            Err(b) => b,
-        }
-    }
-
-    fn release_on_drop(&self, channel: hyper::body::Sender) -> IsUpdating {
-        IsUpdating(self.0.clone(), channel)
+        Self { ctxt }
     }
 }
 
@@ -191,21 +148,22 @@ impl Server {
     async fn handle_metrics(&self, _req: Request) -> Response {
         use prometheus::Encoder;
         let ctxt: Arc<SiteCtxt> = self.ctxt.read().as_ref().unwrap().clone();
-        let idx = ctxt.index.load();
 
         let mut buffer = Vec::new();
         let r = prometheus::Registry::new();
 
-        let missing_commits = ctxt.missing_commits().await;
+        let queue = build_queue(ctxt.pool.connection().await.as_mut())
+            .await
+            .unwrap_or_default();
         let queue_length =
             prometheus::IntGauge::new("rustc_perf_queue_length", "queue length").unwrap();
-        queue_length.set(missing_commits.len() as i64);
+        queue_length.set(queue.len() as i64);
         r.register(Box::new(queue_length)).unwrap();
 
         let queue_try_commits =
             prometheus::IntGauge::new("rustc_perf_queue_try_commits", "queued try commits")
                 .unwrap();
-        queue_try_commits.set(missing_commits.iter().filter(|(c, _)| c.is_try()).count() as i64);
+        queue_try_commits.set(queue.iter().filter(|req| req.is_try()).count() as i64);
         r.register(Box::new(queue_try_commits)).unwrap();
 
         // Stores cache hits and misses of the self profile cache
@@ -228,86 +186,12 @@ impl Server {
             self_profile_cache_misses.set(self_profile_stats.get_misses() as i64);
             r.register(Box::new(self_profile_cache_misses)).unwrap();
         }
-        if let Some(last_commit) = idx.commits().last().cloned() {
-            let conn = ctxt.conn().await;
-            let steps = conn.in_progress_steps(&ArtifactId::from(last_commit)).await;
-            let g = prometheus::IntGaugeVec::new(
-                prometheus::core::Opts {
-                    namespace: "rustc_perf".to_string(),
-                    subsystem: String::new(),
-                    name: String::from("step_duration_seconds"),
-                    help: String::from("step duration"),
-                    const_labels: HashMap::new(),
-                    variable_labels: vec![],
-                },
-                &["step"],
-            )
-            .unwrap();
-            for step in steps {
-                g.with_label_values(&[&step.name])
-                    .set(step.expected.as_secs() as i64);
-            }
-            r.register(Box::new(g)).unwrap();
-        }
 
         let encoder = prometheus::TextEncoder::new();
         let metric_families = r.gather();
         encoder.encode(&metric_families, &mut buffer).unwrap();
 
         Response::new(buffer.into())
-    }
-
-    async fn handle_push(&self, _req: Request) -> Response {
-        static LAST_UPDATE: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
-
-        let last = *LAST_UPDATE.lock();
-        if let Some(last) = last {
-            let min = 60; // 1 minutes
-            let elapsed = last.elapsed();
-            if elapsed < std::time::Duration::from_secs(min) {
-                return http::Response::builder()
-                    .status(StatusCode::OK)
-                    .header_typed(ContentType::text_utf8())
-                    .body(hyper::Body::from(format!(
-                        "Refreshed too recently ({elapsed:?} ago). Please wait."
-                    )))
-                    .unwrap();
-            }
-        }
-        *LAST_UPDATE.lock() = Some(Instant::now());
-
-        // set to updating
-        let was_updating = self.updating.set_updating();
-
-        if was_updating {
-            return http::Response::builder()
-                .status(StatusCode::OK)
-                .header_typed(ContentType::text_utf8())
-                .body(hyper::Body::from("Already updating!"))
-                .unwrap();
-        }
-
-        debug!("received onpush hook");
-
-        let (channel, body) = hyper::Body::channel();
-
-        let ctxt: Arc<SiteCtxt> = self.ctxt.read().as_ref().unwrap().clone();
-        let _updating = self.updating.release_on_drop(channel);
-        let mut conn = ctxt.conn().await;
-        let index = database::Index::load(&mut *conn).await;
-        eprintln!("index has {} commits", index.commits().len());
-        ctxt.index.store(Arc::new(index));
-
-        // Refresh the landing page
-        ctxt.landing_page.store(Arc::new(None));
-
-        // Spawn off a task to post the results of any commit results that we
-        // are now aware of.
-        tokio::spawn(async move {
-            crate::github::post_finished(&ctxt).await;
-        });
-
-        Response::new(body)
     }
 }
 
@@ -393,16 +277,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .unwrap()),
             };
         }
-        "/perf/status_page_old" => {
-            return server
-                .handle_get_async(&req, request_handlers::handle_status_page_old)
-                .await;
-        }
-        "/perf/next_artifact" => {
-            return server
-                .handle_get_async(&req, request_handlers::handle_next_artifact)
-                .await;
-        }
         "/perf/triage" if *req.method() == http::Method::GET => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
             let input: triage::Request = check!(parse_query_string(req.uri()));
@@ -444,9 +318,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         }
         "/perf/metrics" => {
             return Ok(server.handle_metrics(req).await);
-        }
-        "/perf/onpush" => {
-            return Ok(server.handle_push(req).await);
         }
         "/perf/download-raw-self-profile" => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
@@ -658,7 +529,6 @@ async fn handle_fs_path(
         | "/dashboard.html"
         | "/detailed-query.html"
         | "/help.html"
-        | "/status_old.html"
         | "/status.html" => resolve_template(relative_path).await,
         _ => match TEMPLATES.get_static_asset(relative_path, use_compression)? {
             Payload::Compressed(data) => {

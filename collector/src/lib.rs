@@ -1,11 +1,9 @@
 use chrono::NaiveDate;
 pub use database::{Commit, PatchName, QueryLabel};
 use serde::Deserialize;
-use std::cmp::PartialOrd;
 use std::fmt;
 use std::process::{self, Command};
 
-pub mod api;
 pub mod artifact_stats;
 pub mod benchmark_set;
 pub mod cargo;
@@ -23,9 +21,6 @@ use database::{ArtifactId, ArtifactIdNumber, Connection};
 use hashbrown::HashSet;
 use process::Stdio;
 use std::time::{Duration, Instant};
-
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
-pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 
 /// The bound for finding an artifact
 ///
