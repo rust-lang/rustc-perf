@@ -9,6 +9,8 @@ export interface Selector {
   base_commit: string | null;
   benchmark: string;
   scenario: string;
+  backend: string;
+  target: string;
 }
 
 export interface ProfileElement {
@@ -100,8 +102,9 @@ export function createTitleData(selector: Selector | null): {
   let selfHref = "";
 
   if (state.base_commit) {
-    selfHref = `/detailed-query.html?commit=${state.commit}&scenario=${state.scenario}&benchmark=${state.benchmark}`;
-    baseHref = `/detailed-query.html?commit=${state.base_commit}&scenario=${state.scenario}&benchmark=${state.benchmark}`;
+    const args = `&scenario=${state.scenario}&benchmark=${state.benchmark}&backend=${state.backend}&target=${state.target}`;
+    selfHref = `/detailed-query.html?commit=${state.commit}${args}`;
+    baseHref = `/detailed-query.html?commit=${state.base_commit}${args}`;
   }
 
   return {text, baseHref, selfHref};

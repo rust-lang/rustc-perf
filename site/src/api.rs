@@ -490,6 +490,12 @@ pub mod self_profile {
         pub benchmark: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
+        // These fields are kept optional for backwards compatibility
+        // They can be make required e.g. in 2027
+        #[serde(default)]
+        pub backend: Option<String>,
+        #[serde(default)]
+        pub target: Option<String>,
     }
 
     #[derive(Debug, Clone, Serialize)]

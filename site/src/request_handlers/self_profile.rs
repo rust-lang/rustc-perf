@@ -5,9 +5,9 @@ use std::time::Instant;
 
 use brotli::enc::BrotliEncoderParams;
 use bytes::Buf;
-use database::selector;
 use database::ArtifactId;
 use database::{metric::Metric, CommitType};
+use database::{selector, CodegenBackend, Target};
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 
@@ -461,10 +461,23 @@ pub async fn handle_self_profile(
         .map_err(|e| format!("invalid run name: {e:?}"))?;
     let index = ctxt.index.load();
 
+    let backend: CodegenBackend = if let Some(backend) = body.backend {
+        backend.parse()?
+    } else {
+        CodegenBackend::Llvm
+    };
+    let target: Target = if let Some(target) = body.target {
+        target.parse()?
+    } else {
+        Target::X86_64UnknownLinuxGnu
+    };
+
     let query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::One(bench_name.to_string()))
         .profile(selector::Selector::One(profile.parse().unwrap()))
         .scenario(selector::Selector::One(scenario))
+        .backend(selector::Selector::One(backend))
+        .target(selector::Selector::One(target))
         .metric(selector::Selector::One(Metric::CpuClock));
 
     // Helper for finding an `ArtifactId` based on a commit sha
@@ -481,7 +494,12 @@ pub async fn handle_self_profile(
     let commits = Arc::new(commits);
 
     let mut cpu_responses = ctxt.statistic_series(query, commits.clone()).await?;
-    assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
+    if cpu_responses.len() != 1 {
+        return Err(
+            "The database query returned multiple results for the given commit. This is a bug."
+                .to_string(),
+        );
+    }
     let mut cpu_response = cpu_responses.remove(0).series;
 
     let mut self_profile = get_or_download_self_profile(
