@@ -461,8 +461,16 @@ pub async fn handle_self_profile(
         .map_err(|e| format!("invalid run name: {e:?}"))?;
     let index = ctxt.index.load();
 
-    let backend: CodegenBackend = body.backend.parse()?;
-    let target: Target = body.target.parse()?;
+    let backend: CodegenBackend = if let Some(backend) = body.backend {
+        backend.parse()?
+    } else {
+        CodegenBackend::Llvm
+    };
+    let target: Target = if let Some(target) = body.target {
+        target.parse()?
+    } else {
+        Target::X86_64UnknownLinuxGnu
+    };
 
     let query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::One(bench_name.to_string()))
