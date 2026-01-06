@@ -156,9 +156,7 @@ pub trait Connection: Send + Sync {
     /// (Currently only works for try commits)
     async fn parent_of(&self, sha: &str) -> Option<String>;
 
-    /// Returns the PR of the parent commit, if available.
-    ///
-    /// (Currently only works for try commits)
+    /// Returns the PR associated with an artifact with the given SHA, if available.
     async fn pr_of(&self, sha: &str) -> Option<u32>;
 
     /// Returns the collection ids corresponding to the query. Usually just one.

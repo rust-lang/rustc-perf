@@ -1048,14 +1048,7 @@ impl Connection for SqliteConnection {
     }
 
     async fn pr_of(&self, sha: &str) -> Option<u32> {
-        self.raw_ref()
-            .query_row(
-                "select pr from pull_request_build where bors_sha = ?",
-                params![sha],
-                |row| Ok(row.get(0).unwrap()),
-            )
-            .optional()
-            .unwrap()
+        None
     }
 
     async fn list_self_profile(
