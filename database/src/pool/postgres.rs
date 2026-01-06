@@ -1249,7 +1249,7 @@ where
     async fn parent_of(&self, sha: &str) -> Option<String> {
         self.conn()
             .query_opt(
-                "select parent_sha from pull_request_build where bors_sha = $1",
+                "SELECT parent_sha FROM benchmark_request WHERE tag = $1",
                 &[&sha],
             )
             .await
