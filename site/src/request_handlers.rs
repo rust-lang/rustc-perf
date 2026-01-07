@@ -7,7 +7,7 @@ mod status_page;
 
 pub use bootstrap::handle_bootstrap;
 pub use dashboard::handle_dashboard;
-pub use github::handle_github;
+pub use github::handle_github_webhook;
 pub use graph::{
     handle_compile_detail_graphs, handle_compile_detail_sections, handle_graphs,
     handle_runtime_detail_graphs,
