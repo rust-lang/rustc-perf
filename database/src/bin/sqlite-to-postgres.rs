@@ -81,45 +81,6 @@ impl Table for Artifact {
     }
 }
 
-struct ArtifactCollectionDuration;
-
-#[derive(Serialize)]
-struct ArtifactCollectionDurationRow {
-    aid: i32,
-    date_recorded: DateTime<Utc>,
-    duration: i32,
-}
-
-impl Table for ArtifactCollectionDuration {
-    fn name() -> &'static str {
-        "artifact_collection_duration"
-    }
-
-    fn sqlite_attributes() -> &'static str {
-        "aid, date_recorded, duration"
-    }
-
-    fn postgres_attributes() -> &'static str {
-        "aid, date_recorded, duration"
-    }
-
-    fn postgres_generated_id_attribute() -> Option<&'static str> {
-        None
-    }
-
-    fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
-        let date_recorded: i64 = row.get(1).unwrap();
-
-        writer
-            .serialize(ArtifactCollectionDurationRow {
-                aid: row.get(0).unwrap(),
-                date_recorded: Utc.timestamp_opt(date_recorded, 0).unwrap(),
-                duration: row.get(2).unwrap(),
-            })
-            .unwrap();
-    }
-}
-
 struct Benchmark;
 
 #[derive(Serialize)]
@@ -188,50 +149,6 @@ impl Table for Collection {
             .serialize(CollectionRow {
                 id: row.get(0).unwrap(),
                 perf_commit: row.get_ref(1).unwrap().try_into().unwrap(),
-            })
-            .unwrap();
-    }
-}
-
-struct CollectorProgress;
-
-#[derive(Serialize)]
-struct CollectorProgressRow<'a> {
-    aid: i32,
-    step: &'a str,
-    start_time: Nullable<DateTime<Utc>>,
-    end_time: Nullable<DateTime<Utc>>,
-}
-
-impl Table for CollectorProgress {
-    fn name() -> &'static str {
-        "collector_progress"
-    }
-
-    fn sqlite_attributes() -> &'static str {
-        "aid, step, start, end"
-    }
-
-    fn postgres_attributes() -> &'static str {
-        "aid, step, start_time, end_time"
-    }
-
-    fn postgres_generated_id_attribute() -> Option<&'static str> {
-        None
-    }
-
-    fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
-        let start: Option<i64> = row.get(2).unwrap();
-        let end: Option<i64> = row.get(3).unwrap();
-        let start_time = Nullable(start.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()));
-        let end_time = Nullable(end.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()));
-
-        writer
-            .serialize(CollectorProgressRow {
-                aid: row.get(0).unwrap(),
-                step: row.get_ref(1).unwrap().as_str().unwrap(),
-                start_time,
-                end_time,
             })
             .unwrap();
     }
@@ -355,64 +272,6 @@ impl Table for PstatSeries {
                 backend: row.get_ref(4).unwrap().as_str().unwrap(),
                 target: row.get_ref(5).unwrap().as_str().unwrap(),
                 metric: row.get_ref(6).unwrap().as_str().unwrap(),
-            })
-            .unwrap();
-    }
-}
-
-struct PullRequestBuild;
-
-#[derive(Serialize)]
-struct PullRequestBuildRow<'a> {
-    bors_sha: Nullable<&'a str>,
-    pr: i32,
-    parent_sha: Nullable<&'a str>,
-    complete: Nullable<bool>,
-    requested: Nullable<DateTime<Utc>>,
-    include: Nullable<&'a str>,
-    exclude: Nullable<&'a str>,
-    runs: Nullable<i32>,
-    commit_date: Nullable<DateTime<Utc>>,
-    backends: Nullable<&'a str>,
-}
-
-impl Table for PullRequestBuild {
-    fn name() -> &'static str {
-        "pull_request_build"
-    }
-
-    fn sqlite_attributes() -> &'static str {
-        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date, backends"
-    }
-
-    fn postgres_attributes() -> &'static str {
-        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date, backends"
-    }
-
-    fn postgres_generated_id_attribute() -> Option<&'static str> {
-        None
-    }
-
-    fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
-        let requested: Option<i64> = row.get(4).unwrap();
-        let commit_date: Option<i64> = row.get(8).unwrap();
-
-        writer
-            .serialize(PullRequestBuildRow {
-                bors_sha: row.get_ref(0).unwrap().try_into().unwrap(),
-                pr: row.get(1).unwrap(),
-                parent_sha: row.get_ref(2).unwrap().try_into().unwrap(),
-                complete: row.get(3).unwrap(),
-                requested: Nullable(
-                    requested.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()),
-                ),
-                include: row.get_ref(5).unwrap().try_into().unwrap(),
-                exclude: row.get_ref(6).unwrap().try_into().unwrap(),
-                runs: row.get(7).unwrap(),
-                commit_date: Nullable(
-                    commit_date.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()),
-                ),
-                backends: row.get_ref(9).unwrap().try_into().unwrap(),
             })
             .unwrap();
     }
@@ -731,14 +590,11 @@ async fn main() -> anyhow::Result<()> {
     disable_table_triggers(&postgres_tx, &tables).await;
     // Order matters to the extent necessary to satisfy foreign key constraints.
     copy::<Artifact>(&sqlite_tx, &postgres_tx).await;
-    copy::<ArtifactCollectionDuration>(&sqlite_tx, &postgres_tx).await;
     copy::<Benchmark>(&sqlite_tx, &postgres_tx).await;
     copy::<Collection>(&sqlite_tx, &postgres_tx).await;
-    copy::<CollectorProgress>(&sqlite_tx, &postgres_tx).await;
     copy::<Error>(&sqlite_tx, &postgres_tx).await;
     copy::<PstatSeries>(&sqlite_tx, &postgres_tx).await;
     copy::<Pstat>(&sqlite_tx, &postgres_tx).await;
-    copy::<PullRequestBuild>(&sqlite_tx, &postgres_tx).await;
     copy::<RawSelfProfile>(&sqlite_tx, &postgres_tx).await;
     copy::<RustcCompilation>(&sqlite_tx, &postgres_tx).await;
     copy::<RuntimePstatSeries>(&sqlite_tx, &postgres_tx).await;

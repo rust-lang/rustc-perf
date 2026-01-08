@@ -1249,7 +1249,7 @@ where
     async fn parent_of(&self, sha: &str) -> Option<String> {
         self.conn()
             .query_opt(
-                "select parent_sha from pull_request_build where bors_sha = $1",
+                "SELECT parent_sha FROM benchmark_request WHERE tag = $1",
                 &[&sha],
             )
             .await
@@ -1258,10 +1258,7 @@ where
     }
     async fn pr_of(&self, sha: &str) -> Option<u32> {
         self.conn()
-            .query_opt(
-                "select pr from pull_request_build where bors_sha = $1",
-                &[&sha],
-            )
+            .query_opt("SELECT pr FROM benchmark_request WHERE tag = $1", &[&sha])
             .await
             .unwrap()
             .map(|r| r.get::<_, i32>(0) as u32)

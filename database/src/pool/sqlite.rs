@@ -1034,28 +1034,12 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    async fn parent_of(&self, sha: &str) -> Option<String> {
-        let mut shas = self
-            .raw_ref()
-            .prepare_cached("select parent_sha from pull_request_build where bors_sha = ?")
-            .unwrap()
-            .query(params![sha])
-            .unwrap()
-            .mapped(|row| Ok(row.get(0).unwrap()))
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        shas.pop()
+    async fn parent_of(&self, _sha: &str) -> Option<String> {
+        None
     }
 
-    async fn pr_of(&self, sha: &str) -> Option<u32> {
-        self.raw_ref()
-            .query_row(
-                "select pr from pull_request_build where bors_sha = ?",
-                params![sha],
-                |row| Ok(row.get(0).unwrap()),
-            )
-            .optional()
-            .unwrap()
+    async fn pr_of(&self, _sha: &str) -> Option<u32> {
+        None
     }
 
     async fn list_self_profile(
