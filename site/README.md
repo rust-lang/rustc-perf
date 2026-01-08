@@ -25,8 +25,13 @@ You can build the website in multiple ways:
   
   # Build website binary
   $ cd ../..
+  $ cargo clean
   $ cargo build --bin site --release
   ```
+
+  A clean build with `cargo clean` is needed only if you compiled the site previously,
+  as static files are embedded into the binary in release mode.
+
   The `--release` flag is on purpose, reducing startup time 15x from roughly 15
   seconds to 1; this is on the production database and smaller data sets are
   likely to load considerably faster.
