@@ -371,23 +371,36 @@ impl PartialOrd for Scenario {
 pub enum Target {
     /// `x86_64-unknown-linux-gnu`
     X86_64UnknownLinuxGnu,
+
+    /// `aarch64-unknown-linux-gnu`
+    AArch64UnknownLinuxGnu,
 }
 
 impl Target {
     pub fn as_str(self) -> &'static str {
         match self {
             Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
+            Target::AArch64UnknownLinuxGnu => "aarch64-unknown-linux-gnu",
         }
     }
 
     pub fn all() -> Vec<Self> {
-        vec![Self::X86_64UnknownLinuxGnu]
+        vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn default_targets() -> Vec<Self> {
         vec![Self::X86_64UnknownLinuxGnu]
     }
 
+    #[cfg(target_arch = "aarch64")]
+    fn default_targets() -> Self {
+        vec![Self::AArch64UnknownLinuxGnu]
+    }
+
+    // 2026/01/12 (Jamesbarford) - presently rustc-perf only support `x86_64`'s
+    // in the pipeline and has two machines running. AArch64 will be run in
+    // the background and we do not want to wait for it to complete benchmarking
     pub fn is_optional(self) -> bool {
         self != Target::X86_64UnknownLinuxGnu
     }
@@ -398,6 +411,7 @@ impl FromStr for Target {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.to_ascii_lowercase().as_str() {
             "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
+            "aarch64-unknown-linux-gnu" => Target::AArch64UnknownLinuxGnu,
             _ => return Err(format!("{s} is not a valid target")),
         })
     }
