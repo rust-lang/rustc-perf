@@ -135,6 +135,67 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 BenchmarkSet { members: set_1 },
             ]
         }
+        Target::AArch64UnknownLinuxGnu => {
+            let set = vec![
+                compile(AWAIT_CALL_TREE),
+                compile(CARGO_0_87_1),
+                compile(BITMAPS_3_2_1),
+                compile(BITMAPS_3_2_1_NEW_SOLVER),
+                compile(CLAP_DERIVE_4_5_32),
+                compile(COERCIONS),
+                compile(CRANELIFT_CODEGEN_0_119_0),
+                compile(CTFE_STRESS_5),
+                compile(DEEP_VECTOR),
+                compile(DEEPLY_NESTED_MULTI),
+                compile(DERIVE),
+                compile(DIESEL_2_2_10),
+                compile(EXTERNS),
+                compile(EZA_0_21_2),
+                // We split here on x86_64 for the two machines
+                compile(HELLOWORLD),
+                compile(HELLOWORLD_TINY),
+                compile(HTML5EVER_0_31_0),
+                compile(HTML5EVER_0_31_0_NEW_SOLVER),
+                compile(HYPER_1_6_0),
+                compile(IMAGE_0_25_6),
+                compile(INCLUDE_BLOB),
+                compile(ISSUE_46449),
+                compile(ISSUE_58319),
+                compile(ISSUE_88862),
+                compile(LARGE_WORKSPACE),
+                compile(LIBC_0_2_172),
+                compile(MANY_ASSOC_ITEMS),
+                compile(MATCH_STRESS),
+                compile(NALGEBRA_0_33_0),
+                compile(NALGEBRA_0_33_0_NEW_SOLVER),
+                compile(PROJECTION_CACHING),
+                compile(REGEX_AUTOMATA_0_4_8),
+                compile(REGRESSION_31157),
+                compile(RIPGREP_14_1_1),
+                compile(RIPGREP_14_1_1_TINY),
+                compile(SERDE_1_0_219),
+                compile(SERDE_1_0_219_NEW_SOLVER),
+                compile(SERDE_1_0_219_THREADS4),
+                compile(SERDE_DERIVE_1_0_219),
+                compile(STM32F4_0_15_1),
+                compile(SYN_2_0_101),
+                compile(SYN_2_0_101_NEW_SOLVER),
+                compile(TOKEN_STREAM_STRESS),
+                compile(TT_MUNCHER),
+                compile(TUPLE_STRESS),
+                compile(TYPENUM_1_18_0),
+                compile(UCD),
+                compile(UNICODE_NORMALIZATION_0_1_24),
+                compile(UNIFY_LINEARLY),
+                compile(UNUSED_WARNINGS),
+                compile(WF_PROJECTION_STRESS_65510),
+                compile(WG_GRAMMAR),
+            ];
+
+            vec![BenchmarkSet {
+                members: stable.into_iter().chain(set).collect(),
+            }]
+        }
     }
 }
 
@@ -146,7 +207,7 @@ pub fn get_benchmark_set(id: BenchmarkSetId) -> BenchmarkSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::benchmark_set::{get_benchmark_sets_for_target, BenchmarkSetMember};
+    use crate::benchmark_set::{get_benchmark_sets_for_target, BenchmarkSet, BenchmarkSetMember};
     use crate::compile::benchmark::target::Target;
     use crate::compile::benchmark::{
         get_compile_benchmarks, BenchmarkName, CompileBenchmarkFilter,
@@ -154,14 +215,9 @@ mod tests {
     use std::collections::HashSet;
     use std::path::Path;
 
-    /// Sanity check for making sure that the expanded benchmark sets are non-overlapping and
-    /// complete, i.e. they don't miss any benchmarks.
-    #[test]
-    fn check_benchmark_set_x64() {
-        let sets = get_benchmark_sets_for_target(Target::X86_64UnknownLinuxGnu);
-
+    fn check_benchmark_sets(sets: &Vec<BenchmarkSet>) {
         // Assert set is unique
-        for set in &sets {
+        for set in sets {
             let hashset = set.members().iter().collect::<HashSet<_>>();
             assert_eq!(
                 set.members().len(),
@@ -211,5 +267,23 @@ mod tests {
             );
         }
         assert_eq!(all_members.len(), all_compile_benchmarks.len());
+    }
+
+    /// Sanity check for making sure that the expanded benchmark sets are non-overlapping and
+    /// complete, i.e. they don't miss any benchmarks.
+    #[test]
+    fn check_benchmark_set_x64() {
+        let sets = get_benchmark_sets_for_target(Target::X86_64UnknownLinuxGnu);
+
+        check_benchmark_sets(&sets);
+    }
+
+    #[test]
+    fn check_benchmark_set_aarch64() {
+        let sets = get_benchmark_sets_for_target(Target::AArch64UnknownLinuxGnu);
+
+        assert!(sets.len() == 1);
+
+        check_benchmark_sets(&sets);
     }
 }

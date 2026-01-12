@@ -103,6 +103,7 @@ impl<'a> BenchProcessor<'a> {
 
         let target = match target {
             Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
+            Target::AArch64UnknownLinuxGnu => database::Target::AArch64UnknownLinuxGnu,
         };
 
         let mut buf = FuturesUnordered::new();
