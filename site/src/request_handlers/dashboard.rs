@@ -1,12 +1,21 @@
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use crate::api::{dashboard, ServerResult};
 use crate::benchmark_metadata::get_stable_benchmark_names;
 use crate::load::SiteCtxt;
-use database::selector;
 use database::{self, metric::Metric, ArtifactId, Profile, Scenario};
+use database::{selector, Target};
 
-pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Response> {
+pub async fn handle_dashboard(
+    query: dashboard::Request,
+    ctxt: Arc<SiteCtxt>,
+) -> ServerResult<dashboard::Response> {
+    let target = match query.target {
+        Some(target) => Target::from_str(&target),
+        _ => Ok(Target::X86_64UnknownLinuxGnu),
+    }?;
+
     let index = ctxt.index.load();
     if index.artifacts().next().is_none() {
         return Ok(dashboard::Response::default());
@@ -80,7 +89,8 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
 
     let compile_benchmark_query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))
-        .metric(selector::Selector::One(Metric::WallTime));
+        .metric(selector::Selector::One(Metric::WallTime))
+        .target(selector::Selector::One(target));
 
     let summary_scenarios = ctxt.summary_scenarios();
     let aids = &artifact_ids;

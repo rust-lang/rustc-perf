@@ -1,7 +1,10 @@
 import Highcharts from "highcharts";
+import {createApp} from "vue";
 import {DASHBOARD_DATA_URL} from "../urls";
-
-import {getJson} from "../utils/requests";
+import Dashboard from "./dashboard/page.vue";
+import WithSuspense from "../components/with-suspense.vue";
+import {getUrlParams} from "../utils/navigation";
+import {getApi} from "../utils/requests";
 
 type ScaleKind = "linear" | "log";
 let scale: ScaleKind = "linear";
@@ -27,14 +30,12 @@ interface DashboardCompileBenchmarkCases {
 }
 
 interface DashboardResponse {
-  Ok: {
-    versions: [string];
-    check: DashboardCompileBenchmarkCases;
-    debug: DashboardCompileBenchmarkCases;
-    opt: DashboardCompileBenchmarkCases;
-    doc: DashboardCompileBenchmarkCases;
-    runtime: [number];
-  };
+  versions: [string];
+  check: DashboardCompileBenchmarkCases;
+  debug: DashboardCompileBenchmarkCases;
+  opt: DashboardCompileBenchmarkCases;
+  doc: DashboardCompileBenchmarkCases;
+  runtime: [number];
 }
 
 type Profile = "check" | "debug" | "opt" | "doc";
@@ -136,7 +137,7 @@ function renderRuntime(element: string, data: [number], versions: [string]) {
 }
 
 function populate_data(response: DashboardResponse) {
-  const data = response.Ok;
+  const data = response;
   render("check-average-times", "check", data.check, data.versions);
   render("debug-average-times", "debug", data.debug, data.versions);
   render("opt-average-times", "opt", data.opt, data.versions);
@@ -145,12 +146,55 @@ function populate_data(response: DashboardResponse) {
 }
 
 let response: DashboardResponse | null = null;
-async function make_data() {
-  if (!response) {
-    response = await getJson<DashboardResponse>(DASHBOARD_DATA_URL);
-  }
 
-  populate_data(response);
+async function make_data() {
+  // As we are not really rendering HTML on this page in the traditional VUE
+  // sense - to handle an error we render and empty chart where the title of
+  // the chart is the error.
+  if (!response) {
+    const urlParams = getUrlParams();
+    const apiResponse = await getApi(DASHBOARD_DATA_URL, urlParams);
+    if (apiResponse.ok) {
+      response = (await apiResponse.json()) as DashboardResponse;
+      populate_data(response);
+    } else {
+      const responseText = await apiResponse.text();
+      Highcharts.chart({
+        chart: {
+          renderTo: "check-average-times",
+          zooming: {
+            type: "xy",
+          },
+          type: "line",
+        },
+        title: {
+          text: `${responseText}`,
+        },
+        yAxis: {
+          title: {text: "Error"},
+          min: scale === "linear" ? 0 : undefined,
+          type: scale === "log" ? "logarithmic" : undefined,
+        },
+        xAxis: {
+          categories: [],
+          title: {text: "Error"},
+        },
+        series: [
+          {
+            showInLegend: false,
+            type: "line",
+            animation: false,
+            data: [],
+          },
+        ],
+      });
+    }
+  }
 }
 
 make_data();
+
+const app = createApp(WithSuspense, {
+  component: Dashboard,
+});
+app.mount("#app");
