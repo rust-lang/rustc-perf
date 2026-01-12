@@ -35,8 +35,7 @@ async fn create_benchmark_request_master_commits(
         .filter(|c| now.signed_duration_since(c.time) < chrono::Duration::days(29));
 
     for master_commit in master_commits {
-        if !index.contains_tag(&master_commit.sha) && conn.pr_of(&master_commit.sha).await.is_none()
-        {
+        if !index.contains_tag(&master_commit.sha) {
             let pr = master_commit.pr.unwrap_or(0);
             let benchmark = BenchmarkRequest::create_master(
                 &master_commit.sha,
@@ -345,12 +344,7 @@ pub async fn enqueue_benchmark_request(
                     // If the parent job has been deleted from the database
                     // but was already benchmarked then the collector will ignore
                     // it as it will see it already has results.
-
                     if let Some(parent_sha) = request.parent_sha() {
-                        // If the parent is in the old system, do not backfill it
-                        if tx.conn().parent_of(parent_sha).await.is_some() {
-                            continue;
-                        }
                         enqueue_job(
                             &mut tx,
                             parent_sha,
