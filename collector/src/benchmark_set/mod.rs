@@ -192,7 +192,9 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(WG_GRAMMAR),
             ];
 
-            vec![BenchmarkSet { members: set }]
+            vec![BenchmarkSet {
+                members: stable.into_iter().chain(set).collect(),
+            }]
         }
     }
 }
@@ -205,7 +207,7 @@ pub fn get_benchmark_set(id: BenchmarkSetId) -> BenchmarkSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::benchmark_set::{get_benchmark_sets_for_target, BenchmarkSetMember};
+    use crate::benchmark_set::{get_benchmark_sets_for_target, BenchmarkSet, BenchmarkSetMember};
     use crate::compile::benchmark::target::Target;
     use crate::compile::benchmark::{
         get_compile_benchmarks, BenchmarkName, CompileBenchmarkFilter,
@@ -213,14 +215,9 @@ mod tests {
     use std::collections::HashSet;
     use std::path::Path;
 
-    /// Sanity check for making sure that the expanded benchmark sets are non-overlapping and
-    /// complete, i.e. they don't miss any benchmarks.
-    #[test]
-    fn check_benchmark_set_x64() {
-        let sets = get_benchmark_sets_for_target(Target::X86_64UnknownLinuxGnu);
-
+    fn check_benchmark_sets(sets: &Vec<BenchmarkSet>) {
         // Assert set is unique
-        for set in &sets {
+        for set in sets {
             let hashset = set.members().iter().collect::<HashSet<_>>();
             assert_eq!(
                 set.members().len(),
@@ -270,5 +267,23 @@ mod tests {
             );
         }
         assert_eq!(all_members.len(), all_compile_benchmarks.len());
+    }
+
+    /// Sanity check for making sure that the expanded benchmark sets are non-overlapping and
+    /// complete, i.e. they don't miss any benchmarks.
+    #[test]
+    fn check_benchmark_set_x64() {
+        let sets = get_benchmark_sets_for_target(Target::X86_64UnknownLinuxGnu);
+
+        check_benchmark_sets(&sets);
+    }
+
+    #[test]
+    fn check_benchmark_set_aarch64() {
+        let sets = get_benchmark_sets_for_target(Target::AArch64UnknownLinuxGnu);
+
+        assert!(sets.len() == 1);
+
+        check_benchmark_sets(&sets);
     }
 }

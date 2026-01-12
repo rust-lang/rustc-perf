@@ -388,14 +388,8 @@ impl Target {
         vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
     }
 
-    #[cfg(target_arch = "x86_64")]
     pub fn default_targets() -> Vec<Self> {
         vec![Self::X86_64UnknownLinuxGnu]
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn default_targets() -> Self {
-        vec![Self::AArch64UnknownLinuxGnu]
     }
 
     // 2026/01/12 (Jamesbarford) - presently rustc-perf only support `x86_64`'s

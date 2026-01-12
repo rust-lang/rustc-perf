@@ -1040,7 +1040,7 @@ fn main_result() -> anyhow::Result<i32> {
                 iterations: Some(iterations),
                 is_self_profile: self_profile.self_profile,
                 bench_rustc: bench_rustc.bench_rustc,
-                targets: vec![Target::default()],
+                targets: vec![Target::host()],
             };
 
             rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
@@ -1119,7 +1119,7 @@ fn main_result() -> anyhow::Result<i32> {
                         scenarios,
                         backends,
                         &mut errors,
-                        &[Target::default()],
+                        &[Target::host()],
                     );
                     Ok(id)
                 };
@@ -2167,13 +2167,13 @@ async fn bench_published_artifact(
             iterations: Some(3),
             is_self_profile: false,
             bench_rustc: false,
-            targets: vec![Target::default()],
+            targets: vec![Target::host()],
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
             RuntimeBenchmarkFilter::keep_all(),
             DEFAULT_RUNTIME_ITERATIONS,
-            Target::default(),
+            Target::host(),
         )),
     )
     .await

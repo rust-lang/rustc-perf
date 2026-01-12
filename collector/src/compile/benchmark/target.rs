@@ -15,18 +15,6 @@ pub enum Target {
     AArch64UnknownLinuxGnu,
 }
 
-impl Default for Target {
-    #[cfg(target_arch = "x86_64")]
-    fn default() -> Self {
-        Self::X86_64UnknownLinuxGnu
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn default() -> Self {
-        Self::AArch64UnknownLinuxGnu
-    }
-}
-
 impl FromStr for Target {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -45,17 +33,25 @@ impl fmt::Display for Target {
 }
 
 impl Target {
-    pub fn all() -> Vec<Self> {
-        vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
-    }
-}
-
-impl Target {
     pub fn as_str(self) -> &'static str {
         match self {
             Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
             Target::AArch64UnknownLinuxGnu => "aarch64-unknown-linux-gnu",
         }
+    }
+
+    pub fn all() -> Vec<Self> {
+        vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub fn host() -> Self {
+        Self::X86_64UnknownLinuxGnu
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn host() -> Self {
+        Self::AArch64UnknownLinuxGnu
     }
 }
 
