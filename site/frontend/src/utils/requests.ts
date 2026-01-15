@@ -28,26 +28,6 @@ export async function getJson<T>(
   return await response.json();
 }
 
-export async function getApi(
-  path: string,
-  params: Dict<string> = {}
-): Promise<Response> {
-  let url = path;
-
-  if (Object.keys(params).length > 0) {
-    const urlParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== null) {
-        urlParams.set(key, value);
-      }
-    }
-    url = `${path}?${urlParams}`;
-  }
-
-  const response = await fetch(url, {});
-  return response;
-}
-
 export async function postMsgpack<T>(path: string, body: any): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
