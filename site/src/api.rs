@@ -68,6 +68,11 @@ pub mod dashboard {
         pub println_incr_averages: Vec<f64>,
     }
 
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub target: Option<String>,
+    }
+
     #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
         pub versions: Vec<String>,
