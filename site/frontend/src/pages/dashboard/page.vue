@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {ref, Ref} from "vue";
+import {ref, Ref, onMounted} from "vue";
 import Highcharts from "highcharts";
 
 import {getUrlParams} from "../../utils/navigation";
@@ -14,19 +14,19 @@ type TargetUrl = {
 };
 
 interface DashboardCompileBenchmarkCases {
-  clean_averages: [number];
-  base_incr_averages: [number];
-  clean_incr_averages: [number];
-  println_incr_averages: [number];
+  clean_averages: number[];
+  base_incr_averages: number[];
+  clean_incr_averages: number[];
+  println_incr_averages: number[];
 }
 
-interface DashboardResponse {
-  versions: [string];
+interface DashboardData {
+  versions: string[];
   check: DashboardCompileBenchmarkCases;
   debug: DashboardCompileBenchmarkCases;
   opt: DashboardCompileBenchmarkCases;
   doc: DashboardCompileBenchmarkCases;
-  runtime: [number];
+  runtime: number[];
 }
 
 const windowLocation = `${window.location.origin}${window.location.pathname}`;
@@ -44,7 +44,7 @@ const AArch64UnknownLinuxGnu = {
 const TargetUrls = [x86_64UnknownLinuxGnu, AArch64UnknownLinuxGnu];
 
 const scale: Ref<ScaleKind> = ref("linear");
-const response: Ref<DashboardResponse | null> = ref(null);
+const response: Ref<DashboardData | null> = ref(null);
 
 function handleScaleChange(e: Event) {
   const value = (e.target as HTMLInputElement).value;
@@ -60,7 +60,7 @@ function render(
   element: string,
   name: Profile,
   data: DashboardCompileBenchmarkCases,
-  versions: [string]
+  versions: string[]
 ) {
   let articles = {check: "a", debug: "a", opt: "an", doc: "a"};
 
@@ -113,7 +113,7 @@ function render(
   });
 }
 
-function renderRuntime(element: string, data: [number], versions: [string]) {
+function renderRuntime(element: string, data: number[], versions: string[]) {
   // Remove null and convert nanoseconds to miliseconds
   // The null values, which indicate that the runtime data is missing, are only present at the beginning of the array.
   const formattedData = data
@@ -165,16 +165,18 @@ async function getDataAndRenderCharts() {
   // TODO: error handling
   if (!response.value) {
     const urlParams = getUrlParams();
-    const apiResponse = await getJson<DashboardResponse>(
+    const apiResponse = await getJson<{Ok: DashboardData}>(
       DASHBOARD_DATA_URL,
       urlParams
     );
-    response.value = apiResponse;
+    response.value = apiResponse.Ok;
   }
   renderCharts();
 }
 
-getDataAndRenderCharts();
+onMounted(() => {
+  getDataAndRenderCharts();
+});
 
 function getActiveClass(target: TargetUrl): string {
   const params = getUrlParams();
