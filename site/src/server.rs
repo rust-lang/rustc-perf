@@ -73,27 +73,6 @@ impl Server {
             .unwrap())
     }
 
-    /// Handle an asynchrnous HTTP GET request
-    async fn handle_get_async<F, R, S>(
-        &self,
-        req: &Request,
-        handler: F,
-    ) -> Result<Response, ServerError>
-    where
-        F: FnOnce(Arc<SiteCtxt>) -> R,
-        R: std::future::Future<Output = S> + Send,
-        S: Serialize,
-    {
-        check_http_method!(*req.method(), http::Method::GET);
-        let ctxt = self.ctxt.clone();
-        let ctxt = ctxt.read().as_ref().unwrap().clone();
-        let result = handler(ctxt).await;
-        Ok(http::Response::builder()
-            .header_typed(ContentType::json())
-            .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
-            .unwrap())
-    }
-
     async fn handle_fallible_get_async<F, R, S, E>(
         &self,
         req: &Request,
@@ -257,8 +236,11 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     match path {
         "/perf/info" => return server.handle_get(&req, request_handlers::handle_info),
         "/perf/dashboard" => {
+            let query = check!(parse_query_string(req.uri()));
             return server
-                .handle_get_async(&req, request_handlers::handle_dashboard)
+                .handle_fallible_get_async(&req, &compression, |c| {
+                    request_handlers::handle_dashboard(query, c)
+                })
                 .await;
         }
         "/perf/status_page" => {
