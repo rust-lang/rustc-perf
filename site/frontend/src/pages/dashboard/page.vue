@@ -165,11 +165,11 @@ async function getDataAndRenderCharts() {
   // TODO: error handling
   if (!response.value) {
     const urlParams = getUrlParams();
-    const apiResponse = await getJson<{Ok: DashboardData}>(
+    const apiResponse = await getJson<DashboardData>(
       DASHBOARD_DATA_URL,
       urlParams
     );
-    response.value = apiResponse.Ok;
+    response.value = apiResponse;
   }
   renderCharts();
 }
