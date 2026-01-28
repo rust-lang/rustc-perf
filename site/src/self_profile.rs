@@ -29,8 +29,8 @@ pub struct Output {
 pub fn generate(
     title: &str,
     processor_type: ProcessorType,
-    self_profile_base_data: Option<Vec<u8>>,
-    self_profile_data: Vec<u8>,
+    self_profile_base_data: Option<ProfilingData>,
+    self_profile_data: ProfilingData,
     params: HashMap<String, String>,
 ) -> anyhow::Result<Output> {
     match processor_type {
