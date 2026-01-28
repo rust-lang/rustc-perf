@@ -8,7 +8,6 @@ use crate::load::SiteCtxt;
 use analyzeme::ProfilingData;
 use anyhow::Context;
 use collector::SelfProfileId;
-use database::ArtifactId;
 use lru::LruCache;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -70,14 +69,6 @@ pub fn generate(
     }
 }
 
-#[derive(Hash, Eq, PartialEq)]
-pub struct SelfProfileKey {
-    pub aid: ArtifactId,
-    pub benchmark: String,
-    pub profile: database::Profile,
-    pub scenario: database::Scenario,
-}
-
 #[derive(Default)]
 pub struct SelfProfileCacheStats {
     hits: u64,
@@ -105,7 +96,7 @@ impl SelfProfileCacheStats {
 /// page, but the post-processed results aren't very large in memory (~50 KiB), so it makes sense
 /// to cache them.
 pub struct SelfProfileCache {
-    profiles: LruCache<SelfProfileKey, SelfProfileWithAnalysis>,
+    profiles: LruCache<SelfProfileId, SelfProfileWithAnalysis>,
     stats: SelfProfileCacheStats,
 }
 
@@ -121,7 +112,7 @@ impl SelfProfileCache {
         &self.stats
     }
 
-    pub fn get(&mut self, key: &SelfProfileKey) -> Option<SelfProfileWithAnalysis> {
+    pub fn get(&mut self, key: &SelfProfileId) -> Option<SelfProfileWithAnalysis> {
         match self.profiles.get(key) {
             Some(value) => {
                 self.stats.hit();
@@ -134,7 +125,7 @@ impl SelfProfileCache {
         }
     }
 
-    pub fn insert(&mut self, key: SelfProfileKey, profile: SelfProfileWithAnalysis) {
+    pub fn insert(&mut self, key: SelfProfileId, profile: SelfProfileWithAnalysis) {
         self.profiles.put(key, profile);
     }
 }
@@ -148,32 +139,9 @@ pub struct SelfProfileWithAnalysis {
 
 async fn download_and_analyze_self_profile(
     ctxt: &SiteCtxt,
-    aid: ArtifactId,
-    benchmark: &str,
-    profile: database::Profile,
-    scenario: database::Scenario,
+    id: SelfProfileId,
     metric: Option<f64>,
 ) -> ServerResult<SelfProfileWithAnalysis> {
-    let conn = ctxt.conn().await;
-    let aids_and_cids = conn
-        .list_self_profile(
-            aid.clone(),
-            benchmark,
-            &profile.to_string(),
-            &scenario.to_string(),
-        )
-        .await;
-
-    let Some((anum, cid)) = aids_and_cids.first() else {
-        return Err(format!("no self-profile found for {aid}"));
-    };
-    let id = SelfProfileId {
-        artifact_id_number: *anum,
-        collection: *cid,
-        benchmark: benchmark.into(),
-        profile,
-        scenario,
-    };
     let profiling_data = ctxt
         .self_profile_storage
         .load(id)
@@ -185,8 +153,8 @@ async fn download_and_analyze_self_profile(
 
     let compilation_sections = compute_compilation_sections(&profiling_data);
     let profiling_data = profiling_data.perform_analysis();
-    let profile =
-        get_self_profile_data(metric, &profiling_data).map_err(|e| format!("{aid}: {e}"))?;
+    let profile = get_self_profile_data(metric, &profiling_data)
+        .map_err(|e| format!("Cannot load self-profile data: {e}"))?;
     Ok(SelfProfileWithAnalysis {
         profile,
         profiling_data,
@@ -261,26 +229,15 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
 
 pub(crate) async fn fetch_self_profile(
     ctxt: &SiteCtxt,
-    aid: ArtifactId,
-    benchmark: &str,
-    profile: database::Profile,
-    scenario: database::Scenario,
+    id: SelfProfileId,
     metric: Option<f64>,
 ) -> ServerResult<SelfProfileWithAnalysis> {
-    let key = SelfProfileKey {
-        aid: aid.clone(),
-        benchmark: benchmark.to_string(),
-        profile,
-        scenario,
-    };
-    let cache_result = ctxt.self_profile_cache.lock().get(&key);
+    let cache_result = ctxt.self_profile_cache.lock().get(&id);
     match cache_result {
         Some(res) => Ok(res),
         None => {
-            let profile =
-                download_and_analyze_self_profile(ctxt, aid, benchmark, profile, scenario, metric)
-                    .await?;
-            ctxt.self_profile_cache.lock().insert(key, profile.clone());
+            let profile = download_and_analyze_self_profile(ctxt, id.clone(), metric).await?;
+            ctxt.self_profile_cache.lock().insert(id, profile.clone());
             Ok(profile)
         }
     }

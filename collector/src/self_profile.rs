@@ -12,7 +12,7 @@ use std::time::Instant;
 // TODO: Record codegen backend in the self profile name
 // TODO: remove collection ID from self-profile ID
 /// Uniquely identifies a self-profile archive.
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct SelfProfileId {
     pub artifact_id_number: ArtifactIdNumber,
     pub collection: CollectionId,

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use collector::Bound;
+use collector::{Bound, SelfProfileId};
 
 use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
@@ -14,7 +14,7 @@ use database::interpolate::IsInterpolated;
 use database::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
-use database::{self, ArtifactId, CodegenBackend, Profile, Scenario, Target};
+use database::{self, ArtifactId, CodegenBackend, Connection, Profile, Scenario, Target};
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.
@@ -89,12 +89,33 @@ pub async fn handle_compile_detail_sections(
 
     async fn calculate_sections(
         ctxt: &SiteCtxt,
+        conn: &dyn Connection,
         aid: ArtifactId,
         benchmark: &str,
         profile: Profile,
         scenario: Scenario,
     ) -> Option<CompilationSections> {
-        fetch_self_profile(ctxt, aid, benchmark, profile, scenario, None)
+        let aids_and_cids = conn
+            .list_self_profile(
+                aid.clone(),
+                benchmark,
+                &profile.to_string(),
+                &scenario.to_string(),
+            )
+            .await;
+
+        let Some((anum, cid)) = aids_and_cids.first() else {
+            return None;
+        };
+
+        let id = SelfProfileId {
+            artifact_id_number: *anum,
+            collection: *cid,
+            benchmark: benchmark.into(),
+            profile,
+            scenario,
+        };
+        fetch_self_profile(ctxt, id, None)
             .await
             .ok()
             .map(|profile| CompilationSections {
@@ -106,11 +127,27 @@ pub async fn handle_compile_detail_sections(
         Profile::Check | Profile::Debug | Profile::Opt | Profile::Clippy => false,
         Profile::Doc | Profile::DocJson => true,
     };
+
     // Doc queries are not split into the classic frontend/backend/linker parts.
     let (before, after) = if !is_doc {
+        let conn = ctxt.conn().await;
         tokio::join!(
-            calculate_sections(&ctxt, start_artifact, &request.benchmark, profile, scenario),
-            calculate_sections(&ctxt, end_artifact, &request.benchmark, profile, scenario)
+            calculate_sections(
+                &ctxt,
+                &*conn,
+                start_artifact,
+                &request.benchmark,
+                profile,
+                scenario
+            ),
+            calculate_sections(
+                &ctxt,
+                &*conn,
+                end_artifact,
+                &request.benchmark,
+                profile,
+                scenario
+            )
         )
     } else {
         (None, None)

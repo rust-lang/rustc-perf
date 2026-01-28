@@ -563,27 +563,39 @@ pub async fn handle_self_profile(
     }
     let mut cpu_response = cpu_responses.remove(0).series;
 
-    let mut self_profile = fetch_self_profile(
-        ctxt,
-        commits.first().unwrap().clone(),
-        benchmark,
-        profile,
-        scenario,
-        cpu_response.next().unwrap().1,
-    )
-    .await?;
+    let mut self_profile = {
+        let id = get_self_profile_id(
+            ctxt,
+            benchmark.as_str(),
+            &match commits.first().unwrap().clone() {
+                ArtifactId::Commit(commit) => commit.sha,
+                ArtifactId::Tag(name) => name,
+            },
+            profile.as_str(),
+            &scenario.to_string(),
+            None,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        fetch_self_profile(ctxt, id, cpu_response.next().unwrap().1).await?
+    };
     let base_self_profile = match commits.get(1) {
-        Some(aid) => Some(
-            fetch_self_profile(
+        Some(aid) => {
+            let id = get_self_profile_id(
                 ctxt,
-                aid.clone(),
-                benchmark,
-                profile,
-                scenario,
-                cpu_response.next().unwrap().1,
+                benchmark.as_str(),
+                match aid {
+                    ArtifactId::Commit(commit) => commit.sha.as_str(),
+                    ArtifactId::Tag(name) => name.as_str(),
+                },
+                profile.as_str(),
+                &scenario.to_string(),
+                None,
             )
-            .await?,
-        ),
+            .await
+            .map_err(|e| e.to_string())?;
+            Some(fetch_self_profile(ctxt, id, cpu_response.next().unwrap().1).await?)
+        }
         None => None,
     };
     add_uninvoked_base_profile_queries(
