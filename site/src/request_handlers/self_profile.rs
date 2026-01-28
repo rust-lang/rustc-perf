@@ -53,18 +53,24 @@ pub async fn handle_self_profile_processed_download(
     let start = Instant::now();
 
     let base_data = if let Some(diff_against) = diff_against {
-        let id =
-            match get_self_profile_id(ctxt, &body.benchmark, &diff_against, &body.scenario, None)
-                .await
-            {
-                Ok(id) => id,
-                Err(error) => {
-                    log::error!("Cannot get self-profile ID: {error}");
-                    let mut resp = Response::new(error.to_string().into());
-                    *resp.status_mut() = StatusCode::BAD_REQUEST;
-                    return resp;
-                }
-            };
+        let id = match get_self_profile_id(
+            ctxt,
+            &body.benchmark,
+            &diff_against,
+            &body.profile,
+            &body.scenario,
+            None,
+        )
+        .await
+        {
+            Ok(id) => id,
+            Err(error) => {
+                log::error!("Cannot get self-profile ID: {error}");
+                let mut resp = Response::new(error.to_string().into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+                return resp;
+            }
+        };
         let data = match ctxt.self_profile_storage.load(id).await {
             Ok(Some(data)) => data,
             Ok(None) => {
@@ -91,6 +97,7 @@ pub async fn handle_self_profile_processed_download(
             ctxt,
             &body.benchmark,
             &body.commit,
+            &body.profile,
             &body.scenario,
             body.cid,
         )
@@ -180,19 +187,13 @@ async fn get_self_profile_id(
     ctxt: &SiteCtxt,
     benchmark: &str,
     commit: &str,
+    profile: &str,
     scenario: &str,
     cid: Option<i32>,
 ) -> anyhow::Result<SelfProfileId> {
-    let mut it = benchmark.rsplitn(2, '-');
-    let profile = it
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("no profile"))?
+    let profile = profile
         .parse::<Profile>()
         .map_err(|e| anyhow::anyhow!("Cannot parse profile: {e}"))?;
-    let bench_name = it
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("no benchmark name"))?;
-
     let scenario = scenario
         .parse::<database::Scenario>()
         .map_err(|e| anyhow::anyhow!("invalid scenario: {e:?}"))?;
@@ -206,7 +207,7 @@ async fn get_self_profile_id(
                 date: database::Date::empty(),
                 r#type: CommitType::Master,
             }),
-            bench_name,
+            benchmark,
             profile.as_str(),
             &scenario.to_id(),
         )
@@ -232,7 +233,7 @@ async fn get_self_profile_id(
     Ok(SelfProfileId {
         artifact_id_number: aid,
         collection: cid,
-        benchmark: bench_name.into(),
+        benchmark: benchmark.into(),
         profile,
         scenario,
     })
@@ -438,15 +439,11 @@ async fn get_self_profile_download_url(
     ctxt: &SiteCtxt,
 ) -> anyhow::Result<String> {
     log::info!("handle_self_profile_raw({:?})", body);
-    let mut it = body.benchmark.rsplitn(2, '-');
-    let profile = it
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("no profile"))?
+    let benchmark = &body.benchmark;
+    let profile = body
+        .profile
         .parse::<Profile>()
         .map_err(|e| anyhow::anyhow!("Cannot parse profile: {e}"))?;
-    let bench_name = it
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("no benchmark name"))?;
 
     let scenario = body
         .scenario
@@ -462,7 +459,7 @@ async fn get_self_profile_download_url(
                 date: database::Date::empty(),
                 r#type: CommitType::Master,
             }),
-            bench_name,
+            benchmark,
             profile.as_str(),
             &scenario.to_id(),
         )
@@ -488,7 +485,7 @@ async fn get_self_profile_download_url(
     let url = format!(
         "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.mm_profdata.sz",
         aid.0,
-        bench_name,
+        benchmark,
         profile,
         scenario.to_id(),
         cid,
@@ -514,13 +511,11 @@ pub async fn handle_self_profile(
     ctxt: &SiteCtxt,
 ) -> ServerResult<self_profile::Response> {
     log::info!("handle_self_profile({:?})", body);
-    let mut it = body.benchmark.rsplitn(2, '-');
-    let profile = it
-        .next()
-        .ok_or("no benchmark profile".to_string())?
-        .parse::<database::Profile>()
+    let benchmark = &body.benchmark;
+    let profile = body
+        .profile
+        .parse::<Profile>()
         .map_err(|e| format!("invalid profile: {e:?}"))?;
-    let bench_name = it.next().ok_or("no benchmark name".to_string())?;
     let scenario = body
         .scenario
         .parse::<database::Scenario>()
@@ -539,7 +534,7 @@ pub async fn handle_self_profile(
     };
 
     let query = selector::CompileBenchmarkQuery::default()
-        .benchmark(selector::Selector::One(bench_name.to_string()))
+        .benchmark(selector::Selector::One(benchmark.to_string()))
         .profile(selector::Selector::One(profile))
         .scenario(selector::Selector::One(scenario))
         .backend(selector::Selector::One(backend))
@@ -571,7 +566,7 @@ pub async fn handle_self_profile(
     let mut self_profile = fetch_self_profile(
         ctxt,
         commits.first().unwrap().clone(),
-        bench_name,
+        benchmark,
         profile,
         scenario,
         cpu_response.next().unwrap().1,
@@ -582,7 +577,7 @@ pub async fn handle_self_profile(
             fetch_self_profile(
                 ctxt,
                 aid.clone(),
-                bench_name,
+                benchmark,
                 profile,
                 scenario,
                 cpu_response.next().unwrap().1,
