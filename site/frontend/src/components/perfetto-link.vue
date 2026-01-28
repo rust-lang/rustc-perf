@@ -13,8 +13,9 @@ const props = defineProps<{
 const link = computed(() => {
   return chromeProfileUrl(
     props.artifact.commit,
-    `${props.testCase.benchmark}-${props.testCase.profile.toLowerCase()}`,
-    props.testCase.scenario
+    `${props.testCase.benchmark}`,
+    props.testCase.scenario,
+    props.testCase.profile.toLowerCase()
   );
 });
 

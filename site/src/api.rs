@@ -438,16 +438,10 @@ pub mod self_profile_raw {
     pub struct Request {
         pub commit: String,
         pub benchmark: String,
+        pub profile: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
         pub cid: Option<i32>,
-    }
-
-    #[derive(Debug, Clone, Serialize)]
-    pub struct Response {
-        pub cids: Vec<i32>,
-        pub cid: i32,
-        pub url: String,
     }
 }
 
@@ -469,6 +463,7 @@ pub mod self_profile_processed {
         pub benchmark: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
+        pub profile: String,
         pub cid: Option<i32>,
         #[serde(rename = "type")]
         pub processor_type: ProcessorType,
@@ -493,10 +488,11 @@ pub mod self_profile {
         pub commit: String,
         pub base_commit: Option<String>,
         pub benchmark: String,
+        pub profile: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
         // These fields are kept optional for backwards compatibility
-        // They can be make required e.g. in 2027
+        // They can be made required e.g. in 2027
         #[serde(default)]
         pub backend: Option<String>,
         #[serde(default)]

@@ -1041,7 +1041,7 @@ impl Connection for SqliteConnection {
         crate_: &str,
         profile: &str,
         scenario: &str,
-    ) -> Vec<(ArtifactIdNumber, i32)> {
+    ) -> Vec<(ArtifactIdNumber, CollectionId)> {
         self.raw_ref()
             .prepare(
                 "select aid, cid from raw_self_profile where
@@ -1061,7 +1061,12 @@ impl Connection for SqliteConnection {
                         ArtifactId::Tag(a) => a,
                     }
                 ],
-                |r| Ok((ArtifactIdNumber(r.get::<_, i32>(0)? as u32), r.get(1)?)),
+                |r| {
+                    Ok((
+                        ArtifactIdNumber(r.get::<_, i32>(0)? as u32),
+                        CollectionId(r.get(1)?),
+                    ))
+                },
             )
             .unwrap()
             .collect::<Result<_, _>>()

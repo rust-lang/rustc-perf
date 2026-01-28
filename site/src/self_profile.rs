@@ -7,12 +7,11 @@ use crate::api::{self_profile, ServerResult};
 use crate::load::SiteCtxt;
 use analyzeme::ProfilingData;
 use anyhow::Context;
-use bytes::Buf;
-use database::ArtifactId;
+use collector::SelfProfileId;
 use lru::LruCache;
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use std::{collections::HashMap, io::Read, time::Instant};
 
 mod codegen_schedule;
 pub mod crox;
@@ -29,8 +28,8 @@ pub struct Output {
 pub fn generate(
     title: &str,
     processor_type: ProcessorType,
-    self_profile_base_data: Option<Vec<u8>>,
-    self_profile_data: Vec<u8>,
+    self_profile_base_data: Option<ProfilingData>,
+    self_profile_data: ProfilingData,
     params: HashMap<String, String>,
 ) -> anyhow::Result<Output> {
     match processor_type {
@@ -70,70 +69,6 @@ pub fn generate(
     }
 }
 
-/// Extract self profile data from raw buffer
-pub(crate) fn extract_profiling_data(data: Vec<u8>) -> anyhow::Result<analyzeme::ProfilingData> {
-    analyzeme::ProfilingData::from_paged_buffer(data, None)
-        .map_err(|_| anyhow::Error::msg("could not parse profiling data"))
-}
-
-/// Fetches the raw self profile data for the given test case
-pub(crate) async fn fetch_raw_self_profile_data(
-    aid: database::ArtifactIdNumber,
-    benchmark: &str,
-    profile: &str,
-    scenario: database::Scenario,
-    cid: i32,
-) -> anyhow::Result<Vec<u8>> {
-    let url =
-        format!(
-        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.mm_profdata.sz",
-        aid.0, benchmark, profile, scenario.to_id(), cid,
-    );
-
-    get_self_profile_raw_data(&url).await
-}
-
-/// Fetch self profile data at the given URL
-pub(crate) async fn get_self_profile_raw_data(url: &str) -> anyhow::Result<Vec<u8>> {
-    log::trace!("downloading {}", url);
-
-    let start = Instant::now();
-    let resp = match reqwest::get(url).await {
-        Ok(r) => r,
-        Err(e) => anyhow::bail!("{:?}", e),
-    };
-
-    if !resp.status().is_success() {
-        anyhow::bail!(
-            "upstream status {:?} is not successful.\nurl={url}",
-            resp.status(),
-        )
-    }
-
-    let compressed = match resp.bytes().await {
-        Ok(b) => b,
-        Err(e) => {
-            anyhow::bail!("could not download from upstream: {:?}", e);
-        }
-    };
-
-    log::trace!(
-        "downloaded {} bytes in {:?}",
-        compressed.len(),
-        start.elapsed()
-    );
-
-    extract(&compressed)
-}
-
-#[derive(Hash, Eq, PartialEq)]
-pub struct SelfProfileKey {
-    pub aid: ArtifactId,
-    pub benchmark: String,
-    pub profile: String,
-    pub scenario: database::Scenario,
-}
-
 #[derive(Default)]
 pub struct SelfProfileCacheStats {
     hits: u64,
@@ -161,7 +96,7 @@ impl SelfProfileCacheStats {
 /// page, but the post-processed results aren't very large in memory (~50 KiB), so it makes sense
 /// to cache them.
 pub struct SelfProfileCache {
-    profiles: LruCache<SelfProfileKey, SelfProfileWithAnalysis>,
+    profiles: LruCache<SelfProfileId, SelfProfileWithAnalysis>,
     stats: SelfProfileCacheStats,
 }
 
@@ -177,7 +112,7 @@ impl SelfProfileCache {
         &self.stats
     }
 
-    pub fn get(&mut self, key: &SelfProfileKey) -> Option<SelfProfileWithAnalysis> {
+    pub fn get(&mut self, key: &SelfProfileId) -> Option<SelfProfileWithAnalysis> {
         match self.profiles.get(key) {
             Some(value) => {
                 self.stats.hit();
@@ -190,7 +125,7 @@ impl SelfProfileCache {
         }
     }
 
-    pub fn insert(&mut self, key: SelfProfileKey, profile: SelfProfileWithAnalysis) {
+    pub fn insert(&mut self, key: SelfProfileId, profile: SelfProfileWithAnalysis) {
         self.profiles.put(key, profile);
     }
 }
@@ -204,31 +139,22 @@ pub struct SelfProfileWithAnalysis {
 
 async fn download_and_analyze_self_profile(
     ctxt: &SiteCtxt,
-    aid: ArtifactId,
-    benchmark: &str,
-    profile: &str,
-    scenario: database::Scenario,
+    id: SelfProfileId,
     metric: Option<f64>,
 ) -> ServerResult<SelfProfileWithAnalysis> {
-    let conn = ctxt.conn().await;
-    let aids_and_cids = conn
-        .list_self_profile(aid.clone(), benchmark, profile, &scenario.to_string())
-        .await;
-
-    let Some((anum, cid)) = aids_and_cids.first() else {
-        return Err(format!("no self-profile found for {aid}"));
+    let profiling_data = ctxt
+        .self_profile_storage
+        .load(id)
+        .await
+        .map_err(|e| format!("Cannot fetch raw self-profile data: {e}"))?;
+    let Some(profiling_data) = profiling_data else {
+        return Err("Self-profile data was not found".to_string());
     };
-    let profiling_data =
-        match fetch_raw_self_profile_data(*anum, benchmark, profile, scenario, *cid).await {
-            Ok(d) => extract_profiling_data(d)
-                .map_err(|e| format!("error extracting self profiling data: {e}"))?,
-            Err(e) => return Err(format!("could not fetch raw profile data: {e:?}")),
-        };
 
     let compilation_sections = compute_compilation_sections(&profiling_data);
     let profiling_data = profiling_data.perform_analysis();
-    let profile =
-        get_self_profile_data(metric, &profiling_data).map_err(|e| format!("{aid}: {e}"))?;
+    let profile = get_self_profile_data(metric, &profiling_data)
+        .map_err(|e| format!("Cannot load self-profile data: {e}"))?;
     Ok(SelfProfileWithAnalysis {
         profile,
         profiling_data,
@@ -301,28 +227,17 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
     sections
 }
 
-pub(crate) async fn get_or_download_self_profile(
+pub(crate) async fn fetch_self_profile(
     ctxt: &SiteCtxt,
-    aid: ArtifactId,
-    benchmark: &str,
-    profile: &str,
-    scenario: database::Scenario,
+    id: SelfProfileId,
     metric: Option<f64>,
 ) -> ServerResult<SelfProfileWithAnalysis> {
-    let key = SelfProfileKey {
-        aid: aid.clone(),
-        benchmark: benchmark.to_string(),
-        profile: profile.to_string(),
-        scenario,
-    };
-    let cache_result = ctxt.self_profile_cache.lock().get(&key);
+    let cache_result = ctxt.self_profile_cache.lock().get(&id);
     match cache_result {
         Some(res) => Ok(res),
         None => {
-            let profile =
-                download_and_analyze_self_profile(ctxt, aid, benchmark, profile, scenario, metric)
-                    .await?;
-            ctxt.self_profile_cache.lock().insert(key, profile.clone());
+            let profile = download_and_analyze_self_profile(ctxt, id.clone(), metric).await?;
+            ctxt.self_profile_cache.lock().insert(id, profile.clone());
             Ok(profile)
         }
     }
@@ -401,13 +316,4 @@ fn get_self_profile_data(
         totals,
         artifact_sizes: Some(artifact_sizes),
     })
-}
-
-fn extract(compressed: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let mut data = Vec::new();
-    match snap::read::FrameDecoder::new(compressed.reader()).read_to_end(&mut data) {
-        Ok(v) => v,
-        Err(e) => anyhow::bail!("could not decode: {:?}", e),
-    };
-    Ok(data)
 }

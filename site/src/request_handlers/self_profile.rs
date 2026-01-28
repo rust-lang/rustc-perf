@@ -1,22 +1,18 @@
-use std::collections::HashSet;
-use std::io::Read;
-use std::sync::Arc;
-use std::time::Instant;
-
-use brotli::enc::BrotliEncoderParams;
-use bytes::Buf;
-use database::ArtifactId;
-use database::{metric::Metric, CommitType};
-use database::{selector, CodegenBackend, Target};
-use headers::{ContentType, Header};
-use hyper::StatusCode;
-
 use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
 use crate::load::SiteCtxt;
-use crate::self_profile::{get_or_download_self_profile, get_self_profile_raw_data};
-use crate::server::maybe_compressed_response;
-use crate::server::{Response, ResponseHeaders};
+use crate::self_profile::fetch_self_profile;
+use crate::server::{maybe_compressed_response, Response, ResponseHeaders};
+use brotli::enc::BrotliEncoderParams;
+use collector::SelfProfileId;
+use database::{metric::Metric, CollectionId, CommitType};
+use database::{selector, CodegenBackend, Target};
+use database::{ArtifactId, Profile};
+use headers::{ContentType, Header};
+use hyper::{Body, StatusCode};
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Instant;
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
@@ -55,59 +51,79 @@ pub async fn handle_self_profile_processed_download(
     let start = Instant::now();
 
     let base_data = if let Some(diff_against) = diff_against {
-        match handle_self_profile_raw(
-            self_profile_raw::Request {
-                commit: diff_against,
-                benchmark: body.benchmark.clone(),
-                scenario: body.scenario.clone(),
-                cid: None,
-            },
+        let id = match get_self_profile_id(
             ctxt,
+            &body.benchmark,
+            &diff_against,
+            &body.profile,
+            &body.scenario,
+            None,
         )
         .await
         {
-            Ok(v) => match get_self_profile_raw_data(&v.url).await {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    let mut resp = Response::new(e.to_string().into());
-                    *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                    return resp;
-                }
-            },
-            Err(e) => {
-                let mut resp = Response::new(e.into());
+            Ok(id) => id,
+            Err(error) => {
+                log::error!("Cannot get self-profile ID: {error}");
+                let mut resp = Response::new(error.to_string().into());
                 *resp.status_mut() = StatusCode::BAD_REQUEST;
                 return resp;
             }
-        }
+        };
+        let data = match ctxt.self_profile_storage.load(id).await {
+            Ok(Some(data)) => data,
+            Ok(None) => {
+                let mut resp = Response::new(
+                    format!("Self-profile data for {} not found", body.commit).into(),
+                );
+                *resp.status_mut() = StatusCode::NOT_FOUND;
+                return resp;
+            }
+            Err(error) => {
+                log::error!("Cannot get self-profile data: {error}");
+                let mut resp = Response::new(error.to_string().into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+                return resp;
+            }
+        };
+        Some(data)
     } else {
         None
     };
 
-    let data = match handle_self_profile_raw(
-        self_profile_raw::Request {
-            commit: body.commit,
-            benchmark: body.benchmark.clone(),
-            scenario: body.scenario.clone(),
-            cid: body.cid,
-        },
-        ctxt,
-    )
-    .await
-    {
-        Ok(v) => match get_self_profile_raw_data(&v.url).await {
-            Ok(v) => v,
-
-            Err(e) => {
-                let mut resp = Response::new(e.to_string().into());
-                *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+    let data = {
+        let id = match get_self_profile_id(
+            ctxt,
+            &body.benchmark,
+            &body.commit,
+            &body.profile,
+            &body.scenario,
+            body.cid,
+        )
+        .await
+        {
+            Ok(id) => id,
+            Err(error) => {
+                log::error!("Cannot get self-profile ID: {error}");
+                let mut resp = Response::new(error.to_string().into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
                 return resp;
             }
-        },
-        Err(e) => {
-            let mut resp = Response::new(e.into());
-            *resp.status_mut() = StatusCode::BAD_REQUEST;
-            return resp;
+        };
+        match ctxt.self_profile_storage.load(id).await {
+            Ok(Some(data)) => data,
+            Ok(None) => {
+                let mut resp = Response::new(
+                    format!("Self-profile data for {} not found", body.commit).into(),
+                );
+                *resp.status_mut() = StatusCode::NOT_FOUND;
+                return resp;
+            }
+            Err(error) => {
+                log::error!("Cannot get self-profile data: {error}");
+                let mut resp = Response::new(error.to_string().into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+                return resp;
+            }
         }
     };
 
@@ -163,6 +179,62 @@ pub async fn handle_self_profile_processed_download(
     } else {
         builder.body(hyper::Body::from(output.data)).unwrap()
     }
+}
+
+async fn get_self_profile_id(
+    ctxt: &SiteCtxt,
+    benchmark: &str,
+    commit: &str,
+    profile: &str,
+    scenario: &str,
+    cid: Option<i32>,
+) -> anyhow::Result<SelfProfileId> {
+    let profile = profile
+        .parse::<Profile>()
+        .map_err(|e| anyhow::anyhow!("Cannot parse profile: {e}"))?;
+    let scenario = scenario
+        .parse::<database::Scenario>()
+        .map_err(|e| anyhow::anyhow!("invalid scenario: {e:?}"))?;
+
+    let conn = ctxt.conn().await;
+
+    let aids_and_cids = conn
+        .list_self_profile(
+            ArtifactId::Commit(database::Commit {
+                sha: commit.to_owned(),
+                date: database::Date::empty(),
+                r#type: CommitType::Master,
+            }),
+            benchmark,
+            profile.as_str(),
+            &scenario.to_id(),
+        )
+        .await;
+    let (aid, first_cid) = aids_and_cids
+        .first()
+        .copied()
+        .ok_or_else(|| anyhow::anyhow!("No results for {commit}"))?;
+
+    let cid = match cid {
+        Some(cid) => {
+            if aids_and_cids.iter().any(|(_, v)| v.as_inner() == cid) {
+                CollectionId::from_inner(cid)
+            } else {
+                return Err(anyhow::anyhow!(
+                    "{cid} is not a collection ID at this artifact"
+                ));
+            }
+        }
+        _ => first_cid,
+    };
+
+    Ok(SelfProfileId {
+        artifact_id_number: aid,
+        collection: cid,
+        benchmark: benchmark.into(),
+        profile,
+        scenario,
+    })
 }
 
 // Add query data entries to `profile` for any queries in `base_profile` which are not present in
@@ -277,35 +349,41 @@ pub async fn handle_self_profile_raw_download(
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
     log::info!("handle_self_profile_raw_download({:?})", body);
-    let url = match handle_self_profile_raw(body, ctxt).await {
-        Ok(v) => v.url,
-        Err(e) => {
-            let mut resp = http::Response::new(e.into());
-            *resp.status_mut() = StatusCode::BAD_REQUEST;
+
+    let id = match get_self_profile_id(
+        ctxt,
+        &body.benchmark,
+        &body.commit,
+        &body.profile,
+        &body.scenario,
+        body.cid,
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(error) => {
+            let mut resp =
+                http::Response::new(format!("Cannot find self-profile data: {error}").into());
+            *resp.status_mut() = StatusCode::NOT_FOUND;
             return resp;
         }
     };
-    log::trace!("downloading {}", url);
-
-    let resp = match reqwest::get(&url).await {
-        Ok(r) => r,
-        Err(e) => {
-            let mut resp = http::Response::new(format!("{e:?}").into());
+    let bytes = match ctxt.self_profile_storage.load_raw(id).await {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => {
+            let mut resp = http::Response::new("Cannot find self-profile data".into());
+            *resp.status_mut() = StatusCode::NOT_FOUND;
+            return resp;
+        }
+        Err(error) => {
+            let mut resp =
+                http::Response::new(format!("Cannot download self-profile data: {error}").into());
             *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             return resp;
         }
     };
 
-    if !resp.status().is_success() {
-        let mut resp = http::Response::new(
-            format!("upstream status {:?} is not successful", resp.status()).into(),
-        );
-        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-        return resp;
-    }
-
-    let (sender, body) = hyper::Body::channel();
-    let mut server_resp = http::Response::new(body);
+    let mut server_resp = http::Response::new(Body::from(bytes));
     let mut header = vec![];
     ContentType::octet_stream().encode(&mut header);
     server_resp
@@ -319,146 +397,24 @@ pub async fn handle_self_profile_raw_download(
         .expect("valid header"),
     );
     *server_resp.status_mut() = StatusCode::OK;
-    tokio::spawn(tarball(resp, sender));
     server_resp
 }
 
-async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
-    // Ideally, we would stream the response though the snappy decoding, but
-    // snappy doesn't support that AFAICT -- we'd need it to implement AsyncRead
-    // or correctly handle WouldBlock, and neither is true.
-    let input = match resp.bytes().await {
-        Ok(b) => b,
-        Err(e) => {
-            log::error!("failed to receive data: {:?}", e);
-            sender.abort();
-            return;
-        }
-    };
-    let mut decoder = snap::read::FrameDecoder::new(input.reader());
-    let mut buffer = vec![0; 32 * 1024];
-    loop {
-        match decoder.read(&mut buffer[..]) {
-            Ok(0) => return,
-            Ok(length) => {
-                if let Err(e) = sender
-                    .send_data(bytes::Bytes::copy_from_slice(&buffer[..length]))
-                    .await
-                {
-                    log::error!("failed to send data: {:?}", e);
-                    sender.abort();
-                    return;
-                }
-            }
-            Err(e) => {
-                log::error!("failed to fill buffer: {:?}", e);
-                sender.abort();
-                return;
-            }
-        }
-    }
-}
-
-pub async fn handle_self_profile_raw(
-    body: self_profile_raw::Request,
-    ctxt: &SiteCtxt,
-) -> ServerResult<self_profile_raw::Response> {
-    log::info!("handle_self_profile_raw({:?})", body);
-    let mut it = body.benchmark.rsplitn(2, '-');
-    let profile = it.next().ok_or("no benchmark type".to_string())?;
-    let bench_name = it.next().ok_or("no benchmark name".to_string())?;
-
-    let scenario = body
-        .scenario
-        .parse::<database::Scenario>()
-        .map_err(|e| format!("invalid run name: {e:?}"))?;
-
-    let conn = ctxt.conn().await;
-
-    let aids_and_cids = conn
-        .list_self_profile(
-            ArtifactId::Commit(database::Commit {
-                sha: body.commit.clone(),
-                date: database::Date::empty(),
-                r#type: CommitType::Master,
-            }),
-            bench_name,
-            profile,
-            &body.scenario,
-        )
-        .await;
-    let (aid, first_cid) = aids_and_cids
-        .first()
-        .copied()
-        .ok_or_else(|| format!("No results for {}", body.commit))?;
-
-    let cid = match body.cid {
-        Some(cid) => {
-            if aids_and_cids.iter().any(|(_, v)| *v == cid) {
-                cid
-            } else {
-                return Err(format!("{cid} is not a collection ID at this artifact"));
-            }
-        }
-        _ => first_cid,
-    };
-
-    let cids = aids_and_cids
-        .into_iter()
-        .map(|(_, cid)| cid)
-        .collect::<Vec<_>>();
-
-    let url_prefix = format!(
-        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}",
-        aid.0,
-        bench_name,
-        profile,
-        scenario.to_id(),
-        cid,
-    );
-
-    return match fetch(&cids, cid, format!("{url_prefix}.mm_profdata.sz")).await {
-        Ok(fetched) => Ok(fetched),
-        Err(new_error) => Err(format!("mm_profdata download failed: {new_error:?}",)),
-    };
-
-    async fn fetch(
-        cids: &[i32],
-        cid: i32,
-        url: String,
-    ) -> ServerResult<self_profile_raw::Response> {
-        let resp = reqwest::Client::new()
-            .head(&url)
-            .send()
-            .await
-            .map_err(|e| format!("fetching artifact: {e:?}"))?;
-        if !resp.status().is_success() {
-            return Err(format!(
-                "Artifact did not resolve successfully: {:?} received",
-                resp.status()
-            ));
-        }
-
-        Ok(self_profile_raw::Response {
-            cids: cids.to_vec(),
-            cid,
-            url,
-        })
-    }
-}
-
+/// Loads self-profile and query data for the "Detailed results" page.
 pub async fn handle_self_profile(
     body: self_profile::Request,
     ctxt: &SiteCtxt,
 ) -> ServerResult<self_profile::Response> {
     log::info!("handle_self_profile({:?})", body);
-    let mut it = body.benchmark.rsplitn(2, '-');
-    let profile = it.next().ok_or("no benchmark type".to_string())?;
-    let bench_name = it.next().ok_or("no benchmark name".to_string())?;
+    let benchmark = &body.benchmark;
+    let profile = body
+        .profile
+        .parse::<Profile>()
+        .map_err(|e| format!("invalid profile: {e:?}"))?;
     let scenario = body
         .scenario
         .parse::<database::Scenario>()
-        .map_err(|e| format!("invalid run name: {e:?}"))?;
+        .map_err(|e| format!("invalid scenario: {e:?}"))?;
     let index = ctxt.index.load();
 
     let backend: CodegenBackend = if let Some(backend) = body.backend {
@@ -473,8 +429,8 @@ pub async fn handle_self_profile(
     };
 
     let query = selector::CompileBenchmarkQuery::default()
-        .benchmark(selector::Selector::One(bench_name.to_string()))
-        .profile(selector::Selector::One(profile.parse().unwrap()))
+        .benchmark(selector::Selector::One(benchmark.to_string()))
+        .profile(selector::Selector::One(profile))
         .scenario(selector::Selector::One(scenario))
         .backend(selector::Selector::One(backend))
         .target(selector::Selector::One(target))
@@ -494,35 +450,49 @@ pub async fn handle_self_profile(
     let commits = Arc::new(commits);
 
     let mut cpu_responses = ctxt.statistic_series(query, commits.clone()).await?;
-    if cpu_responses.len() != 1 {
+    if cpu_responses.len() > 1 {
         return Err(
             "The database query returned multiple results for the given commit. This is a bug."
                 .to_string(),
         );
+    } else if cpu_responses.is_empty() {
+        return Err("No self-profile data was found.".to_string());
     }
     let mut cpu_response = cpu_responses.remove(0).series;
 
-    let mut self_profile = get_or_download_self_profile(
-        ctxt,
-        commits.first().unwrap().clone(),
-        bench_name,
-        profile,
-        scenario,
-        cpu_response.next().unwrap().1,
-    )
-    .await?;
+    let mut self_profile = {
+        let id = get_self_profile_id(
+            ctxt,
+            benchmark.as_str(),
+            &match commits.first().unwrap().clone() {
+                ArtifactId::Commit(commit) => commit.sha,
+                ArtifactId::Tag(name) => name,
+            },
+            profile.as_str(),
+            &scenario.to_string(),
+            None,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        fetch_self_profile(ctxt, id, cpu_response.next().unwrap().1).await?
+    };
     let base_self_profile = match commits.get(1) {
-        Some(aid) => Some(
-            get_or_download_self_profile(
+        Some(aid) => {
+            let id = get_self_profile_id(
                 ctxt,
-                aid.clone(),
-                bench_name,
-                profile,
-                scenario,
-                cpu_response.next().unwrap().1,
+                benchmark.as_str(),
+                match aid {
+                    ArtifactId::Commit(commit) => commit.sha.as_str(),
+                    ArtifactId::Tag(name) => name.as_str(),
+                },
+                profile.as_str(),
+                &scenario.to_string(),
+                None,
             )
-            .await?,
-        ),
+            .await
+            .map_err(|e| e.to_string())?;
+            Some(fetch_self_profile(ctxt, id, cpu_response.next().unwrap().1).await?)
+        }
         None => None,
     };
     add_uninvoked_base_profile_queries(

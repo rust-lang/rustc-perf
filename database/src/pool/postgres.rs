@@ -1284,7 +1284,7 @@ where
         crate_: &str,
         profile: &str,
         scenario: &str,
-    ) -> Vec<(ArtifactIdNumber, i32)> {
+    ) -> Vec<(ArtifactIdNumber, CollectionId)> {
         self.conn()
             .query(
                 "
@@ -1307,7 +1307,12 @@ where
             .await
             .unwrap()
             .into_iter()
-            .map(|r| (ArtifactIdNumber(r.get::<_, i32>(0) as u32), r.get(1)))
+            .map(|r| {
+                (
+                    ArtifactIdNumber(r.get::<_, i32>(0) as u32),
+                    CollectionId(r.get(1)),
+                )
+            })
             .collect()
     }
 
