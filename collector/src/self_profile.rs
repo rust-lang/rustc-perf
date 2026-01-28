@@ -48,6 +48,11 @@ impl LocalSelfProfileStorage {
             directory: dir.to_owned(),
         }
     }
+
+    /// Create local self-profile storage located at a local path on disk.
+    pub fn default_path() -> Self {
+        Self::new(Path::new("self-profile-storage"))
+    }
 }
 
 impl SelfProfileStorage for LocalSelfProfileStorage {
