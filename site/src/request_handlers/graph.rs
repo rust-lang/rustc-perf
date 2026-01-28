@@ -104,9 +104,7 @@ pub async fn handle_compile_detail_sections(
             )
             .await;
 
-        let Some((anum, cid)) = aids_and_cids.first() else {
-            return None;
-        };
+        let (anum, cid) = aids_and_cids.first()?;
 
         let id = SelfProfileId {
             artifact_id_number: *anum,

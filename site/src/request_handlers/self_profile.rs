@@ -450,11 +450,13 @@ pub async fn handle_self_profile(
     let commits = Arc::new(commits);
 
     let mut cpu_responses = ctxt.statistic_series(query, commits.clone()).await?;
-    if cpu_responses.len() != 1 {
+    if cpu_responses.len() > 1 {
         return Err(
             "The database query returned multiple results for the given commit. This is a bug."
                 .to_string(),
         );
+    } else if cpu_responses.is_empty() {
+        return Err("No self-profile data was found.".to_string());
     }
     let mut cpu_response = cpu_responses.remove(0).series;
 
