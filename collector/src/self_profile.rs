@@ -3,6 +3,7 @@ use crate::compile::execute::SelfProfileFiles;
 use analyzeme::ProfilingData;
 use anyhow::Context;
 use database::{ArtifactIdNumber, CollectionId, Profile, Scenario};
+use reqwest::StatusCode;
 use std::future::Future;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -214,6 +215,10 @@ impl SelfProfileStorage for S3SelfProfileStorage {
             };
 
             if !resp.status().is_success() {
+                // Hitting an unknown path is returned as forbidden
+                if resp.status() == StatusCode::FORBIDDEN {
+                    return Ok(None);
+                }
                 return Err(anyhow::anyhow!(
                     "Upstream status {:?} is not successful.\nurl={url}",
                     resp.status(),
