@@ -218,12 +218,19 @@ async fn download_and_analyze_self_profile(
     let Some((anum, cid)) = aids_and_cids.first() else {
         return Err(format!("no self-profile found for {aid}"));
     };
-    let profiling_data =
-        match fetch_raw_self_profile_data(*anum, benchmark, profile, scenario, *cid).await {
-            Ok(d) => extract_profiling_data(d)
-                .map_err(|e| format!("error extracting self profiling data: {e}"))?,
-            Err(e) => return Err(format!("could not fetch raw profile data: {e:?}")),
-        };
+    let profiling_data = match fetch_raw_self_profile_data(
+        *anum,
+        benchmark,
+        profile,
+        scenario,
+        cid.as_inner(),
+    )
+    .await
+    {
+        Ok(d) => extract_profiling_data(d)
+            .map_err(|e| format!("error extracting self profiling data: {e}"))?,
+        Err(e) => return Err(format!("could not fetch raw profile data: {e:?}")),
+    };
 
     let compilation_sections = compute_compilation_sections(&profiling_data);
     let profiling_data = profiling_data.perform_analysis();

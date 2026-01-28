@@ -394,18 +394,18 @@ pub async fn handle_self_profile_raw(
 
     let cid = match body.cid {
         Some(cid) => {
-            if aids_and_cids.iter().any(|(_, v)| *v == cid) {
+            if aids_and_cids.iter().any(|(_, v)| v.as_inner() == cid) {
                 cid
             } else {
                 return Err(format!("{cid} is not a collection ID at this artifact"));
             }
         }
-        _ => first_cid,
+        _ => first_cid.as_inner(),
     };
 
     let cids = aids_and_cids
         .into_iter()
-        .map(|(_, cid)| cid)
+        .map(|(_, cid)| cid.as_inner())
         .collect::<Vec<_>>();
 
     let url_prefix = format!(

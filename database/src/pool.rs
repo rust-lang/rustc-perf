@@ -166,7 +166,7 @@ pub trait Connection: Send + Sync {
         crate_: &str,
         profile: &str,
         cache: &str,
-    ) -> Vec<(ArtifactIdNumber, i32)>;
+    ) -> Vec<(ArtifactIdNumber, CollectionId)>;
 
     /// Removes all data associated with the given artifact.
     async fn purge_artifact(&self, aid: &ArtifactId);

@@ -821,6 +821,12 @@ impl fmt::Display for CollectionId {
     }
 }
 
+impl CollectionId {
+    pub fn as_inner(&self) -> i32 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CompileBenchmark {
     pub name: String,
