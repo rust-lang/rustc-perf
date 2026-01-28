@@ -4,6 +4,7 @@ use crate::load::SiteCtxt;
 use crate::self_profile::fetch_self_profile;
 use crate::server::{maybe_compressed_response, Response, ResponseHeaders};
 use brotli::enc::BrotliEncoderParams;
+use collector::compile::benchmark::BenchmarkName;
 use collector::SelfProfileId;
 use database::{metric::Metric, CommitType};
 use database::{selector, CodegenBackend, Target};
@@ -204,35 +205,47 @@ async fn get_self_profile_id(
     let target = target
         .parse::<Target>()
         .map_err(|e| anyhow::anyhow!("invalid target: {e:?}"))?;
+    let benchmark: BenchmarkName = benchmark.into();
 
     let conn = ctxt.conn().await;
 
+    let aid = ArtifactId::Commit(database::Commit {
+        sha: commit.to_owned(),
+        date: database::Date::empty(),
+        r#type: CommitType::Master,
+    });
+    // This exists only for backwards compatibility with old self-profile data
+    // Remove in Q3 2026
     let aids_and_cids = conn
         .list_self_profile(
-            ArtifactId::Commit(database::Commit {
-                sha: commit.to_owned(),
-                date: database::Date::empty(),
-                r#type: CommitType::Master,
-            }),
-            benchmark,
+            aid.clone(),
+            benchmark.0.as_str(),
             profile.as_str(),
             &scenario.to_id(),
         )
         .await;
-    let (aid, first_cid) = aids_and_cids
-        .first()
-        .copied()
-        .ok_or_else(|| anyhow::anyhow!("No results for {commit}"))?;
 
-    Ok(SelfProfileId {
-        artifact_id_number: aid,
-        collection: first_cid,
-        benchmark: benchmark.into(),
-        profile,
-        scenario,
-        codegen_backend: backend,
-        target,
-    })
+    let id = match aids_and_cids.first().copied() {
+        // We have a record in the DB, assume that it is the legacy ID
+        Some((aid, first_cid)) => SelfProfileId::Legacy {
+            artifact_id_number: aid,
+            collection: first_cid,
+            benchmark,
+            profile,
+            scenario,
+        },
+        // No record in the DB, assume that it is the new ID
+        None => SelfProfileId::Simple {
+            artifact_id: aid,
+            benchmark,
+            profile,
+            scenario,
+            backend,
+            target,
+        },
+    };
+
+    Ok(id)
 }
 
 // Add query data entries to `profile` for any queries in `base_profile` which are not present in

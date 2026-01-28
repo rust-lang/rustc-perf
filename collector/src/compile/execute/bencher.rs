@@ -14,7 +14,7 @@ use crate::utils::git::get_rustc_perf_commit;
 use crate::{CollectorCtx, SelfProfileStorage};
 use database::CollectionId;
 use futures::stream::FuturesUnordered;
-use futures::{future, StreamExt};
+use futures::StreamExt;
 use std::future::Future;
 use std::pin::Pin;
 use std::process::Command;
@@ -23,7 +23,6 @@ use std::{env, process};
 use tokio::task::JoinSet;
 
 pub struct RecordedSelfProfile {
-    collection: CollectionId,
     scenario: database::Scenario,
     profile: database::Profile,
     codegen_backend: database::CodegenBackend,
@@ -196,7 +195,6 @@ impl Processor for BenchProcessor<'_> {
 
                     if let Some(files) = res.2 {
                         self.self_profiles.push(RecordedSelfProfile {
-                            collection,
                             scenario,
                             profile,
                             codegen_backend: data.backend.into(),
@@ -250,21 +248,6 @@ impl Processor for BenchProcessor<'_> {
     fn postprocess_results<'b>(&'b mut self) -> Pin<Box<dyn Future<Output = ()> + 'b>> {
         Box::pin(async move {
             if let Some(self_profile_storage) = self.self_profile_storage {
-                let futs = self
-                    .self_profiles
-                    .iter()
-                    .map(|profile| {
-                        self.conn.record_raw_self_profile(
-                            profile.collection,
-                            self.collector_ctx.artifact_row_id,
-                            self.benchmark.0.as_str(),
-                            profile.profile,
-                            profile.scenario,
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                future::join_all(futs).await;
-
                 let start = Instant::now();
                 let profile_count = self.self_profiles.len();
 
@@ -277,13 +260,12 @@ impl Processor for BenchProcessor<'_> {
                         }
                     }
 
-                    let id = SelfProfileId {
-                        artifact_id_number: self.collector_ctx.artifact_row_id,
-                        collection: profile.collection,
+                    let id = SelfProfileId::Simple {
+                        artifact_id: self.collector_ctx.artifact_id.clone(),
                         benchmark: self.benchmark.clone(),
                         profile: profile.profile,
                         scenario: profile.scenario,
-                        codegen_backend: profile.codegen_backend,
+                        backend: profile.codegen_backend,
                         target: profile.target,
                     };
                     futures.spawn(self_profile_storage.store(id, profile.files));

@@ -71,18 +71,6 @@ pub trait Connection: Send + Sync {
         target: Target,
         value: f64,
     );
-    /// Records a self-profile artifact in S3.
-    ///
-    /// The upload is a separate step (which may fail or be canceled, but that's
-    /// fine, the database just stores that the files *may* be there).
-    async fn record_raw_self_profile(
-        &self,
-        collection: CollectionId,
-        artifact: ArtifactIdNumber,
-        benchmark: &str,
-        profile: Profile,
-        scenario: Scenario,
-    );
     async fn record_error(
         &self,
         artifact: ArtifactIdNumber,

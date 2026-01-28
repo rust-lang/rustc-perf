@@ -784,15 +784,6 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
     }
-    async fn record_raw_self_profile(
-        &self,
-        _collection: CollectionId,
-        _artifact: ArtifactIdNumber,
-        _benchmark: &str,
-        _profile: Profile,
-        _scenario: crate::Scenario,
-    ) {
-    }
 
     async fn record_error(
         &self,
