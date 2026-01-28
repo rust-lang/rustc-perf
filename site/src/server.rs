@@ -20,8 +20,8 @@ use serde::Serialize;
 use uuid::Uuid;
 
 pub use crate::api::{
-    self, bootstrap, comparison, dashboard, github, graphs, info, self_profile, self_profile_raw,
-    status, triage, ServerResult,
+    self, bootstrap, comparison, dashboard, github, graphs, info, self_profile, status, triage,
+    ServerResult,
 };
 use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
@@ -389,10 +389,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         }
         "/perf/self-profile" => Ok(to_response(
             request_handlers::handle_self_profile(check!(parse_body(&body)), &ctxt).await,
-            &compression,
-        )),
-        "/perf/self-profile-raw" => Ok(to_response(
-            request_handlers::handle_self_profile_raw(check!(parse_body(&body)), &ctxt).await,
             &compression,
         )),
         "/perf/bootstrap" => Ok(

@@ -1,31 +1,82 @@
 use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute::SelfProfileFiles;
+use analyzeme::ProfilingData;
 use anyhow::Context;
-use database::{ArtifactIdNumber, CollectionId, Profile, Scenario};
+use database::{
+    ArtifactId, ArtifactIdNumber, CodegenBackend, CollectionId, Profile, Scenario, Target,
+};
+use reqwest::StatusCode;
 use std::future::Future;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::time::Instant;
 
-// TODO: Record codegen backend in the self profile name
-// TODO: remove collection ID from self-profile ID
 /// Uniquely identifies a self-profile archive.
-#[derive(Debug)]
-pub struct SelfProfileId {
-    pub artifact_id_number: ArtifactIdNumber,
-    pub collection: CollectionId,
-    pub benchmark: BenchmarkName,
-    pub profile: Profile,
-    pub scenario: Scenario,
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+pub enum SelfProfileId {
+    /// Legacy ID with artifact ID number and collection ID
+    /// Exists for backwards compatibility with old self-profile links.
+    /// TODO: remove in Q3 2026
+    Legacy {
+        artifact_id_number: ArtifactIdNumber,
+        collection: CollectionId,
+        benchmark: BenchmarkName,
+        profile: Profile,
+        scenario: Scenario,
+    },
+    /// Simplified ID with artifact name and without collection ID
+    Simple {
+        artifact_id: ArtifactId,
+        benchmark: BenchmarkName,
+        profile: Profile,
+        scenario: Scenario,
+        backend: CodegenBackend,
+        target: Target,
+    },
 }
 
 impl SelfProfileId {
-    fn file_prefix(&self) -> PathBuf {
-        PathBuf::from("self-profile")
-            .join(self.artifact_id_number.0.to_string())
-            .join(self.benchmark.0.as_str())
-            .join(self.profile.to_string())
-            .join(self.scenario.to_id())
+    fn relative_file_path(&self) -> PathBuf {
+        match self {
+            //  self-profile/<artifact id number>/<benchmark>/<profile>/<scenario>
+            //    /self-profile-<collection-id>.mm_profdata.sz
+            SelfProfileId::Legacy {
+                profile,
+                benchmark,
+                collection,
+                artifact_id_number,
+                scenario,
+            } => PathBuf::from("self-profile")
+                .join(artifact_id_number.0.to_string())
+                .join(benchmark.0.as_str())
+                .join(profile.to_string())
+                .join(scenario.to_id())
+                .join(format!("self-profile-{collection}.mm_profdata.sz")),
+            //  self-profile/<artifact id>/<benchmark>/<target>/<backend>/<profile>/<scenario>
+            //    /self-profile.mm_profdata.sz
+            SelfProfileId::Simple {
+                artifact_id,
+                benchmark,
+                profile,
+                scenario,
+                backend: codegen_backend,
+                target,
+            } => {
+                let artifact_name = match artifact_id {
+                    ArtifactId::Commit(c) => &c.sha,
+                    ArtifactId::Tag(name) => name,
+                };
+                PathBuf::from("self-profile")
+                    .join(artifact_name)
+                    .join(benchmark.0.as_str())
+                    .join(target.to_string())
+                    .join(codegen_backend.to_string())
+                    .join(profile.to_string())
+                    .join(scenario.to_id())
+                    .join("self-profile.mm_profdata.sz")
+            }
+        }
     }
 }
 
@@ -36,6 +87,31 @@ pub trait SelfProfileStorage {
         id: SelfProfileId,
         files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>;
+
+    /// Load self-profile data with the given ID.
+    /// Returns `None` if data for the ID was not found.
+    fn load(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<analyzeme::ProfilingData>>> + Send>>
+    {
+        let fut = self.load_raw(id);
+        Box::pin(async move {
+            let Some(data) = fut.await? else {
+                return Ok(None);
+            };
+            Ok(Some(ProfilingData::from_paged_buffer(data, None).map_err(
+                |e| anyhow::anyhow!("Cannot parse self-profile data: {e}"),
+            )?))
+        })
+    }
+
+    /// Load the raw byte data of the self-profile with the given ID.
+    /// Returns `None` if data for the ID was not found.
+    fn load_raw(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>>;
 }
 
 pub struct LocalSelfProfileStorage {
@@ -48,6 +124,15 @@ impl LocalSelfProfileStorage {
             directory: dir.to_owned(),
         }
     }
+
+    /// Create local self-profile storage located at a local path on disk.
+    pub fn default_path() -> Self {
+        Self::new(Path::new("self-profile-storage"))
+    }
+
+    fn path(&self, id: &SelfProfileId) -> PathBuf {
+        self.directory.join(id.relative_file_path())
+    }
 }
 
 impl SelfProfileStorage for LocalSelfProfileStorage {
@@ -56,11 +141,7 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
         id: SelfProfileId,
         files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        let prefix = id.file_prefix();
-        let path = self
-            .directory
-            .join(prefix)
-            .join(format!("self-profile-{}.mm_profdata.sz", id.collection));
+        let path = self.path(&id);
         Box::pin(async move {
             tokio::fs::create_dir_all(path.parent().unwrap()).await?;
             match files {
@@ -70,6 +151,22 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
             }
 
             Ok(())
+        })
+    }
+
+    fn load_raw(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
+        let path = self.path(&id);
+        Box::pin(async move {
+            if !path.is_file() {
+                return Ok(None);
+            }
+            let data = tokio::fs::read(&path).await.with_context(|| {
+                anyhow::anyhow!("Cannot read self-profile data from {}", path.display())
+            })?;
+            Ok(Some(data))
         })
     }
 }
@@ -90,12 +187,9 @@ impl SelfProfileStorage for S3SelfProfileStorage {
         files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
         Box::pin(async move {
-            // Files are placed at
-            //  * self-profile/<artifact id>/<benchmark>/<profile>/<scenario>
-            //    /self-profile-<collection-id>.{extension}
-            let prefix = id.file_prefix();
+            let file_path = id.relative_file_path();
             let upload = tempfile::NamedTempFile::new().context("cannot create temporary file")?;
-            let filename = match files {
+            match files {
                 SelfProfileFiles::Eight { file } => {
                     let data = tokio::fs::read(file)
                         .await
@@ -107,10 +201,10 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                     tokio::fs::write(upload.path(), &compressed)
                         .await
                         .context("cannot write compressed self-profile data")?;
-
-                    format!("self-profile-{}.mm_profdata.sz", id.collection)
                 }
             };
+
+            log::info!("Uploading self-profile to {}", file_path.display());
 
             let output = tokio::process::Command::new("aws")
                 .arg("s3")
@@ -121,7 +215,9 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                 .arg(upload.path())
                 .arg(format!(
                     "s3://rustc-perf/{}",
-                    &prefix.join(filename).to_str().unwrap()
+                    file_path
+                        .to_str()
+                        .expect("Non UTF-8 path used for self-profile")
                 ))
                 .spawn()
                 .context("cannot spawn aws binary")?
@@ -136,6 +232,62 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                 ));
             }
             Ok(())
+        })
+    }
+
+    fn load_raw(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
+        let path = id.relative_file_path();
+        let url = format!(
+            "https://perf-data.rust-lang.org/{}",
+            path.to_str().expect("Non UTF-8 path used for self-profile")
+        );
+        Box::pin(async move {
+            log::trace!("Downloading {url}");
+            let start = Instant::now();
+            let resp = match reqwest::get(&url).await {
+                Ok(r) => r,
+                Err(e) => return Err(anyhow::anyhow!("{e:?}")),
+            };
+
+            if !resp.status().is_success() {
+                // Hitting an unknown path is returned as forbidden
+                if resp.status() == StatusCode::FORBIDDEN {
+                    return Ok(None);
+                }
+                return Err(anyhow::anyhow!(
+                    "Upstream status {:?} is not successful.\nurl={url}",
+                    resp.status(),
+                ));
+            }
+
+            let compressed = match resp.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    return Err(anyhow::anyhow!("Could not download from upstream: {e:?}"));
+                }
+            };
+
+            log::trace!(
+                "downloaded {} bytes in {:?}",
+                compressed.len(),
+                start.elapsed()
+            );
+
+            // The decompression is blocking, so we should not do it in the async task directly
+            let data = tokio::task::spawn_blocking(move || {
+                let mut data = Vec::new();
+                match snap::read::FrameDecoder::new(Cursor::new(compressed)).read_to_end(&mut data)
+                {
+                    Ok(_) => Ok(data),
+                    Err(e) => Err(anyhow::anyhow!("Could not decode self-profile data: {e:?}")),
+                }
+            })
+            .await??;
+
+            Ok(Some(data))
         })
     }
 }

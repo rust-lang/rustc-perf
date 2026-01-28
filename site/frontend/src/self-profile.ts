@@ -2,13 +2,19 @@
 // Chrome profiler format.
 export function chromeProfileUrl(
   commit: string,
-  benchmarkAndProfile: string,
-  scenario: string
+  benchmark: string,
+  scenario: string,
+  profile: string,
+  backend: string,
+  target: string
 ): string {
   const relativeUrl = processedSelfProfileRelativeUrl(
     commit,
-    benchmarkAndProfile,
+    benchmark,
     scenario,
+    profile,
+    backend,
+    target,
     "crox"
   );
   return window.location.origin + relativeUrl;
@@ -16,9 +22,12 @@ export function chromeProfileUrl(
 
 export function processedSelfProfileRelativeUrl(
   commit: string,
-  benchmarkAndProfile: string,
+  benchmark: string,
   scenario: string,
+  profile: string,
+  backend: string,
+  target: string,
   type: string
 ): string {
-  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmarkAndProfile}&scenario=${scenario}&type=${type}`;
+  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&backend=${backend}&target=${target}&type=${type}`;
 }

@@ -32,6 +32,8 @@ export interface CompileDetailSectionsSelector {
   benchmark: string;
   scenario: string;
   profile: string;
+  backend: string;
+  target: string;
 }
 
 export interface CompileDetailSections {
@@ -92,7 +94,7 @@ export const COMPILE_DETAIL_SECTIONS_RESOLVER: CachedDataLoader<
   CompileDetailSections
 > = new CachedDataLoader(
   (key: CompileDetailSectionsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.start};${key.end}`,
+    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.target};${key.start};${key.end}`,
   loadSectionsDetail
 );
 
@@ -105,6 +107,8 @@ async function loadSectionsDetail(
     benchmark: selector.benchmark,
     scenario: selector.scenario,
     profile: selector.profile,
+    backend: selector.backend,
+    target: selector.target,
   };
   return await getJson<CompileDetailSections>(
     COMPARE_COMPILE_DETAIL_SECTIONS_DATA_URL,

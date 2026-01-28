@@ -1263,28 +1263,13 @@ where
             .unwrap()
             .map(|r| r.get::<_, i32>(0) as u32)
     }
-    async fn record_raw_self_profile(
-        &self,
-        collection: CollectionId,
-        artifact: ArtifactIdNumber,
-        benchmark: &str,
-        profile: Profile,
-        scenario: Scenario,
-    ) {
-        let profile = profile.to_string();
-        let scenario = scenario.to_string();
-        self.conn().execute(
-            "insert into raw_self_profile (aid, cid, crate, profile, cache) VALUES ($1, $2, $3, $4, $5)",
-            &[&(artifact.0 as i32), &collection.0, &benchmark, &profile, &scenario],
-        ).await.unwrap();
-    }
     async fn list_self_profile(
         &self,
         aid: ArtifactId,
         crate_: &str,
         profile: &str,
         scenario: &str,
-    ) -> Vec<(ArtifactIdNumber, i32)> {
+    ) -> Vec<(ArtifactIdNumber, CollectionId)> {
         self.conn()
             .query(
                 "
@@ -1307,7 +1292,12 @@ where
             .await
             .unwrap()
             .into_iter()
-            .map(|r| (ArtifactIdNumber(r.get::<_, i32>(0) as u32), r.get(1)))
+            .map(|r| {
+                (
+                    ArtifactIdNumber(r.get::<_, i32>(0) as u32),
+                    CollectionId(r.get(1)),
+                )
+            })
             .collect()
     }
 

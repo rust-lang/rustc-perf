@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use collector::Bound;
+use collector::{Bound, SelfProfileId};
 
 use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
 use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
 use crate::load::SiteCtxt;
-use crate::self_profile::get_or_download_self_profile;
+use crate::self_profile::fetch_self_profile;
 
 use database::interpolate::IsInterpolated;
 use database::selector::{
@@ -84,16 +84,29 @@ pub async fn handle_compile_detail_sections(
             request.end
         ))?;
 
-    let scenario = request.scenario.parse()?;
+    let scenario: Scenario = request.scenario.parse()?;
+    let profile: Profile = request.profile.parse()?;
+    let backend: CodegenBackend = request.backend.parse()?;
+    let target: Target = request.target.parse()?;
 
     async fn calculate_sections(
         ctxt: &SiteCtxt,
         aid: ArtifactId,
         benchmark: &str,
-        profile: &str,
+        profile: Profile,
         scenario: Scenario,
+        backend: CodegenBackend,
+        target: Target,
     ) -> Option<CompilationSections> {
-        get_or_download_self_profile(ctxt, aid, benchmark, profile, scenario, None)
+        let id = SelfProfileId::Simple {
+            artifact_id: aid,
+            benchmark: benchmark.into(),
+            profile,
+            scenario,
+            backend,
+            target,
+        };
+        fetch_self_profile(ctxt, id, None)
             .await
             .ok()
             .map(|profile| CompilationSections {
@@ -101,22 +114,31 @@ pub async fn handle_compile_detail_sections(
             })
     }
 
+    let is_doc = match profile {
+        Profile::Check | Profile::Debug | Profile::Opt | Profile::Clippy => false,
+        Profile::Doc | Profile::DocJson => true,
+    };
+
     // Doc queries are not split into the classic frontend/backend/linker parts.
-    let (before, after) = if request.profile != "doc" {
+    let (before, after) = if !is_doc {
         tokio::join!(
             calculate_sections(
                 &ctxt,
                 start_artifact,
                 &request.benchmark,
-                &request.profile,
+                profile,
                 scenario,
+                backend,
+                target
             ),
             calculate_sections(
                 &ctxt,
                 end_artifact,
                 &request.benchmark,
-                &request.profile,
+                profile,
                 scenario,
+                backend,
+                target
             )
         )
     } else {

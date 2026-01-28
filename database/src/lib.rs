@@ -812,12 +812,21 @@ pub struct Step {
     pub expected: Duration,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
 pub struct CollectionId(i32);
 
 impl fmt::Display for CollectionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl CollectionId {
+    pub fn from_inner(cid: i32) -> Self {
+        Self(cid)
+    }
+    pub fn as_inner(&self) -> i32 {
+        self.0
     }
 }
 

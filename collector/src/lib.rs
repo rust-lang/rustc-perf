@@ -17,7 +17,9 @@ pub mod utils;
 
 use crate::compile::benchmark::{Benchmark, BenchmarkName};
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
-pub use crate::self_profile::{LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileStorage};
+pub use crate::self_profile::{
+    LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileId, SelfProfileStorage,
+};
 use database::selector::CompileTestCase;
 use database::{ArtifactId, ArtifactIdNumber, Connection};
 use hashbrown::HashSet;
@@ -359,6 +361,7 @@ impl CollectorStepBuilder {
 
         CollectorCtx {
             artifact_row_id,
+            artifact_id: artifact_id.clone(),
             measured_compile_test_cases,
             job_id: self.job_id,
         }
@@ -368,6 +371,7 @@ impl CollectorStepBuilder {
 /// Represents an in-progress run for a given artifact.
 pub struct CollectorCtx {
     pub artifact_row_id: ArtifactIdNumber,
+    pub artifact_id: ArtifactId,
     /// Which tests cases were already computed **before** this collection began?
     pub measured_compile_test_cases: HashSet<CompileTestCase>,
     pub job_id: Option<u32>,
