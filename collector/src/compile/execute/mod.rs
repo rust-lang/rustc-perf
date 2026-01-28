@@ -671,7 +671,7 @@ enum DeserializeStatError {
     IOError(#[from] std::io::Error),
 }
 
-enum SelfProfileFiles {
+pub enum SelfProfileFiles {
     Eight { file: PathBuf },
 }
 

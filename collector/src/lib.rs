@@ -11,11 +11,13 @@ pub mod codegen;
 pub mod compare;
 pub mod compile;
 pub mod runtime;
+mod self_profile;
 pub mod toolchain;
 pub mod utils;
 
 use crate::compile::benchmark::{Benchmark, BenchmarkName};
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
+pub use crate::self_profile::{LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileStorage};
 use database::selector::CompileTestCase;
 use database::{ArtifactId, ArtifactIdNumber, Connection};
 use hashbrown::HashSet;

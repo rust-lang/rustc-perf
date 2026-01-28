@@ -1,5 +1,13 @@
 #![recursion_limit = "1024"]
 
+use anyhow::Context;
+use chrono::Utc;
+use clap::builder::TypedValueParser;
+use clap::{Arg, Parser};
+use collector::compare::compare_artifacts;
+use hashbrown::HashSet;
+use humansize::{format_size, BINARY};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -15,15 +23,6 @@ use std::process::Command;
 use std::str::FromStr;
 use std::time::Duration;
 use std::{str, time::Instant};
-
-use anyhow::Context;
-use chrono::Utc;
-use clap::builder::TypedValueParser;
-use clap::{Arg, Parser};
-use collector::compare::compare_artifacts;
-use hashbrown::HashSet;
-use humansize::{format_size, BINARY};
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tabled::builder::Builder;
 use tabled::settings::object::{Columns, Rows};
 use tabled::settings::style::Border;
@@ -58,7 +57,10 @@ use collector::toolchain::{
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
-use collector::{command_output, utils, CollectorCtx, CollectorStepBuilder};
+use collector::{
+    command_output, utils, CollectorCtx, CollectorStepBuilder, LocalSelfProfileStorage,
+    S3SelfProfileStorage, SelfProfileStorage,
+};
 use database::{
     ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, CollectorConfig, Commit,
     CommitType, Connection, Pool,
@@ -111,7 +113,7 @@ struct CompileBenchmarkConfig {
     scenarios: Vec<Scenario>,
     backends: Vec<CodegenBackend>,
     iterations: Option<usize>,
-    is_self_profile: bool,
+    self_profile_storage: Option<Box<dyn SelfProfileStorage>>,
     bench_rustc: bool,
     targets: Vec<Target>,
 }
@@ -1038,7 +1040,13 @@ fn main_result() -> anyhow::Result<i32> {
                 scenarios,
                 backends,
                 iterations: Some(iterations),
-                is_self_profile: self_profile.self_profile,
+                self_profile_storage: if self_profile.self_profile {
+                    Some(Box::new(LocalSelfProfileStorage::new(Path::new(
+                        "self-profile-storage",
+                    ))))
+                } else {
+                    None
+                },
                 bench_rustc: bench_rustc.bench_rustc,
                 targets: vec![Target::host()],
             };
@@ -1657,7 +1665,11 @@ async fn create_benchmark_configs(
             scenarios: Scenario::all(),
             backends: vec![job.backend().into()],
             iterations: if is_release { Some(3) } else { None },
-            is_self_profile: !is_release,
+            self_profile_storage: if !is_release {
+                Some(Box::new(S3SelfProfileStorage::new()))
+            } else {
+                None
+            },
             bench_rustc,
             targets: vec![job.target().into()],
         })
@@ -2165,7 +2177,7 @@ async fn bench_published_artifact(
             scenarios,
             backends: vec![CodegenBackend::Llvm],
             iterations: Some(3),
-            is_self_profile: false,
+            self_profile_storage: None,
             bench_rustc: false,
             targets: vec![Target::host()],
         }),
@@ -2233,7 +2245,7 @@ async fn bench_compile(
             benchmark_name,
             &shared.artifact_id,
             collector,
-            config.is_self_profile,
+            config.self_profile_storage.as_deref(),
         );
         let result = measure(&mut processor).await;
         if let Err(s) = result {

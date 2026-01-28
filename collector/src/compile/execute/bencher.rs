@@ -8,20 +8,19 @@ use crate::compile::execute::{
     rustc, DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfileFiles,
     Stats,
 };
+use crate::self_profile::SelfProfileId;
 use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
-use crate::CollectorCtx;
-use anyhow::Context;
+use crate::{CollectorCtx, SelfProfileStorage};
 use database::CollectionId;
 use futures::stream::FuturesUnordered;
 use futures::{future, StreamExt};
-use std::collections::VecDeque;
 use std::future::Future;
-use std::io::Read;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Command;
+use std::time::Instant;
 use std::{env, process};
+use tokio::task::JoinSet;
 
 pub struct RecordedSelfProfile {
     collection: CollectionId,
@@ -45,7 +44,7 @@ pub struct BenchProcessor<'a> {
     artifact: &'a database::ArtifactId,
     collector_ctx: &'a CollectorCtx,
     is_first_collection: bool,
-    is_self_profile: bool,
+    self_profile_storage: Option<&'a dyn SelfProfileStorage>,
     tries: u8,
     self_profiles: Vec<RecordedSelfProfile>,
 }
@@ -56,7 +55,7 @@ impl<'a> BenchProcessor<'a> {
         benchmark: &'a BenchmarkName,
         artifact: &'a database::ArtifactId,
         collector_ctx: &'a CollectorCtx,
-        is_self_profile: bool,
+        self_profile_storage: Option<&'a dyn SelfProfileStorage>,
     ) -> Self {
         // Check we have `perf` or (`xperf.exe` and `tracelog.exe`)  available.
         if cfg!(unix) {
@@ -81,7 +80,7 @@ impl<'a> BenchProcessor<'a> {
             artifact,
             collector_ctx,
             is_first_collection: true,
-            is_self_profile,
+            self_profile_storage,
             tries: 0,
             self_profiles: vec![],
         }
@@ -137,7 +136,7 @@ impl<'a> BenchProcessor<'a> {
 
 impl Processor for BenchProcessor<'_> {
     fn perf_tool(&self) -> PerfTool {
-        if self.is_first_collection && self.is_self_profile {
+        if self.is_first_collection && self.self_profile_storage.is_some() {
             if cfg!(unix) {
                 PerfTool::BenchTool(Bencher::PerfStatSelfProfile)
             } else {
@@ -253,7 +252,7 @@ impl Processor for BenchProcessor<'_> {
 
     fn postprocess_results<'b>(&'b mut self) -> Pin<Box<dyn Future<Output = ()> + 'b>> {
         Box::pin(async move {
-            if env::var_os("RUSTC_PERF_UPLOAD_TO_S3").is_some() {
+            if let Some(self_profile_storage) = self.self_profile_storage {
                 let futs = self
                     .self_profiles
                     .iter()
@@ -269,86 +268,37 @@ impl Processor for BenchProcessor<'_> {
                     .collect::<Vec<_>>();
                 future::join_all(futs).await;
 
-                // Upload profiles to S3. Buffer up to 10 uploads at a time.
-                let mut uploads: VecDeque<SelfProfileS3Upload> = VecDeque::new();
+                let start = Instant::now();
+                let profile_count = self.self_profiles.len();
+
+                // Buffer up to 10 self-profile stores at a time.
+                let mut futures = JoinSet::new();
                 for profile in self.self_profiles.drain(..) {
-                    if uploads.len() == 10 {
-                        uploads.pop_front().unwrap().wait();
+                    if futures.len() == 10 {
+                        if let Err(error) = futures.join_next().await.unwrap().unwrap() {
+                            log::error!("Failed to store self-profile result: {error:?}");
+                        }
                     }
 
-                    // FIXME: Record codegen backend in the self profile name
-                    let prefix = PathBuf::from("self-profile")
-                        .join(self.collector_ctx.artifact_row_id.0.to_string())
-                        .join(self.benchmark.0.as_str())
-                        .join(profile.profile.to_string())
-                        .join(profile.scenario.to_id());
-                    let upload =
-                        SelfProfileS3Upload::new(prefix, profile.collection, profile.files);
-                    uploads.push_back(upload);
+                    let id = SelfProfileId {
+                        artifact_id_number: self.collector_ctx.artifact_row_id,
+                        collection: profile.collection,
+                        benchmark: self.benchmark.clone(),
+                        profile: profile.profile,
+                        scenario: profile.scenario,
+                    };
+                    futures.spawn(self_profile_storage.store(id, profile.files));
                 }
-                for upload in uploads {
-                    upload.wait();
+                for result in futures.join_all().await {
+                    if let Err(error) = result {
+                        log::error!("Failed to store self-profile result: {error:?}");
+                    }
                 }
+                log::trace!(
+                    "Stored {profile_count} self-profile(s) in {}s",
+                    start.elapsed().as_secs_f64()
+                );
             }
         })
-    }
-}
-
-/// Uploads self-profile results to S3
-struct SelfProfileS3Upload(
-    std::process::Child,
-    // This field is used only for its Drop impl
-    #[allow(unused)] tempfile::NamedTempFile,
-);
-
-impl SelfProfileS3Upload {
-    fn new(
-        prefix: PathBuf,
-        collection: database::CollectionId,
-        files: SelfProfileFiles,
-    ) -> SelfProfileS3Upload {
-        // Files are placed at
-        //  * self-profile/<artifact id>/<benchmark>/<profile>/<scenario>
-        //    /self-profile-<collection-id>.{extension}
-        let upload = tempfile::NamedTempFile::new()
-            .context("create temporary file")
-            .unwrap();
-        let filename = match files {
-            SelfProfileFiles::Eight { file } => {
-                let data = std::fs::read(file).expect("read profile data");
-                let mut data = snap::read::FrameEncoder::new(&data[..]);
-                let mut compressed = Vec::new();
-                data.read_to_end(&mut compressed).expect("compressed");
-                std::fs::write(upload.path(), &compressed).expect("write compressed profile data");
-
-                format!("self-profile-{collection}.mm_profdata.sz")
-            }
-        };
-
-        let child = Command::new("aws")
-            .arg("s3")
-            .arg("cp")
-            .arg("--storage-class")
-            .arg("INTELLIGENT_TIERING")
-            .arg("--only-show-errors")
-            .arg(upload.path())
-            .arg(format!(
-                "s3://rustc-perf/{}",
-                &prefix.join(filename).to_str().unwrap()
-            ))
-            .spawn()
-            .expect("spawn aws");
-
-        SelfProfileS3Upload(child, upload)
-    }
-
-    fn wait(mut self) {
-        let start = std::time::Instant::now();
-        let status = self.0.wait().expect("waiting for child");
-        if !status.success() {
-            panic!("S3 upload failed: {status:?}");
-        }
-
-        log::trace!("uploaded to S3, additional wait: {:?}", start.elapsed());
     }
 }
