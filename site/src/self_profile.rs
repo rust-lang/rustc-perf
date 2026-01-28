@@ -80,7 +80,7 @@ pub(crate) fn extract_profiling_data(data: Vec<u8>) -> anyhow::Result<analyzeme:
 pub(crate) async fn fetch_raw_self_profile_data(
     aid: database::ArtifactIdNumber,
     benchmark: &str,
-    profile: &str,
+    profile: database::Profile,
     scenario: database::Scenario,
     cid: i32,
 ) -> anyhow::Result<Vec<u8>> {
@@ -130,7 +130,7 @@ pub(crate) async fn get_self_profile_raw_data(url: &str) -> anyhow::Result<Vec<u
 pub struct SelfProfileKey {
     pub aid: ArtifactId,
     pub benchmark: String,
-    pub profile: String,
+    pub profile: database::Profile,
     pub scenario: database::Scenario,
 }
 
@@ -206,13 +206,18 @@ async fn download_and_analyze_self_profile(
     ctxt: &SiteCtxt,
     aid: ArtifactId,
     benchmark: &str,
-    profile: &str,
+    profile: database::Profile,
     scenario: database::Scenario,
     metric: Option<f64>,
 ) -> ServerResult<SelfProfileWithAnalysis> {
     let conn = ctxt.conn().await;
     let aids_and_cids = conn
-        .list_self_profile(aid.clone(), benchmark, profile, &scenario.to_string())
+        .list_self_profile(
+            aid.clone(),
+            benchmark,
+            &profile.to_string(),
+            &scenario.to_string(),
+        )
         .await;
 
     let Some((anum, cid)) = aids_and_cids.first() else {
@@ -312,14 +317,14 @@ pub(crate) async fn get_or_download_self_profile(
     ctxt: &SiteCtxt,
     aid: ArtifactId,
     benchmark: &str,
-    profile: &str,
+    profile: database::Profile,
     scenario: database::Scenario,
     metric: Option<f64>,
 ) -> ServerResult<SelfProfileWithAnalysis> {
     let key = SelfProfileKey {
         aid: aid.clone(),
         benchmark: benchmark.to_string(),
-        profile: profile.to_string(),
+        profile,
         scenario,
     };
     let cache_result = ctxt.self_profile_cache.lock().get(&key);

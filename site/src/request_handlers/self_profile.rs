@@ -453,12 +453,16 @@ pub async fn handle_self_profile(
 ) -> ServerResult<self_profile::Response> {
     log::info!("handle_self_profile({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
-    let profile = it.next().ok_or("no benchmark type".to_string())?;
+    let profile = it
+        .next()
+        .ok_or("no benchmark profile".to_string())?
+        .parse::<database::Profile>()
+        .map_err(|e| format!("invalid profile: {e:?}"))?;
     let bench_name = it.next().ok_or("no benchmark name".to_string())?;
     let scenario = body
         .scenario
         .parse::<database::Scenario>()
-        .map_err(|e| format!("invalid run name: {e:?}"))?;
+        .map_err(|e| format!("invalid scenario: {e:?}"))?;
     let index = ctxt.index.load();
 
     let backend: CodegenBackend = if let Some(backend) = body.backend {
@@ -474,7 +478,7 @@ pub async fn handle_self_profile(
 
     let query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::One(bench_name.to_string()))
-        .profile(selector::Selector::One(profile.parse().unwrap()))
+        .profile(selector::Selector::One(profile))
         .scenario(selector::Selector::One(scenario))
         .backend(selector::Selector::One(backend))
         .target(selector::Selector::One(target))

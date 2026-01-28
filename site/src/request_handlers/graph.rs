@@ -84,13 +84,14 @@ pub async fn handle_compile_detail_sections(
             request.end
         ))?;
 
-    let scenario = request.scenario.parse()?;
+    let scenario: Scenario = request.scenario.parse()?;
+    let profile: Profile = request.profile.parse()?;
 
     async fn calculate_sections(
         ctxt: &SiteCtxt,
         aid: ArtifactId,
         benchmark: &str,
-        profile: &str,
+        profile: Profile,
         scenario: Scenario,
     ) -> Option<CompilationSections> {
         get_or_download_self_profile(ctxt, aid, benchmark, profile, scenario, None)
@@ -101,23 +102,15 @@ pub async fn handle_compile_detail_sections(
             })
     }
 
+    let is_doc = match profile {
+        Profile::Check | Profile::Debug | Profile::Opt | Profile::Clippy => false,
+        Profile::Doc | Profile::DocJson => true,
+    };
     // Doc queries are not split into the classic frontend/backend/linker parts.
-    let (before, after) = if request.profile != "doc" {
+    let (before, after) = if !is_doc {
         tokio::join!(
-            calculate_sections(
-                &ctxt,
-                start_artifact,
-                &request.benchmark,
-                &request.profile,
-                scenario,
-            ),
-            calculate_sections(
-                &ctxt,
-                end_artifact,
-                &request.benchmark,
-                &request.profile,
-                scenario,
-            )
+            calculate_sections(&ctxt, start_artifact, &request.benchmark, profile, scenario),
+            calculate_sections(&ctxt, end_artifact, &request.benchmark, profile, scenario)
         )
     } else {
         (None, None)
