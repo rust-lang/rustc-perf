@@ -4,15 +4,13 @@ use crate::load::SiteCtxt;
 use crate::self_profile::fetch_self_profile;
 use crate::server::{maybe_compressed_response, Response, ResponseHeaders};
 use brotli::enc::BrotliEncoderParams;
-use bytes::Buf;
 use collector::SelfProfileId;
 use database::{metric::Metric, CollectionId, CommitType};
 use database::{selector, CodegenBackend, Target};
 use database::{ArtifactId, Profile};
 use headers::{ContentType, Header};
-use hyper::StatusCode;
+use hyper::{Body, StatusCode};
 use std::collections::HashSet;
-use std::io::Read;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -351,35 +349,41 @@ pub async fn handle_self_profile_raw_download(
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
     log::info!("handle_self_profile_raw_download({:?})", body);
-    let url = match get_self_profile_download_url(body, ctxt).await {
-        Ok(url) => url,
-        Err(e) => {
-            let mut resp = http::Response::new(e.to_string().into());
-            *resp.status_mut() = StatusCode::BAD_REQUEST;
+
+    let id = match get_self_profile_id(
+        ctxt,
+        &body.benchmark,
+        &body.commit,
+        &body.profile,
+        &body.scenario,
+        body.cid,
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(error) => {
+            let mut resp =
+                http::Response::new(format!("Cannot find self-profile data: {error}").into());
+            *resp.status_mut() = StatusCode::NOT_FOUND;
             return resp;
         }
     };
-    log::trace!("downloading {}", url);
-
-    let resp = match reqwest::get(&url).await {
-        Ok(r) => r,
-        Err(e) => {
-            let mut resp = http::Response::new(format!("{e:?}").into());
+    let bytes = match ctxt.self_profile_storage.load_raw(id).await {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => {
+            let mut resp = http::Response::new("Cannot find self-profile data".into());
+            *resp.status_mut() = StatusCode::NOT_FOUND;
+            return resp;
+        }
+        Err(error) => {
+            let mut resp =
+                http::Response::new(format!("Cannot download self-profile data: {error}").into());
             *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             return resp;
         }
     };
 
-    if !resp.status().is_success() {
-        let mut resp = http::Response::new(
-            format!("upstream status {:?} is not successful", resp.status()).into(),
-        );
-        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-        return resp;
-    }
-
-    let (sender, body) = hyper::Body::channel();
-    let mut server_resp = http::Response::new(body);
+    let mut server_resp = http::Response::new(Body::from(bytes));
     let mut header = vec![];
     ContentType::octet_stream().encode(&mut header);
     server_resp
@@ -393,116 +397,7 @@ pub async fn handle_self_profile_raw_download(
         .expect("valid header"),
     );
     *server_resp.status_mut() = StatusCode::OK;
-    tokio::spawn(tarball(resp, sender));
     server_resp
-}
-
-async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
-    // Ideally, we would stream the response though the snappy decoding, but
-    // snappy doesn't support that AFAICT -- we'd need it to implement AsyncRead
-    // or correctly handle WouldBlock, and neither is true.
-    let input = match resp.bytes().await {
-        Ok(b) => b,
-        Err(e) => {
-            log::error!("failed to receive data: {:?}", e);
-            sender.abort();
-            return;
-        }
-    };
-    let mut decoder = snap::read::FrameDecoder::new(input.reader());
-    let mut buffer = vec![0; 32 * 1024];
-    loop {
-        match decoder.read(&mut buffer[..]) {
-            Ok(0) => return,
-            Ok(length) => {
-                if let Err(e) = sender
-                    .send_data(bytes::Bytes::copy_from_slice(&buffer[..length]))
-                    .await
-                {
-                    log::error!("failed to send data: {:?}", e);
-                    sender.abort();
-                    return;
-                }
-            }
-            Err(e) => {
-                log::error!("failed to fill buffer: {:?}", e);
-                sender.abort();
-                return;
-            }
-        }
-    }
-}
-
-/// Return URL for downloading a compressed self-profile from S3.
-async fn get_self_profile_download_url(
-    body: self_profile_raw::Request,
-    ctxt: &SiteCtxt,
-) -> anyhow::Result<String> {
-    log::info!("handle_self_profile_raw({:?})", body);
-    let benchmark = &body.benchmark;
-    let profile = body
-        .profile
-        .parse::<Profile>()
-        .map_err(|e| anyhow::anyhow!("Cannot parse profile: {e}"))?;
-
-    let scenario = body
-        .scenario
-        .parse::<database::Scenario>()
-        .map_err(|e| anyhow::anyhow!("invalid scenario: {e:?}"))?;
-
-    let conn = ctxt.conn().await;
-
-    let aids_and_cids = conn
-        .list_self_profile(
-            ArtifactId::Commit(database::Commit {
-                sha: body.commit.clone(),
-                date: database::Date::empty(),
-                r#type: CommitType::Master,
-            }),
-            benchmark,
-            profile.as_str(),
-            &scenario.to_id(),
-        )
-        .await;
-    let (aid, first_cid) = aids_and_cids
-        .first()
-        .copied()
-        .ok_or_else(|| anyhow::anyhow!("No results for {}", body.commit))?;
-
-    let cid = match body.cid {
-        Some(cid) => {
-            if aids_and_cids.iter().any(|(_, v)| v.as_inner() == cid) {
-                cid
-            } else {
-                return Err(anyhow::anyhow!(
-                    "{cid} is not a collection ID at this artifact"
-                ));
-            }
-        }
-        _ => first_cid.as_inner(),
-    };
-
-    let url = format!(
-        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.mm_profdata.sz",
-        aid.0,
-        benchmark,
-        profile,
-        scenario.to_id(),
-        cid,
-    );
-
-    let resp = reqwest::Client::new()
-        .head(&url)
-        .send()
-        .await
-        .map_err(|e| anyhow::anyhow!("Fetching self-profile data: {e:?}"))?;
-    if !resp.status().is_success() {
-        return Err(anyhow::anyhow!(
-            "Self-profile data did not resolve successfully: {:?} received",
-            resp.status()
-        ));
-    }
-    Ok(url)
 }
 
 /// Loads self-profile and query data for the "Detailed results" page.

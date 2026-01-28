@@ -44,7 +44,25 @@ pub trait SelfProfileStorage {
     fn load(
         &self,
         id: SelfProfileId,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<analyzeme::ProfilingData>>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<analyzeme::ProfilingData>>> + Send>>
+    {
+        let fut = self.load_raw(id);
+        Box::pin(async move {
+            let Some(data) = fut.await? else {
+                return Ok(None);
+            };
+            Ok(Some(ProfilingData::from_paged_buffer(data, None).map_err(
+                |e| anyhow::anyhow!("Cannot parse self-profile data: {e}"),
+            )?))
+        })
+    }
+
+    /// Load the raw byte data of the self-profile with the given ID.
+    /// Returns `None` if data for the ID was not found.
+    fn load_raw(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>>;
 }
 
 pub struct LocalSelfProfileStorage {
@@ -90,10 +108,10 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
         })
     }
 
-    fn load(
+    fn load_raw(
         &self,
         id: SelfProfileId,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<ProfilingData>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
         let path = self.path(&id);
         Box::pin(async move {
             if !path.is_file() {
@@ -102,9 +120,7 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
             let data = tokio::fs::read(&path).await.with_context(|| {
                 anyhow::anyhow!("Cannot read self-profile data from {}", path.display())
             })?;
-            Ok(Some(ProfilingData::from_paged_buffer(data, None).map_err(
-                |e| anyhow::anyhow!("Cannot parse self-profile data: {e}"),
-            )?))
+            Ok(Some(data))
         })
     }
 }
@@ -180,10 +196,10 @@ impl SelfProfileStorage for S3SelfProfileStorage {
         })
     }
 
-    fn load(
+    fn load_raw(
         &self,
         id: SelfProfileId,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<ProfilingData>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
         let path = id.file_prefix().join(s3_self_profile_filename(&id));
         let url = format!(
             "https://perf-data.rust-lang.org/{}",
@@ -223,9 +239,7 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                 Err(e) => return Err(anyhow::anyhow!("Could not decode self-profile data: {e:?}")),
             };
 
-            Ok(Some(ProfilingData::from_paged_buffer(data, None).map_err(
-                |e| anyhow::anyhow!("Cannot parse self-profile data: {e}"),
-            )?))
+            Ok(Some(data))
         })
     }
 }
