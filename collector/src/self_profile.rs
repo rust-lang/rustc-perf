@@ -2,7 +2,9 @@ use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute::SelfProfileFiles;
 use analyzeme::ProfilingData;
 use anyhow::Context;
-use database::{ArtifactIdNumber, CodegenBackend, CollectionId, Profile, Scenario, Target};
+use database::{
+    ArtifactId, ArtifactIdNumber, CodegenBackend, CollectionId, Profile, Scenario, Target,
+};
 use reqwest::StatusCode;
 use std::future::Future;
 use std::io::{Cursor, Read};
@@ -10,28 +12,71 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Instant;
 
-// TODO: remove collection ID from self-profile ID
 /// Uniquely identifies a self-profile archive.
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
-pub struct SelfProfileId {
-    pub artifact_id_number: ArtifactIdNumber,
-    pub collection: CollectionId,
-    pub benchmark: BenchmarkName,
-    pub profile: Profile,
-    pub scenario: Scenario,
-    pub codegen_backend: CodegenBackend,
-    pub target: Target,
+pub enum SelfProfileId {
+    /// Legacy ID with artifact ID number and collection ID
+    /// Exists for backwards compatibility with old self-profile links.
+    /// TODO: remove in Q3 2026
+    Legacy {
+        artifact_id_number: ArtifactIdNumber,
+        collection: CollectionId,
+        benchmark: BenchmarkName,
+        profile: Profile,
+        scenario: Scenario,
+    },
+    /// Simplified ID with artifact name and without collection ID
+    Simple {
+        artifact_id: ArtifactId,
+        benchmark: BenchmarkName,
+        profile: Profile,
+        scenario: Scenario,
+        backend: CodegenBackend,
+        target: Target,
+    },
 }
 
 impl SelfProfileId {
-    fn file_prefix(&self) -> PathBuf {
-        PathBuf::from("self-profile")
-            .join(self.artifact_id_number.0.to_string())
-            .join(self.benchmark.0.as_str())
-            .join(self.target.to_string())
-            .join(self.codegen_backend.to_string())
-            .join(self.profile.to_string())
-            .join(self.scenario.to_id())
+    fn relative_file_path(&self) -> PathBuf {
+        match self {
+            //  self-profile/<artifact id number>/<benchmark>/<profile>/<scenario>
+            //    /self-profile-<collection-id>.mm_profdata.sz
+            SelfProfileId::Legacy {
+                profile,
+                benchmark,
+                collection,
+                artifact_id_number,
+                scenario,
+            } => PathBuf::from("self-profile")
+                .join(artifact_id_number.0.to_string())
+                .join(benchmark.0.as_str())
+                .join(profile.to_string())
+                .join(scenario.to_id())
+                .join(format!("self-profile-{collection}.mm_profdata.sz")),
+            //  self-profile/<artifact id>/<benchmark>/<target>/<backend>/<profile>/<scenario>
+            //    /self-profile.mm_profdata.sz
+            SelfProfileId::Simple {
+                artifact_id,
+                benchmark,
+                profile,
+                scenario,
+                backend: codegen_backend,
+                target,
+            } => {
+                let artifact_name = match artifact_id {
+                    ArtifactId::Commit(c) => &c.sha,
+                    ArtifactId::Tag(name) => name,
+                };
+                PathBuf::from("self-profile")
+                    .join(artifact_name)
+                    .join(benchmark.0.as_str())
+                    .join(target.to_string())
+                    .join(codegen_backend.to_string())
+                    .join(profile.to_string())
+                    .join(scenario.to_id())
+                    .join("self-profile.mm_profdata.sz")
+            }
+        }
     }
 }
 
@@ -87,10 +132,7 @@ impl LocalSelfProfileStorage {
     }
 
     fn path(&self, id: &SelfProfileId) -> PathBuf {
-        let prefix = id.file_prefix();
-        self.directory
-            .join(prefix)
-            .join(format!("self-profile-{}.mm_profdata.sz", id.collection))
+        self.directory.join(id.relative_file_path())
     }
 }
 
@@ -139,10 +181,6 @@ impl S3SelfProfileStorage {
     }
 }
 
-fn s3_self_profile_filename(id: &SelfProfileId) -> String {
-    format!("self-profile-{}.mm_profdata.sz", id.collection)
-}
-
 impl SelfProfileStorage for S3SelfProfileStorage {
     fn store(
         &self,
@@ -150,12 +188,9 @@ impl SelfProfileStorage for S3SelfProfileStorage {
         files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
         Box::pin(async move {
-            // Files are placed at
-            //  * self-profile/<artifact id>/<benchmark>/<profile>/<scenario>
-            //    /self-profile-<collection-id>.{extension}
-            let prefix = id.file_prefix();
+            let file_path = id.relative_file_path();
             let upload = tempfile::NamedTempFile::new().context("cannot create temporary file")?;
-            let filename = match files {
+            match files {
                 SelfProfileFiles::Eight { file } => {
                     let data = tokio::fs::read(file)
                         .await
@@ -167,12 +202,10 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                     tokio::fs::write(upload.path(), &compressed)
                         .await
                         .context("cannot write compressed self-profile data")?;
-
-                    s3_self_profile_filename(&id)
                 }
             };
 
-            log::info!("Uploading self-profile to {}/{filename}", prefix.display());
+            log::info!("Uploading self-profile to {}", file_path.display());
 
             let output = tokio::process::Command::new("aws")
                 .arg("s3")
@@ -183,7 +216,9 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                 .arg(upload.path())
                 .arg(format!(
                     "s3://rustc-perf/{}",
-                    &prefix.join(filename).to_str().unwrap()
+                    file_path
+                        .to_str()
+                        .expect("Non UTF-8 path used for self-profile")
                 ))
                 .spawn()
                 .context("cannot spawn aws binary")?
@@ -205,7 +240,7 @@ impl SelfProfileStorage for S3SelfProfileStorage {
         &self,
         id: SelfProfileId,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
-        let path = id.file_prefix().join(s3_self_profile_filename(&id));
+        let path = id.relative_file_path();
         let url = format!(
             "https://perf-data.rust-lang.org/{}",
             path.to_str().expect("Non UTF-8 path used for self-profile")

@@ -489,7 +489,7 @@ pub mod self_profile {
         #[serde(alias = "run_name")]
         pub scenario: String,
         // These fields are kept optional for backwards compatibility
-        // They can be made required e.g. in 2027
+        // They can be made required in Q3 2026
         #[serde(default)]
         pub backend: Option<String>,
         #[serde(default)]
