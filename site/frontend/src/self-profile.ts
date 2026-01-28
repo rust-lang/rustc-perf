@@ -5,7 +5,8 @@ export function chromeProfileUrl(
   benchmark: string,
   scenario: string,
   profile: string,
-  backend: string
+  backend: string,
+  target: string
 ): string {
   const relativeUrl = processedSelfProfileRelativeUrl(
     commit,
@@ -13,6 +14,7 @@ export function chromeProfileUrl(
     scenario,
     profile,
     backend,
+    target,
     "crox"
   );
   return window.location.origin + relativeUrl;
@@ -24,7 +26,8 @@ export function processedSelfProfileRelativeUrl(
   scenario: string,
   profile: string,
   backend: string,
+  target: string,
   type: string
 ): string {
-  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&backend=${backend}&type=${type}`;
+  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&backend=${backend}&target=${target}&type=${type}`;
 }
