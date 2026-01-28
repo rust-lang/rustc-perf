@@ -233,11 +233,16 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                 start.elapsed()
             );
 
-            let mut data = Vec::new();
-            match snap::read::FrameDecoder::new(Cursor::new(compressed)).read_to_end(&mut data) {
-                Ok(_) => {}
-                Err(e) => return Err(anyhow::anyhow!("Could not decode self-profile data: {e:?}")),
-            };
+            // The decompression is blocking, so we should not do it in the async task directly
+            let data = tokio::task::spawn_blocking(move || {
+                let mut data = Vec::new();
+                match snap::read::FrameDecoder::new(Cursor::new(compressed)).read_to_end(&mut data)
+                {
+                    Ok(_) => Ok(data),
+                    Err(e) => Err(anyhow::anyhow!("Could not decode self-profile data: {e:?}")),
+                }
+            })
+            .await??;
 
             Ok(Some(data))
         })
