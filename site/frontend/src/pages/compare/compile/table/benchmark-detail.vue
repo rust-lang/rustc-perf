@@ -35,6 +35,7 @@ function createSectionsSelector(): CompileDetailSectionsSelector {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
+    backend: props.testCase.backend,
     start: props.baseArtifact.commit,
     end: props.artifact.commit,
   };

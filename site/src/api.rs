@@ -186,6 +186,7 @@ pub mod detail_sections {
         pub benchmark: String,
         pub scenario: String,
         pub profile: String,
+        pub backend: String,
     }
 
     #[derive(Default, Debug, Clone, Serialize)]
@@ -441,6 +442,7 @@ pub mod self_profile_raw {
         pub profile: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
+        pub backend: String,
         pub cid: Option<i32>,
     }
 }
@@ -464,6 +466,7 @@ pub mod self_profile_processed {
         #[serde(alias = "run_name")]
         pub scenario: String,
         pub profile: String,
+        pub backend: String,
         pub cid: Option<i32>,
         #[serde(rename = "type")]
         pub processor_type: ProcessorType,
