@@ -57,6 +57,7 @@ pub async fn handle_self_profile_processed_download(
             &diff_against,
             &body.profile,
             &body.scenario,
+            &body.backend,
             None,
         )
         .await
@@ -97,6 +98,7 @@ pub async fn handle_self_profile_processed_download(
             &body.commit,
             &body.profile,
             &body.scenario,
+            &body.backend,
             body.cid,
         )
         .await
@@ -187,6 +189,7 @@ async fn get_self_profile_id(
     commit: &str,
     profile: &str,
     scenario: &str,
+    backend: &str,
     cid: Option<i32>,
 ) -> anyhow::Result<SelfProfileId> {
     let profile = profile
@@ -195,6 +198,9 @@ async fn get_self_profile_id(
     let scenario = scenario
         .parse::<database::Scenario>()
         .map_err(|e| anyhow::anyhow!("invalid scenario: {e:?}"))?;
+    let backend = backend
+        .parse::<CodegenBackend>()
+        .map_err(|e| anyhow::anyhow!("invalid codegen backend: {e:?}"))?;
 
     let conn = ctxt.conn().await;
 
@@ -234,6 +240,7 @@ async fn get_self_profile_id(
         benchmark: benchmark.into(),
         profile,
         scenario,
+        codegen_backend: backend,
     })
 }
 
@@ -356,6 +363,7 @@ pub async fn handle_self_profile_raw_download(
         &body.commit,
         &body.profile,
         &body.scenario,
+        &body.backend,
         body.cid,
     )
     .await
@@ -418,7 +426,9 @@ pub async fn handle_self_profile(
     let index = ctxt.index.load();
 
     let backend: CodegenBackend = if let Some(backend) = body.backend {
-        backend.parse()?
+        backend
+            .parse()
+            .map_err(|e| format!("invalid scenario: {e:?}"))?
     } else {
         CodegenBackend::Llvm
     };
@@ -470,6 +480,7 @@ pub async fn handle_self_profile(
             },
             profile.as_str(),
             &scenario.to_string(),
+            backend.as_str(),
             None,
         )
         .await
@@ -487,6 +498,7 @@ pub async fn handle_self_profile(
                 },
                 profile.as_str(),
                 &scenario.to_string(),
+                backend.as_str(),
                 None,
             )
             .await

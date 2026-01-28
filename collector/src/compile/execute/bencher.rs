@@ -26,6 +26,7 @@ pub struct RecordedSelfProfile {
     collection: CollectionId,
     scenario: database::Scenario,
     profile: database::Profile,
+    codegen_backend: database::CodegenBackend,
     files: SelfProfileFiles,
 }
 
@@ -204,6 +205,7 @@ impl Processor for BenchProcessor<'_> {
                             collection,
                             scenario,
                             profile,
+                            codegen_backend: data.backend.into(),
                             files,
                         });
 
@@ -286,6 +288,7 @@ impl Processor for BenchProcessor<'_> {
                         benchmark: self.benchmark.clone(),
                         profile: profile.profile,
                         scenario: profile.scenario,
+                        codegen_backend: profile.codegen_backend,
                     };
                     futures.spawn(self_profile_storage.store(id, profile.files));
                 }

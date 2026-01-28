@@ -86,6 +86,7 @@ pub async fn handle_compile_detail_sections(
 
     let scenario: Scenario = request.scenario.parse()?;
     let profile: Profile = request.profile.parse()?;
+    let backend: CodegenBackend = request.backend.parse()?;
 
     async fn calculate_sections(
         ctxt: &SiteCtxt,
@@ -94,7 +95,9 @@ pub async fn handle_compile_detail_sections(
         benchmark: &str,
         profile: Profile,
         scenario: Scenario,
+        backend: CodegenBackend,
     ) -> Option<CompilationSections> {
+        // TODO: remove this, it does not take backend/target into account
         let aids_and_cids = conn
             .list_self_profile(
                 aid.clone(),
@@ -112,6 +115,7 @@ pub async fn handle_compile_detail_sections(
             benchmark: benchmark.into(),
             profile,
             scenario,
+            codegen_backend: backend,
         };
         fetch_self_profile(ctxt, id, None)
             .await
@@ -136,7 +140,8 @@ pub async fn handle_compile_detail_sections(
                 start_artifact,
                 &request.benchmark,
                 profile,
-                scenario
+                scenario,
+                backend
             ),
             calculate_sections(
                 &ctxt,
@@ -144,7 +149,8 @@ pub async fn handle_compile_detail_sections(
                 end_artifact,
                 &request.benchmark,
                 profile,
-                scenario
+                scenario,
+                backend
             )
         )
     } else {
