@@ -58,6 +58,7 @@ pub async fn handle_self_profile_processed_download(
             &body.profile,
             &body.scenario,
             &body.backend,
+            &body.target,
             None,
         )
         .await
@@ -99,6 +100,7 @@ pub async fn handle_self_profile_processed_download(
             &body.profile,
             &body.scenario,
             &body.backend,
+            &body.target,
             body.cid,
         )
         .await
@@ -190,6 +192,7 @@ async fn get_self_profile_id(
     profile: &str,
     scenario: &str,
     backend: &str,
+    target: &str,
     cid: Option<i32>,
 ) -> anyhow::Result<SelfProfileId> {
     let profile = profile
@@ -201,6 +204,9 @@ async fn get_self_profile_id(
     let backend = backend
         .parse::<CodegenBackend>()
         .map_err(|e| anyhow::anyhow!("invalid codegen backend: {e:?}"))?;
+    let target = target
+        .parse::<Target>()
+        .map_err(|e| anyhow::anyhow!("invalid target: {e:?}"))?;
 
     let conn = ctxt.conn().await;
 
@@ -241,6 +247,7 @@ async fn get_self_profile_id(
         profile,
         scenario,
         codegen_backend: backend,
+        target,
     })
 }
 
@@ -364,6 +371,7 @@ pub async fn handle_self_profile_raw_download(
         &body.profile,
         &body.scenario,
         &body.backend,
+        &body.target,
         body.cid,
     )
     .await
@@ -481,6 +489,7 @@ pub async fn handle_self_profile(
             profile.as_str(),
             &scenario.to_string(),
             backend.as_str(),
+            target.as_str(),
             None,
         )
         .await
@@ -499,6 +508,7 @@ pub async fn handle_self_profile(
                 profile.as_str(),
                 &scenario.to_string(),
                 backend.as_str(),
+                target.as_str(),
                 None,
             )
             .await

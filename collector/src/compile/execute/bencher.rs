@@ -27,6 +27,7 @@ pub struct RecordedSelfProfile {
     scenario: database::Scenario,
     profile: database::Profile,
     codegen_backend: database::CodegenBackend,
+    target: database::Target,
     files: SelfProfileFiles,
 }
 
@@ -188,14 +189,7 @@ impl Processor for BenchProcessor<'_> {
                             database::Scenario::IncrementalPatch(patch.name)
                         }
                     };
-                    let profile = match data.profile {
-                        Profile::Check => database::Profile::Check,
-                        Profile::Debug => database::Profile::Debug,
-                        Profile::Doc => database::Profile::Doc,
-                        Profile::DocJson => database::Profile::DocJson,
-                        Profile::Opt => database::Profile::Opt,
-                        Profile::Clippy => database::Profile::Clippy,
-                    };
+                    let profile: database::Profile = data.profile.into();
 
                     let version = get_rustc_perf_commit();
                     let collection = self.conn.collection_id(&version).await;
@@ -206,6 +200,7 @@ impl Processor for BenchProcessor<'_> {
                             scenario,
                             profile,
                             codegen_backend: data.backend.into(),
+                            target: data.target.into(),
                             files,
                         });
 
@@ -289,6 +284,7 @@ impl Processor for BenchProcessor<'_> {
                         profile: profile.profile,
                         scenario: profile.scenario,
                         codegen_backend: profile.codegen_backend,
+                        target: profile.target,
                     };
                     futures.spawn(self_profile_storage.store(id, profile.files));
                 }

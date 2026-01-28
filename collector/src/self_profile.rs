@@ -2,7 +2,7 @@ use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute::SelfProfileFiles;
 use analyzeme::ProfilingData;
 use anyhow::Context;
-use database::{ArtifactIdNumber, CodegenBackend, CollectionId, Profile, Scenario};
+use database::{ArtifactIdNumber, CodegenBackend, CollectionId, Profile, Scenario, Target};
 use reqwest::StatusCode;
 use std::future::Future;
 use std::io::{Cursor, Read};
@@ -20,6 +20,7 @@ pub struct SelfProfileId {
     pub profile: Profile,
     pub scenario: Scenario,
     pub codegen_backend: CodegenBackend,
+    pub target: Target,
 }
 
 impl SelfProfileId {
@@ -27,6 +28,7 @@ impl SelfProfileId {
         PathBuf::from("self-profile")
             .join(self.artifact_id_number.0.to_string())
             .join(self.benchmark.0.as_str())
+            .join(self.target.to_string())
             .join(self.codegen_backend.to_string())
             .join(self.profile.to_string())
             .join(self.scenario.to_id())
