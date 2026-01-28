@@ -442,13 +442,6 @@ pub mod self_profile_raw {
         pub scenario: String,
         pub cid: Option<i32>,
     }
-
-    #[derive(Debug, Clone, Serialize)]
-    pub struct Response {
-        pub cids: Vec<i32>,
-        pub cid: i32,
-        pub url: String,
-    }
 }
 
 pub mod self_profile_processed {
