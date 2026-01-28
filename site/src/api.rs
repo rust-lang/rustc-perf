@@ -445,7 +445,6 @@ pub mod self_profile_raw {
         pub scenario: String,
         pub backend: String,
         pub target: String,
-        pub cid: Option<i32>,
     }
 }
 
@@ -470,18 +469,10 @@ pub mod self_profile_processed {
         pub profile: String,
         pub backend: String,
         pub target: String,
-        pub cid: Option<i32>,
         #[serde(rename = "type")]
         pub processor_type: ProcessorType,
         #[serde(default, flatten)]
         pub params: std::collections::HashMap<String, String>,
-    }
-
-    #[derive(Debug, Clone, Serialize)]
-    pub struct Response {
-        pub cids: Vec<i32>,
-        pub cid: i32,
-        pub url: String,
     }
 }
 

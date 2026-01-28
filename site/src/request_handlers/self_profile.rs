@@ -5,7 +5,7 @@ use crate::self_profile::fetch_self_profile;
 use crate::server::{maybe_compressed_response, Response, ResponseHeaders};
 use brotli::enc::BrotliEncoderParams;
 use collector::SelfProfileId;
-use database::{metric::Metric, CollectionId, CommitType};
+use database::{metric::Metric, CommitType};
 use database::{selector, CodegenBackend, Target};
 use database::{ArtifactId, Profile};
 use headers::{ContentType, Header};
@@ -59,7 +59,6 @@ pub async fn handle_self_profile_processed_download(
             &body.scenario,
             &body.backend,
             &body.target,
-            None,
         )
         .await
         {
@@ -101,7 +100,6 @@ pub async fn handle_self_profile_processed_download(
             &body.scenario,
             &body.backend,
             &body.target,
-            body.cid,
         )
         .await
         {
@@ -193,7 +191,6 @@ async fn get_self_profile_id(
     scenario: &str,
     backend: &str,
     target: &str,
-    cid: Option<i32>,
 ) -> anyhow::Result<SelfProfileId> {
     let profile = profile
         .parse::<Profile>()
@@ -227,22 +224,9 @@ async fn get_self_profile_id(
         .copied()
         .ok_or_else(|| anyhow::anyhow!("No results for {commit}"))?;
 
-    let cid = match cid {
-        Some(cid) => {
-            if aids_and_cids.iter().any(|(_, v)| v.as_inner() == cid) {
-                CollectionId::from_inner(cid)
-            } else {
-                return Err(anyhow::anyhow!(
-                    "{cid} is not a collection ID at this artifact"
-                ));
-            }
-        }
-        _ => first_cid,
-    };
-
     Ok(SelfProfileId {
         artifact_id_number: aid,
-        collection: cid,
+        collection: first_cid,
         benchmark: benchmark.into(),
         profile,
         scenario,
@@ -372,7 +356,6 @@ pub async fn handle_self_profile_raw_download(
         &body.scenario,
         &body.backend,
         &body.target,
-        body.cid,
     )
     .await
     {
@@ -490,7 +473,6 @@ pub async fn handle_self_profile(
             &scenario.to_string(),
             backend.as_str(),
             target.as_str(),
-            None,
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -509,7 +491,6 @@ pub async fn handle_self_profile(
                 &scenario.to_string(),
                 backend.as_str(),
                 target.as_str(),
-                None,
             )
             .await
             .map_err(|e| e.to_string())?;
