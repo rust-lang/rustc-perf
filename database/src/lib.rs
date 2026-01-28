@@ -822,6 +822,9 @@ impl fmt::Display for CollectionId {
 }
 
 impl CollectionId {
+    pub fn from_inner(cid: i32) -> Self {
+        Self(cid)
+    }
     pub fn as_inner(&self) -> i32 {
         self.0
     }

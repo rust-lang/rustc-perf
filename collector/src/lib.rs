@@ -17,7 +17,9 @@ pub mod utils;
 
 use crate::compile::benchmark::{Benchmark, BenchmarkName};
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
-pub use crate::self_profile::{LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileStorage};
+pub use crate::self_profile::{
+    LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileId, SelfProfileStorage,
+};
 use database::selector::CompileTestCase;
 use database::{ArtifactId, ArtifactIdNumber, Connection};
 use hashbrown::HashSet;

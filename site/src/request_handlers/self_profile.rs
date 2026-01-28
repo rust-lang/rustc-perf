@@ -1,20 +1,20 @@
-use std::collections::HashSet;
-use std::io::Read;
-use std::sync::Arc;
-use std::time::Instant;
-
+use crate::api::self_profile::ArtifactSizeDelta;
+use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
+use crate::load::SiteCtxt;
+use crate::self_profile::fetch_self_profile;
+use crate::server::{maybe_compressed_response, Response, ResponseHeaders};
+use brotli::enc::BrotliEncoderParams;
 use bytes::Buf;
-use database::{metric::Metric, CommitType};
+use collector::SelfProfileId;
+use database::{metric::Metric, CollectionId, CommitType};
 use database::{selector, CodegenBackend, Target};
 use database::{ArtifactId, Profile};
 use headers::{ContentType, Header};
 use hyper::StatusCode;
-
-use crate::api::self_profile::ArtifactSizeDelta;
-use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
-use crate::load::SiteCtxt;
-use crate::self_profile::get_or_download_self_profile;
-use crate::server::Response;
+use std::collections::HashSet;
+use std::io::Read;
+use std::sync::Arc;
+use std::time::Instant;
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
@@ -52,116 +52,190 @@ pub async fn handle_self_profile_processed_download(
 
     let start = Instant::now();
 
-    todo!()
-    // let base_data = if let Some(diff_against) = diff_against {
-    //     match handle_self_profile_raw(
-    //         self_profile_raw::Request {
-    //             commit: diff_against,
-    //             benchmark: body.benchmark.clone(),
-    //             scenario: body.scenario.clone(),
-    //             cid: None,
-    //         },
-    //         ctxt,
-    //     )
-    //     .await
-    //     {
-    //         Ok(v) => match get_self_profile_raw_data(&v.url).await {
-    //             Ok(v) => Some(v),
-    //             Err(e) => {
-    //                 let mut resp = Response::new(e.to_string().into());
-    //                 *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-    //                 return resp;
-    //             }
-    //         },
-    //         Err(e) => {
-    //             let mut resp = Response::new(e.into());
-    //             *resp.status_mut() = StatusCode::BAD_REQUEST;
-    //             return resp;
-    //         }
-    //     }
-    // } else {
-    //     None
-    // };
-    //
-    // let data = match handle_self_profile_raw(
-    //     self_profile_raw::Request {
-    //         commit: body.commit,
-    //         benchmark: body.benchmark.clone(),
-    //         scenario: body.scenario.clone(),
-    //         cid: body.cid,
-    //     },
-    //     ctxt,
-    // )
-    // .await
-    // {
-    //     Ok(v) => match get_self_profile_raw_data(&v.url).await {
-    //         Ok(v) => v,
-    //
-    //         Err(e) => {
-    //             let mut resp = Response::new(e.to_string().into());
-    //             *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-    //             return resp;
-    //         }
-    //     },
-    //     Err(e) => {
-    //         let mut resp = Response::new(e.into());
-    //         *resp.status_mut() = StatusCode::BAD_REQUEST;
-    //         return resp;
-    //     }
-    // };
-    //
-    // log::trace!("got data in {:?}", start.elapsed());
-    //
-    // let output =
-    //     match crate::self_profile::generate(&title, body.processor_type, base_data, data, params) {
-    //         Ok(c) => c,
-    //         Err(e) => {
-    //             log::error!("Failed to generate json {:?}", e);
-    //             let mut resp = http::Response::new(format!("{e:?}").into());
-    //             *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-    //             return resp;
-    //         }
-    //     };
-    // let mut builder = http::Response::builder()
-    //     .header_typed(if output.filename.ends_with("json") {
-    //         ContentType::json()
-    //     } else if output.filename.ends_with("svg") {
-    //         ContentType::from("image/svg+xml".parse::<mime::Mime>().unwrap())
-    //     } else if output.filename.ends_with("html") {
-    //         ContentType::html()
-    //     } else {
-    //         unreachable!()
-    //     })
-    //     .status(StatusCode::OK);
-    //
-    // if output.is_download {
-    //     builder.headers_mut().unwrap().insert(
-    //         hyper::header::CONTENT_DISPOSITION,
-    //         hyper::header::HeaderValue::from_maybe_shared(format!(
-    //             "attachment; filename=\"{}\"",
-    //             output.filename,
-    //         ))
-    //         .expect("valid header"),
-    //     );
-    // }
-    //
-    // builder.headers_mut().unwrap().insert(
-    //     hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-    //     hyper::header::HeaderValue::from_static("https://profiler.firefox.com"),
-    // );
-    //
-    // if output.filename.ends_with("json") && allow_compression {
-    //     maybe_compressed_response(
-    //         builder,
-    //         output.data,
-    //         &Some(BrotliEncoderParams {
-    //             quality: 4,
-    //             ..Default::default()
-    //         }),
-    //     )
-    // } else {
-    //     builder.body(hyper::Body::from(output.data)).unwrap()
-    // }
+    let base_data = if let Some(diff_against) = diff_against {
+        let id =
+            match get_self_profile_id(ctxt, &body.benchmark, &diff_against, &body.scenario, None)
+                .await
+            {
+                Ok(id) => id,
+                Err(error) => {
+                    log::error!("Cannot get self-profile ID: {error}");
+                    let mut resp = Response::new(error.to_string().into());
+                    *resp.status_mut() = StatusCode::BAD_REQUEST;
+                    return resp;
+                }
+            };
+        let data = match ctxt.self_profile_storage.load(id).await {
+            Ok(Some(data)) => data,
+            Ok(None) => {
+                let mut resp = Response::new(
+                    format!("Self-profile data for {} not found", body.commit).into(),
+                );
+                *resp.status_mut() = StatusCode::NOT_FOUND;
+                return resp;
+            }
+            Err(error) => {
+                log::error!("Cannot get self-profile data: {error}");
+                let mut resp = Response::new(error.to_string().into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+                return resp;
+            }
+        };
+        Some(data)
+    } else {
+        None
+    };
+
+    let data = {
+        let id = match get_self_profile_id(
+            ctxt,
+            &body.benchmark,
+            &body.commit,
+            &body.scenario,
+            body.cid,
+        )
+        .await
+        {
+            Ok(id) => id,
+            Err(error) => {
+                log::error!("Cannot get self-profile ID: {error}");
+                let mut resp = Response::new(error.to_string().into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+                return resp;
+            }
+        };
+        match ctxt.self_profile_storage.load(id).await {
+            Ok(Some(data)) => data,
+            Ok(None) => {
+                let mut resp = Response::new(
+                    format!("Self-profile data for {} not found", body.commit).into(),
+                );
+                *resp.status_mut() = StatusCode::NOT_FOUND;
+                return resp;
+            }
+            Err(error) => {
+                log::error!("Cannot get self-profile data: {error}");
+                let mut resp = Response::new(error.to_string().into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+                return resp;
+            }
+        }
+    };
+
+    log::trace!("got data in {:?}", start.elapsed());
+
+    let output =
+        match crate::self_profile::generate(&title, body.processor_type, base_data, data, params) {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!("Failed to generate json {:?}", e);
+                let mut resp = http::Response::new(format!("{e:?}").into());
+                *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                return resp;
+            }
+        };
+    let mut builder = http::Response::builder()
+        .header_typed(if output.filename.ends_with("json") {
+            ContentType::json()
+        } else if output.filename.ends_with("svg") {
+            ContentType::from("image/svg+xml".parse::<mime::Mime>().unwrap())
+        } else if output.filename.ends_with("html") {
+            ContentType::html()
+        } else {
+            unreachable!()
+        })
+        .status(StatusCode::OK);
+
+    if output.is_download {
+        builder.headers_mut().unwrap().insert(
+            hyper::header::CONTENT_DISPOSITION,
+            hyper::header::HeaderValue::from_maybe_shared(format!(
+                "attachment; filename=\"{}\"",
+                output.filename,
+            ))
+            .expect("valid header"),
+        );
+    }
+
+    builder.headers_mut().unwrap().insert(
+        hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        hyper::header::HeaderValue::from_static("https://profiler.firefox.com"),
+    );
+
+    if output.filename.ends_with("json") && allow_compression {
+        maybe_compressed_response(
+            builder,
+            output.data,
+            &Some(BrotliEncoderParams {
+                quality: 4,
+                ..Default::default()
+            }),
+        )
+    } else {
+        builder.body(hyper::Body::from(output.data)).unwrap()
+    }
+}
+
+async fn get_self_profile_id(
+    ctxt: &SiteCtxt,
+    benchmark: &str,
+    commit: &str,
+    scenario: &str,
+    cid: Option<i32>,
+) -> anyhow::Result<SelfProfileId> {
+    let mut it = benchmark.rsplitn(2, '-');
+    let profile = it
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no profile"))?
+        .parse::<Profile>()
+        .map_err(|e| anyhow::anyhow!("Cannot parse profile: {e}"))?;
+    let bench_name = it
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no benchmark name"))?;
+
+    let scenario = scenario
+        .parse::<database::Scenario>()
+        .map_err(|e| anyhow::anyhow!("invalid scenario: {e:?}"))?;
+
+    let conn = ctxt.conn().await;
+
+    let aids_and_cids = conn
+        .list_self_profile(
+            ArtifactId::Commit(database::Commit {
+                sha: commit.to_owned(),
+                date: database::Date::empty(),
+                r#type: CommitType::Master,
+            }),
+            bench_name,
+            profile.as_str(),
+            &scenario.to_id(),
+        )
+        .await;
+    let (aid, first_cid) = aids_and_cids
+        .first()
+        .copied()
+        .ok_or_else(|| anyhow::anyhow!("No results for {commit}"))?;
+
+    let cid = match cid {
+        Some(cid) => {
+            if aids_and_cids.iter().any(|(_, v)| v.as_inner() == cid) {
+                CollectionId::from_inner(cid)
+            } else {
+                return Err(anyhow::anyhow!(
+                    "{cid} is not a collection ID at this artifact"
+                ));
+            }
+        }
+        _ => first_cid,
+    };
+
+    Ok(SelfProfileId {
+        artifact_id_number: aid,
+        collection: cid,
+        benchmark: bench_name.into(),
+        profile,
+        scenario,
+    })
 }
 
 // Add query data entries to `profile` for any queries in `base_profile` which are not present in
@@ -434,6 +508,7 @@ async fn get_self_profile_download_url(
     Ok(url)
 }
 
+/// Loads self-profile and query data for the "Detailed results" page.
 pub async fn handle_self_profile(
     body: self_profile::Request,
     ctxt: &SiteCtxt,
@@ -493,7 +568,7 @@ pub async fn handle_self_profile(
     }
     let mut cpu_response = cpu_responses.remove(0).series;
 
-    let mut self_profile = get_or_download_self_profile(
+    let mut self_profile = fetch_self_profile(
         ctxt,
         commits.first().unwrap().clone(),
         bench_name,
@@ -504,7 +579,7 @@ pub async fn handle_self_profile(
     .await?;
     let base_self_profile = match commits.get(1) {
         Some(aid) => Some(
-            get_or_download_self_profile(
+            fetch_self_profile(
                 ctxt,
                 aid.clone(),
                 bench_name,

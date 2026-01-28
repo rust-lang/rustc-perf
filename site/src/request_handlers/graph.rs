@@ -8,7 +8,7 @@ use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
 use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
 use crate::load::SiteCtxt;
-use crate::self_profile::get_or_download_self_profile;
+use crate::self_profile::fetch_self_profile;
 
 use database::interpolate::IsInterpolated;
 use database::selector::{
@@ -94,7 +94,7 @@ pub async fn handle_compile_detail_sections(
         profile: Profile,
         scenario: Scenario,
     ) -> Option<CompilationSections> {
-        get_or_download_self_profile(ctxt, aid, benchmark, profile, scenario, None)
+        fetch_self_profile(ctxt, aid, benchmark, profile, scenario, None)
             .await
             .ok()
             .map(|profile| CompilationSections {
