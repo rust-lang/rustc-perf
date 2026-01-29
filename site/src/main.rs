@@ -1,3 +1,4 @@
+use collector::{LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileStorage};
 use futures::future::FutureExt;
 use parking_lot::RwLock;
 use site::job_queue::create_job_queue_process;
@@ -35,10 +36,25 @@ async fn main() {
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(30);
+    let self_profile_storage: Box<dyn SelfProfileStorage + Send + Sync> =
+        match env::var("SELF_PROFILE_STORAGE_S3").ok() {
+            Some(_) => {
+                eprintln!("Loading self-profile data from S3");
+                Box::new(S3SelfProfileStorage::new())
+            }
+            None => {
+                eprintln!("Loading self-profile data from local directory");
+                Box::new(LocalSelfProfileStorage::default_path())
+            }
+        };
 
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
-            let res = Arc::new(load::SiteCtxt::from_db_url(&db_url).await.unwrap());
+            let res = Arc::new(
+                load::SiteCtxt::from_db_url(&db_url, self_profile_storage)
+                    .await
+                    .unwrap(),
+            );
             *ctxt_.write() = Some(res.clone());
             let commits = res.index.load().commits().len();
             let artifacts = res.index.load().artifacts().count();

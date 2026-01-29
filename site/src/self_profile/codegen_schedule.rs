@@ -17,10 +17,7 @@ fn is_interesting(name: &str) -> bool {
     )
 }
 
-fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Vec<Event>>)> {
-    let data = ProfilingData::from_paged_buffer(self_profile_data, None)
-        .map_err(|e| anyhow::format_err!("{:?}", e))?;
-
+fn by_thread(data: ProfilingData) -> anyhow::Result<(u64, HashMap<u32, Vec<Event>>)> {
     let mut start = None;
     for event in data
         .iter()
@@ -78,8 +75,8 @@ fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Ve
 
 pub fn generate(
     title: &str,
-    self_profile_base_data: Option<Vec<u8>>,
-    self_profile_data: Vec<u8>,
+    self_profile_base_data: Option<ProfilingData>,
+    self_profile_data: ProfilingData,
     opt: Opt,
 ) -> anyhow::Result<Vec<u8>> {
     let (total_duration_new, by_thread_new) = by_thread(self_profile_data)?;

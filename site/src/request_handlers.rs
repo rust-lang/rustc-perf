@@ -13,8 +13,7 @@ pub use graph::{
     handle_runtime_detail_graphs,
 };
 pub use self_profile::{
-    handle_self_profile, handle_self_profile_processed_download, handle_self_profile_raw,
-    handle_self_profile_raw_download,
+    handle_self_profile, handle_self_profile_processed_download, handle_self_profile_raw_download,
 };
 pub use status_page::handle_status_page;
 

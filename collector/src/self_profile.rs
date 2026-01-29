@@ -1,16 +1,19 @@
 use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute::SelfProfileFiles;
+use analyzeme::ProfilingData;
 use anyhow::Context;
 use database::{ArtifactIdNumber, CollectionId, Profile, Scenario};
+use reqwest::StatusCode;
 use std::future::Future;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::time::Instant;
 
 // TODO: Record codegen backend in the self profile name
 // TODO: remove collection ID from self-profile ID
 /// Uniquely identifies a self-profile archive.
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct SelfProfileId {
     pub artifact_id_number: ArtifactIdNumber,
     pub collection: CollectionId,
@@ -36,6 +39,32 @@ pub trait SelfProfileStorage {
         id: SelfProfileId,
         files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>;
+
+    /// Load self-profile data with the given ID.
+    /// Returns `None` if data for the ID was not found.
+    fn load(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<analyzeme::ProfilingData>>> + Send>>
+    {
+        let fut = self.load_raw(id);
+        Box::pin(async move {
+            let Some(data) = fut.await? else {
+                return Ok(None);
+            };
+            Ok(Some(ProfilingData::from_paged_buffer(data, None).map_err(
+                |e| anyhow::anyhow!("Cannot parse self-profile data: {e}"),
+            )?))
+        })
+    }
+
+    /// Load the raw byte data of the self-profile with the given ID.
+    /// Returns `None` if data for the ID was not found.
+    #[allow(clippy::type_complexity)]
+    fn load_raw(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>>;
 }
 
 pub struct LocalSelfProfileStorage {
@@ -48,6 +77,18 @@ impl LocalSelfProfileStorage {
             directory: dir.to_owned(),
         }
     }
+
+    /// Create local self-profile storage located at a local path on disk.
+    pub fn default_path() -> Self {
+        Self::new(Path::new("self-profile-storage"))
+    }
+
+    fn path(&self, id: &SelfProfileId) -> PathBuf {
+        let prefix = id.file_prefix();
+        self.directory
+            .join(prefix)
+            .join(format!("self-profile-{}.mm_profdata.sz", id.collection))
+    }
 }
 
 impl SelfProfileStorage for LocalSelfProfileStorage {
@@ -56,11 +97,7 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
         id: SelfProfileId,
         files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        let prefix = id.file_prefix();
-        let path = self
-            .directory
-            .join(prefix)
-            .join(format!("self-profile-{}.mm_profdata.sz", id.collection));
+        let path = self.path(&id);
         Box::pin(async move {
             tokio::fs::create_dir_all(path.parent().unwrap()).await?;
             match files {
@@ -72,6 +109,22 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
             Ok(())
         })
     }
+
+    fn load_raw(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
+        let path = self.path(&id);
+        Box::pin(async move {
+            if !path.is_file() {
+                return Ok(None);
+            }
+            let data = tokio::fs::read(&path).await.with_context(|| {
+                anyhow::anyhow!("Cannot read self-profile data from {}", path.display())
+            })?;
+            Ok(Some(data))
+        })
+    }
 }
 
 #[derive(Default)]
@@ -81,6 +134,10 @@ impl S3SelfProfileStorage {
     pub fn new() -> Self {
         Self
     }
+}
+
+fn s3_self_profile_filename(id: &SelfProfileId) -> String {
+    format!("self-profile-{}.mm_profdata.sz", id.collection)
 }
 
 impl SelfProfileStorage for S3SelfProfileStorage {
@@ -108,9 +165,11 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                         .await
                         .context("cannot write compressed self-profile data")?;
 
-                    format!("self-profile-{}.mm_profdata.sz", id.collection)
+                    s3_self_profile_filename(&id)
                 }
             };
+
+            log::info!("Uploading self-profile to {}/{filename}", prefix.display());
 
             let output = tokio::process::Command::new("aws")
                 .arg("s3")
@@ -136,6 +195,62 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                 ));
             }
             Ok(())
+        })
+    }
+
+    fn load_raw(
+        &self,
+        id: SelfProfileId,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
+        let path = id.file_prefix().join(s3_self_profile_filename(&id));
+        let url = format!(
+            "https://perf-data.rust-lang.org/{}",
+            path.to_str().expect("Non UTF-8 path used for self-profile")
+        );
+        Box::pin(async move {
+            log::trace!("Downloading {url}");
+            let start = Instant::now();
+            let resp = match reqwest::get(&url).await {
+                Ok(r) => r,
+                Err(e) => return Err(anyhow::anyhow!("{e:?}")),
+            };
+
+            if !resp.status().is_success() {
+                // Hitting an unknown path is returned as forbidden
+                if resp.status() == StatusCode::FORBIDDEN {
+                    return Ok(None);
+                }
+                return Err(anyhow::anyhow!(
+                    "Upstream status {:?} is not successful.\nurl={url}",
+                    resp.status(),
+                ));
+            }
+
+            let compressed = match resp.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    return Err(anyhow::anyhow!("Could not download from upstream: {e:?}"));
+                }
+            };
+
+            log::trace!(
+                "downloaded {} bytes in {:?}",
+                compressed.len(),
+                start.elapsed()
+            );
+
+            // The decompression is blocking, so we should not do it in the async task directly
+            let data = tokio::task::spawn_blocking(move || {
+                let mut data = Vec::new();
+                match snap::read::FrameDecoder::new(Cursor::new(compressed)).read_to_end(&mut data)
+                {
+                    Ok(_) => Ok(data),
+                    Err(e) => Err(anyhow::anyhow!("Could not decode self-profile data: {e:?}")),
+                }
+            })
+            .await??;
+
+            Ok(Some(data))
         })
     }
 }

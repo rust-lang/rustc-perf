@@ -1041,9 +1041,7 @@ fn main_result() -> anyhow::Result<i32> {
                 backends,
                 iterations: Some(iterations),
                 self_profile_storage: if self_profile.self_profile {
-                    Some(Box::new(LocalSelfProfileStorage::new(Path::new(
-                        "self-profile-storage",
-                    ))))
+                    Some(Box::new(LocalSelfProfileStorage::default_path()))
                 } else {
                     None
                 },

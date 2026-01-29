@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
-use collector::{Bound, MasterCommit};
+use collector::{Bound, MasterCommit, SelfProfileStorage};
 use database::Pool;
 pub use database::{ArtifactId, Benchmark, Commit};
 
@@ -85,6 +85,8 @@ pub struct SiteCtxt {
     pub master_commits: Arc<ArcSwap<MasterCommitCache>>, // outer Arc enables mutation in background task
     /// Cache for self profile data
     pub self_profile_cache: Mutex<SelfProfileCache>,
+    /// Resolver for fetching self-profile data
+    pub self_profile_storage: Box<dyn SelfProfileStorage + Send + Sync>,
     /// Database connection pool
     pub pool: Pool,
 }
@@ -108,7 +110,10 @@ impl SiteCtxt {
     }
 
     /// Initialize `SiteCtxt` from database url
-    pub async fn from_db_url(db_url: &str) -> anyhow::Result<Self> {
+    pub async fn from_db_url(
+        db_url: &str,
+        self_profile_storage: Box<dyn SelfProfileStorage + Send + Sync>,
+    ) -> anyhow::Result<Self> {
         let pool = Pool::open(db_url);
 
         let mut conn = pool.connection().await;
@@ -134,6 +139,7 @@ impl SiteCtxt {
             pool,
             landing_page: ArcSwap::new(Arc::new(None)),
             self_profile_cache: Mutex::new(SelfProfileCache::new(CACHED_SELF_PROFILE_COUNT)),
+            self_profile_storage,
         })
     }
 

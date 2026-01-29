@@ -56,4 +56,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 COPY --from=build /target/release/postgres-to-sqlite /usr/local/bin/rustc-perf-postgres-to-sqlite
 COPY --from=build /target/release/site /usr/local/bin/rustc-perf-site
 
+ENV SELF_PROFILE_STORAGE_S3=1
+
 CMD rustc-perf-site
