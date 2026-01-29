@@ -4,8 +4,9 @@ use crate::load::SiteCtxt;
 use crate::self_profile::fetch_self_profile;
 use crate::server::{maybe_compressed_response, Response, ResponseHeaders};
 use brotli::enc::BrotliEncoderParams;
+use collector::compile::benchmark::BenchmarkName;
 use collector::SelfProfileId;
-use database::{metric::Metric, CollectionId, CommitType};
+use database::{metric::Metric, CommitType};
 use database::{selector, CodegenBackend, Target};
 use database::{ArtifactId, Profile};
 use headers::{ContentType, Header};
@@ -57,7 +58,8 @@ pub async fn handle_self_profile_processed_download(
             &diff_against,
             &body.profile,
             &body.scenario,
-            None,
+            &body.backend,
+            &body.target,
         )
         .await
         {
@@ -97,7 +99,8 @@ pub async fn handle_self_profile_processed_download(
             &body.commit,
             &body.profile,
             &body.scenario,
-            body.cid,
+            &body.backend,
+            &body.target,
         )
         .await
         {
@@ -187,7 +190,8 @@ async fn get_self_profile_id(
     commit: &str,
     profile: &str,
     scenario: &str,
-    cid: Option<i32>,
+    backend: &str,
+    target: &str,
 ) -> anyhow::Result<SelfProfileId> {
     let profile = profile
         .parse::<Profile>()
@@ -195,46 +199,53 @@ async fn get_self_profile_id(
     let scenario = scenario
         .parse::<database::Scenario>()
         .map_err(|e| anyhow::anyhow!("invalid scenario: {e:?}"))?;
+    let backend = backend
+        .parse::<CodegenBackend>()
+        .map_err(|e| anyhow::anyhow!("invalid codegen backend: {e:?}"))?;
+    let target = target
+        .parse::<Target>()
+        .map_err(|e| anyhow::anyhow!("invalid target: {e:?}"))?;
+    let benchmark: BenchmarkName = benchmark.into();
 
     let conn = ctxt.conn().await;
 
+    let aid = ArtifactId::Commit(database::Commit {
+        sha: commit.to_owned(),
+        date: database::Date::empty(),
+        r#type: CommitType::Master,
+    });
+    // This exists only for backwards compatibility with old self-profile data
+    // Remove in Q3 2026
     let aids_and_cids = conn
         .list_self_profile(
-            ArtifactId::Commit(database::Commit {
-                sha: commit.to_owned(),
-                date: database::Date::empty(),
-                r#type: CommitType::Master,
-            }),
-            benchmark,
+            aid.clone(),
+            benchmark.0.as_str(),
             profile.as_str(),
             &scenario.to_id(),
         )
         .await;
-    let (aid, first_cid) = aids_and_cids
-        .first()
-        .copied()
-        .ok_or_else(|| anyhow::anyhow!("No results for {commit}"))?;
 
-    let cid = match cid {
-        Some(cid) => {
-            if aids_and_cids.iter().any(|(_, v)| v.as_inner() == cid) {
-                CollectionId::from_inner(cid)
-            } else {
-                return Err(anyhow::anyhow!(
-                    "{cid} is not a collection ID at this artifact"
-                ));
-            }
-        }
-        _ => first_cid,
+    let id = match aids_and_cids.first().copied() {
+        // We have a record in the DB, assume that it is the legacy ID
+        Some((aid, first_cid)) => SelfProfileId::Legacy {
+            artifact_id_number: aid,
+            collection: first_cid,
+            benchmark,
+            profile,
+            scenario,
+        },
+        // No record in the DB, assume that it is the new ID
+        None => SelfProfileId::Simple {
+            artifact_id: aid,
+            benchmark,
+            profile,
+            scenario,
+            backend,
+            target,
+        },
     };
 
-    Ok(SelfProfileId {
-        artifact_id_number: aid,
-        collection: cid,
-        benchmark: benchmark.into(),
-        profile,
-        scenario,
-    })
+    Ok(id)
 }
 
 // Add query data entries to `profile` for any queries in `base_profile` which are not present in
@@ -356,7 +367,8 @@ pub async fn handle_self_profile_raw_download(
         &body.commit,
         &body.profile,
         &body.scenario,
-        body.cid,
+        &body.backend,
+        &body.target,
     )
     .await
     {
@@ -418,7 +430,9 @@ pub async fn handle_self_profile(
     let index = ctxt.index.load();
 
     let backend: CodegenBackend = if let Some(backend) = body.backend {
-        backend.parse()?
+        backend
+            .parse()
+            .map_err(|e| format!("invalid scenario: {e:?}"))?
     } else {
         CodegenBackend::Llvm
     };
@@ -470,7 +484,8 @@ pub async fn handle_self_profile(
             },
             profile.as_str(),
             &scenario.to_string(),
-            None,
+            backend.as_str(),
+            target.as_str(),
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -487,7 +502,8 @@ pub async fn handle_self_profile(
                 },
                 profile.as_str(),
                 &scenario.to_string(),
-                None,
+                backend.as_str(),
+                target.as_str(),
             )
             .await
             .map_err(|e| e.to_string())?;

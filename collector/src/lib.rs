@@ -361,6 +361,7 @@ impl CollectorStepBuilder {
 
         CollectorCtx {
             artifact_row_id,
+            artifact_id: artifact_id.clone(),
             measured_compile_test_cases,
             job_id: self.job_id,
         }
@@ -370,6 +371,7 @@ impl CollectorStepBuilder {
 /// Represents an in-progress run for a given artifact.
 pub struct CollectorCtx {
     pub artifact_row_id: ArtifactIdNumber,
+    pub artifact_id: ArtifactId,
     /// Which tests cases were already computed **before** this collection began?
     pub measured_compile_test_cases: HashSet<CompileTestCase>,
     pub job_id: Option<u32>,

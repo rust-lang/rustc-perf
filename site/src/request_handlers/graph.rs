@@ -14,7 +14,7 @@ use database::interpolate::IsInterpolated;
 use database::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
-use database::{self, ArtifactId, CodegenBackend, Connection, Profile, Scenario, Target};
+use database::{self, ArtifactId, CodegenBackend, Profile, Scenario, Target};
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.
@@ -86,32 +86,25 @@ pub async fn handle_compile_detail_sections(
 
     let scenario: Scenario = request.scenario.parse()?;
     let profile: Profile = request.profile.parse()?;
+    let backend: CodegenBackend = request.backend.parse()?;
+    let target: Target = request.target.parse()?;
 
     async fn calculate_sections(
         ctxt: &SiteCtxt,
-        conn: &dyn Connection,
         aid: ArtifactId,
         benchmark: &str,
         profile: Profile,
         scenario: Scenario,
+        backend: CodegenBackend,
+        target: Target,
     ) -> Option<CompilationSections> {
-        let aids_and_cids = conn
-            .list_self_profile(
-                aid.clone(),
-                benchmark,
-                &profile.to_string(),
-                &scenario.to_string(),
-            )
-            .await;
-
-        let (anum, cid) = aids_and_cids.first()?;
-
-        let id = SelfProfileId {
-            artifact_id_number: *anum,
-            collection: *cid,
+        let id = SelfProfileId::Simple {
+            artifact_id: aid,
             benchmark: benchmark.into(),
             profile,
             scenario,
+            backend,
+            target,
         };
         fetch_self_profile(ctxt, id, None)
             .await
@@ -128,23 +121,24 @@ pub async fn handle_compile_detail_sections(
 
     // Doc queries are not split into the classic frontend/backend/linker parts.
     let (before, after) = if !is_doc {
-        let conn = ctxt.conn().await;
         tokio::join!(
             calculate_sections(
                 &ctxt,
-                &*conn,
                 start_artifact,
                 &request.benchmark,
                 profile,
-                scenario
+                scenario,
+                backend,
+                target
             ),
             calculate_sections(
                 &ctxt,
-                &*conn,
                 end_artifact,
                 &request.benchmark,
                 profile,
-                scenario
+                scenario,
+                backend,
+                target
             )
         )
     } else {

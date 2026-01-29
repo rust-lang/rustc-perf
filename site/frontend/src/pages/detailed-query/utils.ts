@@ -81,9 +81,18 @@ export function perfettoProfilerData(
   commit: string,
   benchmark: string,
   scenario: string,
-  profile: string
+  profile: string,
+  backend: string,
+  target: string
 ): {link: string; traceTitle: string} {
-  const link = chromeProfileUrl(commit, benchmark, scenario, profile);
+  const link = chromeProfileUrl(
+    commit,
+    benchmark,
+    scenario,
+    profile,
+    backend,
+    target
+  );
   const traceTitle = `${benchmark}-${scenario} (${commit})`;
   return {link, traceTitle};
 }
@@ -170,12 +179,14 @@ export function createDownloadLinksData(selector: Selector | null): {
       : "???";
 
   const createLinks = (commit: string) => ({
-    raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}`,
+    raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&backend=${state.backend}&target=${state.target}`,
     flamegraph: processedSelfProfileRelativeUrl(
       commit,
       state.benchmark,
       state.scenario,
       state.profile,
+      state.backend,
+      state.target,
       "flamegraph"
     ),
     crox: processedSelfProfileRelativeUrl(
@@ -183,6 +194,8 @@ export function createDownloadLinksData(selector: Selector | null): {
       state.benchmark,
       state.scenario,
       state.profile,
+      state.backend,
+      state.target,
       "crox"
     ),
     codegen: processedSelfProfileRelativeUrl(
@@ -190,16 +203,27 @@ export function createDownloadLinksData(selector: Selector | null): {
       state.benchmark,
       state.scenario,
       state.profile,
+      state.backend,
+      state.target,
       "codegen-schedule"
     ),
     perfetto: perfettoProfilerData(
       commit,
       state.benchmark,
       state.scenario,
-      state.profile
+      state.profile,
+      state.backend,
+      state.target
     ),
     firefox: `https://profiler.firefox.com/from-url/${encodeURIComponent(
-      chromeProfileUrl(commit, state.benchmark, state.scenario, state.profile)
+      chromeProfileUrl(
+        commit,
+        state.benchmark,
+        state.scenario,
+        state.profile,
+        state.backend,
+        state.target
+      )
     )}/marker-chart/?v=5`,
   });
 
@@ -207,7 +231,7 @@ export function createDownloadLinksData(selector: Selector | null): {
   const newLinks = createLinks(state.commit);
 
   const diffLink = state.base_commit
-    ? `/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&type=codegen-schedule`
+    ? `/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&backend=${state.backend}&target=${state.target}&type=codegen-schedule`
     : "";
 
   const localCommands = {
