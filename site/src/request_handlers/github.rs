@@ -9,6 +9,7 @@ use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
     CodegenBackend, Profile, Target,
 };
+use futures::stream::{FuturesUnordered, StreamExt};
 use hashbrown::HashMap;
 use std::sync::Arc;
 
@@ -117,6 +118,61 @@ async fn record_try_benchmark_request_without_artifacts(
     }
 }
 
+async fn validate_build_commands<'a>(build_cmds: &[BuildCommand<'a>]) -> Result<(), String> {
+    const BASE_URL: &str = "https://ci-artifacts.rust-lang.org/rustc-builds";
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(3000))
+        .build()
+        .map_err(|e| format!("Failed to build request client {e}"))?;
+    let mut futures = FuturesUnordered::new();
+
+    // Many commands within one build command
+    for cmd in build_cmds {
+        let sha = cmd.sha;
+        // Though presently very unlikely, there could be `N` targets
+        let targets = cmd
+            .params
+            .targets
+            .unwrap_or("")
+            .split(',')
+            .map(str::trim)
+            .filter(|t| !t.is_empty());
+
+        for target in targets {
+            let url = format!("{BASE_URL}/{sha}/rustc-nightly-{target}.tar.xz");
+            let client = client.clone();
+
+            futures.push(async move {
+                let status = client.head(&url).send().await.map(|r| r.status());
+                (sha, url, status)
+            });
+        }
+    }
+
+    let mut errors = String::new();
+    while let Some((sha, url, status)) = futures.next().await {
+        match status {
+            Ok(reqwest::StatusCode::NOT_FOUND) => {
+                errors += format!(
+                    "Missing artifact for sha `{sha}` ({url}); not built yet, try again later.\n"
+                )
+                .as_str();
+            }
+            Ok(_) => {}
+            Err(e) => {
+                errors += format!("Failed to check sha `{sha}` ({url}): {e}. Try again later.\n")
+                    .as_str();
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 async fn handle_rust_timer(
     ctxt: Arc<SiteCtxt>,
     main_client: &client::Client,
@@ -174,8 +230,14 @@ async fn handle_rust_timer(
         }
     }
 
+    // parser errors
     if valid_build_cmds.is_empty() && errors.is_empty() {
         errors.push_str("Command cannot be empty\n");
+    }
+
+    // requested artifacts do not exist errors
+    if let Err(error) = validate_build_commands(&valid_build_cmds).await {
+        errors.push_str(&error);
     }
 
     if !errors.is_empty() {
