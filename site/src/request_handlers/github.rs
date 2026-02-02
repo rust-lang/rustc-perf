@@ -133,10 +133,20 @@ async fn validate_build_commands<'a>(build_cmds: &[BuildCommand<'a>]) -> Result<
         let targets = cmd
             .params
             .targets
-            .unwrap_or("")
-            .split(',')
-            .map(str::trim)
-            .filter(|t| !t.is_empty());
+            .map(|targets| {
+                targets
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(|t| t.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| {
+                Target::default_targets()
+                    .into_iter()
+                    .map(|t| t.to_string())
+                    .collect()
+            });
 
         for target in targets {
             let url = format!("{BASE_URL}/{sha}/rustc-nightly-{target}.tar.xz");
