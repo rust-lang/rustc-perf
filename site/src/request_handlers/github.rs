@@ -112,7 +112,7 @@ async fn record_try_benchmark_request_without_artifacts(
             )
         }
         Err(e) => {
-            log::error!("Failed to insert release benchmark request: {e}");
+            log::error!("Failed to insert try benchmark request: {e}");
             "Something went wrong! This is most likely an internal failure, please let us know on [Zulip](https://rust-lang.zulipchat.com/#narrow/channel/242791-t-infra)".to_string()
         }
     }
