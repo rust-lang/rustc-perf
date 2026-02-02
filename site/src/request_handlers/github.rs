@@ -121,7 +121,7 @@ async fn record_try_benchmark_request_without_artifacts(
 async fn validate_build_commands<'a>(build_cmds: &[BuildCommand<'a>]) -> Result<(), String> {
     const BASE_URL: &str = "https://ci-artifacts.rust-lang.org/rustc-builds";
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(150))
+        .timeout(std::time::Duration::from_millis(3000))
         .build()
         .map_err(|e| format!("Failed to build request client {e}"))?;
     let mut futures = FuturesUnordered::new();
