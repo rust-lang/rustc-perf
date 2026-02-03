@@ -40,10 +40,6 @@ impl Target {
         }
     }
 
-    pub fn all() -> Vec<Self> {
-        vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
-    }
-
     #[cfg(target_arch = "x86_64")]
     pub fn host() -> Self {
         Self::X86_64UnknownLinuxGnu

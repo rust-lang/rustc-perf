@@ -96,16 +96,6 @@ impl<'a> BenchProcessor<'a> {
         target: Target,
         stats: Stats,
     ) {
-        let backend = match backend {
-            CodegenBackend::Llvm => database::CodegenBackend::Llvm,
-            CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
-        };
-
-        let target = match target {
-            Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
-            Target::AArch64UnknownLinuxGnu => database::Target::AArch64UnknownLinuxGnu,
-        };
-
         let mut buf = FuturesUnordered::new();
         for (stat, value) in stats.iter() {
             buf.push(self.conn.record_statistic(
@@ -114,8 +104,8 @@ impl<'a> BenchProcessor<'a> {
                 self.benchmark.0.as_str(),
                 profile,
                 scenario,
-                backend,
-                target,
+                backend.into(),
+                target.into(),
                 stat,
                 value,
             ));

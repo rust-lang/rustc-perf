@@ -388,6 +388,8 @@ impl Target {
         vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
     }
 
+    /// Targets that will be benchmarked by default in benchmark requests when no explicit target
+    /// is specified.
     pub fn default_targets() -> Vec<Self> {
         vec![Self::X86_64UnknownLinuxGnu]
     }
