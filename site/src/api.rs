@@ -120,6 +120,7 @@ pub mod graphs {
         pub benchmark: Option<String>,
         pub scenario: Option<String>,
         pub profile: Option<String>,
+        pub target: Option<String>,
     }
 
     #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -164,6 +165,7 @@ pub mod detail_graphs {
         pub scenario: String,
         pub profile: String,
         pub backend: String,
+        pub target: String,
         #[serde(deserialize_with = "vec_from_comma_separated")]
         pub kinds: Vec<GraphKind>,
     }
@@ -224,6 +226,7 @@ pub mod runtime_detail_graphs {
         pub end: Bound,
         pub stat: String,
         pub benchmark: String,
+        pub target: String,
         #[serde(deserialize_with = "vec_from_comma_separated")]
         pub kinds: Vec<GraphKind>,
     }

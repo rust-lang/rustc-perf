@@ -15,6 +15,7 @@ export interface RuntimeDetailGraphsSelector {
   end: string;
   stat: string;
   benchmark: string;
+  target: string;
   kinds: GraphKind[];
 }
 
@@ -28,6 +29,7 @@ async function loadGraphsDetail(
     benchmark: selector.benchmark,
     scenario: null,
     profile: null,
+    target: selector.target,
     kinds: selector.kinds.join(","),
   };
   return await getJson<RuntimeDetailGraphs>(
@@ -41,6 +43,6 @@ export const RUNTIME_DETAIL_GRAPHS_RESOLVER: CachedDataLoader<
   RuntimeDetailGraphs
 > = new CachedDataLoader(
   (key: RuntimeDetailGraphsSelector) =>
-    `${key.benchmark};${key.start};${key.end};${key.stat};${key.kinds}`,
+    `${key.benchmark};${key.start};${key.end};${key.stat};${key.kinds};${key.target}`,
   loadGraphsDetail
 );

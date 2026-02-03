@@ -21,6 +21,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
   const benchmark = urlParams["benchmark"] ?? null;
   const scenario = urlParams["scenario"] ?? null;
   const profile = urlParams["profile"] ?? null;
+  const target = urlParams["target"] ?? null;
   return {
     start,
     end,
@@ -29,6 +30,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     benchmark,
     scenario,
     profile,
+    target,
   };
 }
 

@@ -354,6 +354,11 @@ impl RuntimeBenchmarkQuery {
         self
     }
 
+    pub fn target(mut self, selector: Selector<Target>) -> Self {
+        self.target = selector;
+        self
+    }
+
     pub fn metric(mut self, selector: Selector<Metric>) -> Self {
         self.metric = selector.map(|v| v.as_str().into());
         self
