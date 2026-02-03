@@ -65,9 +65,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.3.3"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
+checksum = "5c8214115b7bf84099f1309324e63141d4c5d7cc26862f97a0a857dbefe165bd"
 
 [[package]]
 name = "bitvec"
@@ -463,7 +463,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97cc864b2dc5f078725908d7be7b35ce934e156ff52db40643ba6cb55f813c14"
 dependencies = [
  "ahash",
- "bitflags 2.3.3",
+ "bitflags 2.9.0",
  "const-str",
  "cssparser",
  "dashmap",
@@ -550,7 +550,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3e808c7a75aedcc522bd24187de6903adab3265d690a61f8b8181edaa988377"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.9.0",
  "cssparser",
  "fxhash",
  "log",
@@ -602,18 +602,17 @@ checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 [[package]]
 name = "perf-event"
 version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4d6393d9238342159080d79b78cb59c67399a8e7ecfa5d410bd614169e4e823"
+source = "git+https://github.com/jimblandy/perf-event?rev=bc6699c78c0a1fa3f83dfcb6a1a945991bc7cae9#bc6699c78c0a1fa3f83dfcb6a1a945991bc7cae9"
 dependencies = [
+ "bitflags 2.9.0",
  "libc",
  "perf-event-open-sys",
 ]
 
 [[package]]
 name = "perf-event-open-sys"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c44fb1c7651a45a3652c4afc6e754e40b3d6e6556f1487e2b230bfc4f33c2a8"
+version = "5.0.0"
+source = "git+https://github.com/jimblandy/perf-event?rev=bc6699c78c0a1fa3f83dfcb6a1a945991bc7cae9#bc6699c78c0a1fa3f83dfcb6a1a945991bc7cae9"
 dependencies = [
  "libc",
 ]
