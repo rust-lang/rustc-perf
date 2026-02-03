@@ -38,6 +38,7 @@ pub async fn handle_compile_detail_graphs(
                 .profile(Selector::One(request.profile.parse()?))
                 .scenario(Selector::One(scenario))
                 .backend(Selector::One(request.backend.parse()?))
+                .target(Selector::One(request.target.parse()?))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
@@ -164,6 +165,7 @@ pub async fn handle_runtime_detail_graphs(
         .statistic_series(
             RuntimeBenchmarkQuery::default()
                 .benchmark(Selector::One(request.benchmark.clone()))
+                .target(Selector::One(request.target.parse()?))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
@@ -204,6 +206,7 @@ pub async fn handle_graphs(
             benchmark: None,
             scenario: None,
             profile: None,
+            target: None,
         };
 
     if is_default_query {
@@ -245,6 +248,8 @@ async fn create_graphs(
     let profile_selector = create_selector(&request.profile)
         .unwrap_or_else(|| Ok(Selector::Subset(Profile::default_profiles())))?;
     let scenario_selector = create_selector(&request.scenario).unwrap_or(Ok(Selector::All))?;
+    let target_selector = create_selector(&request.target)
+        .unwrap_or(Ok(Selector::One(Target::X86_64UnknownLinuxGnu)))?;
 
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
@@ -253,7 +258,7 @@ async fn create_graphs(
                 .profile(profile_selector)
                 .scenario(scenario_selector)
                 .backend(Selector::One(CodegenBackend::Llvm))
-                .target(Selector::One(Target::X86_64UnknownLinuxGnu))
+                .target(target_selector)
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )

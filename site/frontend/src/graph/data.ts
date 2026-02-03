@@ -9,6 +9,7 @@ export interface GraphsSelector {
   benchmark: string | null;
   scenario: string | null;
   profile: string | null;
+  target: string | null;
 }
 
 export interface Series {

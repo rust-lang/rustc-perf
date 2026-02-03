@@ -32,6 +32,7 @@ function createGraphsSelector(): RuntimeDetailGraphsSelector {
 
   return {
     benchmark: props.testCase.benchmark,
+    target: props.testCase.target,
     stat: props.metric,
     start,
     end,
@@ -65,6 +66,7 @@ async function renderGraphs(detail: RuntimeDetailGraphs) {
       end: selector.end,
       profile: null,
       scenario: null,
+      target: selector.target,
       kind,
     };
 

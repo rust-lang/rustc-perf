@@ -42,6 +42,7 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
     stat: props.metric,
     start,
     end,
+    target: props.testCase.target,
     kinds: ["percentrelative", "percentfromfirst"] as GraphKind[],
   };
 }
@@ -77,6 +78,7 @@ async function renderGraphs(detail: CompileDetailGraphs) {
       stat: selector.stat,
       start: selector.start,
       end: selector.end,
+      target: selector.target,
       kind,
     };
 
