@@ -135,7 +135,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 BenchmarkSet { members: set_1 },
             ]
         }
-        Target::AArch64UnknownLinuxGnu => {
+        Target::AArch64UnknownLinuxGnu | Target::LoongArch64UnknownLinuxGnu => {
             let set = vec![
                 compile(AWAIT_CALL_TREE),
                 compile(CARGO_0_87_1),
@@ -281,6 +281,15 @@ mod tests {
     #[test]
     fn check_benchmark_set_aarch64() {
         let sets = get_benchmark_sets_for_target(Target::AArch64UnknownLinuxGnu);
+
+        assert!(sets.len() == 1);
+
+        check_benchmark_sets(&sets);
+    }
+
+    #[test]
+    fn check_benchmark_set_loongarch64() {
+        let sets = get_benchmark_sets_for_target(Target::LoongArch64UnknownLinuxGnu);
 
         assert!(sets.len() == 1);
 

@@ -13,6 +13,9 @@ pub enum Target {
 
     /// `aarch64-unknown-linux-gnu`
     AArch64UnknownLinuxGnu,
+
+    /// `loongarch64-unknown-linux-gnu`
+    LoongArch64UnknownLinuxGnu,
 }
 
 impl FromStr for Target {
@@ -21,6 +24,7 @@ impl FromStr for Target {
         Ok(match s.to_ascii_lowercase().as_str() {
             "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
             "aarch64-unknown-linux-gnu" => Target::AArch64UnknownLinuxGnu,
+            "loongarch64-unknown-linux-gnu" => Target::LoongArch64UnknownLinuxGnu,
             _ => return Err(format!("{s} is not a valid target")),
         })
     }
@@ -37,6 +41,7 @@ impl Target {
         match self {
             Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
             Target::AArch64UnknownLinuxGnu => "aarch64-unknown-linux-gnu",
+            Target::LoongArch64UnknownLinuxGnu => "loongarch64-unknown-linux-gnu",
         }
     }
 
@@ -49,6 +54,11 @@ impl Target {
     pub fn host() -> Self {
         Self::AArch64UnknownLinuxGnu
     }
+
+    #[cfg(target_arch = "loongarch64")]
+    pub fn host() -> Self {
+        Self::LoongArch64UnknownLinuxGnu
+    }
 }
 
 impl From<database::Target> for Target {
@@ -56,6 +66,7 @@ impl From<database::Target> for Target {
         match value {
             database::Target::X86_64UnknownLinuxGnu => Self::X86_64UnknownLinuxGnu,
             database::Target::AArch64UnknownLinuxGnu => Self::AArch64UnknownLinuxGnu,
+            database::Target::LoongArch64UnknownLinuxGnu => Self::LoongArch64UnknownLinuxGnu,
         }
     }
 }
@@ -65,6 +76,7 @@ impl From<Target> for database::Target {
         match value {
             Target::X86_64UnknownLinuxGnu => database::Target::X86_64UnknownLinuxGnu,
             Target::AArch64UnknownLinuxGnu => database::Target::AArch64UnknownLinuxGnu,
+            Target::LoongArch64UnknownLinuxGnu => database::Target::LoongArch64UnknownLinuxGnu,
         }
     }
 }
