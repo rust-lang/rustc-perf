@@ -198,9 +198,10 @@ fn generate_diffs(
                 };
                 let id_diff = format!("{id1}-{id2}");
                 let prefix = profiler.prefix();
+                let prefix2 = profiler.prefix2();
                 let left = out_dir.join(filename(prefix, id1));
                 let right = out_dir.join(filename(prefix, id2));
-                let output = out_dir.join(filename(&format!("{prefix}-diff"), &id_diff));
+                let output = out_dir.join(filename(&format!("{prefix2}-diff"), &id_diff));
 
                 if let Err(e) = profiler.diff(&left, &right, &output) {
                     errors.incr();
@@ -1148,7 +1149,7 @@ fn main_result() -> anyhow::Result<i32> {
                     &profiler,
                 );
                 if let [diff] = &diffs[..] {
-                    let short = out_dir.join(format!("{}-diff-latest", profiler.prefix()));
+                    let short = out_dir.join(format!("{}-diff-latest", profiler.prefix2()));
                     std::fs::copy(diff, &short).expect("copy to short path");
                     eprintln!("Original diff at: {}", diff.to_string_lossy());
                     eprintln!("Short path: {}", short.to_string_lossy());
