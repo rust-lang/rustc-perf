@@ -65,6 +65,18 @@ impl Profiler {
         }
     }
 
+    /// A file prefix added to all (second-stage) files of this profiler.
+    pub fn prefix2(&self) -> &'static str {
+        use Profiler::*;
+        match self {
+            Cachegrind => "cgann",
+            DepGraph => "dep-graph",
+
+            SelfProfile | PerfRecord | Oprofile | Samply | Callgrind | Dhat | DhatCopy | Massif
+            | Bytehound | Eprintln | LlvmLines | MonoItems | LlvmIr => "",
+        }
+    }
+
     /// A postfix added to the file that gets diffed.
     pub fn postfix(&self) -> &'static str {
         use Profiler::*;
