@@ -19,6 +19,11 @@ pub use pool::{Connection, Pool};
 
 intern!(pub struct Metric);
 intern!(pub struct Benchmark);
+intern!(pub struct TargetName);
+
+pub fn intern_target_name(target: &str) -> TargetName {
+    intern(target)
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct QueuedCommit {
@@ -366,7 +371,8 @@ impl PartialOrd for Scenario {
 /// their support see;
 /// https://doc.rust-lang.org/nightly/rustc/platform-support.html
 ///
-/// Presently we only support x86_64
+/// We separate "first-party" targets for which we have additional support, and a fallback
+/// that can be used to use rustc-perf for any target.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Target {
     /// `x86_64-unknown-linux-gnu`
@@ -374,6 +380,7 @@ pub enum Target {
 
     /// `aarch64-unknown-linux-gnu`
     AArch64UnknownLinuxGnu,
+    Custom(TargetName),
 }
 
 impl Target {
@@ -381,10 +388,12 @@ impl Target {
         match self {
             Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
             Target::AArch64UnknownLinuxGnu => "aarch64-unknown-linux-gnu",
+            Target::Custom(name) => name.as_str(),
         }
     }
 
-    pub fn all() -> Vec<Self> {
+    /// Targets that we primarily support in the website.
+    pub fn primary_targets() -> Vec<Self> {
         vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
     }
 
@@ -397,18 +406,18 @@ impl Target {
     // 2026/01/12 (Jamesbarford) - presently rustc-perf only support `x86_64`'s
     // in the pipeline and has two machines running. AArch64 will be run in
     // the background and we do not want to wait for it to complete benchmarking
-    pub fn is_optional(self) -> bool {
-        self != Target::X86_64UnknownLinuxGnu
+    pub fn is_optional(&self) -> bool {
+        *self != Target::X86_64UnknownLinuxGnu
     }
 }
 
 impl FromStr for Target {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s.to_ascii_lowercase().as_str() {
+        Ok(match s {
             "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
             "aarch64-unknown-linux-gnu" => Target::AArch64UnknownLinuxGnu,
-            _ => return Err(format!("{s} is not a valid target")),
+            other => Target::Custom(intern(other)),
         })
     }
 }
@@ -667,7 +676,7 @@ mod index_serde {
     }
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum DbLabel {
     StatisticDescription {
         benchmark: Benchmark,
@@ -1130,7 +1139,12 @@ pub fn parse_profiles(profiles: &str) -> Result<Vec<Profile>, String> {
 }
 
 pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
-    parse_comma_separated(targets, "target")
+    let primary = Target::primary_targets();
+    let targets = parse_comma_separated(targets, "target")?;
+    if !targets.iter().all(|t| primary.contains(t)) {
+        return Err("Only primary targets can be specified".to_string());
+    }
+    Ok(targets)
 }
 
 /// Cached information about benchmark requests in the DB
