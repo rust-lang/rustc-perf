@@ -17,7 +17,7 @@ pub use self_profile::{
 };
 pub use status_page::handle_status_page;
 
-use crate::api::{info, ServerResult};
+use crate::api::info;
 use crate::load::SiteCtxt;
 
 pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
@@ -25,8 +25,4 @@ pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
         compile_metrics: ctxt.data_summary.compile_metrics().to_vec(),
         runtime_metrics: ctxt.data_summary.runtime_metrics().to_vec(),
     }
-}
-
-pub async fn handle_collected() -> ServerResult<()> {
-    Ok(())
 }
