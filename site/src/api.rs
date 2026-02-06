@@ -51,6 +51,9 @@ pub mod info {
 
         /// Sorted list of known runtime metrics
         pub runtime_metrics: Vec<String>,
+
+        /// List of known targets for compile-time benchmarks
+        pub compile_targets: Vec<String>,
     }
 }
 

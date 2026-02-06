@@ -24,5 +24,11 @@ pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
     info::Response {
         compile_metrics: ctxt.data_summary.compile_metrics().to_vec(),
         runtime_metrics: ctxt.data_summary.runtime_metrics().to_vec(),
+        compile_targets: ctxt
+            .data_summary
+            .compile_targets()
+            .iter()
+            .map(|t| t.to_string())
+            .collect(),
     }
 }

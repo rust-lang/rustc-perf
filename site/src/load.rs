@@ -12,8 +12,8 @@ use serde::Deserialize;
 use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit, SelfProfileStorage};
-use database::Pool;
 pub use database::{ArtifactId, Benchmark, Commit};
+use database::{Pool, Target};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TryCommit {
@@ -145,6 +145,7 @@ impl SiteCtxt {
             metrics.sort();
             metrics
         };
+        let compile_targets = index.compile_targets();
 
         Ok(Self {
             config,
@@ -152,6 +153,7 @@ impl SiteCtxt {
             data_summary: BenchmarkDataSummary {
                 compile_metrics,
                 runtime_metrics,
+                compile_targets,
             },
             master_commits: Arc::new(ArcSwap::new(Arc::new(master_commits))),
             pool,
@@ -206,12 +208,14 @@ impl SiteCtxt {
 /// aggressively cached - we only load the summary when starting the website.
 /// Currently, it contains compile and runtime metrics.
 pub struct BenchmarkDataSummary {
-    /// All known compile benchmark metrics (e.g. instruction count, cycles, etc.) contained in
-    /// the DB.
+    /// All known compile benchmark metrics (e.g. instruction count, cycles, etc.) for which we have
+    /// some benchmark results in the DB.
     compile_metrics: Vec<String>,
-    /// All known runtime benchmark metrics (e.g. instruction count, cycles, etc.) contained in
-    /// the DB.
+    /// All known runtime benchmark metrics (e.g. instruction count, cycles, etc.) for which we have
+    /// some benchmark results in the DB.
     runtime_metrics: Vec<String>,
+    /// All known targets for which we have some compile-time benchmark results in the DB.
+    compile_targets: Vec<Target>,
 }
 
 impl BenchmarkDataSummary {
@@ -221,5 +225,9 @@ impl BenchmarkDataSummary {
 
     pub fn runtime_metrics(&self) -> &[String] {
         &self.runtime_metrics
+    }
+
+    pub fn compile_targets(&self) -> &[Target] {
+        &self.compile_targets
     }
 }

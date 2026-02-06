@@ -763,6 +763,18 @@ impl Index {
             .collect()
     }
 
+    /// All targets for which we have some compile-time benchmark result data.
+    pub fn compile_targets(&self) -> Vec<Target> {
+        self.pstat_series
+            .map
+            .keys()
+            .map(|(_, _, _, _, target, _)| target)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
     // FIXME: in theory this won't scale indefinitely as there's potentially
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
