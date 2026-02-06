@@ -17,23 +17,18 @@ pub use self_profile::{
 };
 pub use status_page::handle_status_page;
 
-use crate::api::{info, ServerResult};
+use crate::api::info;
 use crate::load::SiteCtxt;
 
 pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
-    let mut compile_metrics = ctxt.index.load().compile_metrics();
-    compile_metrics.sort();
-
-    let mut runtime_metrics = ctxt.index.load().runtime_metrics();
-    runtime_metrics.sort();
-
     info::Response {
-        compile_metrics,
-        runtime_metrics,
-        as_of: ctxt.index.load().commits().last().map(|d| d.date),
+        compile_metrics: ctxt.data_summary.compile_metrics().to_vec(),
+        runtime_metrics: ctxt.data_summary.runtime_metrics().to_vec(),
+        compile_targets: ctxt
+            .data_summary
+            .compile_targets()
+            .iter()
+            .map(|t| t.to_string())
+            .collect(),
     }
-}
-
-pub async fn handle_collected() -> ServerResult<()> {
-    Ok(())
 }

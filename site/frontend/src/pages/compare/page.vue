@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {loadBenchmarkInfo} from "../../api";
-import AsOf from "../../components/as-of.vue";
 import {
   changeUrl,
   createUrlWithAppendedParams,
@@ -182,5 +181,4 @@ let info = await loadBenchmarkInfo();
     </div>
   </div>
   <br />
-  <AsOf :info="info" />
 </template>

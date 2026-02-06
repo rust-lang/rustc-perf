@@ -42,7 +42,6 @@ where
 }
 
 pub mod info {
-    use database::Date;
     use serde::Serialize;
 
     #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -53,8 +52,8 @@ pub mod info {
         /// Sorted list of known runtime metrics
         pub runtime_metrics: Vec<String>,
 
-        /// Chronologically last loaded run date.
-        pub as_of: Option<Date>,
+        /// List of known targets for compile-time benchmarks
+        pub compile_targets: Vec<String>,
     }
 }
 

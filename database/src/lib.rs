@@ -739,10 +739,8 @@ impl Index {
         commits
     }
 
-    // FIXME: in theory this won't scale indefinitely as there's potentially
-    // millions of queries and labels and iterating all of them is eventually
-    // going to be impractical. But for now it performs quite well, so we'll go
-    // for it as keeping indices around would be annoying.
+    // Note: this function (same as the functions below) iterate through all possible combinations
+    // of benchmark parameters, so they should ideally not be called very often.
     pub fn compile_metrics(&self) -> Vec<String> {
         self.pstat_series
             .map
@@ -762,6 +760,18 @@ impl Index {
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())
+            .collect()
+    }
+
+    /// All targets for which we have some compile-time benchmark result data.
+    pub fn compile_targets(&self) -> Vec<Target> {
+        self.pstat_series
+            .map
+            .keys()
+            .map(|(_, _, _, _, target, _)| target)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .cloned()
             .collect()
     }
 

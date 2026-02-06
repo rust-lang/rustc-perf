@@ -12,8 +12,8 @@ use serde::Deserialize;
 use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit, SelfProfileStorage};
-use database::Pool;
 pub use database::{ArtifactId, Benchmark, Commit};
+use database::{Pool, Target};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TryCommit {
@@ -81,6 +81,8 @@ pub struct SiteCtxt {
     pub landing_page: ArcSwap<Option<Arc<crate::api::graphs::Response>>>,
     /// Index of various common queries
     pub index: ArcSwap<database::Index>,
+    /// Summary of some basic data present in the database.
+    pub data_summary: BenchmarkDataSummary,
     /// Cached master-branch Rust commits
     pub master_commits: Arc<ArcSwap<MasterCommitCache>>, // outer Arc enables mutation in background task
     /// Cache for self profile data
@@ -132,9 +134,27 @@ impl SiteCtxt {
 
         let master_commits = MasterCommitCache::download().await?;
 
+        // We load this data only at website start, as they change very infrequently
+        let compile_metrics = {
+            let mut metrics = index.compile_metrics();
+            metrics.sort();
+            metrics
+        };
+        let runtime_metrics = {
+            let mut metrics = index.runtime_metrics();
+            metrics.sort();
+            metrics
+        };
+        let compile_targets = index.compile_targets();
+
         Ok(Self {
             config,
             index: ArcSwap::new(Arc::new(index)),
+            data_summary: BenchmarkDataSummary {
+                compile_metrics,
+                runtime_metrics,
+                compile_targets,
+            },
             master_commits: Arc::new(ArcSwap::new(Arc::new(master_commits))),
             pool,
             landing_page: ArcSwap::new(Arc::new(None)),
@@ -181,5 +201,33 @@ impl SiteCtxt {
         }
 
         commits
+    }
+}
+
+/// Summary of data contained in the database which changes *very* infrequently, so it can be
+/// aggressively cached - we only load the summary when starting the website.
+/// Currently, it contains compile and runtime metrics.
+pub struct BenchmarkDataSummary {
+    /// All known compile benchmark metrics (e.g. instruction count, cycles, etc.) for which we have
+    /// some benchmark results in the DB.
+    compile_metrics: Vec<String>,
+    /// All known runtime benchmark metrics (e.g. instruction count, cycles, etc.) for which we have
+    /// some benchmark results in the DB.
+    runtime_metrics: Vec<String>,
+    /// All known targets for which we have some compile-time benchmark results in the DB.
+    compile_targets: Vec<Target>,
+}
+
+impl BenchmarkDataSummary {
+    pub fn compile_metrics(&self) -> &[String] {
+        &self.compile_metrics
+    }
+
+    pub fn runtime_metrics(&self) -> &[String] {
+        &self.runtime_metrics
+    }
+
+    pub fn compile_targets(&self) -> &[Target] {
+        &self.compile_targets
     }
 }

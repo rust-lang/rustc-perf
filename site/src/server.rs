@@ -10,7 +10,7 @@ use std::sync::{Arc, LazyLock};
 use std::{fmt, str};
 
 use futures::{future::FutureExt, stream::StreamExt};
-use headers::{Authorization, CacheControl, ContentType, ETag, Header, HeaderMapExt, IfNoneMatch};
+use headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch};
 use http::header::CACHE_CONTROL;
 use hyper::StatusCode;
 use log::{error, info};
@@ -105,23 +105,6 @@ impl Server {
                 .unwrap(),
         };
         Ok(response)
-    }
-
-    fn check_auth(&self, req: &http::request::Parts) -> bool {
-        if let Some(auth) = req
-            .headers
-            .get(Authorization::<headers::authorization::Bearer>::name())
-        {
-            let ctxt = self.ctxt.read();
-            let ctxt = ctxt.as_ref().unwrap();
-            let auth = Authorization::<headers::authorization::Bearer>::decode(
-                &mut Some(auth).into_iter(),
-            )
-            .unwrap();
-            return auth.0.token() == *ctxt.config.keys.github_webhook_secret.as_ref().unwrap();
-        }
-
-        false
     }
 
     async fn handle_metrics(&self, _req: Request) -> Response {
@@ -342,18 +325,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             crate::comparison::handle_compare(check!(parse_body(&body)), &ctxt).await,
             &compression,
         )),
-        "/perf/collected" => {
-            if !server.check_auth(&req) {
-                return Ok(http::Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .body(hyper::Body::empty())
-                    .unwrap());
-            }
-            Ok(to_response(
-                request_handlers::handle_collected().await,
-                &compression,
-            ))
-        }
         "/perf/github-hook" => {
             if !verify_gh(&ctxt.config, &req, &body) {
                 return Ok(http::Response::builder()
