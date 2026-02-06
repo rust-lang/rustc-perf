@@ -19,7 +19,7 @@ flate2 = { version = "1", optional = true }
 crabgrind = { version = "0.1.10", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-perf-event = "0.4.7"
+perf-event = { git = "https://github.com/jimblandy/perf-event", rev = "bc6699c78c0a1fa3f83dfcb6a1a945991bc7cae9" }
 
 [features]
 compression = ["dep:flate2"]

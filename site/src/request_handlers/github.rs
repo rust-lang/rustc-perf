@@ -597,7 +597,7 @@ Otherwise LGTM."#),
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue targets=x86_64-unknown-linux-gnu"),
             @r#"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: Some("x86_64-unknown-linux-gnu") } }))"#);
         insta::assert_compact_debug_snapshot!(parse_queue_command("@rust-timer queue targets=x86_64-unknown-linux-gnu,67-unknown-none"),
-            @r#"Some(Err("Cannot parse targets: Invalid target: 67-unknown-none. Valid values are: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu"))"#);
+            @r#"Some(Err("Cannot parse targets: Invalid target: 67-unknown-none. Valid values are: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, loongarch64-unknown-linux-gnu"))"#);
     }
 
     #[test]

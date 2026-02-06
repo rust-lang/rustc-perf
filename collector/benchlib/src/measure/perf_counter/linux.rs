@@ -95,7 +95,13 @@ fn prepare_counters(group: &mut Group) -> anyhow::Result<Counters> {
     let instructions = add_event(Hardware::INSTRUCTIONS);
     let branch_misses = add_event(Hardware::BRANCH_MISSES);
     let cache_misses = add_event(Hardware::CACHE_MISSES);
-    let cache_references = add_event(Hardware::CACHE_REFERENCES);
+    let cache_references = if cfg!(target_arch = "loongarch64") {
+        // LoongArch64 PMU supports sampling at most 4 hardware events, so
+        // CACHE_REFERENCES is disabled to avoid exceeding the limit.
+        None
+    } else {
+        add_event(Hardware::CACHE_REFERENCES)
+    };
 
     Ok(Counters {
         cycles,

@@ -374,6 +374,9 @@ pub enum Target {
 
     /// `aarch64-unknown-linux-gnu`
     AArch64UnknownLinuxGnu,
+
+    /// `loongarch64-unknown-linux-gnu`
+    LoongArch64UnknownLinuxGnu,
 }
 
 impl Target {
@@ -381,11 +384,16 @@ impl Target {
         match self {
             Target::X86_64UnknownLinuxGnu => "x86_64-unknown-linux-gnu",
             Target::AArch64UnknownLinuxGnu => "aarch64-unknown-linux-gnu",
+            Target::LoongArch64UnknownLinuxGnu => "loongarch64-unknown-linux-gnu",
         }
     }
 
     pub fn all() -> Vec<Self> {
-        vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
+        vec![
+            Self::X86_64UnknownLinuxGnu,
+            Self::AArch64UnknownLinuxGnu,
+            Self::LoongArch64UnknownLinuxGnu,
+        ]
     }
 
     /// Targets that will be benchmarked by default in benchmark requests when no explicit target
@@ -408,6 +416,7 @@ impl FromStr for Target {
         Ok(match s.to_ascii_lowercase().as_str() {
             "x86_64-unknown-linux-gnu" => Target::X86_64UnknownLinuxGnu,
             "aarch64-unknown-linux-gnu" => Target::AArch64UnknownLinuxGnu,
+            "loongarch64-unknown-linux-gnu" => Target::LoongArch64UnknownLinuxGnu,
             _ => return Err(format!("{s} is not a valid target")),
         })
     }
