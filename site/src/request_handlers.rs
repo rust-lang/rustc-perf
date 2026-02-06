@@ -30,7 +30,6 @@ pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
     info::Response {
         compile_metrics,
         runtime_metrics,
-        as_of: ctxt.index.load().commits().last().map(|d| d.date),
     }
 }
 

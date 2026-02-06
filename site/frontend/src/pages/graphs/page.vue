@@ -10,7 +10,6 @@ import {
 } from "../../utils/navigation";
 import {renderPlots} from "../../graph/render";
 import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
-import AsOf from "../../components/as-of.vue";
 import {loadGraphs} from "../../graph/api";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
@@ -180,7 +179,6 @@ loadGraphData(selector, loading);
         </div>
         <div id="size-charts"></div>
       </div>
-      <AsOf :info="info" />
     </div>
   </div>
 </template>
