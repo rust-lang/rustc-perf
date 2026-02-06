@@ -21,15 +21,9 @@ use crate::api::{info, ServerResult};
 use crate::load::SiteCtxt;
 
 pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
-    let mut compile_metrics = ctxt.index.load().compile_metrics();
-    compile_metrics.sort();
-
-    let mut runtime_metrics = ctxt.index.load().runtime_metrics();
-    runtime_metrics.sort();
-
     info::Response {
-        compile_metrics,
-        runtime_metrics,
+        compile_metrics: ctxt.data_summary.compile_metrics().to_vec(),
+        runtime_metrics: ctxt.data_summary.runtime_metrics().to_vec(),
     }
 }
 

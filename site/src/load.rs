@@ -81,6 +81,8 @@ pub struct SiteCtxt {
     pub landing_page: ArcSwap<Option<Arc<crate::api::graphs::Response>>>,
     /// Index of various common queries
     pub index: ArcSwap<database::Index>,
+    /// Summary of some basic data present in the database.
+    pub data_summary: BenchmarkDataSummary,
     /// Cached master-branch Rust commits
     pub master_commits: Arc<ArcSwap<MasterCommitCache>>, // outer Arc enables mutation in background task
     /// Cache for self profile data
@@ -132,9 +134,25 @@ impl SiteCtxt {
 
         let master_commits = MasterCommitCache::download().await?;
 
+        // We load this data only at website start, as they change very infrequently
+        let compile_metrics = {
+            let mut metrics = index.compile_metrics();
+            metrics.sort();
+            metrics
+        };
+        let runtime_metrics = {
+            let mut metrics = index.runtime_metrics();
+            metrics.sort();
+            metrics
+        };
+
         Ok(Self {
             config,
             index: ArcSwap::new(Arc::new(index)),
+            data_summary: BenchmarkDataSummary {
+                compile_metrics,
+                runtime_metrics,
+            },
             master_commits: Arc::new(ArcSwap::new(Arc::new(master_commits))),
             pool,
             landing_page: ArcSwap::new(Arc::new(None)),
@@ -181,5 +199,27 @@ impl SiteCtxt {
         }
 
         commits
+    }
+}
+
+/// Summary of data contained in the database which changes *very* infrequently, so it can be
+/// aggressively cached - we only load the summary when starting the website.
+/// Currently, it contains compile and runtime metrics.
+pub struct BenchmarkDataSummary {
+    /// All known compile benchmark metrics (e.g. instruction count, cycles, etc.) contained in
+    /// the DB.
+    compile_metrics: Vec<String>,
+    /// All known runtime benchmark metrics (e.g. instruction count, cycles, etc.) contained in
+    /// the DB.
+    runtime_metrics: Vec<String>,
+}
+
+impl BenchmarkDataSummary {
+    pub fn compile_metrics(&self) -> &[String] {
+        &self.compile_metrics
+    }
+
+    pub fn runtime_metrics(&self) -> &[String] {
+        &self.runtime_metrics
     }
 }
