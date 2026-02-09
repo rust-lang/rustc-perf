@@ -8,7 +8,6 @@ import {getJson} from "../../utils/requests";
 import {
   BenchmarkInfo,
   loadBenchmarkInfo,
-  CompileTarget,
   DEFAULT_COMPILE_TARGET_TRIPLE,
 } from "../../api";
 
@@ -29,6 +28,10 @@ interface DashboardData {
   opt: DashboardCompileBenchmarkCases;
   doc: DashboardCompileBenchmarkCases;
   runtime: number[];
+}
+
+class CompileTarget {
+  public constructor(public name: string, public url: string) {}
 }
 
 const windowLocation = `${window.location.origin}${window.location.pathname}`;

@@ -128,5 +128,5 @@ const TARGET_SHORTCUTS: {[target in Target]: string} = {
 };
 
 export function formatTarget(target: Target): string {
-  return TARGET_SHORTCUTS[target] ?? target.slice(0, 5);
+  return TARGET_SHORTCUTS[target] ?? target?.split("-")[0];
 }

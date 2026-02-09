@@ -14,8 +14,4 @@ export async function loadBenchmarkInfo(): Promise<BenchmarkInfo> {
   return await getJson<BenchmarkInfo>(INFO_URL);
 }
 
-export class CompileTarget {
-  public constructor(public name: string, public url: string) {}
-}
-
 export const DEFAULT_COMPILE_TARGET_TRIPLE = "x86_64-unknown-linux-gnu";
