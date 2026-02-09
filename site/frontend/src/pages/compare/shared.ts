@@ -124,8 +124,9 @@ export function loadTargetSetFromUrl(
 
 const TARGET_SHORTCUTS: {[target in Target]: string} = {
   "x86_64-unknown-linux-gnu": "x64",
+  "aarch64-unknown-linux-gnu": "AArch64",
 };
 
 export function formatTarget(target: Target): string {
-  return TARGET_SHORTCUTS[target] ?? target;
+  return TARGET_SHORTCUTS[target] ?? target.slice(0, 5);
 }
