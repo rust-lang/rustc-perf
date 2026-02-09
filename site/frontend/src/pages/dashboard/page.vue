@@ -5,13 +5,15 @@ import Highcharts from "highcharts";
 import {getUrlParams} from "../../utils/navigation";
 import {DASHBOARD_DATA_URL} from "../../urls";
 import {getJson} from "../../utils/requests";
+import {
+  BenchmarkInfo,
+  loadBenchmarkInfo,
+  CompileTarget,
+  DEFAULT_COMPILE_TARGET_TRIPLE,
+} from "../../api";
 
 type ScaleKind = "linear" | "log";
 type Profile = "check" | "debug" | "opt" | "doc";
-type TargetUrl = {
-  name: string;
-  url: string;
-};
 
 interface DashboardCompileBenchmarkCases {
   clean_averages: number[];
@@ -31,21 +33,10 @@ interface DashboardData {
 
 const windowLocation = `${window.location.origin}${window.location.pathname}`;
 
-const x86_64UnknownLinuxGnu = {
-  name: "x86_64-unknown-linux-gnu",
-  url: `${windowLocation}?target=x86_64-unknown-linux-gnu`,
-};
-
-const AArch64UnknownLinuxGnu = {
-  name: "aarch64-unknown-linux-gnu",
-  url: `${windowLocation}?target=aarch64-unknown-linux-gnu`,
-};
-
-const TargetUrls = [x86_64UnknownLinuxGnu, AArch64UnknownLinuxGnu];
-
 const scale: Ref<ScaleKind> = ref("linear");
-const response: Ref<DashboardData | null> = ref(null);
 const error: Ref<string | null> = ref(null);
+const infoResponse: Ref<BenchmarkInfo | null> = ref(null);
+const compileTargets: Ref<CompileTarget[]> = ref([]);
 
 function clearError() {
   error.value = null;
@@ -183,17 +174,35 @@ async function getDataAndRenderCharts() {
   }
 }
 
-onMounted(() => {
-  getDataAndRenderCharts();
+async function getCompileTargets() {
+  // TODO: error handling
+  if (!infoResponse.value) {
+    const info = await loadBenchmarkInfo();
+    infoResponse.value = info;
+    const apiCompileTargets = info.compile_targets ?? [];
+    const targets: CompileTarget[] = [];
+    for (const target of apiCompileTargets) {
+      const compileTarget = new CompileTarget(
+        target,
+        `${windowLocation}?target=${target}`
+      );
+      targets.push(compileTarget);
+    }
+    compileTargets.value = targets;
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([getCompileTargets(), getDataAndRenderCharts()]);
 });
 
-function getActiveClass(target: TargetUrl): string {
+function getActiveClass(target: CompileTarget): string {
   const params = getUrlParams();
   const curTarget = params?.["target"];
   if (!curTarget) {
-    return target.name === x86_64UnknownLinuxGnu.name ? "target-active" : "";
+    return target.name === DEFAULT_COMPILE_TARGET_TRIPLE ? "target-active" : "";
   }
-  return target.name == curTarget ? "target-active" : "";
+  return target.name === curTarget ? "target-active" : "";
 }
 </script>
 
@@ -242,7 +251,7 @@ function getActiveClass(target: TargetUrl): string {
   <div class="target-wrapper">
     <strong>Targets: </strong>
     <div class="target-list-wrapper">
-      <template v-for="target in TargetUrls">
+      <template v-for="target in compileTargets">
         <span class="target-list-element">
           <a :class="getActiveClass(target)" :href="target.url"
             >{{ target.name }}
