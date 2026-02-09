@@ -55,6 +55,23 @@ impl Server {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct ServerJsonError {
+    error: String,
+}
+
+pub fn json_error_response(status: StatusCode, message: impl Into<String>) -> Response {
+    let payload = ServerJsonError {
+        error: message.into(),
+    };
+    let body = hyper::Body::from(serde_json::to_vec(&payload).unwrap());
+    http::Response::builder()
+        .status(status)
+        .header_typed(ContentType::json())
+        .body(body)
+        .unwrap()
+}
+
 impl Server {
     /// Handle a synchrnous HTTP GET request
     fn handle_get<F, S>(&self, req: &Request, handler: F) -> Result<Response, ServerError>
@@ -97,12 +114,10 @@ impl Server {
                 let body = serde_json::to_vec(&result).unwrap();
                 maybe_compressed_response(response, body, compression)
             }
-            Err(err) => http::Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .header_typed(ContentType::text_utf8())
-                .header_typed(CacheControl::new().with_no_cache().with_no_store())
-                .body(hyper::Body::from(err.into()))
-                .unwrap(),
+            Err(err) => {
+                let message = String::from_utf8_lossy(&err.into()).to_string();
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, message)
+            }
         };
         Ok(response)
     }

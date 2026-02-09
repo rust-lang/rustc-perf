@@ -1,4 +1,5 @@
 import {decode} from "msgpack-lite";
+import {isObject} from "./getType";
 
 export async function postJson<T>(path: string, body: any): Promise<T> {
   const response = await fetch(path, {
@@ -6,6 +7,15 @@ export async function postJson<T>(path: string, body: any): Promise<T> {
     body: JSON.stringify(body),
   });
   return await response.json();
+}
+
+export type JsonServerError = {error: string};
+export type JsonResponse<T> = T | JsonServerError;
+
+export function jsonResponseHasError<T>(
+  response: JsonResponse<T>
+): response is JsonServerError {
+  return isObject(response) && "error" in response;
 }
 
 export async function getJson<T>(
@@ -25,7 +35,12 @@ export async function getJson<T>(
   }
 
   const response = await fetch(url, {});
-  return await response.json();
+  const json = await response.json();
+  // If the response is an error, throw it
+  if (jsonResponseHasError(json)) {
+    throw json;
+  }
+  return json;
 }
 
 export async function postMsgpack<T>(path: string, body: any): Promise<T> {
