@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {ref, Ref, onMounted, h} from "vue";
+import {ref, Ref, onMounted} from "vue";
 import Highcharts from "highcharts";
 
 import {getUrlParams} from "../../utils/navigation";
@@ -183,22 +183,6 @@ async function getDataAndRenderCharts() {
   }
 }
 
-function RenderPage() {
-  if (!error.value) {
-    return (
-      <div class="graphs">
-        <div id="check-average-times"></div>
-        <div id="debug-average-times"></div>
-        <div id="opt-average-times"></div>
-        <div id="doc-average-times"></div>
-        <div id="runtime-average-times"></div>
-      </div>
-    );
-  } else {
-    return <h2>Error: {error.value}</h2>;
-  }
-}
-
 onMounted(() => {
   getDataAndRenderCharts();
 });
@@ -268,7 +252,14 @@ function getActiveClass(target: TargetUrl): string {
     </div>
   </div>
 
-  <RenderPage />
+  <div v-if="error == null" class="graphs">
+    <div id="check-average-times"></div>
+    <div id="debug-average-times"></div>
+    <div id="opt-average-times"></div>
+    <div id="doc-average-times"></div>
+    <div id="runtime-average-times"></div>
+  </div>
+  <h2 v-else>Error: {{ error }}</h2>
 </template>
 
 <style scoped lang="scss">
