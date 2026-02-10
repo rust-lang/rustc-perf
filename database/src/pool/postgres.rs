@@ -526,6 +526,7 @@ pub struct CachedStatements {
     get_last_n_completed_requests_with_errors: Statement,
     get_jobs_of_in_progress_benchmark_requests: Statement,
     load_pending_benchmark_requests: Statement,
+    get_jobs_of_benchmark_requests: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -763,6 +764,11 @@ impl PostgresConnection {
                     FROM pending
                     LEFT JOIN benchmark_request as parent ON parent.tag = pending.parent_sha
                 ")).await.unwrap(),
+                get_jobs_of_benchmark_requests: conn.prepare("
+                    SELECT *
+                    FROM job_queue
+                    WHERE request_tag = ANY($1)
+                ").await.unwrap(),
             }),
             conn,
         }
@@ -772,6 +778,44 @@ impl PostgresConnection {
 // `tag` should be kept as the first column
 const BENCHMARK_REQUEST_COLUMNS: &str =
     "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets";
+
+/// Parse a benchmark job out of a row.
+/// Expects to be used with `SELECT * FROM job_queue`.
+fn parse_benchmark_job_from_row(row: &Row) -> anyhow::Result<BenchmarkJob> {
+    let started_at = row.get::<_, Option<DateTime<Utc>>>(7);
+    let status = row.get::<_, &str>(9);
+    let collector_name = row.get::<_, Option<String>>(11);
+    let status = match status {
+        BENCHMARK_JOB_STATUS_QUEUED_STR => BenchmarkJobStatus::Queued,
+        BENCHMARK_JOB_STATUS_IN_PROGRESS_STR => BenchmarkJobStatus::InProgress {
+            started_at: started_at.expect("started_at was null for an in progress job"),
+            collector_name: collector_name.expect("Collector is missing for an in progress job"),
+        },
+        BENCHMARK_JOB_STATUS_FAILURE_STR | BENCHMARK_JOB_STATUS_SUCCESS_STR => {
+            BenchmarkJobStatus::Completed {
+                started_at: started_at.expect("started_at was null for a finished job"),
+                completed_at: row.get::<_, DateTime<Utc>>(8),
+                collector_name: collector_name
+                    .expect("Collector is missing for an in progress job"),
+                success: status == BENCHMARK_JOB_STATUS_SUCCESS_STR,
+            }
+        }
+        _ => panic!("Invalid job status {status}"),
+    };
+    Ok(BenchmarkJob {
+        id: row.get::<_, i32>(0) as u32,
+        request_tag: row.get::<_, String>(1),
+        target: Target::from_str(row.get::<_, &str>(2)).map_err(|e| anyhow::anyhow!(e))?,
+        backend: CodegenBackend::from_str(row.get::<_, &str>(3)).map_err(|e| anyhow::anyhow!(e))?,
+        profile: Profile::from_str(row.get::<_, &str>(4)).map_err(|e| anyhow::anyhow!(e))?,
+        benchmark_set: BenchmarkSet(row.get::<_, i32>(5) as u32),
+        created_at: row.get::<_, DateTime<Utc>>(6),
+        status,
+        deque_counter: row.get::<_, i32>(10) as u32,
+        kind: BenchmarkJobKind::from_str(row.get::<_, &str>(12)).map_err(|e| anyhow::anyhow!(e))?,
+        is_optional: row.get::<_, bool>(13),
+    })
+}
 
 #[async_trait::async_trait]
 impl<P> Connection for P
@@ -2000,49 +2044,24 @@ where
 
         let mut request_to_jobs: HashMap<String, Vec<BenchmarkJob>> = HashMap::new();
         for row in rows {
-            let started_at = row.get::<_, Option<DateTime<Utc>>>(7);
-            let status = row.get::<_, &str>(9);
-            let collector_name = row.get::<_, Option<String>>(11);
-            let status = match status {
-                BENCHMARK_JOB_STATUS_QUEUED_STR => BenchmarkJobStatus::Queued,
-                BENCHMARK_JOB_STATUS_IN_PROGRESS_STR => BenchmarkJobStatus::InProgress {
-                    started_at: started_at.expect("started_at was null for an in progress job"),
-                    collector_name: collector_name
-                        .expect("Collector is missing for an in progress job"),
-                },
-                BENCHMARK_JOB_STATUS_FAILURE_STR | BENCHMARK_JOB_STATUS_SUCCESS_STR => {
-                    BenchmarkJobStatus::Completed {
-                        started_at: started_at.expect("started_at was null for a finished job"),
-                        completed_at: row.get::<_, DateTime<Utc>>(8),
-                        collector_name: collector_name
-                            .expect("Collector is missing for an in progress job"),
-                        success: status == BENCHMARK_JOB_STATUS_SUCCESS_STR,
-                    }
-                }
-                _ => panic!("Invalid job status {status}"),
-            };
-            let job = BenchmarkJob {
-                id: row.get::<_, i32>(0) as u32,
-                request_tag: row.get::<_, String>(1),
-                target: Target::from_str(row.get::<_, &str>(2)).map_err(|e| anyhow::anyhow!(e))?,
-                backend: CodegenBackend::from_str(row.get::<_, &str>(3))
-                    .map_err(|e| anyhow::anyhow!(e))?,
-                profile: Profile::from_str(row.get::<_, &str>(4))
-                    .map_err(|e| anyhow::anyhow!(e))?,
-                benchmark_set: BenchmarkSet(row.get::<_, i32>(5) as u32),
-                created_at: row.get::<_, DateTime<Utc>>(6),
-                status,
-                deque_counter: row.get::<_, i32>(10) as u32,
-                kind: BenchmarkJobKind::from_str(row.get::<_, &str>(12))
-                    .map_err(|e| anyhow::anyhow!(e))?,
-                is_optional: row.get::<_, bool>(13),
-            };
+            let job = parse_benchmark_job_from_row(&row)?;
             request_to_jobs
                 .entry(job.request_tag.clone())
                 .or_default()
                 .push(job);
         }
         Ok(request_to_jobs)
+    }
+
+    async fn get_jobs_of_benchmark_requests(
+        &self,
+        tags: &[String],
+    ) -> anyhow::Result<Vec<BenchmarkJob>> {
+        let rows = self
+            .conn()
+            .query(&self.statements().get_jobs_of_benchmark_requests, &[&tags])
+            .await?;
+        rows.iter().map(parse_benchmark_job_from_row).collect()
     }
 
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>> {

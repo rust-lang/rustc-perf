@@ -277,6 +277,12 @@ pub trait Connection: Send + Sync {
         &self,
     ) -> anyhow::Result<HashMap<String, Vec<BenchmarkJob>>>;
 
+    /// Return all jobs associated with the given benchmark request tags.
+    async fn get_jobs_of_benchmark_requests(
+        &self,
+        tags: &[String],
+    ) -> anyhow::Result<Vec<BenchmarkJob>>;
+
     /// Get all of the configuration for all of the collectors
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>>;
 

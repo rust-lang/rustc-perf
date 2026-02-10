@@ -415,6 +415,14 @@ pub mod status {
 
     #[derive(Serialize, Debug)]
     #[serde(rename_all = "camelCase")]
+    pub struct PastRequestDuration {
+        pub request_tag: String,
+        /// Sum of (completed_at - started_at) for all jobs this collector ran for the request, in seconds.
+        pub job_duration_s: u64,
+    }
+
+    #[derive(Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
     pub struct Collector {
         pub name: String,
         pub target: String,
@@ -424,6 +432,7 @@ pub mod status {
         pub date_added: DateTime<Utc>,
         pub commit_sha: String,
         pub jobs: Vec<BenchmarkJob>,
+        pub past_request_durations: Vec<PastRequestDuration>,
     }
 
     #[derive(Serialize, Debug)]

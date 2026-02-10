@@ -1193,6 +1193,13 @@ impl Connection for SqliteConnection {
         no_queue_implementation_abort!()
     }
 
+    async fn get_jobs_of_benchmark_requests(
+        &self,
+        _tags: &[String],
+    ) -> anyhow::Result<Vec<BenchmarkJob>> {
+        no_queue_implementation_abort!()
+    }
+
     async fn get_collector_configs(&self) -> anyhow::Result<Vec<CollectorConfig>> {
         no_queue_implementation_abort!()
     }
