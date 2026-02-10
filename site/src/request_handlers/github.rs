@@ -56,6 +56,11 @@ async fn handle_issue(
     issue: github::Issue,
     comment: github::Comment,
 ) -> ServerResult<github::Response> {
+    // Do not react to our own comments, to avoid funny loops :)
+    if comment.user.login == "rust-timer" {
+        return Ok(github::Response);
+    }
+
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     if comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&comment.body).await {
