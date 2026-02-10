@@ -1,4 +1,5 @@
 import {decode} from "msgpack-lite";
+import {isObject, isString} from "./getType";
 
 export async function postJson<T>(path: string, body: any): Promise<T> {
   const response = await fetch(path, {
@@ -6,6 +7,15 @@ export async function postJson<T>(path: string, body: any): Promise<T> {
     body: JSON.stringify(body),
   });
   return await response.json();
+}
+
+export type JsonServerError = {error: string};
+export type JsonResponse<T> = T | JsonServerError;
+
+export function jsonResponseHasError<T>(
+  response: JsonResponse<T>
+): response is JsonServerError {
+  return isObject(response) && "error" in response;
 }
 
 export async function getJson<T>(
@@ -24,8 +34,39 @@ export async function getJson<T>(
     url = `${path}?${urlParams}`;
   }
 
-  const response = await fetch(url, {});
-  return await response.json();
+  let response: Response;
+  try {
+    response = await fetch(url, {});
+  } catch (error) {
+    throw {error: `Network error: ${String(error)}`};
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    if (!response.ok) {
+      throw {
+        error: `Request failed with status ${response.status}`,
+      };
+    }
+    throw {error: "Invalid JSON response"};
+  }
+
+  // If the response is an error, throw it
+  if (!response.ok) {
+    if (jsonResponseHasError(json as JsonResponse<T>)) {
+      throw json;
+    }
+    if (isString(json)) {
+      throw {error: json};
+    }
+    if (isObject(json)) {
+      throw {error: JSON.stringify(json)};
+    }
+    throw {error: String(json)};
+  }
+  return json as T;
 }
 
 export async function postMsgpack<T>(path: string, body: any): Promise<T> {

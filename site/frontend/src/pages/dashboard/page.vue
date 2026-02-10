@@ -45,6 +45,11 @@ const TargetUrls = [x86_64UnknownLinuxGnu, AArch64UnknownLinuxGnu];
 
 const scale: Ref<ScaleKind> = ref("linear");
 const response: Ref<DashboardData | null> = ref(null);
+const error: Ref<string | null> = ref(null);
+
+function clearError() {
+  error.value = null;
+}
 
 function handleScaleChange(e: Event) {
   const value = (e.target as HTMLInputElement).value;
@@ -162,16 +167,20 @@ function renderCharts() {
 }
 
 async function getDataAndRenderCharts() {
-  // TODO: error handling
+  clearError();
   if (!response.value) {
     const urlParams = getUrlParams();
-    const apiResponse = await getJson<DashboardData>(
-      DASHBOARD_DATA_URL,
-      urlParams
-    );
-    response.value = apiResponse;
+    try {
+      const apiResponse = await getJson<DashboardData>(
+        DASHBOARD_DATA_URL,
+        urlParams
+      );
+      response.value = apiResponse;
+      renderCharts();
+    } catch (e) {
+      error.value = e.error;
+    }
   }
-  renderCharts();
 }
 
 onMounted(() => {
@@ -243,13 +252,14 @@ function getActiveClass(target: TargetUrl): string {
     </div>
   </div>
 
-  <div class="graphs">
+  <div v-if="error == null" class="graphs">
     <div id="check-average-times"></div>
     <div id="debug-average-times"></div>
     <div id="opt-average-times"></div>
     <div id="doc-average-times"></div>
     <div id="runtime-average-times"></div>
   </div>
+  <h2 v-else>Error: {{ error }}</h2>
 </template>
 
 <style scoped lang="scss">
