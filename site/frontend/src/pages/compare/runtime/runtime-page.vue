@@ -12,7 +12,12 @@ import MetricSelector from "../metric-selector.vue";
 import {BenchmarkInfo} from "../../../api";
 import {importantRuntimeMetrics} from "../metrics";
 import ComparisonsTable from "./comparisons-table.vue";
-import {getBoolOrDefault, loadTargetSetFromUrl} from "../shared";
+import {
+  getBoolOrDefault,
+  loadTargetsFromUrl,
+  storeOrResetBool,
+  storeOrResetStringArray,
+} from "../shared";
 import {changeUrl, getUrlParams} from "../../../utils/navigation";
 import Filters from "./filters.vue";
 
@@ -28,7 +33,7 @@ function loadFilterFromUrl(
 ): RuntimeBenchmarkFilter {
   return {
     name: urlParams["runtimeName"] ?? defaultFilter.name,
-    target: loadTargetSetFromUrl(urlParams, defaultFilter.target),
+    target: loadTargetsFromUrl(urlParams, defaultFilter.target),
     nonRelevant: getBoolOrDefault(
       urlParams,
       "nonRelevant",
@@ -51,28 +56,30 @@ function storeFilterToUrl(
   defaultFilter: RuntimeBenchmarkFilter,
   urlParams: Dict<string>
 ) {
-  function storeOrReset<T extends boolean | string>(
-    name: string,
-    value: T,
-    defaultValue: T
-  ) {
-    if (value === defaultValue) {
-      if (urlParams.hasOwnProperty(name)) {
-        delete urlParams[name];
-      }
-    } else {
-      urlParams[name] = value.toString();
-    }
-  }
-
-  storeOrReset("runtimeName", filter.name || null, defaultFilter.name);
-  storeOrReset(
-    "target-x86_64-unknown-linux-gnu",
-    filter.target.x86_64_unknown_linux_gnu,
-    defaultFilter.target.x86_64_unknown_linux_gnu
+  storeOrResetBool(
+    urlParams,
+    "runtimeName",
+    filter.name || null,
+    defaultFilter.name
   );
-  storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
-  storeOrReset("showRawData", filter.showRawData, defaultFilter.showRawData);
+  storeOrResetStringArray(
+    urlParams,
+    "target",
+    filter.target,
+    defaultFilter.target
+  );
+  storeOrResetBool(
+    urlParams,
+    "nonRelevant",
+    filter.nonRelevant,
+    defaultFilter.nonRelevant
+  );
+  storeOrResetBool(
+    urlParams,
+    "showRawData",
+    filter.showRawData,
+    defaultFilter.showRawData
+  );
   changeUrl(urlParams);
 }
 
@@ -117,6 +124,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :metrics="benchmarkInfo.runtime_metrics"
   />
   <Filters
+    :info="benchmarkInfo"
     :defaultFilter="defaultRuntimeFilter"
     :initialFilter="filter"
     @change="updateFilter"

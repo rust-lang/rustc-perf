@@ -1,5 +1,6 @@
 import {getJson} from "./utils/requests";
 import {INFO_URL} from "./urls";
+import {Target} from "./pages/compare/compile/common";
 
 export interface BenchmarkInfo {
   // Known compile metrics from the DB
@@ -7,10 +8,10 @@ export interface BenchmarkInfo {
   // Known runtime metrics from the DB
   runtime_metrics: string[];
   // Known targets that have been benchmarked from the DB
-  compile_targets: string[];
+  compile_targets: Target[];
 }
 
-export const DEFAULT_COMPILE_TARGET_TRIPLE = "x86_64-unknown-linux-gnu";
+export const DEFAULT_COMPILE_TARGET_TRIPLE: Target = "x86_64-unknown-linux-gnu";
 
 function compareDefaultCompileTarget(a: string, b: string) {
   return (
