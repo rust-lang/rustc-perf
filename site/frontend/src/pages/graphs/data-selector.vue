@@ -8,6 +8,7 @@ export interface SelectionParams {
   end: string;
   kind: GraphKind;
   stat: string;
+  target: string;
 }
 
 interface Props extends SelectionParams {
@@ -24,12 +25,14 @@ const startRef = ref<HTMLInputElement | null>(null);
 const endRef = ref<HTMLInputElement | null>(null);
 const kindRef = ref<HTMLSelectElement | null>(null);
 const statRef = ref<HTMLSelectElement | null>(null);
+const targetRef = ref<HTMLSelectElement | null>(null);
 
 onMounted(() => {
   startRef.value.value = props.start;
   endRef.value.value = props.end;
   kindRef.value.value = props.kind;
   statRef.value.value = props.stat;
+  targetRef.value.value = props.target;
 });
 
 function submitSettings() {
@@ -37,8 +40,9 @@ function submitSettings() {
   const end = endRef.value.value;
   const kind = kindRef.value.value as GraphKind;
   const stat = statRef.value.value;
+  const target = targetRef.value.value;
 
-  const params = {start, end, kind, stat};
+  const params = {start, end, kind, stat, target};
   emit("change", params);
 }
 </script>
@@ -55,7 +59,13 @@ function submitSettings() {
     <select ref="statRef">
       <option v-for="value in info.compile_metrics" :value="value">
         {{ value }}
-      </option></select
-    >&nbsp;<a href="#" @click.prevent="submitSettings">Submit</a>
+      </option>
+    </select>
+    <select ref="targetRef">
+      <option v-for="value in info.compile_targets" :value="value">
+        {{ value }}
+      </option>
+    </select>
+    &nbsp;<a href="#" @click.prevent="submitSettings">Submit</a>
   </div>
 </template>
