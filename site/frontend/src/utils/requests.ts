@@ -43,15 +43,14 @@ export async function getJson<T>(
 
   let json: unknown;
   try {
-    json = await response.clone().json();
+    json = await response.json();
   } catch {
-    const text = await response.text();
     if (!response.ok) {
       throw {
-        error: text || `Request failed with status ${response.status}`,
+        error: `Request failed with status ${response.status}`,
       };
     }
-    throw {error: text || "Invalid JSON response"};
+    throw {error: "Invalid JSON response"};
   }
 
   // If the response is an error, throw it
