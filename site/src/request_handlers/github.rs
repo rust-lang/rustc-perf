@@ -19,7 +19,17 @@ pub async fn handle_github_webhook(
 ) -> ServerResult<github::Response> {
     log::info!("handle_github({:?})", request);
     match request {
-        github::Request::Issue { issue, comment } => handle_issue(ctxt, issue, comment).await,
+        github::Request::Issue {
+            action,
+            issue,
+            comment,
+        } => {
+            // Ignore edits and other comment actions
+            if action != "created" {
+                return Ok(github::Response);
+            }
+            handle_issue(ctxt, issue, comment).await
+        }
         github::Request::Push(p) => handle_push(ctxt, p).await,
     }
 }

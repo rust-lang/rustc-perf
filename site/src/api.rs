@@ -602,7 +602,11 @@ pub mod github {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(untagged)]
     pub enum Request {
-        Issue { issue: Issue, comment: Comment },
+        Issue {
+            action: String,
+            issue: Issue,
+            comment: Comment,
+        },
         Push(Push),
     }
 
