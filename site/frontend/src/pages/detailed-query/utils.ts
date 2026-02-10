@@ -156,17 +156,16 @@ export function createDownloadLinksData(selector: Selector | null): {
     };
 
   const state = selector;
-  const profile = (b: string) =>
-    b.endsWith("-opt")
+  const profile = (p: string) =>
+    p == "opt"
       ? "Opt"
-      : b.endsWith("-doc")
+      : p == "doc"
       ? "Doc"
-      : b.endsWith("-debug")
+      : p == "debug"
       ? "Debug"
-      : b.endsWith("-check")
+      : p == "check"
       ? "Check"
       : "???";
-  const benchName = (b: string) => b.replace(/-[^-]*$/, "");
   const scenarioFilter = (s: string) =>
     s == "full"
       ? "Full"
@@ -234,32 +233,26 @@ export function createDownloadLinksData(selector: Selector | null): {
     ? `/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&backend=${state.backend}&target=${state.target}&type=codegen-schedule`
     : "";
 
+  function cachegrindCommand(
+    commit: string,
+    baseCommit: string | null = null
+  ): string {
+    let cmd = `${cargo_collector_command()} profile_local cachegrind`;
+    if (baseCommit !== null) {
+      cmd += ` +${baseCommit} --rustc2 +${commit}`;
+    } else {
+      cmd += ` +${commit}`;
+    }
+    cmd += ` --exact-match ${state.benchmark}`;
+    cmd += ` --profiles ${profile(state.profile)}`;
+    cmd += ` --scenarios ${scenarioFilter(state.scenario)}`;
+    return cmd;
+  }
+
   const localCommands = {
-    base: state.base_commit
-      ? `${cargo_collector_command()} profile_local cachegrind
-                    +${state.base_commit} --exact-match ${benchName(
-          state.benchmark
-        )} --profiles
-                ${profile(state.benchmark)} --scenarios ${scenarioFilter(
-          state.scenario
-        )}`
-      : "",
-    new: `${cargo_collector_command()} profile_local cachegrind
-                +${state.commit} --exact-match ${benchName(
-      state.benchmark
-    )} --profiles
-                ${profile(state.benchmark)} --scenarios ${scenarioFilter(
-      state.scenario
-    )}`,
-    diff: state.base_commit
-      ? `${cargo_collector_command()} profile_local cachegrind
-                +${state.base_commit} --rustc2 +${
-          state.commit
-        } --exact-match ${benchName(state.benchmark)} --profiles
-                ${profile(state.benchmark)} --scenarios ${scenarioFilter(
-          state.scenario
-        )}`
-      : "",
+    base: state.base_commit ? cachegrindCommand(state.base_commit) : "",
+    new: cachegrindCommand(state.commit),
+    diff: cachegrindCommand(state.commit, state.base_commit),
   };
 
   return {baseLinks, newLinks, diffLink, localCommands};
