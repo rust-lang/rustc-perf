@@ -146,6 +146,18 @@ function jobDuration(job: BenchmarkJob): string {
   const diff = differenceInSeconds(end, start);
   return `Job took ${formatSecondsAsDuration(diff)}`;
 }
+
+function averageCollectorDuration(collector: CollectorConfig): string {
+  if (collector.pastRequestDurations.length === 0) {
+    return "Unknown";
+  }
+  const durationSum = collector.pastRequestDurations.reduce(
+    (acc, req) => acc + req.job_duration_s,
+    0
+  );
+  const averageDuration = durationSum / collector.pastRequestDurations.length;
+  return formatSecondsAsDuration(averageDuration);
+}
 </script>
 
 <template>
@@ -193,6 +205,15 @@ function jobDuration(job: BenchmarkJob): string {
             >{{ collector.commitSha }}</a
           ></span
         >
+      </div>
+      <div
+        class="collector-meta"
+        title="Average duration to compute all jobs for the past few benchmark requests."
+      >
+        <span class="collector-meta-name">
+          <strong>Average duration:</strong>
+        </span>
+        <span>{{ averageCollectorDuration(collector) }}</span>
       </div>
       <button @click="toggleShowJobs" class="show-jobs">
         <template v-if="showJobs">Hide jobs</template>
@@ -273,7 +294,7 @@ $sm-radius: 8px;
   padding: 16px;
   display: flex;
   box-shadow: 0 1px 2px #0006;
-  margin: 0px 8px 8px 0px;
+  margin: 0 8px 8px 0;
 }
 .collector-name {
   font-size: 1.5em;
@@ -290,7 +311,7 @@ $sm-radius: 8px;
 
 .collector-meta-name {
   display: block;
-  min-width: 125px;
+  min-width: 140px;
 }
 
 .collector-left-divider {
@@ -302,7 +323,7 @@ $sm-radius: 8px;
 }
 
 .collector-sm-padding-left-right {
-  padding: 0px $sm-padding;
+  padding: 0 $sm-padding;
 }
 .collector-sm-padding-left {
   padding-left: $sm-padding;
