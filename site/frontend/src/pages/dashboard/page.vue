@@ -183,7 +183,6 @@ async function getCompileTargets() {
   if (!infoResponse.value) {
     try {
       const info = await loadBenchmarkInfo();
-      console.log(info);
       infoResponse.value = info;
       const apiCompileTargets = info.compile_targets ?? [];
       const targets: CompileTarget[] = [];
