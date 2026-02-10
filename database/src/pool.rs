@@ -18,8 +18,7 @@ pub mod sqlite;
 #[derive(Debug)]
 pub enum JobEnqueueResult {
     JobCreated(u32),
-    JobAlreadyExisted,
-    RequestShaNotFound { error: String },
+    JobExistedOrParentNotFound,
     Other(anyhow::Error),
 }
 

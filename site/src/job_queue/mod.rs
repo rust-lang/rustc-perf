@@ -294,23 +294,17 @@ pub async fn enqueue_benchmark_request(
 
         match result {
             JobEnqueueResult::JobCreated(_) => Ok(()),
-            JobEnqueueResult::JobAlreadyExisted => {
+            JobEnqueueResult::JobExistedOrParentNotFound => {
                 match mode {
-                    EnqueueMode::Commit => Err(make_error("job already exists in the DB")),
+                    EnqueueMode::Commit => Err(make_error(
+                        "job already exists or parent not found in the DB",
+                    )),
                     EnqueueMode::Parent => {
                         // For parents this is expected
                         Ok(())
                     }
                 }
             }
-            JobEnqueueResult::RequestShaNotFound { error } => match mode {
-                EnqueueMode::Commit => Err(make_error(&format!("request SHA not found: {error}"))),
-                EnqueueMode::Parent => {
-                    // This should not happen often, but we do not want to block the queue on it
-                    log::error!("{}", make_error(&format!("parent SHA not found: {error}")));
-                    Ok(())
-                }
-            },
             JobEnqueueResult::Other(error) => Err(error),
         }
     };
