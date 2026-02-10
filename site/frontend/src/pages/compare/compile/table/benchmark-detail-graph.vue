@@ -79,6 +79,7 @@ async function renderGraphs(detail: CompileDetailGraphs) {
       start: selector.start,
       end: selector.end,
       target: selector.target,
+      backend: selector.backend,
       kind,
     };
 

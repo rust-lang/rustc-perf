@@ -70,8 +70,8 @@ function graphLink(
   // Move to `30 days ago` to display history of the test case
   const start = formatDate(getPastDate(new Date(commit.date), 30));
   const end = commit.commit;
-  const {benchmark, profile, scenario} = testCase;
-  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&stat=${metric}`;
+  const {benchmark, profile, scenario, target, backend} = testCase;
+  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&target=${target}&backend=${backend}&stat=${metric}`;
 }
 
 const metadata = computed(

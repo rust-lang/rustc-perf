@@ -119,6 +119,7 @@ pub mod graphs {
         pub benchmark: Option<String>,
         pub scenario: Option<String>,
         pub profile: Option<String>,
+        pub backend: Option<String>,
         pub target: Option<String>,
     }
 

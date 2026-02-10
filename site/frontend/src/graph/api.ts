@@ -13,6 +13,7 @@ export async function loadGraphs(
     benchmark: selector.benchmark,
     scenario: selector.scenario,
     profile: selector.profile,
+    backend: selector.backend,
     target: selector.target,
   };
   return await getJson<CompileGraphData>(GRAPH_DATA_URL, params);
