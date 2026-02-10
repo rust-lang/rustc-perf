@@ -37,6 +37,7 @@ class CompileTarget {
 const windowLocation = `${window.location.origin}${window.location.pathname}`;
 
 const scale: Ref<ScaleKind> = ref("linear");
+const response: Ref<DashboardData | null> = ref(null);
 const error: Ref<string | null> = ref(null);
 const infoResponse: Ref<BenchmarkInfo | null> = ref(null);
 const compileTargets: Ref<CompileTarget[]> = ref([]);
@@ -178,20 +179,25 @@ async function getDataAndRenderCharts() {
 }
 
 async function getCompileTargets() {
-  // TODO: error handling
+  clearError();
   if (!infoResponse.value) {
-    const info = await loadBenchmarkInfo();
-    infoResponse.value = info;
-    const apiCompileTargets = info.compile_targets ?? [];
-    const targets: CompileTarget[] = [];
-    for (const target of apiCompileTargets) {
-      const compileTarget = new CompileTarget(
-        target,
-        `${windowLocation}?target=${target}`
-      );
-      targets.push(compileTarget);
+    try {
+      const info = await loadBenchmarkInfo();
+      console.log(info);
+      infoResponse.value = info;
+      const apiCompileTargets = info.compile_targets ?? [];
+      const targets: CompileTarget[] = [];
+      for (const target of apiCompileTargets) {
+        const compileTarget = new CompileTarget(
+          target,
+          `${windowLocation}?target=${target}`
+        );
+        targets.push(compileTarget);
+      }
+      compileTargets.value = targets;
+    } catch (e) {
+      error.value = e.error;
     }
-    compileTargets.value = targets;
   }
 }
 
