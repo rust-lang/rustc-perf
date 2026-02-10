@@ -202,10 +202,19 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                         data.len()
                     );
                     let start = Instant::now();
-                    let mut data = snap::read::FrameEncoder::new(&data[..]);
-                    let mut compressed = Vec::new();
-                    data.read_to_end(&mut compressed)
-                        .context("cannot compress self-profile data")?;
+
+                    // This is synchronous and blocks the event loop, so we should do it on a
+                    // worker thread
+                    let compressed = tokio::task::spawn_blocking(move || {
+                        let mut data = snap::read::FrameEncoder::new(&data[..]);
+                        let mut compressed = Vec::new();
+
+                        data.read_to_end(&mut compressed)
+                            .context("cannot compress self-profile data")?;
+                        anyhow::Ok(compressed)
+                    })
+                    .await??;
+
                     log::trace!(
                         "Compress self-profile duration: {}, size: {}",
                         start.elapsed().as_secs_f64(),

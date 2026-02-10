@@ -1816,7 +1816,9 @@ fn build_async_runtime() -> Runtime {
     // We want to minimize noise from the runtime
     builder
         .worker_threads(1)
-        .max_blocking_threads(1)
+        .max_blocking_threads(8)
+        // Do not keep blocking threads alive for long
+        .thread_keep_alive(Duration::from_secs(1))
         .enable_time()
         .enable_io();
     builder.build().expect("built runtime")
