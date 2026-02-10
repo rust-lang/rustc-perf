@@ -1,11 +1,7 @@
-import {
-  BenchmarkFilter,
-  CompareResponse,
-  StatComparison,
-  TargetSet,
-} from "../types";
+import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
 import {benchmarkNameMatchesFilter, targetMatchesFilter} from "../shared";
+import {DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
 
 export type CompileBenchmarkFilter = {
   profile: {
@@ -24,7 +20,7 @@ export type CompileBenchmarkFilter = {
     llvm: boolean;
     cranelift: boolean;
   };
-  target: TargetSet;
+  target: Target[];
   category: {
     primary: boolean;
     secondary: boolean;
@@ -60,9 +56,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     llvm: true,
     cranelift: true,
   },
-  target: {
-    x86_64_unknown_linux_gnu: true,
-  },
+  target: [DEFAULT_COMPILE_TARGET_TRIPLE],
   category: {
     primary: true,
     secondary: true,

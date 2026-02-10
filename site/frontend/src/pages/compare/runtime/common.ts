@@ -1,7 +1,8 @@
-import {BenchmarkFilter, StatComparison, TargetSet} from "../types";
+import {BenchmarkFilter, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
 import {benchmarkNameMatchesFilter, targetMatchesFilter} from "../shared";
 import {Target} from "../compile/common";
+import {DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
 
 export interface RuntimeTestCase {
   benchmark: string;
@@ -9,16 +10,14 @@ export interface RuntimeTestCase {
 }
 
 export type RuntimeBenchmarkFilter = {
-  target: TargetSet;
+  target: Target[];
 } & BenchmarkFilter;
 
 export const defaultRuntimeFilter: RuntimeBenchmarkFilter = {
   name: null,
   nonRelevant: false,
   showRawData: false,
-  target: {
-    x86_64_unknown_linux_gnu: true,
-  },
+  target: [DEFAULT_COMPILE_TARGET_TRIPLE],
 };
 
 export interface RuntimeBenchmarkComparison {

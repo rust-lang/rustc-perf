@@ -16,9 +16,15 @@ import {
   defaultCompileFilter,
   transformDataForBackendComparison,
 } from "./common";
-import {BenchmarkInfo} from "../../../api";
+import {BenchmarkInfo, DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
-import {getBoolOrDefault, loadTargetSetFromUrl} from "../shared";
+import {
+  getBoolOrDefault,
+  isSameStringArray,
+  loadTargetsFromUrl,
+  storeOrResetBool,
+  storeOrResetStringArray,
+} from "../shared";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -30,6 +36,20 @@ function loadFilterFromUrl(
   urlParams: Dict<string>,
   defaultFilter: CompileBenchmarkFilter
 ): CompileBenchmarkFilter {
+  let target = loadTargetsFromUrl(urlParams, defaultFilter.target);
+  // If we don't have data for the default target, try to use a present target
+  // as the default target filter. This is to provide compatibility for
+  // deployment that might have a different default target.
+  if (
+    isSameStringArray(target, defaultFilter.target) &&
+    props.data.compile_comparisons.find(
+      (testCase) => testCase.target === DEFAULT_COMPILE_TARGET_TRIPLE
+    ) === undefined &&
+    props.data.compile_comparisons.length > 0
+  ) {
+    target = [props.data.compile_comparisons[0].target];
+  }
+
   return {
     name: urlParams["name"] ?? defaultFilter.name,
     nonRelevant: getBoolOrDefault(
@@ -78,7 +98,7 @@ function loadFilterFromUrl(
         defaultFilter.backend.cranelift
       ),
     },
-    target: loadTargetSetFromUrl(urlParams, defaultFilter.target),
+    target,
     category: {
       primary: getBoolOrDefault(
         urlParams,
@@ -132,81 +152,123 @@ function storeFilterToUrl(
   defaultFilter: CompileBenchmarkFilter,
   urlParams: Dict<string>
 ) {
-  function storeOrReset<T extends boolean | string>(
-    name: string,
-    value: T,
-    defaultValue: T
-  ) {
-    if (value === defaultValue) {
-      if (urlParams.hasOwnProperty(name)) {
-        delete urlParams[name];
-      }
-    } else {
-      urlParams[name] = value.toString();
-    }
-  }
-
-  storeOrReset("name", filter.name || null, defaultFilter.name);
-  storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
-  storeOrReset("showRawData", filter.showRawData, defaultFilter.showRawData);
-  storeOrReset("check", filter.profile.check, defaultFilter.profile.check);
-  storeOrReset("debug", filter.profile.debug, defaultFilter.profile.debug);
-  storeOrReset("opt", filter.profile.opt, defaultFilter.profile.opt);
-  storeOrReset("doc", filter.profile.doc, defaultFilter.profile.doc);
-  storeOrReset("full", filter.scenario.full, defaultFilter.scenario.full);
-  storeOrReset(
+  storeOrResetBool(urlParams, "name", filter.name || null, defaultFilter.name);
+  storeOrResetBool(
+    urlParams,
+    "nonRelevant",
+    filter.nonRelevant,
+    defaultFilter.nonRelevant
+  );
+  storeOrResetBool(
+    urlParams,
+    "showRawData",
+    filter.showRawData,
+    defaultFilter.showRawData
+  );
+  storeOrResetBool(
+    urlParams,
+    "check",
+    filter.profile.check,
+    defaultFilter.profile.check
+  );
+  storeOrResetBool(
+    urlParams,
+    "debug",
+    filter.profile.debug,
+    defaultFilter.profile.debug
+  );
+  storeOrResetBool(
+    urlParams,
+    "opt",
+    filter.profile.opt,
+    defaultFilter.profile.opt
+  );
+  storeOrResetBool(
+    urlParams,
+    "doc",
+    filter.profile.doc,
+    defaultFilter.profile.doc
+  );
+  storeOrResetBool(
+    urlParams,
+    "full",
+    filter.scenario.full,
+    defaultFilter.scenario.full
+  );
+  storeOrResetBool(
+    urlParams,
     "incrFull",
     filter.scenario.incrFull,
     defaultFilter.scenario.incrFull
   );
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
     "incrUnchanged",
     filter.scenario.incrUnchanged,
     defaultFilter.scenario.incrUnchanged
   );
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
     "incrPatched",
     filter.scenario.incrPatched,
     defaultFilter.scenario.incrPatched
   );
-  storeOrReset("backend-llvm", filter.backend.llvm, defaultFilter.backend.llvm);
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
+    "backend-llvm",
+    filter.backend.llvm,
+    defaultFilter.backend.llvm
+  );
+  storeOrResetBool(
+    urlParams,
     "backend-clif",
     filter.backend.cranelift,
     defaultFilter.backend.cranelift
   );
-  storeOrReset(
-    "target-x86_64-unknown-linux-gnu",
-    filter.target.x86_64_unknown_linux_gnu,
-    defaultFilter.target.x86_64_unknown_linux_gnu
+  storeOrResetStringArray(
+    urlParams,
+    "target",
+    filter.target,
+    defaultFilter.target
   );
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
     "primary",
     filter.category.primary,
     defaultFilter.category.primary
   );
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
     "secondary",
     filter.category.secondary,
     defaultFilter.category.secondary
   );
-  storeOrReset("binary", filter.artifact.binary, defaultFilter.artifact.binary);
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
+    "binary",
+    filter.artifact.binary,
+    defaultFilter.artifact.binary
+  );
+  storeOrResetBool(
+    urlParams,
     "library",
     filter.artifact.library,
     defaultFilter.artifact.library
   );
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
     "regressions",
     filter.changes.regressions,
     defaultFilter.changes.regressions
   );
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
     "improvements",
     filter.changes.improvements,
     defaultFilter.changes.improvements
   );
-  storeOrReset(
+  storeOrResetBool(
+    urlParams,
     "selfCompareBackend",
     filter.selfCompareBackend,
     defaultFilter.selfCompareBackend
@@ -283,6 +345,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :metrics="benchmarkInfo.compile_metrics"
   />
   <Filters
+    :info="benchmarkInfo"
     :default-filter="defaultCompileFilter"
     :initial-filter="filter"
     :can-compare-backends="canCompareBackends"
