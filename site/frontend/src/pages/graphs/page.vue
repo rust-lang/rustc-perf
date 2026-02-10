@@ -9,11 +9,7 @@ import {
   navigateToUrlParams,
 } from "../../utils/navigation";
 import {renderPlots} from "../../graph/render";
-import {
-  BenchmarkInfo,
-  loadBenchmarkInfo,
-  DEFAULT_COMPILE_TARGET_TRIPLE,
-} from "../../api";
+import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
 import {loadGraphs} from "../../graph/api";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
@@ -24,7 +20,8 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
   const benchmark = urlParams["benchmark"] ?? null;
   const scenario = urlParams["scenario"] ?? null;
   const profile = urlParams["profile"] ?? null;
-  const target = urlParams["target"] ?? DEFAULT_COMPILE_TARGET_TRIPLE;
+  const target = urlParams["target"] ?? null;
+  const backend = urlParams["backend"] ?? null;
   return {
     start,
     end,
@@ -33,6 +30,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     benchmark,
     scenario,
     profile,
+    backend,
     target,
   };
 }

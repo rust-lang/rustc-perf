@@ -206,6 +206,7 @@ pub async fn handle_graphs(
             benchmark: None,
             scenario: None,
             profile: None,
+            backend: None,
             target: None,
         };
 
@@ -250,6 +251,8 @@ async fn create_graphs(
     let scenario_selector = create_selector(&request.scenario).unwrap_or(Ok(Selector::All))?;
     let target_selector = create_selector(&request.target)
         .unwrap_or(Ok(Selector::One(Target::X86_64UnknownLinuxGnu)))?;
+    let backend_selector =
+        create_selector(&request.backend).unwrap_or(Ok(Selector::One(CodegenBackend::Llvm)))?;
 
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
@@ -257,7 +260,7 @@ async fn create_graphs(
                 .benchmark(benchmark_selector)
                 .profile(profile_selector)
                 .scenario(scenario_selector)
-                .backend(Selector::One(CodegenBackend::Llvm))
+                .backend(backend_selector)
                 .target(target_selector)
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
