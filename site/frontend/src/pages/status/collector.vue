@@ -180,11 +180,19 @@ function jobDuration(job: BenchmarkJob): string {
         <span>{{ formatISODate(collector.lastHeartbeatAt) }}</span>
       </div>
 
-      <div class="collector-meta">
+      <div
+        class="collector-meta"
+        title="The rustc-perf commit that the collector is currently built from."
+      >
         <span class="collector-meta-name">
-          <strong>Date Added:</strong>
+          <strong>Commit SHA:</strong>
         </span>
-        <span>{{ formatISODate(collector.dateAdded) }}</span>
+        <span
+          ><a
+            :href="`https://github.com/rust-lang/rustc-perf/commit/${collector.commitSha}`"
+            >{{ collector.commitSha }}</a
+          ></span
+        >
       </div>
       <button @click="toggleShowJobs" class="show-jobs">
         <template v-if="showJobs">Hide jobs</template>

@@ -422,6 +422,7 @@ pub mod status {
         pub is_active: bool,
         pub last_heartbeat_at: DateTime<Utc>,
         pub date_added: DateTime<Utc>,
+        pub commit_sha: String,
         pub jobs: Vec<BenchmarkJob>,
     }
 

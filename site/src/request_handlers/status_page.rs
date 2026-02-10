@@ -116,6 +116,10 @@ async fn build_collectors(
                     is_active: c.is_active(),
                     last_heartbeat_at: c.last_heartbeat_at(),
                     date_added: c.date_added(),
+                    commit_sha: c
+                        .commit_sha()
+                        .map(|s| s.to_owned())
+                        .unwrap_or_else(|| "<unknown>".to_owned()),
                     jobs: vec![],
                 },
             )

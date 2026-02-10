@@ -37,6 +37,7 @@ export type CollectorConfig = {
   isActive: boolean;
   lastHeartbeatAt: string;
   dateAdded: string;
+  commitSha: string;
   jobs: BenchmarkJob[];
 };
 
