@@ -156,14 +156,14 @@ export function createDownloadLinksData(selector: Selector | null): {
     };
 
   const state = selector;
-  const profile = (b: string) =>
-    b.endsWith("-opt")
+  const profile = (p: string) =>
+    p == "opt"
       ? "Opt"
-      : b.endsWith("-doc")
+      : p == "doc"
       ? "Doc"
-      : b.endsWith("-debug")
+      : p == "debug"
       ? "Debug"
-      : b.endsWith("-check")
+      : p == "check"
       ? "Check"
       : "???";
   const benchName = (b: string) => b.replace(/-[^-]*$/, "");
@@ -240,7 +240,7 @@ export function createDownloadLinksData(selector: Selector | null): {
                     +${state.base_commit} --exact-match ${benchName(
           state.benchmark
         )} --profiles
-                ${profile(state.benchmark)} --scenarios ${scenarioFilter(
+                ${profile(state.profile)} --scenarios ${scenarioFilter(
           state.scenario
         )}`
       : "",
@@ -248,7 +248,7 @@ export function createDownloadLinksData(selector: Selector | null): {
                 +${state.commit} --exact-match ${benchName(
       state.benchmark
     )} --profiles
-                ${profile(state.benchmark)} --scenarios ${scenarioFilter(
+                ${profile(state.profile)} --scenarios ${scenarioFilter(
       state.scenario
     )}`,
     diff: state.base_commit
@@ -256,7 +256,7 @@ export function createDownloadLinksData(selector: Selector | null): {
                 +${state.base_commit} --rustc2 +${
           state.commit
         } --exact-match ${benchName(state.benchmark)} --profiles
-                ${profile(state.benchmark)} --scenarios ${scenarioFilter(
+                ${profile(state.profile)} --scenarios ${scenarioFilter(
           state.scenario
         )}`
       : "",
