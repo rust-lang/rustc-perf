@@ -166,7 +166,6 @@ export function createDownloadLinksData(selector: Selector | null): {
       : p == "check"
       ? "Check"
       : "???";
-  const benchName = (b: string) => b.replace(/-[^-]*$/, "");
   const scenarioFilter = (s: string) =>
     s == "full"
       ? "Full"
@@ -244,7 +243,7 @@ export function createDownloadLinksData(selector: Selector | null): {
     } else {
       cmd += ` +${commit}`;
     }
-    cmd += ` --exact-match ${benchName(state.benchmark)}`;
+    cmd += ` --exact-match ${state.benchmark}`;
     cmd += ` --profiles ${profile(state.profile)}`;
     cmd += ` --scenarios ${scenarioFilter(state.scenario)}`;
     return cmd;
