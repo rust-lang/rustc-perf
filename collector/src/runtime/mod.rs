@@ -81,7 +81,6 @@ pub async fn bench_runtime(
         }
 
         let step_name = runtime_group_step_name(&group.name);
-        collector.start_runtime_step(conn, &group).await;
 
         let mut tx = conn.transaction().await;
 
@@ -136,7 +135,6 @@ pub async fn bench_runtime(
                 .await;
         };
 
-        collector.end_runtime_step(tx.conn(), &group).await;
         tx.commit()
             .await
             .expect("Cannot commit runtime benchmark group results");

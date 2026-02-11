@@ -15,7 +15,7 @@ mod self_profile;
 pub mod toolchain;
 pub mod utils;
 
-use crate::compile::benchmark::{Benchmark, BenchmarkName};
+use crate::compile::benchmark::Benchmark;
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
 pub use crate::self_profile::{
     LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileId, SelfProfileStorage,
@@ -342,17 +342,7 @@ impl CollectorStepBuilder {
     ) -> CollectorCtx {
         // Make sure there is no observable time when the artifact ID is available
         // but the in-progress steps are not.
-        let artifact_row_id = {
-            let mut tx = conn.transaction().await;
-            let artifact_row_id = tx.conn().artifact_id(artifact_id).await;
-            if self.job_id.is_none() {
-                tx.conn()
-                    .collector_start(artifact_row_id, &self.steps)
-                    .await;
-            }
-            tx.commit().await.unwrap();
-            artifact_row_id
-        };
+        let artifact_row_id = conn.artifact_id(artifact_id).await;
         // Find out which tests cases were already computed
         let measured_compile_test_cases = conn
             .get_compile_test_cases_with_measurements(&artifact_row_id)
@@ -385,24 +375,6 @@ pub struct CollectorCtx {
 }
 
 impl CollectorCtx {
-    pub fn is_from_job_queue(&self) -> bool {
-        self.job_id.is_some()
-    }
-
-    pub async fn start_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {
-        if !self.is_from_job_queue() {
-            conn.collector_start_step(self.artifact_row_id, &benchmark_name.0)
-                .await;
-        }
-    }
-
-    pub async fn end_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {
-        if !self.is_from_job_queue() {
-            conn.collector_end_step(self.artifact_row_id, &benchmark_name.0)
-                .await;
-        }
-    }
-
     /// Returns the names of benchmarks in the group that have not yet been measured
     /// for the given target.
     pub fn get_unmeasured_runtime_benchmarks<'a>(
@@ -421,21 +393,6 @@ impl CollectorCtx {
             })
             .map(|s| s.as_str())
             .collect()
-    }
-
-    pub async fn start_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) {
-        if !self.is_from_job_queue() {
-            let step_name = runtime_group_step_name(&group.name);
-            conn.collector_start_step(self.artifact_row_id, &step_name)
-                .await;
-        }
-    }
-
-    pub async fn end_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) {
-        if !self.is_from_job_queue() {
-            conn.collector_end_step(self.artifact_row_id, &runtime_group_step_name(&group.name))
-                .await;
-        }
     }
 }
 

@@ -2231,8 +2231,6 @@ async fn bench_compile(
         print_intro: &dyn Fn(),
         measure: F,
     ) {
-        collector.start_compile_step(conn, benchmark_name).await;
-
         let mut tx = conn.transaction().await;
         let (supports_stable, category) = category.db_representation();
         tx.conn()
@@ -2259,7 +2257,6 @@ async fn bench_compile(
                 )
                 .await;
         };
-        collector.end_compile_step(tx.conn(), benchmark_name).await;
         tx.commit().await.expect("committed");
     }
 
