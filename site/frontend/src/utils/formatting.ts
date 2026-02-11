@@ -4,7 +4,7 @@ import {PREF_DATETIME_FORMAT} from "../pages/compare/prefs";
 
 // `time` has to be in seconds
 export function formatSecondsAsDuration(time: number): string {
-  let seconds = time % 60;
+  let seconds = Math.trunc(time % 60);
   let mins = Math.trunc(time / 60);
   let hours = Math.trunc(mins / 60);
   mins -= hours * 60;
