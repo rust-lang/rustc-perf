@@ -1,4 +1,4 @@
-use crate::selector::CompileTestCase;
+use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
     ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
@@ -123,20 +123,6 @@ pub trait Connection: Send + Sync {
     ) -> Vec<Vec<Option<f64>>>;
     async fn get_error(&self, artifact_row_id: ArtifactIdNumber) -> HashMap<String, String>;
 
-    // Collector status API
-
-    // TODO: these functions should be removed. The only useful user of them currently are runtime
-    // benchmarks, which should switch to something similar to
-    // `get_compile_test_cases_with_measurements`.
-    async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]);
-
-    // Returns `true` if the step was started, i.e., it did not previously have
-    // an end. Otherwise returns false, indicating that we can skip it.
-    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool;
-    async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str);
-
-    async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str);
-
     /// Returns the SHA of the parent of the given SHA commit, if available.
     async fn parent_of(&self, sha: &str) -> Option<String>;
 
@@ -220,6 +206,13 @@ pub trait Connection: Send + Sync {
         &self,
         artifact_row_id: &ArtifactIdNumber,
     ) -> anyhow::Result<HashSet<CompileTestCase>>;
+
+    /// Returns a set of runtime benchmark names that already have measurements
+    /// for the given artifact in the runtime_pstat table.
+    async fn get_runtime_benchmarks_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<RuntimeTestCase>>;
 
     /// Add the confiuguration for a collector
     async fn add_collector_config(

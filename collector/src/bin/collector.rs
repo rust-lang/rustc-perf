@@ -444,19 +444,11 @@ struct BenchRustcOption {
     bench_rustc: bool,
 }
 
-#[derive(Clone, Debug, clap::ValueEnum)]
-enum PurgeMode {
-    /// Purge all old data associated with the artifact
-    Old,
-    /// Purge old data of failed benchmarks associated with the artifact
-    Failed,
-}
-
 #[derive(Debug, clap::Args)]
 struct PurgeOption {
     /// Removes old data for the specified artifact prior to running the benchmarks.
     #[arg(long = "purge")]
-    purge: Option<PurgeMode>,
+    purge: bool,
 }
 
 #[derive(Debug, clap::Args)]
@@ -872,7 +864,9 @@ fn main_result() -> anyhow::Result<i32> {
                 r#type: CommitType::Master,
             });
 
-            rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
+            if purge.purge {
+                rt.block_on(conn.purge_artifact(&artifact_id));
+            }
 
             let runtime_suite = rt.block_on(load_runtime_benchmarks(
                 conn.as_mut(),
@@ -1028,7 +1022,9 @@ fn main_result() -> anyhow::Result<i32> {
 
             let rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
-            rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
+            if purge.purge {
+                rt.block_on(conn.purge_artifact(&artifact_id));
+            }
 
             let shared = SharedBenchmarkConfig {
                 toolchain,
@@ -2047,28 +2043,6 @@ fn log_db(db_option: &DbOption) {
     println!("Using database `{}`", db_option.db);
 }
 
-async fn purge_old_data(
-    conn: &mut dyn Connection,
-    artifact_id: &ArtifactId,
-    purge_mode: Option<PurgeMode>,
-) {
-    match purge_mode {
-        Some(PurgeMode::Old) => {
-            // Delete everything associated with the artifact
-            conn.purge_artifact(artifact_id).await;
-        }
-        Some(PurgeMode::Failed) => {
-            // Delete all benchmarks that have an error for the given artifact
-            let artifact_row_id = conn.artifact_id(artifact_id).await;
-            let errors = conn.get_error(artifact_row_id).await;
-            for krate in errors.keys() {
-                conn.collector_remove_step(artifact_row_id, krate).await;
-            }
-        }
-        None => {}
-    }
-}
-
 /// Record a collection entry into the database, specifying which benchmark steps will be executed.
 async fn init_collection(
     connection: &mut dyn Connection,
@@ -2233,8 +2207,6 @@ async fn bench_compile(
         print_intro: &dyn Fn(),
         measure: F,
     ) {
-        collector.start_compile_step(conn, benchmark_name).await;
-
         let mut tx = conn.transaction().await;
         let (supports_stable, category) = category.db_representation();
         tx.conn()
@@ -2261,7 +2233,6 @@ async fn bench_compile(
                 )
                 .await;
         };
-        collector.end_compile_step(tx.conn(), benchmark_name).await;
         tx.commit().await.expect("committed");
     }
 
