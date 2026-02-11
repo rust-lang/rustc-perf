@@ -1147,19 +1147,6 @@ pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
     Ok(targets)
 }
 
-/// Cached information about benchmark requests in the DB
-pub struct BenchmarkRequestIndex {
-    /// Tags (SHA or release name) of all known benchmark requests
-    all: HashSet<String>,
-}
-
-impl BenchmarkRequestIndex {
-    /// Do we already have a benchmark request for the passed `tag`?
-    pub fn contains_tag(&self, tag: &str) -> bool {
-        self.all.contains(tag)
-    }
-}
-
 /// Contains pending (ArtifactsReady or InProgress) benchmark requests, and a set of their parents
 /// that are already completed.
 #[derive(Debug)]

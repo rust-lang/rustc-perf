@@ -4,13 +4,12 @@ use crate::pool::{
 use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
     ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestInsertResult, BenchmarkRequestStatus, BenchmarkRequestType,
-    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests, Profile, Scenario,
-    Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
-    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
-    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestInsertResult,
+    BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet,
+    CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date,
+    Index, PendingBenchmarkRequests, Profile, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
     BENCHMARK_REQUEST_TRY_STR,
@@ -520,7 +519,6 @@ pub struct CachedStatements {
     get_runtime_pstat: Statement,
     record_artifact_size: Statement,
     get_artifact_size: Statement,
-    load_benchmark_request_index: Statement,
     get_compile_test_cases_with_measurements: Statement,
     get_runtime_benchmarks_with_measurements: Statement,
     get_last_n_completed_requests_with_errors: Statement,
@@ -679,11 +677,6 @@ impl PostgresConnection {
                 get_artifact_size: conn.prepare("
                     select component, size from artifact_size
                     where aid = $1
-                ").await.unwrap(),
-                load_benchmark_request_index: conn.prepare("
-                    SELECT tag
-                    FROM benchmark_request
-                    WHERE tag IS NOT NULL
                 ").await.unwrap(),
                 get_compile_test_cases_with_measurements: conn.prepare("
                     SELECT DISTINCT crate, profile, scenario, backend, target
@@ -1437,20 +1430,6 @@ where
         } else {
             Ok(BenchmarkRequestInsertResult::Inserted)
         }
-    }
-
-    async fn load_benchmark_request_index(&self) -> anyhow::Result<BenchmarkRequestIndex> {
-        let requests = self
-            .conn()
-            .query(&self.statements().load_benchmark_request_index, &[])
-            .await
-            .context("Cannot load benchmark request index")?;
-
-        let all = requests
-            .into_iter()
-            .map(|row| row.get::<_, String>(0))
-            .collect();
-        Ok(BenchmarkRequestIndex { all })
     }
 
     async fn update_benchmark_request_status(

@@ -10,22 +10,22 @@ use collector::benchmark_set::{
 };
 use database::pool::{JobEnqueueResult, Transaction};
 use database::{
-    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
-    BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, Connection, Date,
-    PendingBenchmarkRequests, Profile, QueuedCommit, Target,
+    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
+    BenchmarkRequestType, CodegenBackend, Connection, Date, PendingBenchmarkRequests, Profile,
+    QueuedCommit, Target,
 };
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::time::{self, Duration, MissedTickBehavior};
 
 /// Store the latest master commits or do nothing if all of them are
 /// already in the database.
 async fn create_benchmark_request_master_commits(
     ctxt: &SiteCtxt,
-    conn: &dyn database::pool::Connection,
-    index: &BenchmarkRequestIndex,
+    conn: &mut dyn database::pool::Connection,
 ) -> anyhow::Result<()> {
+    log::info!("Checking master commits");
+
     let now = Utc::now();
 
     let master_commits = ctxt.get_master_commits();
@@ -35,30 +35,40 @@ async fn create_benchmark_request_master_commits(
         .iter()
         .filter(|c| now.signed_duration_since(c.time) < chrono::Duration::days(29));
 
+    let mut tx = conn.transaction().await;
     for master_commit in master_commits {
-        if !index.contains_tag(&master_commit.sha) {
-            let pr = master_commit.pr.unwrap_or(0);
-            let benchmark = BenchmarkRequest::create_master(
-                &master_commit.sha,
-                &master_commit.parent_sha,
-                pr,
-                master_commit.time,
-            );
-            log::info!("Inserting master benchmark request {benchmark:?}");
+        let pr = master_commit.pr.unwrap_or(0);
+        let benchmark = BenchmarkRequest::create_master(
+            &master_commit.sha,
+            &master_commit.parent_sha,
+            pr,
+            master_commit.time,
+        );
 
-            match conn.insert_benchmark_request(&benchmark).await {
-                Ok(BenchmarkRequestInsertResult::NothingInserted) => {
-                    log::error!(
-                        "Failed to insert master benchmark request, request for PR`#{pr}` already exists",
-                    );
-                }
-                Ok(BenchmarkRequestInsertResult::Inserted) => {}
-                Err(e) => {
-                    log::error!("Failed to insert master benchmark request: {e:?}");
-                }
+        match tx.conn().insert_benchmark_request(&benchmark).await {
+            Ok(BenchmarkRequestInsertResult::NothingInserted) => {
+                // We assume that the master commits are ordered from newest to oldest
+                // They should form a git tree after all. So if we run into a commit that is
+                // already in our DB, all its parents should already be there too.
+                // Note: we have to insert the requests in a transaction for this to work.
+                // Otherwise, when we have commits C3 < C2 < C1, and only C1 is in the DB, the
+                // following could happen:
+                // - We insert C3
+                // - rustc-perf crashes
+                // - C2 would forever be ignored, because C3 is already in the DB
+                log::info!("Benchmark request for PR #{pr} was already in the DB. Skipping the rest of the master commits.");
+                break;
+            }
+            Ok(BenchmarkRequestInsertResult::Inserted) => {
+                log::info!("Inserted master benchmark request {benchmark:?}");
+            }
+            Err(e) => {
+                log::error!("Failed to insert master benchmark request: {e:?}");
             }
         }
     }
+    log::info!("Finished checking master commits");
+    tx.commit().await?;
     Ok(())
 }
 
@@ -454,21 +464,11 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let start = Instant::now();
-    let index = conn
-        .load_benchmark_request_index()
-        .await
-        .context("Failed to load benchmark request index")?;
-    log::info!(
-        "Loading the benchmark request index took {}s",
-        start.elapsed().as_secs_f64()
-    );
-
-    // Put the master commits into the `benchmark_requests` queue
-    if let Err(error) = create_benchmark_request_master_commits(ctxt, &*conn, &index).await {
+    // Put the master commits into the `benchmark_request` table
+    if let Err(error) = create_benchmark_request_master_commits(ctxt, &mut *conn).await {
         log::error!("Could not insert master benchmark requests into the database: {error:?}");
     }
-    // Put the releases into the `benchmark_requests` queue
+    // Put the releases into the `benchmark_requess` table
     if let Err(error) = create_benchmark_request_releases(&*conn).await {
         log::error!("Could not insert release benchmark requests into the database: {error:?}");
     }

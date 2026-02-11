@@ -1,7 +1,7 @@
 use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
     ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
-    BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
+    BenchmarkRequest, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
     BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark,
     PendingBenchmarkRequests, Target,
 };
@@ -151,9 +151,6 @@ pub trait Connection: Send + Sync {
         &self,
         benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<BenchmarkRequestInsertResult>;
-
-    /// Load all known benchmark request SHAs and all completed benchmark requests.
-    async fn load_benchmark_request_index(&self) -> anyhow::Result<BenchmarkRequestIndex>;
 
     /// Load all pending benchmark requests, i.e. those that have artifacts ready, but haven't
     /// been completed yet. Pending statuses are `ArtifactsReady` and `InProgress`.
