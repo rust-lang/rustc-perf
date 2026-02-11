@@ -14,7 +14,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    env_logger::builder().format_timestamp_millis().init();
 
     #[cfg(unix)]
     let _ = jemalloc_ctl::background_thread::write(true);
