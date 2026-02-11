@@ -284,13 +284,27 @@ async fn handle_rust_timer(
         }
     }
 
-    let enqueued = enqueue_shas(
+    let enqueued = match enqueue_shas(
         &ctxt,
         main_client,
         issue.number,
         valid_build_cmds.iter().map(|c| c.sha),
     )
-    .await?;
+    .await
+    {
+        Ok(enqueued) => enqueued,
+        Err(error) => {
+            log::error!("Failed to enqueue SHAs on {}: {error:?}", issue.number);
+            main_client
+                .post_comment(
+                    issue.number,
+                    "Failed to enqueue some commit SHAs. Maybe they were already benchmarked?"
+                        .to_string(),
+                )
+                .await;
+            return Ok(github::Response);
+        }
+    };
     if enqueued.len() < valid_build_cmds.len() {
         use std::fmt::Write;
 
