@@ -24,7 +24,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tokio_postgres::error::SqlState;
 use tokio_postgres::Statement;
 use tokio_postgres::{GenericClient, Row};
 
@@ -1602,7 +1601,11 @@ where
         kind: BenchmarkJobKind,
         is_optional: bool,
     ) -> JobEnqueueResult {
-        // This will return zero rows if the job already exists
+        // This will return zero rows if the job already exists or the request does not exist
+        // We perform a conditional insert here, because if the insertion fails because of a FK
+        // violation, Postgres would invalidate the whole current transaction.
+        // However, we want the transaction to continue, because the parent not existing is not
+        // always an error.
         let result = self
             .conn()
             .query(
@@ -1617,7 +1620,8 @@ where
                 kind,
                 is_optional
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            SELECT $1, $2, $3, $4, $5, $6, $7, $8
+            WHERE EXISTS (SELECT 1 FROM benchmark_request WHERE benchmark_request.tag = $1)
             ON CONFLICT DO NOTHING
             RETURNING job_queue.id
                 "#,
@@ -1637,22 +1641,11 @@ where
         match result {
             Ok(rows) => {
                 let Some(row) = rows.into_iter().next() else {
-                    return JobEnqueueResult::JobAlreadyExisted;
+                    return JobEnqueueResult::JobExistedOrParentNotFound;
                 };
                 JobEnqueueResult::JobCreated(row.get::<_, i32>(0) as u32)
             }
-            Err(e) => {
-                if let Some(db_err) = e.as_db_error() {
-                    if db_err.code() == &SqlState::FOREIGN_KEY_VIOLATION {
-                        let constraint = db_err.constraint().unwrap_or("benchmark_tag constraint");
-                        let detail = db_err.detail().unwrap_or("");
-                        return JobEnqueueResult::RequestShaNotFound {
-                            error: format!("Foreign key violation on `{constraint}`: {detail}"),
-                        };
-                    }
-                }
-                JobEnqueueResult::Other(e.into())
-            }
+            Err(e) => JobEnqueueResult::Other(e.into()),
         }
     }
 

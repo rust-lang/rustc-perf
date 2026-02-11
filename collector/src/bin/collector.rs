@@ -1411,7 +1411,7 @@ async fn run_job_queue_benchmarks(
                                 artifact_row_id,
                                 "Job failure",
                                 &format!(
-                                    "Error while benchmarking job {benchmark_job:?}: {error:?}"
+                                    "Error while benchmarking job {benchmark_job:#?}\n\n{error:?}"
                                 ),
                                 Some(benchmark_job.id()),
                             )
