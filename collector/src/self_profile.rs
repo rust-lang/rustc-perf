@@ -192,21 +192,49 @@ impl SelfProfileStorage for S3SelfProfileStorage {
             let upload = tempfile::NamedTempFile::new().context("cannot create temporary file")?;
             match files {
                 SelfProfileFiles::Eight { file } => {
+                    let start = Instant::now();
                     let data = tokio::fs::read(file)
                         .await
                         .context("cannot read self-profile data")?;
-                    let mut data = snap::read::FrameEncoder::new(&data[..]);
-                    let mut compressed = Vec::new();
-                    data.read_to_end(&mut compressed)
-                        .context("cannot compress self-profile data")?;
+                    log::trace!(
+                        "Read self-profile duration: {}, size: {}",
+                        start.elapsed().as_secs_f64(),
+                        data.len()
+                    );
+                    let start = Instant::now();
+
+                    // This is synchronous and blocks the event loop, so we should do it on a
+                    // worker thread
+                    let compressed = tokio::task::spawn_blocking(move || {
+                        let mut data = snap::read::FrameEncoder::new(&data[..]);
+                        let mut compressed = Vec::new();
+
+                        data.read_to_end(&mut compressed)
+                            .context("cannot compress self-profile data")?;
+                        anyhow::Ok(compressed)
+                    })
+                    .await??;
+
+                    log::trace!(
+                        "Compress self-profile duration: {}, size: {}",
+                        start.elapsed().as_secs_f64(),
+                        compressed.len()
+                    );
+                    let start = Instant::now();
                     tokio::fs::write(upload.path(), &compressed)
                         .await
                         .context("cannot write compressed self-profile data")?;
+                    log::trace!(
+                        "Write self-profile duration: {}",
+                        start.elapsed().as_secs_f64()
+                    );
+                    compressed
                 }
             };
 
             log::info!("Uploading self-profile to {}", file_path.display());
 
+            let start = Instant::now();
             let output = tokio::process::Command::new("aws")
                 .arg("s3")
                 .arg("cp")
@@ -232,6 +260,10 @@ impl SelfProfileStorage for S3SelfProfileStorage {
                     String::from_utf8_lossy(&output.stderr)
                 ));
             }
+            log::trace!(
+                "Upload self-profile duration: {}",
+                start.elapsed().as_secs_f64()
+            );
             Ok(())
         })
     }
