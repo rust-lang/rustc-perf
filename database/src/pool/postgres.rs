@@ -1,7 +1,7 @@
 use crate::pool::{
     Connection, ConnectionManager, JobEnqueueResult, ManagedConnection, Transaction,
 };
-use crate::selector::CompileTestCase;
+use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
     ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
     BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
@@ -523,6 +523,7 @@ pub struct CachedStatements {
     get_artifact_size: Statement,
     load_benchmark_request_index: Statement,
     get_compile_test_cases_with_measurements: Statement,
+    get_runtime_benchmarks_with_measurements: Statement,
     get_last_n_completed_requests_with_errors: Statement,
     get_jobs_of_in_progress_benchmark_requests: Statement,
     load_pending_benchmark_requests: Statement,
@@ -690,6 +691,15 @@ impl PostgresConnection {
                     WHERE id IN (
                         SELECT DISTINCT series
                         FROM pstat
+                        WHERE aid = $1
+                    )
+                ").await.unwrap(),
+                get_runtime_benchmarks_with_measurements: conn.prepare("
+                    SELECT DISTINCT benchmark, target
+                    FROM runtime_pstat_series
+                    WHERE id IN (
+                        SELECT DISTINCT series
+                        FROM runtime_pstat
                         WHERE aid = $1
                     )
                 ").await.unwrap(),
@@ -1632,6 +1642,27 @@ where
                 scenario: row.get::<_, &str>(2).parse().unwrap(),
                 backend: CodegenBackend::from_str(row.get::<_, &str>(3)).unwrap(),
                 target: Target::from_str(row.get::<_, &str>(4)).unwrap(),
+            })
+            .collect())
+    }
+
+    async fn get_runtime_benchmarks_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<RuntimeTestCase>> {
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_runtime_benchmarks_with_measurements,
+                &[&(artifact_row_id.0 as i32)],
+            )
+            .await
+            .context("cannot query runtime benchmarks with measurements")?;
+        Ok(rows
+            .into_iter()
+            .map(|row| RuntimeTestCase {
+                benchmark: Benchmark::from(row.get::<_, &str>(0)),
+                target: Target::from_str(row.get::<_, &str>(1)).unwrap(),
             })
             .collect())
     }

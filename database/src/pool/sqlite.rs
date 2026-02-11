@@ -1,7 +1,7 @@
 use crate::pool::{
     Connection, ConnectionManager, JobEnqueueResult, ManagedConnection, Transaction,
 };
-use crate::selector::CompileTestCase;
+use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
     ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
@@ -1143,6 +1143,30 @@ impl Connection for SqliteConnection {
                     scenario: row.get::<_, String>(2)?.parse().unwrap(),
                     backend: row.get::<_, String>(3)?.parse().unwrap(),
                     target: row.get::<_, String>(4)?.parse().unwrap(),
+                })
+            })?
+            .collect::<Result<_, _>>()?)
+    }
+
+    async fn get_runtime_benchmarks_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<RuntimeTestCase>> {
+        Ok(self
+            .raw_ref()
+            .prepare_cached(
+                "SELECT DISTINCT benchmark, target
+                FROM runtime_pstat_series
+                WHERE id IN (
+                    SELECT DISTINCT series
+                    FROM runtime_pstat
+                    WHERE aid = ?
+                );",
+            )?
+            .query_map(params![artifact_row_id.0], |row| {
+                Ok(RuntimeTestCase {
+                    benchmark: Benchmark::from(row.get::<_, String>(0)?.as_str()),
+                    target: row.get::<_, String>(1)?.parse().unwrap(),
                 })
             })?
             .collect::<Result<_, _>>()?)

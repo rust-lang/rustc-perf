@@ -1,4 +1,4 @@
-use crate::selector::CompileTestCase;
+use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
     ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
@@ -221,6 +221,13 @@ pub trait Connection: Send + Sync {
         &self,
         artifact_row_id: &ArtifactIdNumber,
     ) -> anyhow::Result<HashSet<CompileTestCase>>;
+
+    /// Returns a set of runtime benchmark names that already have measurements
+    /// for the given artifact in the runtime_pstat table.
+    async fn get_runtime_benchmarks_with_measurements(
+        &self,
+        artifact_row_id: &ArtifactIdNumber,
+    ) -> anyhow::Result<HashSet<RuntimeTestCase>>;
 
     /// Add the confiuguration for a collector
     async fn add_collector_config(

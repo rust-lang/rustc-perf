@@ -20,7 +20,7 @@ use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
 pub use crate::self_profile::{
     LocalSelfProfileStorage, S3SelfProfileStorage, SelfProfileId, SelfProfileStorage,
 };
-use database::selector::CompileTestCase;
+use database::selector::{CompileTestCase, RuntimeTestCase};
 use database::{ArtifactId, ArtifactIdNumber, Connection};
 use hashbrown::HashSet;
 use process::Stdio;
@@ -358,11 +358,16 @@ impl CollectorStepBuilder {
             .get_compile_test_cases_with_measurements(&artifact_row_id)
             .await
             .expect("cannot fetch measured compile test cases from DB");
+        let measured_runtime_benchmarks = conn
+            .get_runtime_benchmarks_with_measurements(&artifact_row_id)
+            .await
+            .expect("cannot fetch measured runtime benchmarks from DB");
 
         CollectorCtx {
             artifact_row_id,
             artifact_id: artifact_id.clone(),
             measured_compile_test_cases,
+            measured_runtime_benchmarks,
             job_id: self.job_id,
         }
     }
@@ -372,8 +377,10 @@ impl CollectorStepBuilder {
 pub struct CollectorCtx {
     pub artifact_row_id: ArtifactIdNumber,
     pub artifact_id: ArtifactId,
-    /// Which tests cases were already computed **before** this collection began?
+    /// Which compile test cases were already computed **before** this collection began?
     pub measured_compile_test_cases: HashSet<CompileTestCase>,
+    /// Which runtime benchmarks were already computed **before** this collection began?
+    pub measured_runtime_benchmarks: HashSet<RuntimeTestCase>,
     pub job_id: Option<u32>,
 }
 
@@ -396,21 +403,31 @@ impl CollectorCtx {
         }
     }
 
-    /// Starts a new runtime benchmark collector step.
-    /// If this step was already computed, returns None.
-    /// Otherwise returns Some(<name of step>).
-    pub async fn start_runtime_step(
+    /// Returns the names of benchmarks in the group that have not yet been measured
+    /// for the given target.
+    pub fn get_unmeasured_runtime_benchmarks<'a>(
         &self,
-        conn: &dyn Connection,
-        group: &BenchmarkGroup,
-    ) -> Option<String> {
-        let step_name = runtime_group_step_name(&group.name);
-        if self.is_from_job_queue() {
-            Some(step_name)
-        } else {
+        group: &'a BenchmarkGroup,
+        target: database::Target,
+    ) -> Vec<&'a str> {
+        group
+            .benchmark_names
+            .iter()
+            .filter(|name| {
+                !self.measured_runtime_benchmarks.contains(&RuntimeTestCase {
+                    benchmark: database::Benchmark::from(name.as_str()),
+                    target,
+                })
+            })
+            .map(|s| s.as_str())
+            .collect()
+    }
+
+    pub async fn start_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) {
+        if !self.is_from_job_queue() {
+            let step_name = runtime_group_step_name(&group.name);
             conn.collector_start_step(self.artifact_row_id, &step_name)
-                .await
-                .then_some(step_name)
+                .await;
         }
     }
 
