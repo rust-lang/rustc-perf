@@ -284,13 +284,26 @@ async fn handle_rust_timer(
         }
     }
 
-    enqueue_shas(
+    let enqueued = enqueue_shas(
         &ctxt,
         main_client,
         issue.number,
         valid_build_cmds.iter().map(|c| c.sha),
     )
     .await?;
+    if enqueued.len() < valid_build_cmds.len() {
+        use std::fmt::Write;
+
+        let mut msg =
+            "The following SHAs were not enqueued, as they were probably already benchmarked:\n"
+                .to_string();
+        for cmd in valid_build_cmds {
+            if !enqueued.contains(&cmd.sha) {
+                writeln!(msg, "- {}", cmd.sha).unwrap();
+            }
+        }
+        main_client.post_comment(issue.number, msg).await;
+    }
 
     Ok(github::Response)
 }

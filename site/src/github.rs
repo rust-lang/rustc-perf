@@ -233,12 +233,14 @@ pub async fn rollup_pr_number(
         .then_some(issue.number))
 }
 
-pub async fn enqueue_shas(
+/// Enqueues the given SHAs and returns the SHAs that were actually enqueued.
+pub async fn enqueue_shas<'a>(
     ctxt: &SiteCtxt,
     gh_client: &client::Client,
     pr_number: u32,
-    commits: impl Iterator<Item = &str>,
-) -> Result<(), String> {
+    commits: impl Iterator<Item = &'a str>,
+) -> Result<Vec<&'a str>, String> {
+    let mut enqueued = vec![];
     let mut msg = String::new();
     for commit in commits {
         let mut commit_response = gh_client
@@ -251,7 +253,7 @@ pub async fn enqueue_shas(
                 commit_response.sha,
                 commit_response.parents.len()
             );
-            return Ok(());
+            continue;
         }
         let try_commit = TryCommit {
             sha: commit_response.sha,
@@ -268,6 +270,7 @@ pub async fn enqueue_shas(
             .await
             .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?;
         if queued {
+            enqueued.push(commit);
             if !msg.is_empty() {
                 msg.push('\n');
             }
@@ -286,7 +289,7 @@ pub async fn enqueue_shas(
             let queue_msg = format!(
                 r#"There {verb} currently {preceding_artifacts} preceding artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
 It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
-                (expected_duration.as_secs_f64() / 3600.0)
+                expected_duration.as_secs_f64() / 3600.0
             );
 
             msg.push_str(&format!(
@@ -303,7 +306,7 @@ It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
         gh_client.post_comment(pr_number, msg).await;
     }
 
-    Ok(())
+    Ok(enqueued)
 }
 
 /// Counts how many artifacts are in the queue before the specified commit, and what is the expected
