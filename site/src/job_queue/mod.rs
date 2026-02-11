@@ -16,6 +16,7 @@ use database::{
 };
 use parking_lot::RwLock;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::time::{self, Duration, MissedTickBehavior};
 
 /// Store the latest master commits or do nothing if all of them are
@@ -459,10 +460,15 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let start = Instant::now();
     let index = conn
         .load_benchmark_request_index()
         .await
         .context("Failed to load benchmark request index")?;
+    log::info!(
+        "Loading the benchmark request index took {}s",
+        start.elapsed().as_secs_f64()
+    );
 
     // Put the master commits into the `benchmark_requests` queue
     if let Err(error) = create_benchmark_request_master_commits(ctxt, &*conn, &index).await {
