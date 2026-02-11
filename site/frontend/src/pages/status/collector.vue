@@ -152,7 +152,7 @@ function averageCollectorDuration(collector: CollectorConfig): string {
     return "Unknown";
   }
   const durationSum = collector.pastRequestDurations.reduce(
-    (acc, req) => acc + req.job_duration_s,
+    (acc, req) => acc + req.jobDurationS,
     0
   );
   const averageDuration = durationSum / collector.pastRequestDurations.length;
