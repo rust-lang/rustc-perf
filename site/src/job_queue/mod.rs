@@ -66,8 +66,9 @@ async fn create_benchmark_request_master_commits(
 /// Returns `true` if at least one benchmark request was inserted.
 async fn create_benchmark_request_releases(
     conn: &dyn database::pool::Connection,
-    index: &BenchmarkRequestIndex,
 ) -> anyhow::Result<()> {
+    log::info!("Checking released artifacts");
+
     let releases: String = reqwest::get("https://static.rust-lang.org/manifests.txt")
         .await?
         .text()
@@ -80,23 +81,20 @@ async fn create_benchmark_request_releases(
         .take(20);
 
     for (name, commit_date) in releases {
-        if !index.contains_tag(&name) && conn.artifact_by_name(&name).await.is_none() {
-            let release_request = BenchmarkRequest::create_release(&name, commit_date);
-            log::info!("Inserting release benchmark request {release_request:?}");
-
-            match conn.insert_benchmark_request(&release_request).await {
-                Ok(BenchmarkRequestInsertResult::NothingInserted) => {
-                    log::error!(
-                        "Failed to insert release benchmark request, release with tag `{name}` already exists"
-                    );
-                }
-                Ok(BenchmarkRequestInsertResult::Inserted) => {}
-                Err(e) => {
-                    log::error!("Failed to insert release benchmark request: {e}");
-                }
+        let release_request = BenchmarkRequest::create_release(&name, commit_date);
+        match conn.insert_benchmark_request(&release_request).await {
+            Ok(BenchmarkRequestInsertResult::NothingInserted) => {
+                // Artifact is already recorded in the DB
+            }
+            Ok(BenchmarkRequestInsertResult::Inserted) => {
+                log::info!("Inserted release benchmark request {release_request:?}");
+            }
+            Err(e) => {
+                log::error!("Failed to insert release benchmark request: {e}");
             }
         }
     }
+    log::info!("Finished checking released artifacts");
     Ok(())
 }
 
@@ -471,7 +469,7 @@ async fn perform_queue_tick(ctxt: &SiteCtxt) -> anyhow::Result<()> {
         log::error!("Could not insert master benchmark requests into the database: {error:?}");
     }
     // Put the releases into the `benchmark_requests` queue
-    if let Err(error) = create_benchmark_request_releases(&*conn, &index).await {
+    if let Err(error) = create_benchmark_request_releases(&*conn).await {
         log::error!("Could not insert release benchmark requests into the database: {error:?}");
     }
 
