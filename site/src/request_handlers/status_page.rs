@@ -1,4 +1,5 @@
 use crate::api::status;
+use crate::api::status::PastRequestDuration;
 use crate::job_queue::build_queue;
 use crate::load::SiteCtxt;
 use chrono::{DateTime, Utc};
@@ -7,6 +8,7 @@ use database::{
     BenchmarkRequestType, Connection,
 };
 use hashbrown::HashMap;
+use std::cmp::Reverse;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,6 +18,12 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
     // The queue contains any in-progress request(s) and then the following requests in queue order
     let queue = build_queue(&*conn).await?;
     let completed = conn.get_last_n_completed_benchmark_requests(10).await?;
+
+    let completed_tags = completed
+        .iter()
+        .filter_map(|req| req.request.tag())
+        .map(|t| t.to_owned())
+        .collect::<Vec<String>>();
 
     // Figure out approximately how long was the most recent master benchmark request
     let expected_duration = completed
@@ -28,7 +36,11 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
         .next()
         .unwrap_or(Duration::from_secs(3600));
 
-    let in_progress_jobs = conn.get_jobs_of_in_progress_benchmark_requests().await?;
+    let (in_progress_jobs, past_jobs) = tokio::join!(
+        conn.get_jobs_of_in_progress_benchmark_requests(),
+        conn.get_jobs_of_benchmark_requests(&completed_tags)
+    );
+    let (in_progress_jobs, past_jobs) = (in_progress_jobs?, past_jobs?);
 
     // Here we compute the estimated end time for queued requests, and convert the requests to their
     // frontend representation.
@@ -91,7 +103,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
             .map(|req| request_to_ui(&req.request, req.errors, None)),
     );
 
-    let collectors = build_collectors(conn.as_ref(), &in_progress_jobs).await?;
+    let collectors = build_collectors(conn.as_ref(), &in_progress_jobs, &past_jobs).await?;
 
     Ok(status::Response {
         requests,
@@ -102,11 +114,56 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
 async fn build_collectors(
     conn: &dyn Connection,
     in_progress_jobs: &HashMap<String, Vec<BenchmarkJob>>,
+    past_jobs: &[BenchmarkJob],
 ) -> anyhow::Result<Vec<status::Collector>> {
+    // Collector -> request tag -> sum of job durations
+    let mut collector_request_durations: HashMap<&str, HashMap<&str, Duration>> = HashMap::new();
+    let mut request_start_time: HashMap<&str, DateTime<Utc>> = HashMap::new();
+
+    for job in past_jobs {
+        let BenchmarkJobStatus::Completed {
+            started_at,
+            completed_at,
+            collector_name,
+            ..
+        } = job.status()
+        else {
+            continue;
+        };
+        let start_time = request_start_time.entry(job.request_tag()).or_default();
+        *start_time = *(&*start_time).min(started_at);
+
+        // Accumulate per-collector and per-request job duration
+        let job_duration = (*completed_at - *started_at).to_std().unwrap_or_default();
+        *collector_request_durations
+            .entry(collector_name.as_str())
+            .or_default()
+            .entry(job.request_tag())
+            .or_default() += job_duration;
+    }
+
     let collectors = conn.get_collector_configs().await?;
     let mut collector_map: HashMap<String, status::Collector> = collectors
         .into_iter()
         .map(|c| {
+            let mut past_request_durations = collector_request_durations
+                .remove(c.name())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(request, collector_duration)| PastRequestDuration {
+                    request_tag: request.to_owned(),
+                    job_duration_s: collector_duration.as_secs(),
+                })
+                .collect::<Vec<_>>();
+            // Sort from the most recent benchmark request
+            past_request_durations.sort_by_key(|request| {
+                Reverse(
+                    request_start_time
+                        .get(request.request_tag.as_str())
+                        .copied()
+                        .unwrap_or_default(),
+                )
+            });
             (
                 c.name().to_string(),
                 status::Collector {
@@ -116,7 +173,12 @@ async fn build_collectors(
                     is_active: c.is_active(),
                     last_heartbeat_at: c.last_heartbeat_at(),
                     date_added: c.date_added(),
+                    commit_sha: c
+                        .commit_sha()
+                        .map(|s| s.to_owned())
+                        .unwrap_or_else(|| "<unknown>".to_owned()),
                     jobs: vec![],
+                    past_request_durations,
                 },
             )
         })
