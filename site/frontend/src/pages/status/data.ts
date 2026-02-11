@@ -32,7 +32,7 @@ export type BenchmarkJob = {
 
 export type PastRequestDuration = {
   requestTag: String;
-  job_duration_s: number;
+  jobDurationS: number;
 };
 
 export type CollectorConfig = {
