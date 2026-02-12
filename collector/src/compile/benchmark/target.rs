@@ -50,6 +50,11 @@ impl Target {
     pub fn host() -> Self {
         Self::AArch64UnknownLinuxGnu
     }
+
+    #[cfg(target_arch = "loongarch64")]
+    pub fn host() -> Self {
+        Target::Custom(intern_target_name("loongarch64-unknown-linux-gnu"))
+    }
 }
 
 impl From<database::Target> for Target {
