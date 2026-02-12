@@ -43,6 +43,9 @@ regex = "1.7.1"
 analyzeme = "12.0.0"
 ratatui = "0.29"
 
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+
 benchlib = { path = "benchlib" }
 database = { path = "../database" }
 
@@ -55,3 +58,4 @@ windows-sys = { version = "0.48.0", features = ["Win32_Foundation"] }
 # Requires a recent Valgrind to be installed.
 # Pass DEP_VALGRIND=<path-to-valgrind>/include environment variable when building.
 precise-cachegrind = []
+s3-sdk = ["dep:aws-sdk-s3", "dep:aws-config"]

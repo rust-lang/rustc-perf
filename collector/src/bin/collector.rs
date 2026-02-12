@@ -1661,7 +1661,7 @@ async fn create_benchmark_configs(
             backends: vec![job.backend().into()],
             iterations: if is_release { Some(3) } else { None },
             self_profile_storage: if !is_release {
-                Some(Box::new(S3SelfProfileStorage::new()))
+                Some(Box::new(S3SelfProfileStorage::new().await))
             } else {
                 None
             },

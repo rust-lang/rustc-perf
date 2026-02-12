@@ -40,7 +40,7 @@ async fn main() {
         match env::var("SELF_PROFILE_STORAGE_S3").ok() {
             Some(_) => {
                 eprintln!("Loading self-profile data from S3");
-                Box::new(S3SelfProfileStorage::new())
+                Box::new(S3SelfProfileStorage::new().await)
             }
             None => {
                 eprintln!("Loading self-profile data from local directory");
