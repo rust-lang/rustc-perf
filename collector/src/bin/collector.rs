@@ -1534,8 +1534,7 @@ async fn run_benchmark_job(
     // Command launched before a benchmark suite. Useful to run an external root helper
     // that brings the system in a consistent state.
     if let Ok(pre_run) = std::env::var("RUSTC_PERF_PRE_RUN_COMMAND") {
-        // split by ascii unit separator
-        let commandline = pre_run.split('\x1f').collect::<Vec<_>>();
+        let commandline = pre_run.split(' ').collect::<Vec<_>>();
         let mut cmd = tokio::process::Command::new(commandline[0]);
         cmd.args(&commandline[1..]);
         cmd.status().await.map_err(|error| {
