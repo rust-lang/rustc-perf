@@ -17,7 +17,7 @@ while : ; do
         # Make sure we have a recent build, so that we can successfully build
         # the collector.
         rustup update stable
-        cargo +stable build --release -p collector
+        cargo +stable build --release -p collector --features s3-sdk
 
         CURRENT_SHA=`git rev-parse HEAD`
 

@@ -172,100 +172,126 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
     }
 }
 
-#[derive(Default)]
-pub struct S3SelfProfileStorage;
+/// There seems to be a non-trivial cost (1-2s) for initiating a new S3 connection.
+/// If we initiate a new connection for every uploaded file, that can quickly add up.
+/// We thus cache the client, which makes the follow-up uploads much faster.
+#[cfg(feature = "s3-sdk")]
+#[derive(Clone)]
+struct S3WriteContext {
+    client: aws_sdk_s3::Client,
+}
+
+#[cfg(feature = "s3-sdk")]
+impl S3WriteContext {
+    async fn new() -> Self {
+        use aws_sdk_s3::config::retry::RetryConfig;
+        use aws_sdk_s3::config::timeout::TimeoutConfig;
+
+        let region = aws_config::Region::new("us-west-1");
+        let shared_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .region(region)
+            .retry_config(RetryConfig::standard().with_max_attempts(3))
+            .timeout_config(
+                TimeoutConfig::builder()
+                    .connect_timeout(Duration::from_secs(5))
+                    .read_timeout(Duration::from_secs(3))
+                    .operation_attempt_timeout(Duration::from_secs(60))
+                    .build(),
+            )
+            .load()
+            .await;
+        let client = aws_sdk_s3::Client::new(&shared_config);
+        Self { client }
+    }
+}
+
+pub struct S3SelfProfileStorage {
+    #[cfg(feature = "s3-sdk")]
+    write_ctx: S3WriteContext,
+}
 
 impl S3SelfProfileStorage {
-    pub fn new() -> Self {
-        Self
+    pub async fn new() -> Self {
+        Self {
+            #[cfg(feature = "s3-sdk")]
+            write_ctx: S3WriteContext::new().await,
+        }
     }
 }
 
 impl SelfProfileStorage for S3SelfProfileStorage {
     fn store(
         &self,
-        id: SelfProfileId,
-        files: SelfProfileFiles,
+        _id: SelfProfileId,
+        _files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        Box::pin(async move {
-            let file_path = id.relative_file_path();
-            let upload = tempfile::NamedTempFile::new().context("cannot create temporary file")?;
-            match files {
-                SelfProfileFiles::Eight { file } => {
-                    let start = Instant::now();
-                    let data = tokio::fs::read(file)
-                        .await
-                        .context("cannot read self-profile data")?;
-                    log::trace!(
-                        "Read self-profile duration: {}, size: {}",
-                        start.elapsed().as_secs_f64(),
-                        data.len()
-                    );
-                    let start = Instant::now();
+        #[cfg(feature = "s3-sdk")]
+        {
+            let ctx = self.write_ctx.clone();
+            Box::pin(async move {
+                let file_path = _id.relative_file_path();
+                let compressed = match _files {
+                    SelfProfileFiles::Eight { file } => {
+                        let start = Instant::now();
+                        let data = tokio::fs::read(file)
+                            .await
+                            .context("cannot read self-profile data")?;
+                        log::trace!(
+                            "Read self-profile duration: {}, size: {}",
+                            start.elapsed().as_secs_f64(),
+                            data.len()
+                        );
+                        let start = Instant::now();
 
-                    // This is synchronous and blocks the event loop, so we should do it on a
-                    // worker thread
-                    let compressed = tokio::task::spawn_blocking(move || {
-                        let mut data = snap::read::FrameEncoder::new(&data[..]);
-                        let mut compressed = Vec::new();
+                        // This is synchronous and blocks the event loop, so we should do it on a
+                        // worker thread
+                        let compressed = tokio::task::spawn_blocking(move || {
+                            let mut data = snap::read::FrameEncoder::new(&data[..]);
+                            let mut compressed = Vec::new();
 
-                        data.read_to_end(&mut compressed)
-                            .context("cannot compress self-profile data")?;
-                        anyhow::Ok(compressed)
-                    })
-                    .await??;
+                            data.read_to_end(&mut compressed)
+                                .context("cannot compress self-profile data")?;
+                            anyhow::Ok(compressed)
+                        })
+                        .await??;
 
-                    log::trace!(
-                        "Compress self-profile duration: {}, size: {}",
-                        start.elapsed().as_secs_f64(),
-                        compressed.len()
-                    );
-                    let start = Instant::now();
-                    tokio::fs::write(upload.path(), &compressed)
-                        .await
-                        .context("cannot write compressed self-profile data")?;
-                    log::trace!(
-                        "Write self-profile duration: {}",
-                        start.elapsed().as_secs_f64()
-                    );
-                    compressed
-                }
-            };
+                        log::trace!(
+                            "Compress self-profile duration: {}, size: {}",
+                            start.elapsed().as_secs_f64(),
+                            compressed.len()
+                        );
+                        compressed
+                    }
+                };
 
-            log::info!("Uploading self-profile to {}", file_path.display());
+                log::info!("Uploading self-profile to {}", file_path.display());
 
-            let start = Instant::now();
-            let output = tokio::process::Command::new("aws")
-                .arg("s3")
-                .arg("cp")
-                .arg("--storage-class")
-                .arg("INTELLIGENT_TIERING")
-                .arg("--only-show-errors")
-                .arg(upload.path())
-                .arg(format!(
-                    "s3://rustc-perf/{}",
-                    file_path
-                        .to_str()
-                        .expect("Non UTF-8 path used for self-profile")
-                ))
-                .spawn()
-                .context("cannot spawn aws binary")?
-                .wait_with_output()
-                .await
-                .context("cannot run aws binary")?;
-            if !output.status.success() {
-                return Err(anyhow::anyhow!(
-                    "Could not upload self-profile to S3\nStdout:\n{}\nStderr:\n{}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                ));
-            }
-            log::trace!(
-                "Upload self-profile duration: {}",
-                start.elapsed().as_secs_f64()
-            );
-            Ok(())
-        })
+                let start = Instant::now();
+                let body = aws_sdk_s3::primitives::ByteStream::from_body_1_x(
+                    aws_sdk_s3::primitives::SdkBody::from(compressed),
+                );
+                ctx.client
+                    .put_object()
+                    .bucket("rustc-perf")
+                    .key(
+                        file_path
+                            .to_str()
+                            .expect("Non UTF-8 path used for self-profile"),
+                    )
+                    .storage_class(aws_sdk_s3::types::StorageClass::IntelligentTiering)
+                    .body(body)
+                    .send()
+                    .await
+                    .context("s3 upload failed")?;
+                log::trace!(
+                    "Upload self-profile duration: {}",
+                    start.elapsed().as_secs_f64()
+                );
+                Ok(())
+            })
+        }
+        #[cfg(not(feature = "s3-sdk"))]
+        panic!("S3 upload is not enabled, compile `collector` with the `s3-sdk` feature enabled.");
     }
 
     fn load_raw(
