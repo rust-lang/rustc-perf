@@ -35,7 +35,7 @@ jobs:
           rustup default $RUST_TOOLCHAIN_VERSION
           rustup component add --toolchain $RUST_TOOLCHAIN_VERSION rustfmt clippy
         env:
-          RUST_TOOLCHAIN_VERSION: 1.88.0
+          RUST_TOOLCHAIN_VERSION: 1.91.0
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -43,6 +43,9 @@ jobs:
 
       - name: Run unit tests
         run: cargo test --all
+
+      - name: Build with S3 feature
+        run: cargo build --features s3-sdk
 
       - name: Lint check
         run: cargo clippy --all -- -D warnings
