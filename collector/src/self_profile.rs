@@ -186,6 +186,7 @@ impl S3WriteContext {
     async fn new() -> Self {
         use aws_sdk_s3::config::retry::RetryConfig;
         use aws_sdk_s3::config::timeout::TimeoutConfig;
+        use std::time::Duration;
 
         let region = aws_config::Region::new("us-west-1");
         let shared_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
