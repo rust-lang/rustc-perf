@@ -42,10 +42,10 @@ jobs:
           key: linux
 
       - name: Run unit tests
-        run: cargo test --all
+        run: cargo test --all --locked
 
       - name: Build with S3 feature
-        run: cargo build --features s3-sdk
+        run: cargo build --features s3-sdk --locked
 
       - name: Lint check
         run: cargo clippy --all -- -D warnings
