@@ -194,8 +194,8 @@ impl S3WriteContext {
             .retry_config(RetryConfig::standard().with_max_attempts(3))
             .timeout_config(
                 TimeoutConfig::builder()
-                    .connect_timeout(Duration::from_secs(5))
-                    .read_timeout(Duration::from_secs(3))
+                    .connect_timeout(Duration::from_secs(15))
+                    .read_timeout(Duration::from_secs(15))
                     .operation_attempt_timeout(Duration::from_secs(60))
                     .build(),
             )
