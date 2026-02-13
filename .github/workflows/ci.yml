@@ -44,6 +44,9 @@ jobs:
       - name: Run unit tests
         run: cargo test --all
 
+      - name: Build with S3 feature
+        run: cargo build --features s3-sdk
+
       - name: Lint check
         run: cargo clippy --all -- -D warnings
 
