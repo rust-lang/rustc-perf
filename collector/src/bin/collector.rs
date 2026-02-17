@@ -123,6 +123,7 @@ struct RuntimeBenchmarkConfig {
     filter: RuntimeBenchmarkFilter,
     iterations: u32,
     target: Target,
+    taskset: Option<String>,
 }
 
 impl RuntimeBenchmarkConfig {
@@ -131,12 +132,14 @@ impl RuntimeBenchmarkConfig {
         filter: RuntimeBenchmarkFilter,
         iterations: u32,
         target: Target,
+        taskset: Option<String>,
     ) -> Self {
         Self {
             runtime_suite: suite.filter(&filter),
             filter,
             iterations,
             target,
+            taskset,
         }
     }
 }
@@ -534,6 +537,11 @@ enum Commands {
 
         #[command(flatten)]
         purge: PurgeOption,
+
+        /// CPUs to use for the benchmark execution.
+        /// This is passed to `taskset -c`.
+        #[arg(long)]
+        taskset: Option<String>,
     },
 
     /// Profiles a runtime benchmark.
@@ -843,6 +851,7 @@ fn main_result() -> anyhow::Result<i32> {
             db,
             no_isolate,
             purge,
+            taskset,
         } => {
             log_db(&db);
 
@@ -888,6 +897,7 @@ fn main_result() -> anyhow::Result<i32> {
                 RuntimeBenchmarkFilter::new(local.exclude, local.include),
                 iterations,
                 Target::from_str(&host_tuple).expect("Found unexpected host target"),
+                taskset,
             );
             rt.block_on(run_benchmarks(conn.as_mut(), shared, None, Some(config)))?;
             Ok(0)
@@ -1701,6 +1711,7 @@ async fn create_benchmark_configs(
             filter: RuntimeBenchmarkFilter::keep_all(),
             iterations: DEFAULT_RUNTIME_ITERATIONS,
             target: job.target().into(),
+            taskset: None,
         })
     } else {
         None
@@ -2106,6 +2117,7 @@ async fn run_benchmarks(
             runtime.filter,
             runtime.iterations,
             runtime.target,
+            runtime.taskset,
         )
         .await
         .context("Runtime benchmarks failed")
@@ -2174,6 +2186,7 @@ async fn bench_published_artifact(
             RuntimeBenchmarkFilter::keep_all(),
             DEFAULT_RUNTIME_ITERATIONS,
             Target::host(),
+            None,
         )),
     )
     .await

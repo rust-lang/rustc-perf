@@ -39,6 +39,7 @@ pub async fn bench_runtime(
     filter: RuntimeBenchmarkFilter,
     iterations: u32,
     target: Target,
+    taskset: Option<String>,
 ) -> anyhow::Result<()> {
     let db_target: database::Target = target.into();
 
@@ -88,8 +89,12 @@ pub async fn bench_runtime(
         // Extracting this into a separate function would be annoying, as there would be many
         // parameters.
         let result = async {
-            let messages =
-                execute_runtime_benchmark_binary(&group.binary, &group_filter, iterations)?;
+            let messages = execute_runtime_benchmark_binary(
+                &group.binary,
+                &group_filter,
+                iterations,
+                taskset.as_deref(),
+            )?;
             for message in messages {
                 let message = message.map_err(|err| {
                     anyhow::anyhow!(
@@ -144,9 +149,15 @@ pub async fn bench_runtime(
 }
 
 /// Prepares a command for execution, adding some shared flags.
-fn prepare_command<S: AsRef<OsStr>>(binary: S) -> Command {
+fn prepare_command<S: AsRef<OsStr>>(binary: S, taskset: Option<&str>) -> Command {
+    let mut command = if let Some(taskset) = taskset {
+        let mut cmd = Command::new("taskset");
+        cmd.arg("-c").arg(taskset).arg("setarch");
+        cmd
+    } else {
+        Command::new("setarch")
+    };
     // Turn off ASLR
-    let mut command = Command::new("setarch");
     command.arg(std::env::consts::ARCH).arg("-R").arg(binary);
 
     // We want to see a backtrace if the program panics
@@ -250,8 +261,9 @@ fn execute_runtime_benchmark_binary(
     binary: &Path,
     filter: &RuntimeBenchmarkFilter,
     iterations: u32,
+    taskset: Option<&str>,
 ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>>> {
-    let mut command = prepare_command(binary);
+    let mut command = prepare_command(binary, taskset);
     command.arg("run");
     command.arg("--iterations");
     command.arg(iterations.to_string());
