@@ -1,4 +1,4 @@
-# Rust Compiler Performance Monitoring & Benchmarking
+# Monitering and Benchmarking the Performance of Rust Compiler
 
 This repository contains two primary crates: 
 * [`collector`](./collector): gathers data for each bors commit
