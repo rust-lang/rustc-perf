@@ -34,18 +34,20 @@ pub async fn handle_self_profile_processed_download(
 
     let title = if let Some(diff_against) = diff_against.as_ref() {
         format!(
-            "{} vs {}: {} {}",
+            "{} vs {}: {} {} par{}",
             &diff_against[..std::cmp::min(7, diff_against.len())],
             &body.commit[..std::cmp::min(7, body.commit.len())],
             body.benchmark,
-            body.scenario
+            body.scenario,
+            body.parallel
         )
     } else {
         format!(
-            "{}: {} {}",
+            "{}: {} {} par{}",
             &body.commit[..std::cmp::min(7, body.commit.len())],
             body.benchmark,
-            body.scenario
+            body.scenario,
+            body.parallel
         )
     };
 
@@ -58,6 +60,7 @@ pub async fn handle_self_profile_processed_download(
             &diff_against,
             &body.profile,
             &body.scenario,
+            &body.parallel,
             &body.backend,
             &body.target,
         )
@@ -99,6 +102,7 @@ pub async fn handle_self_profile_processed_download(
             &body.commit,
             &body.profile,
             &body.scenario,
+            &body.parallel,
             &body.backend,
             &body.target,
         )
@@ -184,12 +188,14 @@ pub async fn handle_self_profile_processed_download(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn get_self_profile_id(
     ctxt: &SiteCtxt,
     benchmark: &str,
     commit: &str,
     profile: &str,
     scenario: &str,
+    parallel: &str,
     backend: &str,
     target: &str,
 ) -> anyhow::Result<SelfProfileId> {
@@ -199,6 +205,9 @@ async fn get_self_profile_id(
     let scenario = scenario
         .parse::<database::Scenario>()
         .map_err(|e| anyhow::anyhow!("invalid scenario: {e:?}"))?;
+    let parallel = parallel
+        .parse::<database::Parallel>()
+        .map_err(|e| anyhow::anyhow!("invalid parallel: {e:?}"))?;
     let backend = backend
         .parse::<CodegenBackend>()
         .map_err(|e| anyhow::anyhow!("invalid codegen backend: {e:?}"))?;
@@ -240,6 +249,7 @@ async fn get_self_profile_id(
             benchmark,
             profile,
             scenario,
+            parallel,
             backend,
             target,
         },
@@ -367,6 +377,7 @@ pub async fn handle_self_profile_raw_download(
         &body.commit,
         &body.profile,
         &body.scenario,
+        &body.parallel,
         &body.backend,
         &body.target,
     )
@@ -427,6 +438,10 @@ pub async fn handle_self_profile(
         .scenario
         .parse::<database::Scenario>()
         .map_err(|e| format!("invalid scenario: {e:?}"))?;
+    let parallel = body
+        .parallel
+        .parse::<database::Parallel>()
+        .map_err(|e| format!("invalid parallel: {e:?}"))?;
     let index = ctxt.index.load();
 
     let backend: CodegenBackend = if let Some(backend) = body.backend {
@@ -446,9 +461,10 @@ pub async fn handle_self_profile(
         .benchmark(selector::Selector::One(benchmark.to_string()))
         .profile(selector::Selector::One(profile))
         .scenario(selector::Selector::One(scenario))
+        .parallel(selector::Selector::One(parallel))
         .backend(selector::Selector::One(backend))
         .target(selector::Selector::One(target))
-        .metric(selector::Selector::One(Metric::CpuClock));
+        .metric(selector::Selector::One(Metric::WallTime));
 
     // Helper for finding an `ArtifactId` based on a commit sha
     let find_aid = |commit: &str| {
@@ -484,6 +500,7 @@ pub async fn handle_self_profile(
             },
             profile.as_str(),
             &scenario.to_string(),
+            &parallel.0.to_string(),
             backend.as_str(),
             target.as_str(),
         )
@@ -502,6 +519,7 @@ pub async fn handle_self_profile(
                 },
                 profile.as_str(),
                 &scenario.to_string(),
+                &parallel.0.to_string(),
                 backend.as_str(),
                 target.as_str(),
             )
