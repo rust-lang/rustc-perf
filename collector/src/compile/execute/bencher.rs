@@ -173,6 +173,7 @@ impl Processor for BenchProcessor<'_> {
                         Scenario::Full => database::Scenario::Empty,
                         Scenario::IncrFull => database::Scenario::IncrementalEmpty,
                         Scenario::IncrUnchanged => database::Scenario::IncrementalFresh,
+                        Scenario::ParallelFrontend => database::Scenario::ParallelFrontend,
                         Scenario::IncrPatched => {
                             let patch = data.patch.unwrap();
                             database::Scenario::IncrementalPatch(patch.name)

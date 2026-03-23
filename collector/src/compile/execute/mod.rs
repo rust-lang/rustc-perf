@@ -112,8 +112,12 @@ impl PerfTool {
             | ProfileTool(LlvmIr)
             | ProfileTool(Eprintln) => true,
             // only incremental
-            ProfileTool(DepGraph) => scenario != Scenario::Full,
-            ProfileTool(LlvmLines) => scenario == Scenario::Full,
+            ProfileTool(DepGraph) => {
+                !matches!(scenario, Scenario::Full | Scenario::ParallelFrontend)
+            }
+            ProfileTool(LlvmLines) => {
+                matches!(scenario, Scenario::Full | Scenario::ParallelFrontend)
+            }
         }
     }
 }
@@ -409,6 +413,10 @@ impl<'a> CargoProcess<'a> {
             match self.profile {
                 Profile::Check => {
                     cmd.arg("--profile").arg("check");
+                    if Some(Scenario::ParallelFrontend) == self.processor_etc.as_ref().map(|v| v.1)
+                    {
+                        cmd.env("RUSTC_THREAD_COUNT", "8");
+                    }
                 }
                 Profile::Clippy => {
                     cmd.arg("--profile").arg("check");
