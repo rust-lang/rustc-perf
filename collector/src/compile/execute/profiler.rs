@@ -131,11 +131,16 @@ impl Processor for ProfileProcessor<'_> {
         Box::pin(async move {
             fs::create_dir_all(self.output_dir)?;
 
-            // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$PROFILE-$SCENARIO.
+            // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$PROFILE-$SCENARIO-$PAR<N>.
             let out_file = |prefix: &str| -> String {
                 format!(
-                    "{}-{}-{}-{:?}-{}",
-                    prefix, self.id, data.name, data.profile, data.scenario_str
+                    "{}-{}-{}-{:?}-{}-{}",
+                    prefix,
+                    self.id,
+                    data.name,
+                    data.profile,
+                    data.scenario_str,
+                    data.parallel.par_n()
                 )
             };
 

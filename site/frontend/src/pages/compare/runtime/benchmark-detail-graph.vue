@@ -66,6 +66,7 @@ async function renderGraphs(detail: RuntimeDetailGraphs) {
       end: selector.end,
       profile: null,
       scenario: null,
+      parallel: null,
       target: selector.target,
       backend: null,
       kind,
@@ -110,6 +111,9 @@ async function renderGraph(
   date: Date | null,
   chartRef: Ref<HTMLElement | null>
 ) {
+  if (chartRef.value === null) {
+    return;
+  }
   const opts: GraphRenderOpts = {
     width: Math.min(window.innerWidth - 40, 465),
     height: 300,
@@ -181,15 +185,15 @@ function getGraphRange(
   // If this is a try commit, we don't know its future, so always we just display
   // the last `DAY_RANGE` days.
   if (artifact.type === "try") {
-    const date = new Date(artifact.date);
+    const date = artifact.date ? new Date(artifact.date) : new Date();
     return {
       start: formatDate(getPastDate(date, DAY_RANGE)),
       end: artifact.commit,
       date: null,
     };
   } else {
-    let [start_date, end_date] = [baseArtifact, artifact].map(
-      (c) => new Date(c.date)
+    let [start_date, end_date] = [baseArtifact, artifact].map((c) =>
+      c.date ? new Date(c.date) : new Date()
     );
     // If this is a master commit, we attempt to display more than the full history for commit
     // ranges. If the commit range is not larger than the `dayRange`, the display will likely be

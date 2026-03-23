@@ -10,6 +10,7 @@ export interface Selector {
   benchmark: string;
   profile: string;
   scenario: string;
+  parallel: string;
   backend: string;
   target: string;
 }
@@ -81,6 +82,7 @@ export function perfettoProfilerData(
   commit: string,
   benchmark: string,
   scenario: string,
+  parallel: string,
   profile: string,
   backend: string,
   target: string
@@ -89,11 +91,12 @@ export function perfettoProfilerData(
     commit,
     benchmark,
     scenario,
+    parallel,
     profile,
     backend,
     target
   );
-  const traceTitle = `${benchmark}-${scenario} (${commit})`;
+  const traceTitle = `${benchmark}-${scenario}-par${parallel} (${commit})`;
   return {link, traceTitle};
 }
 
@@ -113,7 +116,7 @@ export function createTitleData(selector: Selector | null): {
   let selfHref = "";
 
   if (state.base_commit) {
-    const args = `&scenario=${state.scenario}&benchmark=${state.benchmark}-${state.profile}&backend=${state.backend}&target=${state.target}`;
+    const args = `&scenario=${state.scenario}&parallel=${state.parallel}&benchmark=${state.benchmark}-${state.profile}&backend=${state.backend}&target=${state.target}`;
     selfHref = `/detailed-query.html?commit=${state.commit}${args}`;
     baseHref = `/detailed-query.html?commit=${state.base_commit}${args}`;
   }
@@ -178,11 +181,12 @@ export function createDownloadLinksData(selector: Selector | null): {
       : "???";
 
   const createLinks = (commit: string) => ({
-    raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&backend=${state.backend}&target=${state.target}`,
+    raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&parallel=${state.parallel}&backend=${state.backend}&target=${state.target}`,
     flamegraph: processedSelfProfileRelativeUrl(
       commit,
       state.benchmark,
       state.scenario,
+      state.parallel.toString(),
       state.profile,
       state.backend,
       state.target,
@@ -192,6 +196,7 @@ export function createDownloadLinksData(selector: Selector | null): {
       commit,
       state.benchmark,
       state.scenario,
+      state.parallel.toString(),
       state.profile,
       state.backend,
       state.target,
@@ -201,6 +206,7 @@ export function createDownloadLinksData(selector: Selector | null): {
       commit,
       state.benchmark,
       state.scenario,
+      state.parallel.toString(),
       state.profile,
       state.backend,
       state.target,
@@ -210,6 +216,7 @@ export function createDownloadLinksData(selector: Selector | null): {
       commit,
       state.benchmark,
       state.scenario,
+      state.parallel.toString(),
       state.profile,
       state.backend,
       state.target
@@ -219,6 +226,7 @@ export function createDownloadLinksData(selector: Selector | null): {
         commit,
         state.benchmark,
         state.scenario,
+        state.parallel.toString(),
         state.profile,
         state.backend,
         state.target
@@ -230,7 +238,7 @@ export function createDownloadLinksData(selector: Selector | null): {
   const newLinks = createLinks(state.commit);
 
   const diffLink = state.base_commit
-    ? `/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&backend=${state.backend}&target=${state.target}&type=codegen-schedule`
+    ? `/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&parallel=${state.parallel}&backend=${state.backend}&target=${state.target}&type=codegen-schedule`
     : "";
 
   function cachegrindCommand(
@@ -246,6 +254,7 @@ export function createDownloadLinksData(selector: Selector | null): {
     cmd += ` --exact-match ${state.benchmark}`;
     cmd += ` --profiles ${profile(state.profile)}`;
     cmd += ` --scenarios ${scenarioFilter(state.scenario)}`;
+    cmd += ` --parallels ${state.parallel}`;
     return cmd;
   }
 

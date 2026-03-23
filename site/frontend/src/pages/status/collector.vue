@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {h, ref, Ref} from "vue";
+import {ref, Ref} from "vue";
 import {
   parseISO,
   differenceInHours,
@@ -40,7 +40,8 @@ const ACTIVE_FILTERS: Ref<Record<BenchmarkJobStatus, boolean>> = ref({
 const showJobs: Ref<boolean> = ref(true);
 
 function filterJobByStatus(status: string) {
-  ACTIVE_FILTERS.value[status] = !ACTIVE_FILTERS.value[status];
+  let stat = status as BenchmarkJobStatus;
+  ACTIVE_FILTERS.value[stat] = !ACTIVE_FILTERS.value[stat];
 }
 
 function formatJobStatus(status: BenchmarkJobStatus): string {
@@ -117,8 +118,8 @@ function formatProfile(job: BenchmarkJob): string {
     return "";
   }
 }
-function timeSince(timestamp: string): string {
-  const date = parseDateIsoStringOrNull(timestamp);
+function timeSince(timestamp: string | null): string {
+  const date = parseDateIsoStringOrNull(timestamp ?? undefined);
   if (date === null) {
     return "";
   }
@@ -130,7 +131,7 @@ function timeSince(timestamp: string): string {
 // Takes a date like `2025-09-10T08:22:47.161348Z` and shows just the time
 // portion (`08:22:47`).
 function formatTime(dateString: string | null): string {
-  const date = parseDateIsoStringOrNull(dateString);
+  const date = parseDateIsoStringOrNull(dateString ?? undefined);
   if (date === null) {
     return "";
   }
@@ -141,9 +142,9 @@ function jobDuration(job: BenchmarkJob): string {
   if (!isJobComplete(job)) {
     return "";
   }
-  const start = parseDateIsoStringOrNull(job.startedAt);
-  const end = parseDateIsoStringOrNull(job.completedAt);
-  const diff = differenceInSeconds(end, start);
+  const start = parseDateIsoStringOrNull(job.startedAt ?? undefined);
+  const end = parseDateIsoStringOrNull(job.completedAt ?? undefined);
+  const diff = start && end ? differenceInSeconds(end, start) : 0;
   return `Job took ${formatSecondsAsDuration(diff)}`;
 }
 

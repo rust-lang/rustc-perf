@@ -86,6 +86,10 @@ function loadFilterFromUrl(
         defaultFilter.scenario.incrPatched
       ),
     },
+    parallel: {
+      par1: getBoolOrDefault(urlParams, "par1", defaultFilter.parallel.par1),
+      par4: getBoolOrDefault(urlParams, "par4", defaultFilter.parallel.par4),
+    },
     backend: {
       llvm: getBoolOrDefault(
         urlParams,
@@ -212,6 +216,18 @@ function storeFilterToUrl(
     "incrPatched",
     filter.scenario.incrPatched,
     defaultFilter.scenario.incrPatched
+  );
+  storeOrResetBool(
+    urlParams,
+    "par1",
+    filter.parallel.par1,
+    defaultFilter.parallel.par1
+  );
+  storeOrResetBool(
+    urlParams,
+    "par4",
+    filter.parallel.par4,
+    defaultFilter.parallel.par4
   );
   storeOrResetBool(
     urlParams,
