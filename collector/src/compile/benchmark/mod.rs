@@ -451,6 +451,13 @@ impl Benchmark {
                         .await?;
                 }
 
+                if scenarios.contains(&Scenario::ParallelFrontend) {
+                    self.mk_cargo_process(toolchain, cwd, profile, backend, target)
+                        .processor(processor, Scenario::ParallelFrontend, "ParFront", None)
+                        .run_rustc(true)
+                        .await?;
+                }
+
                 // Rustdoc does not support incremental compilation
                 if !profile.is_doc() {
                     // An incremental build from scratch (slowest incremental case).
@@ -524,6 +531,10 @@ impl Benchmark {
         if scenario.is_incr() && profile.is_doc() {
             return false;
         }
+        // Testing parallel frontend only for 'check' profile
+        if *scenario == Scenario::ParallelFrontend && *profile != Profile::Check {
+            return false;
+        }
 
         let benchmark = database::Benchmark::from(self.name.0.as_str());
         let profile: database::Profile = (*profile).into();
@@ -532,7 +543,10 @@ impl Benchmark {
 
         match scenario {
             // For these scenarios, we can simply check if they were benchmarked or not
-            Scenario::Full | Scenario::IncrFull | Scenario::IncrUnchanged => {
+            Scenario::Full
+            | Scenario::IncrFull
+            | Scenario::IncrUnchanged
+            | Scenario::ParallelFrontend => {
                 let test_case = CompileTestCase {
                     benchmark,
                     profile,
@@ -542,6 +556,7 @@ impl Benchmark {
                         Scenario::Full => database::Scenario::Empty,
                         Scenario::IncrFull => database::Scenario::IncrementalEmpty,
                         Scenario::IncrUnchanged => database::Scenario::IncrementalFresh,
+                        Scenario::ParallelFrontend => database::Scenario::ParallelFrontend,
                         Scenario::IncrPatched => unreachable!(),
                     },
                 };

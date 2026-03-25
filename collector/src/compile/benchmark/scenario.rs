@@ -5,6 +5,7 @@ pub enum Scenario {
     IncrFull,
     IncrUnchanged,
     IncrPatched,
+    ParallelFrontend,
 }
 
 impl Scenario {
@@ -14,11 +15,12 @@ impl Scenario {
             Scenario::IncrFull,
             Scenario::IncrUnchanged,
             Scenario::IncrPatched,
+            Scenario::ParallelFrontend,
         ]
     }
 
     pub fn all_non_incr() -> Vec<Scenario> {
-        vec![Scenario::Full]
+        vec![Scenario::Full, Scenario::ParallelFrontend]
     }
 
     pub fn is_incr(self) -> bool {
