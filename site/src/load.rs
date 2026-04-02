@@ -99,6 +99,7 @@ impl SiteCtxt {
             database::Scenario::Empty,
             database::Scenario::IncrementalEmpty,
             database::Scenario::IncrementalFresh,
+            database::Scenario::ParallelFrontend,
             database::Scenario::IncrementalPatch("println".into()),
         ]
     }

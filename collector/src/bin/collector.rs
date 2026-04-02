@@ -177,7 +177,10 @@ fn generate_diffs(
                     return vec![];
                 }
                 match scenario {
-                    Scenario::Full | Scenario::IncrFull | Scenario::IncrUnchanged => {
+                    Scenario::Full
+                    | Scenario::IncrFull
+                    | Scenario::IncrUnchanged
+                    | Scenario::ParallelFrontend => {
                         vec![format!("{:?}", scenario)]
                     }
                     Scenario::IncrPatched => (0..benchmark.patches.len())

@@ -286,6 +286,8 @@ pub enum Scenario {
     IncrementalFresh,
     /// Cache is mostly up-to-date but some code has been changed
     IncrementalPatch(PatchName),
+    /// Parallel frontend
+    ParallelFrontend,
 }
 
 intern!(pub struct PatchName);
@@ -297,6 +299,7 @@ impl std::str::FromStr for Scenario {
             "full" => Scenario::Empty,
             "incr-full" => Scenario::IncrementalEmpty,
             "incr-unchanged" => Scenario::IncrementalFresh,
+            "par-front" => Scenario::ParallelFrontend,
             _ => {
                 if let Some(stripped) = s.strip_prefix("incr-patched: ") {
                     Scenario::IncrementalPatch(PatchName::from(stripped))
@@ -314,6 +317,7 @@ impl fmt::Display for Scenario {
             Scenario::Empty => write!(f, "full"),
             Scenario::IncrementalEmpty => write!(f, "incr-full"),
             Scenario::IncrementalFresh => write!(f, "incr-unchanged"),
+            Scenario::ParallelFrontend => write!(f, "par-front"),
             Scenario::IncrementalPatch(name) => write!(f, "incr-patched: {name}"),
         }
     }
@@ -325,6 +329,7 @@ impl Scenario {
             Scenario::Empty => "full".to_string(),
             Scenario::IncrementalEmpty => "incr-full".to_string(),
             Scenario::IncrementalFresh => "incr-unchanged".to_string(),
+            Scenario::ParallelFrontend => "par-front".to_string(),
             Scenario::IncrementalPatch(name) => format!("incr-patched-{name}"),
         }
     }
@@ -345,9 +350,14 @@ impl Ord for Scenario {
             (Scenario::IncrementalFresh, Scenario::Empty) => Ordering::Greater,
             (Scenario::IncrementalFresh, Scenario::IncrementalEmpty) => Ordering::Greater,
             (Scenario::IncrementalFresh, _) => Ordering::Less,
+            (Scenario::ParallelFrontend, Scenario::Empty) => Ordering::Greater,
+            (Scenario::ParallelFrontend, Scenario::IncrementalEmpty) => Ordering::Greater,
+            (Scenario::ParallelFrontend, Scenario::IncrementalFresh) => Ordering::Greater,
+            (Scenario::ParallelFrontend, _) => Ordering::Less,
             (Scenario::IncrementalPatch(_), Scenario::Empty) => Ordering::Greater,
             (Scenario::IncrementalPatch(_), Scenario::IncrementalEmpty) => Ordering::Greater,
             (Scenario::IncrementalPatch(_), Scenario::IncrementalFresh) => Ordering::Greater,
+            (Scenario::IncrementalPatch(_), Scenario::ParallelFrontend) => Ordering::Greater,
             (Scenario::IncrementalPatch(a), Scenario::IncrementalPatch(b)) => {
                 if a == "println" {
                     Ordering::Less

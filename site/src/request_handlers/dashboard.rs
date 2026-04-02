@@ -126,6 +126,7 @@ pub async fn handle_dashboard(
                     Scenario::Empty => cases.clean_averages = points,
                     Scenario::IncrementalEmpty => cases.base_incr_averages = points,
                     Scenario::IncrementalFresh => cases.clean_incr_averages = points,
+                    Scenario::ParallelFrontend => cases.clean_averages = points,
                     // we only have println patches here
                     Scenario::IncrementalPatch(_) => cases.println_incr_averages = points,
                 }
