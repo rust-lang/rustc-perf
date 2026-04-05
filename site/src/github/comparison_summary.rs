@@ -157,7 +157,7 @@ async fn summarize_run(
         if has_broken_benchmarks {
             " - BENCHMARK(S) FAILED"
         } else if is_regression {
-            " - please read the text below"
+            " - please read:"
         } else {
             " - no action needed"
         },
@@ -263,7 +263,7 @@ fn write_metric_summary(
 ) {
     if !primary.is_relevant() && !secondary.is_relevant() {
         message
-            .push_str("This benchmark run did not return any relevant results for this metric.\n");
+            .push_str("This perf run didn't have relevant results for this metric.\n");
     } else {
         match visibility {
             DefaultMetricVisibility::Shown => {
@@ -334,11 +334,11 @@ cc @rust-lang/wg-compiler-performance
 
 fn try_run_body(is_regression: bool) -> String {
     let next_steps = if is_regression {
-        "\n\n**Next Steps**: If you can justify the regressions found in \
-            this try perf run, please do so in sufficient writing \
+        "\n\n**Next, please**: If you can, justify the regressions found in \
+            this try perf run in writing \
             along with `@rustbot label: +perf-regression-triaged`. If not, \
-            please fix the regressions and do another perf run. If its results \
-            are neutral or positive, the label will be automatically removed."
+            fix the regressions and do another perf run. \
+            Neutral or positive results will clear the label automatically."
     } else {
         ""
     };
@@ -346,10 +346,10 @@ fn try_run_body(is_regression: bool) -> String {
     let sign = if is_regression { "+" } else { "-" };
     format!(
         "
-Benchmarking this pull request means it may be perf-sensitive – \
-we'll automatically label it not fit for rolling up. \
-You can override this, but we strongly advise not to, \
-due to possible changes in compiler perf.{next_steps}
+Benchmarking means the PR may be perf-sensitive. \
+It's automatically marked not fit for rolling up. \
+Overriding is possible but disadvised: \
+it risks changing compiler perf.{next_steps}
 
 @bors rollup=never
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
