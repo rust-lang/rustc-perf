@@ -5,6 +5,9 @@ on:
       - master
   workflow_dispatch:
 
+permissions:     
+  contents: read
+
 env:
   AWS_ACCESS_KEY_ID: AKIA46X5W6CZBLO3VBND
 
@@ -19,6 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - uses: docker/setup-buildx-action@v2
       - name: Build Docker image
