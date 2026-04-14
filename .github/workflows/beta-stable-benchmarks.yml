@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "0 12 * * 1" # Every Monday at 12:00 UTC
 
+permissions:     
+  contents: read
+    
 jobs:
   test-stable:
     name: Test stable benchmarks

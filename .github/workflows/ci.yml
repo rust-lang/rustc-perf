@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: "0 12 * * 1" # Every Monday at 12:00 UTC
 
+permissions:
+  contents: read
+
 env:
   AWS_ACCESS_KEY_ID: AKIA46X5W6CZBLO3VBND
 
