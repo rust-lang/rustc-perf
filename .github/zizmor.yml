@@ -1,0 +1,41 @@
+rules:
+  cache-poisoning:
+    ignore:
+      # cache-poisoning is low confidence and no-cache: true is already set
+      - ci.yml
+      - deploy.yml
+
+  unpinned-images:
+    ignore:
+      # TODO: pin postgres images to SHA256 in a follow-up PR
+      - ci.yml
+
+  concurrency-limits:
+    ignore:
+      # TODO: add concurrency settings in a follow-up PR
+      - beta-stable-benchmarks.yml
+      - ci.yml
+      - deploy.yml
+      - nightly.yml
+      - zizmor.yml
+
+  archived-uses:
+    ignore:
+      # TODO: replace actions-rs/cargo with direct cargo run in a follow-up PR
+      - nightly.yml
+
+  misfeature:
+    ignore:
+      # TODO: replace shell: cmd with pwsh or bash in a follow-up PR
+      - ci.yml
+
+  stale-action-refs:
+    ignore:
+      # TODO: update stale action refs in a follow-up PR
+      - deploy.yml
+      - nightly.yml
+
+  superfluous-actions:
+    ignore:
+      # TODO: replace ncipollo/release-action with gh release in a follow-up PR
+      - nightly.yml

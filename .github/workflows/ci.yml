@@ -28,7 +28,7 @@ jobs:
           - 5432:5432
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -41,7 +41,7 @@ jobs:
         env:
           RUST_TOOLCHAIN_VERSION: 1.91.0
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           key: linux
 
@@ -67,9 +67,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Install latest beta toolchain
         run: |
@@ -80,7 +81,7 @@ jobs:
           RUST_TOOLCHAIN_VERSION: beta
         shell: cmd
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           key: windows
 
@@ -118,9 +119,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Install latest beta toolchain
         run: |
@@ -139,7 +141,7 @@ jobs:
       - name: Install servo dependencies
         run: sudo apt-get install -y llvm-dev clang libx11-dev python2.7 autoconf2.13 libjemalloc-dev
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Build collector
         run: cargo build -p collector
@@ -157,9 +159,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Install latest beta toolchain
         run: |
@@ -175,7 +178,7 @@ jobs:
           sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
           echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Build collector
         run: cargo build -p collector
@@ -193,9 +196,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Install latest beta toolchain
         run: |
@@ -211,7 +215,7 @@ jobs:
           sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
           echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Build collector
         run: cargo build -p collector
@@ -226,9 +230,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Install latest beta toolchain
         run: |
@@ -252,7 +257,7 @@ jobs:
           make install
           echo "${PWD}/build/bin" >> $GITHUB_PATH
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Install profilers
         run: cargo install --version 0.4.12 cargo-llvm-lines
@@ -297,7 +302,9 @@ jobs:
 
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install latest toolchain
         run: |
@@ -307,7 +314,7 @@ jobs:
         env:
           RUST_TOOLCHAIN_VERSION: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Build site
         run: cargo build --bin site
@@ -350,7 +357,9 @@ jobs:
 
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install latest stable toolchain
         run: |
@@ -369,7 +378,7 @@ jobs:
           sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
           echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Build collector
         run: cargo build -p collector
@@ -387,7 +396,7 @@ jobs:
         run: cargo build --bin site
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
 
       - name: Install Python dependencies
         run: python3 -m pip install msgpack requests
@@ -399,22 +408,25 @@ jobs:
           python3 ci/check-site.py version1 version2
 
   docker:
+    name: Build Docker image
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v2
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@885d1462b80bc1c1c7f0b00334ad271f09369c55 # v2
       - name: Build Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@0a97817b6ade9f46837855d676c4cca3a2471fc9 # v4
         with:
           context: .
           tags: rustc-perf
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true
 
   # Summary job for the merge queue.
   # ALL THE PREVIOUS JOBS NEED TO BE ADDED TO THE `needs` SECTION OF THIS JOB!
   conclusion:
+    name: Conclusion
     needs:
       - test-linux
       - test-windows
@@ -434,8 +446,10 @@ jobs:
     steps:
       # Manually check the status of all dependencies. `if: failure()` does not work.
       - name: Conclusion
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
         run: |
           # Print the dependent jobs to see them in the CI log
-          jq -C <<< '${{ toJson(needs) }}'
+          jq -C <<< "$NEEDS_JSON"
           # Check if all jobs that we depend on (in the needs array) were successful.
-          jq --exit-status 'all(.result == "success")' <<< '${{ toJson(needs) }}'
+          jq --exit-status 'all(.result == "success")' <<< "$NEEDS_JSON"
