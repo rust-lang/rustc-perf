@@ -352,13 +352,22 @@ fn try_run_body(is_regression: bool, deserves_attention: bool) -> String {
         ""
     };
 
+    // If perf does not deserve attention, don't say that the PR was automatically marked as not fit for rolling up
+    // But point out that it can be manually marked as such
+    let rollup_comment = if deserves_attention {
+         "
+It's automatically marked not fit for rolling up. \
+Overriding is possible but disadvised: \
+it risks changing compiler perf."
+    } else {
+        "Consider adding rollup=never if this change is not fit for rolling up."
+    };
+
     let sign = if is_regression { "+" } else { "-" };
     format!(
         "
 Benchmarking means the PR may be perf-sensitive. \
-It's automatically marked not fit for rolling up. \
-Overriding is possible but disadvised: \
-it risks changing compiler perf.{next_steps}
+{rollup_comment}{next_steps}
 
 {rollup_never}
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
