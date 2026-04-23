@@ -147,8 +147,9 @@ async fn summarize_run(
         Direction::Mixed => "❌✅ regressions and improvements",
         Direction::None => "no relevant changes",
     };
-    let is_regression = deserves_attention_icount(&inst_primary, &inst_secondary)
-        && matches!(direction, Direction::Regression | Direction::Mixed);
+    let deserves_attention = deserves_attention_icount(&inst_primary, &inst_secondary);
+    let is_regression =
+        deserves_attention && matches!(direction, Direction::Regression | Direction::Mixed);
 
     writeln!(
         &mut message,
@@ -165,7 +166,7 @@ async fn summarize_run(
     .unwrap();
 
     let next_steps = match source {
-        PerfRunSource::TryBuild => try_run_body(is_regression),
+        PerfRunSource::TryBuild => try_run_body(is_regression, deserves_attention),
         PerfRunSource::TryBuildRollup => "".to_string(),
         PerfRunSource::MasterCommit => master_run_body(is_regression),
     };
@@ -331,13 +332,22 @@ cc @rust-lang/wg-compiler-performance
     .to_string()
 }
 
-fn try_run_body(is_regression: bool) -> String {
+fn try_run_body(is_regression: bool, deserves_attention: bool) -> String {
     let next_steps = if is_regression {
         "\n\n**Next, please**: If you can, justify the regressions found in \
             this try perf run in writing \
             along with `@rustbot label: +perf-regression-triaged`. If not, \
             fix the regressions and do another perf run. \
             Neutral or positive results will clear the label automatically."
+    } else {
+        ""
+    };
+
+    // We mark PRs as rollup=never if perf deserves attention, so we don't need to debug the perf in the rollup
+    // We don't remove `rollup=never` if perf does not deserve attention, as sometimes there are multiple perf. runs on the same PR,
+    // and it's not always the case that the latest version that gets approved is the one for which we ran perf.
+    let rollup_never = if deserves_attention {
+        "@bors rollup=never"
     } else {
         ""
     };
@@ -350,7 +360,7 @@ It's automatically marked not fit for rolling up. \
 Overriding is possible but disadvised: \
 it risks changing compiler perf.{next_steps}
 
-@bors rollup=never
+{rollup_never}
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
     )
 }
