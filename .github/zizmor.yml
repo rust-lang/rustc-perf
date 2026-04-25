@@ -1,0 +1,7 @@
+rules:
+  cache-poisoning:
+    ignore:
+      # The GHA cache is used intentionally here for build performance.
+      # The risk is accepted as these workflows only build internal images.
+      - ci.yml
+      - deploy.yml
