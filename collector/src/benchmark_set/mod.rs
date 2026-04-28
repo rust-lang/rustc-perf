@@ -123,6 +123,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
             compile(WG_GRAMMAR_NEW_SOLVER),
             compile(DIESEL_2_2_10_NEW_SOLVER),
             compile(DEEPLY_NESTED_MULTI_NEW_SOLVER),
+            compile(NEW_TRAIT_STRESS),
         ]
     };
 
@@ -192,6 +193,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(WG_GRAMMAR_NEW_SOLVER),
                 compile(DIESEL_2_2_10_NEW_SOLVER),
                 compile(DEEPLY_NESTED_MULTI_NEW_SOLVER),
+                compile(NEW_TRAIT_STRESS),
             ];
             vec![
                 BenchmarkSet {
