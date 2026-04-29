@@ -1,0 +1,5 @@
+[package]
+name = "new-trait-stress"
+version = "0.1.0"
+
+[workspace]

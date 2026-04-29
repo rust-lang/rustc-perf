@@ -119,6 +119,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
             compile(UNUSED_WARNINGS),
             compile(WF_PROJECTION_STRESS_65510),
             compile(WG_GRAMMAR),
+            compile(NEW_TRAIT_STRESS),
         ]
     };
 
@@ -184,6 +185,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(UNUSED_WARNINGS),
                 compile(WF_PROJECTION_STRESS_65510),
                 compile(WG_GRAMMAR),
+                compile(NEW_TRAIT_STRESS),
             ];
             vec![
                 BenchmarkSet {
