@@ -1,0 +1,12 @@
+diff --git a/src/query_dsl/mod.rs b/src/query_dsl/mod.rs
+index 8be915e7..6da19ecc 100644
+--- a/src/query_dsl/mod.rs
++++ b/src/query_dsl/mod.rs
+@@ -119,6 +119,7 @@ pub trait QueryDsl: Sized {
+     where
+         Self: methods::DistinctDsl,
+     {
++        println!("testing");
+         methods::DistinctDsl::distinct(self)
+     }
+ 

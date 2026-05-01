@@ -1,0 +1,13 @@
+[package]
+name = "deeply-nested-multi"
+version = "0.1.0"
+authors = [
+    "Tatsuyuki Ishi <ishitatsuyuki@gmail.com>",
+    "Bastian Kauschke <bastian_kauschke@hotmail.de>",
+    "Valerii Lashmanov <vflashm@gmail.com>",
+]
+edition = "2021"
+
+[dependencies]
+
+[workspace]
