@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 benchlib = { path = "../../benchlib" }
-nes = { git = "https://github.com/koute/pinky.git", rev = "af8ce410886dc44d7ce18ee1e5983d5c696698fe" }
+nes = { git = "https://github.com/koute/pinky.git", rev = "5a9d4ff5f22731191cffd7d6202a1d144aacd740" }
 
 [workspace]
