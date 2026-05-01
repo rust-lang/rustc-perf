@@ -113,12 +113,16 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
             compile(TT_MUNCHER),
             compile(TUPLE_STRESS),
             compile(TYPENUM_1_18_0),
+            compile(TYPENUM_1_18_0_NEW_SOLVER),
             compile(UCD),
             compile(UNICODE_NORMALIZATION_0_1_24),
             compile(UNIFY_LINEARLY),
             compile(UNUSED_WARNINGS),
             compile(WF_PROJECTION_STRESS_65510),
             compile(WG_GRAMMAR),
+            compile(WG_GRAMMAR_NEW_SOLVER),
+            compile(DIESEL_2_2_10_NEW_SOLVER),
+            compile(DEEPLY_NESTED_MULTI_NEW_SOLVER),
         ]
     };
 
@@ -178,12 +182,16 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(TT_MUNCHER),
                 compile(TUPLE_STRESS),
                 compile(TYPENUM_1_18_0),
+                compile(TYPENUM_1_18_0_NEW_SOLVER),
                 compile(UCD),
                 compile(UNICODE_NORMALIZATION_0_1_24),
                 compile(UNIFY_LINEARLY),
                 compile(UNUSED_WARNINGS),
                 compile(WF_PROJECTION_STRESS_65510),
                 compile(WG_GRAMMAR),
+                compile(WG_GRAMMAR_NEW_SOLVER),
+                compile(DIESEL_2_2_10_NEW_SOLVER),
+                compile(DEEPLY_NESTED_MULTI_NEW_SOLVER),
             ];
             vec![
                 BenchmarkSet {
