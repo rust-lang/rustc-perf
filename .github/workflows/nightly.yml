@@ -12,14 +12,14 @@ jobs:
     name: Publish release
     runs-on: ubuntu-22.04
     permissions:
-      contents: write
+      contents: write # needed to create and update the nightly release
     steps:
       - name: Set version
         run: |
           echo "RUSTC_PERF_VERSION=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
 
       - name: Checkout the source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -32,9 +32,9 @@ jobs:
         env:
           RUST_TOOLCHAIN_VERSION: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3
         with:
           node-version: 18
 
@@ -45,7 +45,7 @@ jobs:
           npm run build
 
       - name: Compile site
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
         with:
           command: build
           args: --release --bin site
@@ -53,13 +53,13 @@ jobs:
       - name: Prepare archive
         id: archive
         run: |
-          export ARCHIVE_NAME=rustc-perf-${{ env.RUSTC_PERF_VERSION }}-linux-x64.tar.gz
+          ARCHIVE_NAME=rustc-perf-${RUSTC_PERF_VERSION}-linux-x64.tar.gz
           cp target/release/site rustc-perf-site
           tar -czvf $ARCHIVE_NAME rustc-perf-site
           echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
 
       - name: Create release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
           body: Nightly release of `rustc-perf` (commit `${{ github.sha }}`, date ${{ env.RUSTC_PERF_VERSION }})
           token: ${{ secrets.GITHUB_TOKEN }}
