@@ -27,7 +27,7 @@ function prettifyRawNumber(number: number): string {
 
 // Modify this when changing the number of columns in the table!
 const columnCount = computed(() => {
-  const base = 8;
+  const base = 9;
   if (props.showRawData) {
     return base + 2;
   }
@@ -61,6 +61,7 @@ const unit = computed(() => {
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
+          <th>Parallel</th>
           <th v-if="showBackend">Backend</th>
           <th>Target</th>
           <th>% Change</th>
@@ -101,6 +102,7 @@ const unit = computed(() => {
                 {{ comparison.testCase.profile }}
               </td>
               <td>{{ comparison.testCase.scenario }}</td>
+              <td>{{ comparison.testCase.parallel }}</td>
               <td v-if="showBackend">{{ comparison.testCase.backend }}</td>
               <td :title="comparison.testCase.target">
                 {{ formatTarget(comparison.testCase.target) }}

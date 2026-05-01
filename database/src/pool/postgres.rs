@@ -7,8 +7,8 @@ use crate::{
     BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
     BenchmarkRequestInsertResult, BenchmarkRequestStatus, BenchmarkRequestType,
     BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests, Profile, Scenario,
-    Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
+    Commit, CommitType, CompileBenchmark, Date, Index, Parallel, PendingBenchmarkRequests, Profile,
+    Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
     BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
     BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -441,6 +441,12 @@ static MIGRATIONS: &[&str] = &[
     "#,
     r#"ALTER TABLE job_queue ADD COLUMN is_optional BOOLEAN NOT NULL DEFAULT FALSE"#,
     r#"ALTER TABLE benchmark_request ADD COLUMN targets TEXT NOT NULL DEFAULT ''"#,
+    // Add parallel to pstat_series
+    r#"
+    alter table pstat_series add parallel int not null default 1;
+    alter table pstat_series drop constraint test_case;
+    alter table pstat_series add constraint test_case UNIQUE(crate, profile, scenario, backend, target, metric, parallel);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -633,8 +639,8 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 get_error: conn.prepare("select context, message from error where aid = $1").await.unwrap(),
-                insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, target, metric) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
-                select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and target = $5 and metric = $6").await.unwrap(),
+                insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, target, metric, parallel) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and target = $5 and metric = $6 and parallel = $7").await.unwrap(),
                 collection_id: conn.prepare("insert into collection (perf_commit) VALUES ($1) returning id").await.unwrap(),
                 get_benchmarks: conn.prepare("
                     select name, category
@@ -686,7 +692,7 @@ impl PostgresConnection {
                     WHERE tag IS NOT NULL
                 ").await.unwrap(),
                 get_compile_test_cases_with_measurements: conn.prepare("
-                    SELECT DISTINCT crate, profile, scenario, backend, target
+                    SELECT DISTINCT crate, profile, scenario, backend, target, parallel
                     FROM pstat_series
                     WHERE id IN (
                         SELECT DISTINCT series
@@ -885,7 +891,7 @@ where
             pstat_series: self
                 .conn()
                 .query(
-                    "select id, crate, profile, scenario, backend, target, metric from pstat_series;",
+                    "select id, crate, profile, scenario, backend, target, metric, parallel from pstat_series;",
                     &[],
                 )
                 .await
@@ -901,6 +907,7 @@ where
                             CodegenBackend::from_str(row.get::<_, String>(4).as_str()).unwrap(),
                             Target::from_str(row.get::<_, String>(5).as_str()).unwrap(),
                             row.get::<_, String>(6).as_str().into(),
+                            Parallel(row.get::<_, i32>(7) as u32),
                         ),
                     )
                 })
@@ -1021,17 +1028,21 @@ where
         backend: CodegenBackend,
         target: Target,
         metric: &str,
+        parallel: Parallel,
         stat: f64,
     ) {
         let profile = profile.to_string();
         let scenario = scenario.to_string();
         let backend = backend.to_string();
         let target = target.to_string();
+        let parallel = parallel.0 as i32;
         let sid = self
             .conn()
             .query_opt(
                 &self.statements().select_pstat_series,
-                &[&benchmark, &profile, &scenario, &backend, &target, &metric],
+                &[
+                    &benchmark, &profile, &scenario, &backend, &target, &metric, &parallel,
+                ],
             )
             .await
             .unwrap();
@@ -1041,14 +1052,18 @@ where
                 self.conn()
                     .query_opt(
                         &self.statements().insert_pstat_series,
-                        &[&benchmark, &profile, &scenario, &backend, &target, &metric],
+                        &[
+                            &benchmark, &profile, &scenario, &backend, &target, &metric, &parallel,
+                        ],
                     )
                     .await
                     .unwrap();
                 self.conn()
                     .query_one(
                         &self.statements().select_pstat_series,
-                        &[&benchmark, &profile, &scenario, &backend, &target, &metric],
+                        &[
+                            &benchmark, &profile, &scenario, &backend, &target, &metric, &parallel,
+                        ],
                     )
                     .await
                     .unwrap()
@@ -1625,6 +1640,7 @@ where
                 scenario: row.get::<_, &str>(2).parse().unwrap(),
                 backend: CodegenBackend::from_str(row.get::<_, &str>(3)).unwrap(),
                 target: Target::from_str(row.get::<_, &str>(4)).unwrap(),
+                parallel: Parallel(row.get::<_, i32>(5) as u32),
             })
             .collect())
     }

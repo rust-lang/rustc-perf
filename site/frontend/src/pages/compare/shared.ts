@@ -2,7 +2,7 @@ import {Target} from "./compile/common";
 
 export function formatDate(dateString: string): string {
   const date = new Date(dateString);
-  function padStr(i) {
+  function padStr(i: number) {
     return i < 10 ? "0" + i : "" + i;
   }
   return `${date.getUTCFullYear()}-${padStr(date.getUTCMonth() + 1)}-${padStr(
@@ -62,7 +62,7 @@ export function formatPercentChange(
   if (!isValidValue(before) || !isValidValue(after)) {
     return invalidPlaceholder;
   }
-  return `${(((after - before) / before) * 100).toFixed(3)}%`;
+  return `${(((after! - before!) / before!) * 100).toFixed(3)}%`;
 }
 
 // Checks if the value is not undefined and not zero
@@ -116,13 +116,13 @@ export function targetMatchesFilter(
 
 // Store the bool value into URL parameters, or reset it if it has the default
 // value.
-export function storeOrResetBool<T extends boolean | string>(
+export function storeOrResetBool<T extends boolean | string | null>(
   urlParams: Dict<string>,
   name: string,
   value: T,
   defaultValue: T
 ) {
-  if (value === defaultValue) {
+  if (value === defaultValue || value === null) {
     if (urlParams.hasOwnProperty(name)) {
       delete urlParams[name];
     }

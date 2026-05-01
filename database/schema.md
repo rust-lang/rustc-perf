@@ -35,7 +35,8 @@ Here is the diagram for compile-time benchmarks:
   │ scenario      │  │ cid      │   │
   │ backend       │  │ value    ├───┘
   │ metric        │  └──────────┘
-  │ target        │
+  │ target        |
+  │ parallel      │
   └───────────────┘
 ```
 
@@ -101,7 +102,7 @@ Columns:
 ### pstat_series
 
 Describes the parametrization of a compile-time benchmark. Contains a unique combination
-of a crate, profile, scenario and the metric being collected.
+of a crate, profile, scenario, metric and parallel frontend option being collected.
 
 Columns:
 
@@ -110,6 +111,7 @@ Columns:
 * **scenario** (`text`): Describes how much of the incremental cache is full. An empty incremental cache means that the compiler must do a full build.
 * **backend** (`text`): Codegen backend used for compilation, for example 'llvm'
 * **metric** (`text`): the type of metric being collected.
+* **parallel** (`text`): Parallel frontend option ('-Zthreads=N').
 
 This corresponds to a [`statistic description`](../docs/glossary.md).
 

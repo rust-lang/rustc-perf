@@ -15,6 +15,7 @@ const link = computed(() => {
     props.artifact.commit,
     `${props.testCase.benchmark}`,
     props.testCase.scenario,
+    props.testCase.parallel.toString(),
     props.testCase.profile.toLowerCase(),
     props.testCase.backend,
     props.testCase.target

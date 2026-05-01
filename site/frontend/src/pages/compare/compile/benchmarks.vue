@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {computed, h} from "vue";
+import {computed} from "vue";
 import ComparisonsTable from "./table/comparisons-table.vue";
 import {TestCaseComparison} from "../data";
 import {CompareResponse} from "../types";

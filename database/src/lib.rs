@@ -21,6 +21,32 @@ intern!(pub struct Metric);
 intern!(pub struct Benchmark);
 intern!(pub struct TargetName);
 
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct Parallel(pub u32);
+
+impl Parallel {
+    pub fn par_n(self) -> String {
+        format!("par{}", self.0)
+    }
+    // Default parallel frontend options
+    pub fn default_opts() -> Vec<Parallel> {
+        vec![Parallel(1), Parallel(4)]
+    }
+    pub fn single(self) -> bool {
+        self.0 == 1
+    }
+}
+
+impl std::str::FromStr for Parallel {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let v: u32 = s
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        Ok(Self(v))
+    }
+}
+
 pub fn intern_target_name(target: &str) -> TargetName {
     intern(target)
 }
@@ -562,7 +588,15 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
-    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Target, Metric)>,
+    pstat_series: Indexed<(
+        Benchmark,
+        Profile,
+        Scenario,
+        CodegenBackend,
+        Target,
+        Metric,
+        Parallel,
+    )>,
     /// Id lookup of runtime stat description ids
     runtime_pstat_series: Indexed<(Benchmark, Target, Metric)>,
 }
@@ -685,6 +719,7 @@ pub enum DbLabel {
         backend: CodegenBackend,
         target: Target,
         metric: Metric,
+        parallel: Parallel,
     },
 }
 
@@ -704,9 +739,10 @@ impl Lookup for DbLabel {
                 backend,
                 metric,
                 target,
-            } => index
-                .pstat_series
-                .get(&(*benchmark, *profile, *scenario, *backend, *target, *metric)),
+                parallel,
+            } => index.pstat_series.get(&(
+                *benchmark, *profile, *scenario, *backend, *target, *metric, *parallel,
+            )),
         }
     }
 }
@@ -722,6 +758,15 @@ impl Lookup for ArtifactId {
 }
 
 pub type StatisticalDescriptionId = u32;
+pub type CompileStatisticDescription = (
+    Benchmark,
+    Profile,
+    Scenario,
+    CodegenBackend,
+    Target,
+    Metric,
+    Parallel,
+);
 
 impl Index {
     pub async fn load(conn: &mut dyn pool::Connection) -> Index {
@@ -754,7 +799,7 @@ impl Index {
         self.pstat_series
             .map
             .keys()
-            .map(|(_, _, _, _, _, metric)| metric)
+            .map(|(_, _, _, _, _, metric, _)| metric)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())
@@ -777,7 +822,7 @@ impl Index {
         self.pstat_series
             .map
             .keys()
-            .map(|(_, _, _, _, target, _)| target)
+            .map(|(_, _, _, _, target, _, _)| target)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .cloned()
@@ -790,12 +835,7 @@ impl Index {
     // for it as keeping indices around would be annoying.
     pub fn compile_statistic_descriptions(
         &self,
-    ) -> impl Iterator<
-        Item = (
-            &(Benchmark, Profile, Scenario, CodegenBackend, Target, Metric),
-            StatisticalDescriptionId,
-        ),
-    > + '_ {
+    ) -> impl Iterator<Item = (&CompileStatisticDescription, StatisticalDescriptionId)> + '_ {
         self.pstat_series
             .map
             .iter()

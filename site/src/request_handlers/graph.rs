@@ -14,7 +14,7 @@ use database::interpolate::IsInterpolated;
 use database::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
-use database::{self, ArtifactId, CodegenBackend, Profile, Scenario, Target};
+use database::{self, ArtifactId, CodegenBackend, Parallel, Profile, Scenario, Target};
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.
@@ -39,7 +39,8 @@ pub async fn handle_compile_detail_graphs(
                 .scenario(Selector::One(scenario))
                 .backend(Selector::One(request.backend.parse()?))
                 .target(Selector::One(request.target.parse()?))
-                .metric(Selector::One(request.stat.parse()?)),
+                .metric(Selector::One(request.stat.parse()?))
+                .parallel(Selector::One(request.parallel.parse()?)),
             artifact_ids.clone(),
         )
         .await?
@@ -86,16 +87,19 @@ pub async fn handle_compile_detail_sections(
         ))?;
 
     let scenario: Scenario = request.scenario.parse()?;
+    let parallel: Parallel = request.parallel.parse()?;
     let profile: Profile = request.profile.parse()?;
     let backend: CodegenBackend = request.backend.parse()?;
     let target: Target = request.target.parse()?;
 
+    #[allow(clippy::too_many_arguments)]
     async fn calculate_sections(
         ctxt: &SiteCtxt,
         aid: ArtifactId,
         benchmark: &str,
         profile: Profile,
         scenario: Scenario,
+        parallel: Parallel,
         backend: CodegenBackend,
         target: Target,
     ) -> Option<CompilationSections> {
@@ -104,6 +108,7 @@ pub async fn handle_compile_detail_sections(
             benchmark: benchmark.into(),
             profile,
             scenario,
+            parallel,
             backend,
             target,
         };
@@ -129,6 +134,7 @@ pub async fn handle_compile_detail_sections(
                 &request.benchmark,
                 profile,
                 scenario,
+                parallel,
                 backend,
                 target
             ),
@@ -138,6 +144,7 @@ pub async fn handle_compile_detail_sections(
                 &request.benchmark,
                 profile,
                 scenario,
+                parallel,
                 backend,
                 target
             )
@@ -205,6 +212,7 @@ pub async fn handle_graphs(
             kind: graphs::GraphKind::Raw,
             benchmark: None,
             scenario: None,
+            parallel: None,
             profile: None,
             backend: None,
             target: None,
@@ -248,6 +256,10 @@ async fn create_graphs(
         .unwrap();
     let profile_selector = create_selector(&request.profile)
         .unwrap_or_else(|| Ok(Selector::Subset(Profile::default_profiles())))?;
+    let parallel_selector = request
+        .parallel
+        .map(|v| Selector::One(v.parse::<Parallel>().unwrap()))
+        .unwrap_or_else(|| Selector::Subset(Parallel::default_opts()));
     let scenario_selector = create_selector(&request.scenario).unwrap_or(Ok(Selector::All))?;
     let target_selector = create_selector(&request.target)
         .unwrap_or(Ok(Selector::One(Target::X86_64UnknownLinuxGnu)))?;
@@ -259,6 +271,7 @@ async fn create_graphs(
             CompileBenchmarkQuery::default()
                 .benchmark(benchmark_selector)
                 .profile(profile_selector)
+                .parallel(parallel_selector)
                 .scenario(scenario_selector)
                 .backend(backend_selector)
                 .target(target_selector)
@@ -285,12 +298,15 @@ async fn create_graphs(
         let benchmark = response.test_case.benchmark.to_string();
         let profile = response.test_case.profile;
         let scenario = response.test_case.scenario.to_string();
+        let parallel = response.test_case.parallel;
         let graph_series = graph_series(response.series.into_iter(), request.kind);
 
         benchmarks
             .entry(benchmark)
             .or_insert_with(HashMap::new)
             .entry(profile)
+            .or_insert_with(HashMap::new)
+            .entry(format!("{}", parallel.0))
             .or_insert_with(HashMap::new)
             .insert(scenario, graph_series);
     }
@@ -332,15 +348,16 @@ fn create_summary(
     >],
     graph_kind: GraphKind,
     profile: Option<Profile>,
-) -> ServerResult<HashMap<Profile, HashMap<String, graphs::Series>>> {
+) -> ServerResult<HashMap<Profile, HashMap<String, HashMap<String, graphs::Series>>>> {
     let mut baselines = HashMap::new();
     let mut summary_benchmark = HashMap::new();
     let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
-        profile.map_or_else(Profile::default_profiles, |p| vec![p])
+        profile.map_or_else(Profile::default_profiles, |p| vec![p]),
+        Parallel::default_opts()
     );
-    for (scenario, profile) in summary_query_cases {
-        let baseline = match baselines.entry((profile, scenario)) {
+    for (scenario, profile, parallel) in summary_query_cases {
+        let baseline = match baselines.entry((profile, scenario, parallel)) {
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
             std::collections::hash_map::Entry::Vacant(v) => {
                 let baseline_responses = interpolated_responses
@@ -348,7 +365,8 @@ fn create_summary(
                     .filter(|sr| {
                         let p = sr.test_case.profile;
                         let s = sr.test_case.scenario;
-                        p == profile && s == Scenario::Empty
+                        let par = sr.test_case.parallel;
+                        p == profile && s == Scenario::Empty && par.single()
                     })
                     .map(|sr| sr.series.iter().cloned())
                     .collect();
@@ -365,7 +383,8 @@ fn create_summary(
             .filter(|sr| {
                 let p = sr.test_case.profile;
                 let s = sr.test_case.scenario;
-                p == profile && s == scenario
+                let par = sr.test_case.parallel;
+                p == profile && s == scenario && par == parallel
             })
             .map(|sr| sr.series.iter().cloned())
             .collect();
@@ -377,6 +396,8 @@ fn create_summary(
 
         summary_benchmark
             .entry(profile)
+            .or_insert_with(HashMap::new)
+            .entry(format!("{}", parallel.0))
             .or_insert_with(HashMap::new)
             .insert(scenario.to_string(), graph_series);
     }
