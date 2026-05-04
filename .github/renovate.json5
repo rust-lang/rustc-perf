@@ -1,9 +1,12 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
-    "github>rust-lang/renovate:actions",
+    "github>rust-lang/renovate",
     "docker:disable",
   ],
+  "lockFileMaintenance": {
+    "extends": ["schedule:monthly"]
+  },
   "packageRules": [
     {
       "matchManagers": ["github-actions"],
