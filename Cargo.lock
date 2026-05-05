@@ -400,7 +400,7 @@ dependencies = [
  "cfg-if",
  "chrono",
  "clap",
- "console",
+ "console 0.16.3",
  "database",
  "env_logger",
  "flate2",
@@ -457,8 +457,19 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.0",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "console"
+version = "0.16.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d64e8af5551369d19cf50138de61f1c42074ab970f74e99be916646777f8fc87"
+dependencies = [
+ "encode_unicode",
+ "libc",
+ "unicode-width 0.2.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1532,7 +1543,7 @@ version = "1.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6593a41c7a73841868772495db7dc1e8ecab43bb5c0b6da2059246c4b506ab60"
 dependencies = [
- "console",
+ "console 0.15.10",
  "lazy_static",
  "linked-hash-map",
  "similar",

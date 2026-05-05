@@ -35,7 +35,7 @@ cargo_metadata = "0.19"
 thousands = "0.2.0"
 rustc-demangle = { version = "0.1", features = ["std"] }
 similar = "2.2"
-console = "0.15"
+console = "0.16"
 object = "0.36.0"
 tabled = { version = "0.20", default-features = false, features = ["derive", "ansi"] }
 humansize = "2.1.3"
