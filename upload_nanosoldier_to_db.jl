@@ -11,7 +11,7 @@ else
 end
 
 median(x) = sort(x)[div(length(x), 2)+1]
-function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to_pstat_series_id; return_group_only=false)
+function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to_pstat_series_id; return_group_only=false, install)
     println("Processing $path...")
     mktempdir() do dir
         # dir = mktempdir() # Debugger is unable to step into the above line
@@ -64,8 +64,8 @@ function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to
                     # all files for this commit should also hit continue so good
                     if !isempty(artifact_query) && DataFrame(DBInterface.execute(db, "SELECT EXISTS (SELECT * FROM pstat WHERE aid=$(artifact_query[1, :id]))"))[1, 1] == 1
                         if tag_predicate == "ALL"
-                            DBInterface.execute(db, "DELETE FROM pstat WHERE aid=$(artifact_query[1, "id"])")
-                            DBInterface.execute(db, "DELETE FROM pull_request_build WHERE bors_sha='$sha'")
+                            install && DBInterface.execute(db, "DELETE FROM pstat WHERE aid=$(artifact_query[1, "id"])")
+                            install && DBInterface.execute(db, "DELETE FROM pull_request_build WHERE bors_sha='$sha'")
                         else
                             continue
                         end
@@ -77,7 +77,7 @@ function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to
                         artifact_row, parent_sha = create_artifact_row(path, file, next_artifact_id[])
                         next_artifact_id[] += 1
 
-                        DBInterface.execute(db, "INSERT INTO artifact (id, name, date, type) VALUES ($(artifact_row.id), '$(artifact_row.name)', $(artifact_row.date), '$(artifact_row.type)')")
+                        install && DBInterface.execute(db, "INSERT INTO artifact (id, name, date, type) VALUES ($(artifact_row.id), '$(artifact_row.name)', $(artifact_row.date), '$(artifact_row.type)')")
                     else
                         artifact_row = (id=artifact_query[1, "id"], name=artifact_query[1, "name"], date=artifact_query[1, "date"], type=artifact_query[1, "type"])
                         parent_sha = create_artifact_row(path, file, artifact_row.id)[2]
@@ -107,7 +107,7 @@ function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to
 
                     if !isnothing(min_created_date)
                         pr_num = pr_details[mini].number
-                        DBInterface.execute(db, "INSERT INTO pull_request_build (bors_sha, pr, parent_sha, commit_date, include) VALUES ('$sha', $pr_num, '$parent_sha', $(artifact_row.date), '$tag_predicate')")
+                        install && DBInterface.execute(db, "INSERT INTO pull_request_build (bors_sha, pr, parent_sha, commit_date, include) VALUES ('$sha', $pr_num, '$parent_sha', $(artifact_row.date), '$tag_predicate')")
                     else
                         regex_match = nothing
                         if artifact_row.type == "try"
@@ -117,14 +117,14 @@ function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to
                         if !isnothing(regex_match)
                             triggered_by_pr = regex_match.captures[1] |> x -> parse(Int, x)
                             println("Commit $sha has no PR using triggered by pr $triggered_by_pr instead")
-                            DBInterface.execute(db, "INSERT INTO pull_request_build (bors_sha, pr, parent_sha, commit_date, include) VALUES ('$sha', $triggered_by_pr, '$parent_sha', $(artifact_row.date), '$tag_predicate')")
+                            install && DBInterface.execute(db, "INSERT INTO pull_request_build (bors_sha, pr, parent_sha, commit_date, include) VALUES ('$sha', $triggered_by_pr, '$parent_sha', $(artifact_row.date), '$tag_predicate')")
                         else
                             if artifact_row.type == "try"
                                 printstyled("Commit $sha is a try build but was not triggered in a PR\n", color=:red)
                             else
                                 printstyled("Commit $sha has no PR\n", color=:red)
                             end
-                            DBInterface.execute(db, "INSERT INTO pull_request_build (bors_sha, parent_sha, commit_date, include) VALUES ('$sha', '$parent_sha', $(artifact_row.date), '$tag_predicate')")
+                            install && DBInterface.execute(db, "INSERT INTO pull_request_build (bors_sha, parent_sha, commit_date, include) VALUES ('$sha', '$parent_sha', $(artifact_row.date), '$tag_predicate')")
                         end
                     end
 
@@ -153,12 +153,12 @@ function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to
             for (benchmark_name, trial) in benchmark_data
                 if sha ∉ processed_commits # get alloc and memory data, same for all files
                     for metric in (:allocs, :memory) # allocs is num of allocations, memory is in bytes
-                        push_metric_to_pstat!(df, db, benchmark_name, string(metric), artifact_id, getfield(trial, metric), benchmark_to_pstat_series_id)
+                        push_metric_to_pstat!(df, db, benchmark_name, string(metric), artifact_id, getfield(trial, metric), benchmark_to_pstat_series_id; install=install)
                     end
                 end
 
-                push_metric_to_pstat!(df, db, benchmark_name, primary_metric * "-wall-time", artifact_id, trial.time, benchmark_to_pstat_series_id)
-                push_metric_to_pstat!(df, db, benchmark_name, primary_metric * "-gc-time", artifact_id, trial.gctime, benchmark_to_pstat_series_id)
+                push_metric_to_pstat!(df, db, benchmark_name, primary_metric * "-wall-time", artifact_id, trial.time, benchmark_to_pstat_series_id; install=install)
+                push_metric_to_pstat!(df, db, benchmark_name, primary_metric * "-gc-time", artifact_id, trial.gctime, benchmark_to_pstat_series_id; install=install)
             end
 
             if sha ∉ processed_commits
@@ -168,13 +168,13 @@ function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to
     end
 end
 
-function push_metric_to_pstat!(df::DataFrame, db::SQLite.DB, benchmark_name::String, metric::String, aid::Int64, value, benchmark_to_pstat_series_id)
+function push_metric_to_pstat!(df::DataFrame, db::SQLite.DB, benchmark_name::String, metric::String, aid::Int64, value, benchmark_to_pstat_series_id; install)
     if !haskey(benchmark_to_pstat_series_id, (benchmark_name, metric))
         pstat_series_query = DBInterface.execute(db, "SELECT * FROM pstat_series ORDER BY id DESC LIMIT 1") |> DataFrame
         next_pid = 1 + pstat_series_query[1, "id"]
 
         temp_df = DataFrame(id=next_pid, crate=benchmark_name, profile="opt", scenario="full", backend="llvm", metric=metric)
-        SQLite.load!(temp_df, db, "pstat_series")
+        install && SQLite.load!(temp_df, db, "pstat_series")
         benchmark_to_pstat_series_id[(benchmark_name, metric)] = next_pid
     end
     series_id = benchmark_to_pstat_series_id[(benchmark_name, metric)]
@@ -261,7 +261,7 @@ end
 
 # TODO: Seperate out setup and processing
 # Don't pass a dir starting with ~, doesn't work
-function process_benchmarks(dir, db::SQLite.DB)
+function process_benchmarks(dir, db::SQLite.DB; install)
     artifact_id_query = DBInterface.execute(db, "SELECT id FROM artifact ORDER BY id DESC LIMIT 1") |> DataFrame
     next_artifact_id = Ref{Int}((isempty(artifact_id_query) ? 0 : artifact_id_query[1, "id"]) + 1)
 
@@ -280,10 +280,10 @@ function process_benchmarks(dir, db::SQLite.DB)
         pstat_df = DataFrame()
         for file in files
             if contains(file, r"^data.tar.\w+$")
-                @time "processing" process_benchmark_archive!(pstat_df, joinpath(root, file), next_artifact_id, db, benchmark_to_pstat_series_id)
+                @time "processing" process_benchmark_archive!(pstat_df, joinpath(root, file), next_artifact_id, db, benchmark_to_pstat_series_id; install=install)
             end
         end
-        if !isempty(pstat_df)
+        if install && !isempty(pstat_df)
             @time "loading" SQLite.load!(pstat_df, db, "pstat")
         end
     end
@@ -310,16 +310,16 @@ function process_benchmarks(dir, db::SQLite.DB)
     nothing
 end
 
-function process_benchmarks(dir, db_path::AbstractString)
+function process_benchmarks(dir, db_path::AbstractString; install)
     db = SQLite.DB(db_path)
     try
-        process_benchmarks(dir, db)
+        process_benchmarks(dir, db; install=install)
     finally
         close(db)
     end
 end
 
-process_benchmarks(dir) = process_benchmarks(dir, joinpath(@__DIR__, "julia.db"))
+process_benchmarks(dir) = process_benchmarks(dir, joinpath(@__DIR__, "julia.db"); install=false)
 
 function auto_load(month=lpad(month(now()), 2, '0'), year=year(now()))
     process_benchmarks("/home/rag/Documents/Code/NanosoldierReports/benchmark/by_date/$year-$month")
@@ -349,7 +349,7 @@ function create_tables(db_path)
     for (root, dirs, files) in walkdir(dir)
         for file in files
             if contains(file, r"^data.tar.\w+$")
-                group = process_benchmark_archive!(nothing, joinpath(root, file), nothing, nothing, nothing, nothing; return_group_only=true)
+                group = process_benchmark_archive!(nothing, joinpath(root, file), nothing, nothing, nothing, nothing; return_group_only=true, install=false)
                 isnothing(group) && continue
                 data = rec_flatten_benchmarkgroup(group)
                 new_benchmark_table = create_benchmark(data)

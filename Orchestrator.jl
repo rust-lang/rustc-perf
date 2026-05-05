@@ -210,16 +210,24 @@ function github_get_json(url; retries=5, initial_delay=1.0)
 end
 
 function main()
+    install = "install" in ARGS
     db = SQLite.DB(db_path)
+    julia_last_processed = read_checkpoint(julia_checkpoint_file)
+    reports_last_processed = read_checkpoint(reports_checkpoint_file)
 
+    println(install ? "Running in install mode" : "Running in dry-run mode")
     start_server()
     atexit(kill_server)
 
     while true
         changed = false
 
+        if install
+            read_checkpoint(julia_checkpoint_file) == julia_last_processed || error("Julia checkpoint file changed unexpectedly")
+            read_checkpoint(reports_checkpoint_file) == reports_last_processed || error("Reports checkpoint file changed unexpectedly")
+        end
+
         julia_fetched = false
-        julia_last_processed = read_checkpoint(julia_checkpoint_file)
         try
             shas, commit_times = get_master_commits_since(julia_last_processed)
             julia_fetched = true
@@ -230,13 +238,13 @@ function main()
 
         try
             if julia_fetched
-                DBInterface.execute(db, "BEGIN TRANSACTION")
+                install && DBInterface.execute(db, "BEGIN TRANSACTION")
 
-                artifact_size_df, pstat_df, first_unfinished_commit = process_logs(db, shas, commit_times)
+                artifact_size_df, pstat_df, first_unfinished_commit = process_logs(db, shas, commit_times; install=install)
                 changed |= !isempty(artifact_size_df)
                 if !isempty(artifact_size_df)
                     kill_server()
-                    SQLite.load!(artifact_size_df, db, "artifact_size")
+                    install && SQLite.load!(artifact_size_df, db, "artifact_size")
                 end
 
                 if !isnothing(first_unfinished_commit)
@@ -248,17 +256,17 @@ function main()
                     next_julia_checkpoint = isempty(shas) ? julia_last_processed : shas[end]
                 end
 
-                DBInterface.execute(db, "COMMIT")
-                write_checkpoint(julia_checkpoint_file, next_julia_checkpoint)
+                install && DBInterface.execute(db, "COMMIT")
+                install && write_checkpoint(julia_checkpoint_file, next_julia_checkpoint)
+                julia_last_processed = next_julia_checkpoint
             end
         catch
             println("Error processing logs")
-            DBInterface.execute(db, "ROLLBACK")
+            install && DBInterface.execute(db, "ROLLBACK")
             rethrow()
         end
 
         fetched = false
-        reports_last_processed = read_checkpoint(reports_checkpoint_file)
         try
             reports_head = get_reports_head_sha()
             from_entries = get_benchmark_tree_entries(reports_repo_owner, reports_repo_name, reports_last_processed)
@@ -276,7 +284,7 @@ function main()
                     to_entries,
                 )
 
-                DBInterface.execute(db, "BEGIN TRANSACTION")
+                install && DBInterface.execute(db, "BEGIN TRANSACTION")
 
                 for benchmark_dir in changed_benchmark_dirs
                     benchmark_dir_exists(to_entries, benchmark_dir) || continue
@@ -284,16 +292,17 @@ function main()
                     kill_server()
                     println("$(benchmark_dir) changed")
                     with_downloaded_benchmark_dir(to_entries, reports_head, benchmark_dir) do local_benchmark_dir
-                        process_benchmarks(local_benchmark_dir, db)
+                        process_benchmarks(local_benchmark_dir, db; install=install)
                     end
                 end
 
-                DBInterface.execute(db, "COMMIT")
-                write_checkpoint(reports_checkpoint_file, reports_head)
+                install && DBInterface.execute(db, "COMMIT")
+                install && write_checkpoint(reports_checkpoint_file, reports_head)
+                reports_last_processed = reports_head
             end
         catch
             println("Error processing benchmarks")
-            DBInterface.execute(db, "ROLLBACK")
+            install && DBInterface.execute(db, "ROLLBACK")
             rethrow()
         end
 
@@ -304,7 +313,7 @@ function main()
     end
 end
 
-function process_logs(db::SQLite.DB, shas, commit_times)
+function process_logs(db::SQLite.DB, shas, commit_times; install)
     artifact_id_query = DBInterface.execute(db, "SELECT id FROM artifact ORDER BY id DESC LIMIT 1") |> DataFrame
     next_artifact_id = Ref{Int}((isempty(artifact_id_query) ? 0 : artifact_id_query[1, "id"]) + 1)
 
@@ -323,7 +332,7 @@ function process_logs(db::SQLite.DB, shas, commit_times)
 
             next_artifact_id[] += 1
 
-            DBInterface.execute(db, "INSERT INTO artifact (id, name, date, type) VALUES ($(artifact_row.id), '$(artifact_row.name)', $(artifact_row.date), '$(artifact_row.type)')")
+            install && DBInterface.execute(db, "INSERT INTO artifact (id, name, date, type) VALUES ($(artifact_row.id), '$(artifact_row.name)', $(artifact_row.date), '$(artifact_row.type)')")
             artifact_row.id
         end
 
