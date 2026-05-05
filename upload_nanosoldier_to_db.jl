@@ -5,7 +5,7 @@ using SQLite
 using HTTP, JSON3
 
 const headers = if haskey(ENV, "GITHUB_TOKEN")
-    Dict("Authorization" => "tohen " * ENV["GITHUB_TOKEN"])
+    Dict("Authorization" => "token " * ENV["GITHUB_TOKEN"])
 else
     nothing
 end
@@ -261,9 +261,7 @@ end
 
 # TODO: Seperate out setup and processing
 # Don't pass a dir starting with ~, doesn't work
-function process_benchmarks(dir, db_path)
-    db = SQLite.DB(db_path)
-
+function process_benchmarks(dir, db::SQLite.DB)
     artifact_id_query = DBInterface.execute(db, "SELECT id FROM artifact ORDER BY id DESC LIMIT 1") |> DataFrame
     next_artifact_id = Ref{Int}((isempty(artifact_id_query) ? 0 : artifact_id_query[1, "id"]) + 1)
 
@@ -311,6 +309,17 @@ function process_benchmarks(dir, db_path)
 
     nothing
 end
+
+function process_benchmarks(dir, db_path::AbstractString)
+    db = SQLite.DB(db_path)
+    try
+        process_benchmarks(dir, db)
+    finally
+        close(db)
+    end
+end
+
+process_benchmarks(dir) = process_benchmarks(dir, joinpath(@__DIR__, "julia.db"))
 
 function auto_load(month=lpad(month(now()), 2, '0'), year=year(now()))
     process_benchmarks("/home/rag/Documents/Code/NanosoldierReports/benchmark/by_date/$year-$month")
