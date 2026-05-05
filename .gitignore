@@ -9,5 +9,5 @@ target
 prod_site
 .cargo/
 .vscode/
-julia_last_processed_commit.txt"
-reports_last_processed_commit.txt"
+julia_last_processed_commit.txt
+reports_last_processed_commit.txt
