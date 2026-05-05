@@ -111,7 +111,7 @@ default-features = false
 version = "3"
 
 [dependencies.capstone]
-version = "0.13.0"
+version = "0.14.0"
 optional = true
 
 [dependencies.cranelift-assembler-x64]
