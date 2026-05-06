@@ -12,6 +12,12 @@
     "extends": ["schedule:monthly"]
   },
   "packageRules": [
+    // Disable individual PRs for breaking changes
+    {
+      "matchCategories": ["rust", "js"],
+      "matchJsonata": ["isBreaking == true"],
+      "enabled": false
+    },
     {
       "matchManagers": ["github-actions"],
       "extends": ["schedule:monthly"]
