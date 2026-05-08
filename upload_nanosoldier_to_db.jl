@@ -319,12 +319,10 @@ function process_benchmarks(dir, db_path::AbstractString; install)
     end
 end
 
-process_benchmarks(dir) = process_benchmarks(dir, joinpath(@__DIR__, "julia.db"); install=false)
-
 function auto_load(month=lpad(month(now()), 2, '0'), year=year(now()))
-    process_benchmarks("/home/rag/Documents/Code/NanosoldierReports/benchmark/by_date/$year-$month")
+    process_benchmarks("/home/rag/Documents/Code/NanosoldierReports/benchmark/by_date/$year-$month", joinpath(@__DIR__, "julia.db"); install=true)
     # for dir in filter(isdir, readdir("/home/rag/Documents/Code/NanosoldierReports/benchmark/by_hash/", join=true))
-    #     process_benchmarks(dir)
+    #     process_benchmarks(dir, joinpath(@__DIR__, "julia.db"); install=true)
     # end
 end
 
@@ -349,7 +347,7 @@ function create_tables(db_path)
     for (root, dirs, files) in walkdir(dir)
         for file in files
             if contains(file, r"^data.tar.\w+$")
-                group = process_benchmark_archive!(nothing, joinpath(root, file), nothing, nothing, nothing, nothing; return_group_only=true, install=false)
+                group = process_benchmark_archive!(nothing, joinpath(root, file), nothing, nothing, nothing, nothing; return_group_only=true, install=true)
                 isnothing(group) && continue
                 data = rec_flatten_benchmarkgroup(group)
                 new_benchmark_table = create_benchmark(data)
@@ -432,7 +430,7 @@ function add_old_by_hash_benchmarks()
     # dirs = vcat((readdir(".") .|> x->split(x, "_vs_"))...)
 
     for dir in filter(isdir, readdir(joinpath(nanosoldier_dir, "benchmark", "by_hash/"), join=true))
-        process_benchmarks(dir)
+        process_benchmarks(dir, joinpath(@__DIR__, "julia.db"); install=true)
     end
 end
 

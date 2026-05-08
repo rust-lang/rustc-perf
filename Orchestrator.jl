@@ -1,7 +1,8 @@
 using Pkg
 Pkg.activate(@__DIR__)
-using LibGit2, Dates
+using Dates
 using HTTP, JSON3
+using TimeZones
 include("upload_nanosoldier_to_db.jl")
 include("buildkite_logs.jl")
 
