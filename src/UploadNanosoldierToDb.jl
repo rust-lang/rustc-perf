@@ -4,18 +4,13 @@ using Tar, CodecZlib, CodecXz, CodecZstd
 using BenchmarkTools
 using DataFrames, Dates, TimeZones
 using SQLite
-using HTTP, JSON3
 using LibGit2
 
-export headers, process_benchmarks
+using ..GitHubHelpers: github_get_json
+
+export process_benchmarks
 
 const REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
-
-const headers = if haskey(ENV, "GITHUB_TOKEN")
-    Dict("Authorization" => "token " * ENV["GITHUB_TOKEN"])
-else
-    nothing
-end
 
 median(x) = sort(x)[div(length(x), 2)+1]
 function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to_pstat_series_id; return_group_only=false, install)
@@ -99,7 +94,7 @@ function process_benchmark_archive!(df, path, next_artifact_id, db, benchmark_to
                         end
                     end
 
-                    pr_details = HTTP.get("https://api.github.com/repos/JuliaLang/Julia/commits/$sha/pulls", headers=headers).body |> JSON3.read
+                    pr_details = github_get_json("https://api.github.com/repos/JuliaLang/Julia/commits/$sha/pulls")
 
                     min_created_date = nothing
                     mini = 0
@@ -203,10 +198,10 @@ function create_artifact_row(path, file, id)
     type = nothing
     parent_sha = nothing
 
-    search_on_master = HTTP.get("https://api.github.com/search/commits?q=repo:JuliaLang/julia+hash:$commit_sha", headers=headers).body |> JSON3.read
+    search_on_master = github_get_json("https://api.github.com/search/commits?q=repo:JuliaLang/julia+hash:$commit_sha")
 
     if search_on_master.total_count == 0 # commit not in master branch
-        commit_details = HTTP.get("https://api.github.com/repos/JuliaLang/Julia/git/commits/$commit_sha", headers=headers).body |> JSON3.read # can remove /git/ not sure why it's there
+        commit_details = github_get_json("https://api.github.com/repos/JuliaLang/Julia/git/commits/$commit_sha") # can remove /git/ not sure why it's there
         date = DateTime(commit_details.author.date, dateformat"yyyy-mm-ddTHH:MM:SS\Z") |> datetime2unix |> Int64
         type = "try"
         # parent_sha = commit_details.parents[1].sha # How do you deal with multiple parents? Presumably we want the one on master
@@ -409,7 +404,7 @@ function fix_dates_pull_request_build(db_path)
             continue
         end
         try
-            commit_details = HTTP.get("https://api.github.com/repos/JuliaLang/Julia/git/commits/$(row.bors_sha)", headers=headers).body |> JSON3.read # can remove /git/ not sure why it's there
+            commit_details = github_get_json("https://api.github.com/repos/JuliaLang/Julia/git/commits/$(row.bors_sha)") # can remove /git/ not sure why it's there
             date = DateTime(commit_details.author.date, dateformat"yyyy-mm-ddTHH:MM:SS\Z") |> datetime2unix |> Int64
             # if (row["commit_date"] !== missing && row["commit_date"] != date)
             #     println("Commit date already set for $i, $(row.bors_sha) to $(row["commit_date"]), whilst we were going to set it to $date")
@@ -576,7 +571,7 @@ function add_pr_nums(db_path)
     for row in eachrow(artifacts)
         if row["type"] == "master"
             sha = row["name"]
-            pr_details = HTTP.get("https://api.github.com/repos/JuliaLang/Julia/commits/$sha/pulls", headers=headers).body |> JSON3.read
+            pr_details = github_get_json("https://api.github.com/repos/JuliaLang/Julia/commits/$sha/pulls")
             if !isempty(pr_details) && haskey(pr_details[1], :number)
                 pr_num = pr_details[1].number
                 push!(pr_df, (bors_sha=sha, pr=pr_num, parent_sha="", exclude=missing, complete=missing, runs=missing, include="ALL", commit_date=missing, requested=missing))
@@ -588,7 +583,7 @@ function add_pr_nums(db_path)
         else
             # Doesn't really work due to force pushes I think, e.g. https://github.com/JuliaLang/julia/commit/4ff1f007974a4ea1d89e636d8feed83723bbb779 has no pr
             sha = row["name"]
-            pr_details = HTTP.get("https://api.github.com/repos/JuliaLang/Julia/commits/$sha/pulls", headers=headers).body |> JSON3.read
+            pr_details = github_get_json("https://api.github.com/repos/JuliaLang/Julia/commits/$sha/pulls")
             if !isempty(pr_details)
                 mini = 0
                 min_created_date = nothing
@@ -601,7 +596,7 @@ function add_pr_nums(db_path)
 
                 pr_num = pr_details[mini].number
 
-                commit_details = HTTP.get("https://api.github.com/repos/JuliaLang/Julia/git/commits/$sha").body |> JSON3.read # can remove /git/ not sure why it's there
+                commit_details = github_get_json("https://api.github.com/repos/JuliaLang/Julia/git/commits/$sha") # can remove /git/ not sure why it's there
                 date = DateTime(commit_details.author.date, dateformat"yyyy-mm-ddTHH:MM:SS\Z") |> datetime2unix |> Int64
                 parent_sha = commit_details.parents[1].sha # How do you deal with multiple parents? Presumably we want the one on master
 
@@ -693,7 +688,7 @@ function create_sample_pstat_df(db_path)
 end
 
 function create_tags_db(db_path)
-    tags_details = HTTP.get("https://api.github.com/repos/JuliaLang/julia/git/refs/tags", headers=headers).body |> JSON3.read
+    tags_details = github_get_json("https://api.github.com/repos/JuliaLang/julia/git/refs/tags")
 
     df = DataFrame((tag=tag_details.ref[length("refs/tags/")+1:end], sha=tag_details.object.sha) for tag_details in tags_details)
 

@@ -1,14 +1,15 @@
 module Orchestrator
 
 using Dates
-using HTTP, JSON3
 using TimeZones
 using SQLite, DataFrames
 
+include("GitHubHelpers.jl")
 include("UploadNanosoldierToDb.jl")
 include("BuildkiteLogs.jl")
 
-using .UploadNanosoldierToDb: headers, process_benchmarks
+using .GitHubHelpers: github_get_bytes, github_get_json
+using .UploadNanosoldierToDb: process_benchmarks
 using .BuildkiteLogs: process_commit!
 
 export main
@@ -90,34 +91,6 @@ function get_benchmark_tree_entries(owner, repo, commit_sha)
     entries
 end
 
-function github_get_bytes(url; retries=5, initial_delay=1.0)
-    delay = initial_delay
-    last_error = nothing
-
-    for attempt in 1:retries
-        try
-            resp = HTTP.get(url; headers=headers, status_exception=false)
-            if 200 <= resp.status < 300
-                return resp.body
-            end
-            if resp.status in (403, 429) || 500 <= resp.status < 600
-                last_error = ErrorException("GitHub request returned HTTP $(resp.status) for $url")
-            else
-                error("GitHub request returned HTTP $(resp.status) for $url")
-            end
-        catch err
-            last_error = err
-        end
-
-        if attempt < retries
-            sleep(delay)
-            delay *= 2
-        end
-    end
-
-    throw(last_error)
-end
-
 function get_reports_head_sha()
     response = github_get_json(
         "https://api.github.com/repos/$reports_repo_owner/$reports_repo_name/commits?sha=$reports_repo_branch&per_page=1",
@@ -191,34 +164,6 @@ function get_master_commits_since(checkpoint_sha)
     return commits, commit_times
 end
 
-function github_get_json(url; retries=5, initial_delay=1.0)
-    delay = initial_delay
-    last_error = nothing
-
-    for attempt in 1:retries
-        try
-            resp = HTTP.get(url; headers=headers, status_exception=false)
-            if 200 <= resp.status < 300
-                return JSON3.read(resp.body)
-            end
-            if resp.status in (403, 429) || 500 <= resp.status < 600
-                last_error = ErrorException("GitHub API returned HTTP $(resp.status) for $url")
-            else
-                error("GitHub API returned HTTP $(resp.status) for $url")
-            end
-        catch err
-            last_error = err
-        end
-
-        if attempt < retries
-            sleep(delay)
-            delay *= 2
-        end
-    end
-
-    throw(last_error)
-end
-
 function main(args=ARGS)
     install = "install" in args
     db = SQLite.DB(db_path)
@@ -244,8 +189,9 @@ function main(args=ARGS)
             shas, commit_times = get_master_commits_since(julia_last_processed)
             julia_fetched = true
         catch err
-            println("Error fetching Julia commits from GitHub API: $err")
+            println("Error fetching Julia commits from GitHub API")
             Base.showerror(stdout, err, Base.catch_backtrace())
+            println()
         end
 
         try
@@ -289,8 +235,9 @@ function main(args=ARGS)
             to_entries = get_benchmark_tree_entries(reports_repo_owner, reports_repo_name, reports_head)
             fetched = true
         catch err
-            println("Error fetching reports repo metadata from GitHub: $err")
+            println("Error fetching reports repo metadata from GitHub")
             Base.showerror(stdout, err, Base.catch_backtrace())
+            println()
         end
 
         try
