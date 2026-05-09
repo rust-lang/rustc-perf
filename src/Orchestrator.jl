@@ -62,8 +62,8 @@ function get_changed_benchmark_dirs(from_entries, to_entries)
         get(from_entries, relpath, nothing) == get(to_entries, relpath, nothing) && continue
         if startswith(relpath, "benchmark/by_date/")
             parts = splitpath(relpath)
-            length(parts) >= 3 || continue
-            push!(changed_dirs, joinpath(parts[1], parts[2], parts[3]))
+            length(parts) >= 4 || continue
+            push!(changed_dirs, joinpath(parts[1], parts[2], parts[3], parts[4]))
         elseif startswith(relpath, "benchmark/by_hash/")
             parts = splitpath(relpath)
             length(parts) >= 3 || continue
