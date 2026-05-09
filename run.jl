@@ -1,4 +1,4 @@
-#! /usr/bin/env julia
+#!/usr/bin/env julia
 
 using Pkg
 Pkg.activate(@__DIR__)
