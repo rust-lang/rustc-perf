@@ -126,7 +126,7 @@ function get_reports_head_sha()
     String(response[1].sha)
 end
 
-function with_downloaded_benchmark_dir(to_entries, commit_sha, benchmark_dir, f)
+function with_downloaded_benchmark_dir(f, to_entries, commit_sha, benchmark_dir)
     prefix = benchmark_dir * "/"
     mktempdir() do tmpdir
         local_benchmark_dir = joinpath(tmpdir, splitpath(benchmark_dir)...)
@@ -237,6 +237,8 @@ function main(args=ARGS)
             read_checkpoint(reports_checkpoint_file) == reports_last_processed || error("Reports checkpoint file changed unexpectedly")
         end
 
+        shas = String[]
+        commit_times = Dict{String,Int64}()
         julia_fetched = false
         try
             shas, commit_times = get_master_commits_since(julia_last_processed)
@@ -250,6 +252,7 @@ function main(args=ARGS)
             if julia_fetched
                 install && DBInterface.execute(db, "BEGIN TRANSACTION")
 
+                # I think I decided not to upload whatever timing stats we get from build logs
                 artifact_size_df, pstat_df, first_unfinished_commit = process_logs(db, shas, commit_times; install=install)
                 changed |= !isempty(artifact_size_df)
                 if !isempty(artifact_size_df)
@@ -276,6 +279,9 @@ function main(args=ARGS)
             rethrow()
         end
 
+        reports_head = ""
+        from_entries = Dict{String,String}()
+        to_entries = Dict{String,String}()
         fetched = false
         try
             reports_head = get_reports_head_sha()
