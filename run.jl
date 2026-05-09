@@ -4,4 +4,5 @@ using Pkg
 Pkg.activate(@__DIR__)
 using Orchestrator
 
-Orchestrator.main()
+install = "--install" in ARGS
+Orchestrator.main(install)

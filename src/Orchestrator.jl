@@ -165,8 +165,7 @@ function get_master_commits_since(checkpoint_sha)
     return commits, commit_times
 end
 
-function main(args=ARGS)
-    install = "install" in args
+function main(install)
     db = SQLite.DB(db_path)
     julia_last_processed = read_checkpoint(julia_checkpoint_file)
     reports_last_processed = read_checkpoint(reports_checkpoint_file)
