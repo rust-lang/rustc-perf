@@ -1,3 +1,7 @@
+name = "Orchestrator"
+uuid = "392b6d2b-c7d0-496b-839d-8ee8c1af8d44"
+version = "0.1.0"
+
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CodecXz = "ba30903b-d9e8-5048-a5ec-d1f5b0d4b47b"

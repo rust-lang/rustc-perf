@@ -1,4 +1,8 @@
+module BuildkiteLogs
+
 using HTTP, JSON3, DataFrames, Dates
+
+export process_commit!
 
 function get_logs(page)
     url = "https://buildkite.com/julialang/julia-master/builds?branch=master&page=$page"
@@ -172,3 +176,5 @@ end
 #     @test sha_to_timings == sha_to_timings_test
 #     @test sha_to_binary_sizes == sha_to_binary_sizes_test
 # end
+
+end # module BuildkiteLogs

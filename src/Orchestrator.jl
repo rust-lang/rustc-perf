@@ -1,14 +1,23 @@
-using Pkg
-Pkg.activate(@__DIR__)
+module Orchestrator
+
 using Dates
 using HTTP, JSON3
 using TimeZones
-include("upload_nanosoldier_to_db.jl")
-include("buildkite_logs.jl")
+using SQLite, DataFrames
+
+include("UploadNanosoldierToDb.jl")
+include("BuildkiteLogs.jl")
+
+using .UploadNanosoldierToDb: headers, process_benchmarks
+using .BuildkiteLogs: process_commit!
+
+export main
+
+const REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
 
 const sleep_time = Dates.Minute(5)
-const db_path = joinpath(@__DIR__, "julia.db")
-const state_dir = joinpath(@__DIR__, ".state")
+const db_path = joinpath(REPO_ROOT, "julia.db")
+const state_dir = joinpath(REPO_ROOT, ".state")
 const julia_checkpoint_file = joinpath(state_dir, "julia_last_processed_commit.txt")
 const reports_checkpoint_file = joinpath(state_dir, "reports_last_processed_commit.txt")
 const reports_repo_owner = "JuliaCI"
@@ -21,7 +30,7 @@ function start_server()
     if !isnothing(proc[])
         error("Server already running")
     end
-    proc[] = open(pipeline(`$(joinpath(@__DIR__, "prod_site")) $db_path`, stdout=stdout), read=false)
+    proc[] = open(pipeline(`$(joinpath(REPO_ROOT, "prod_site")) $db_path`, stdout=stdout), read=false)
 end
 function kill_server()
     if !isnothing(proc[])
@@ -210,8 +219,8 @@ function github_get_json(url; retries=5, initial_delay=1.0)
     throw(last_error)
 end
 
-function main()
-    install = "install" in ARGS
+function main(args=ARGS)
+    install = "install" in args
     db = SQLite.DB(db_path)
     julia_last_processed = read_checkpoint(julia_checkpoint_file)
     reports_last_processed = read_checkpoint(reports_checkpoint_file)
@@ -367,4 +376,5 @@ function process_logs(db::SQLite.DB, shas, commit_times; install)
     return artifact_size_df, pstat_df, first_unfinished_commit
 end
 
-isinteractive() || main()
+
+end # module Orchestrator
