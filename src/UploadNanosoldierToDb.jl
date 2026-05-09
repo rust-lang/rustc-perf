@@ -5,6 +5,7 @@ using BenchmarkTools
 using DataFrames, Dates, TimeZones
 using SQLite
 using HTTP, JSON3
+using LibGit2
 
 export headers, process_benchmarks
 
@@ -380,7 +381,6 @@ function create_tables(db_path)
     nothing
 end
 
-using LibGit2
 function fix_dates(db_path)
     db = SQLite.DB(db_path)
     artifacts_table = DBInterface.execute(db, "SELECT * FROM artifact") |> DataFrame
