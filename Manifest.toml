@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.5"
+julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "2ecf1b8e9694506b62ce3b5ff99159d9bb16792c"
+project_hash = "d60b0c6179954b3e8c2cb32cd64dac2a011536fc"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -127,6 +127,12 @@ version = "1.11.0"
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 version = "1.11.0"
+
+[[deps.GitHub]]
+deps = ["Base64", "Dates", "HTTP", "JSON", "MbedTLS", "Sockets", "SodiumSeal", "URIs"]
+git-tree-sha1 = "ef535d4e8cb96c4fb6753212744ee737fad1bc50"
+uuid = "bc5e4493-9b4d-5f90-b8aa-2b2bcaad7a26"
+version = "5.12.0"
 
 [[deps.HTTP]]
 deps = ["Base64", "CodecZlib", "ConcurrentUtilities", "Dates", "ExceptionUnwrapping", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "PrecompileTools", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
@@ -304,7 +310,7 @@ uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
 version = "3.5.4+0"
 
 [[deps.Orchestrator]]
-deps = ["BenchmarkTools", "CodecXz", "CodecZlib", "CodecZstd", "DataFrames", "Dates", "HTTP", "JSON3", "SQLite", "Tar", "TimeZones"]
+deps = ["BenchmarkTools", "CodecXz", "CodecZlib", "CodecZstd", "DataFrames", "Dates", "HTTP", "JSON3", "LibGit2", "SQLite", "Tar", "TimeZones"]
 path = "."
 uuid = "392b6d2b-c7d0-496b-839d-8ee8c1af8d44"
 version = "0.1.0"
@@ -415,6 +421,12 @@ version = "1.2.0"
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
 version = "1.11.0"
+
+[[deps.SodiumSeal]]
+deps = ["Base64", "Libdl", "libsodium_jll"]
+git-tree-sha1 = "80cef67d2953e33935b41c6ab0a178b9987b1c99"
+uuid = "2133526b-2bfb-4018-ac12-889fb3908a75"
+version = "0.1.1"
 
 [[deps.SortingAlgorithms]]
 deps = ["DataStructures"]
@@ -563,6 +575,12 @@ version = "1.4.2+0"
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
 version = "5.15.0+0"
+
+[[deps.libsodium_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "011b0a7331b41c25524b64dc42afc9683ee89026"
+uuid = "a9144af2-ca23-56d9-984f-0d03f7b5ccf8"
+version = "1.0.21+0"
 
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]

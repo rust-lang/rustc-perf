@@ -8,7 +8,7 @@ include("GitHubHelpers.jl")
 include("UploadNanosoldierToDb.jl")
 include("BuildkiteLogs.jl")
 
-using .GitHubHelpers: github_get_bytes, github_get_json
+using .GitHubHelpers: github_commits, github_get_bytes, github_gitcommit, github_tree
 using .UploadNanosoldierToDb: process_benchmarks
 using .BuildkiteLogs: process_commit!
 
@@ -75,26 +75,24 @@ function get_changed_benchmark_dirs(from_entries, to_entries)
 end
 
 function get_benchmark_tree_entries(owner, repo, commit_sha)
-    commit = github_get_json("https://api.github.com/repos/$owner/$repo/git/commits/$commit_sha")
-    tree_sha = String(commit.tree.sha)
-    tree = github_get_json("https://api.github.com/repos/$owner/$repo/git/trees/$tree_sha?recursive=1")
+    commit = github_gitcommit(owner, repo, commit_sha)
+    tree_sha = String(commit.tree["sha"])
+    tree = github_tree(owner, repo, tree_sha; recursive=true)
     tree.truncated && error("Git tree for $owner/$repo at $commit_sha is truncated")
 
     entries = Dict{String,String}()
     for entry in tree.tree
-        String(entry.type) == "blob" || continue
-        path = String(entry.path)
+        String(entry["type"]) == "blob" || continue
+        path = String(entry["path"])
         if startswith(path, "benchmark/by_date/") || startswith(path, "benchmark/by_hash/")
-            entries[path] = String(entry.sha)
+            entries[path] = String(entry["sha"])
         end
     end
     entries
 end
 
 function get_reports_head_sha()
-    response = github_get_json(
-        "https://api.github.com/repos/$reports_repo_owner/$reports_repo_name/commits?sha=$reports_repo_branch&per_page=1",
-    )
+    response = github_commits(reports_repo_owner, reports_repo_name; sha=reports_repo_branch, per_page=1)
     isempty(response) && error("No commits found for $reports_repo_owner/$reports_repo_name on $reports_repo_branch")
     String(response[1].sha)
 end
@@ -125,6 +123,11 @@ function benchmark_dir_exists(entries, benchmark_dir)
     any(startswith(path, prefix) for path in keys(entries))
 end
 
+function commit_time_to_unix(dt::Union{DateTime,Nothing})
+    isnothing(dt) && error("Missing commit author date")
+    datetime2unix(dt) |> Int64
+end
+
 function get_master_commits_since(checkpoint_sha)
     commits = String[]
     commit_times = Dict{String,Int64}()
@@ -132,9 +135,7 @@ function get_master_commits_since(checkpoint_sha)
 
     page = 1
     while true
-        response = github_get_json(
-            "https://api.github.com/repos/JuliaLang/Julia/commits?sha=master&per_page=100&page=$page",
-        )
+        response = github_commits("JuliaLang", "Julia"; sha="master", per_page=100, page=page)
 
         if isempty(response)
             break
@@ -147,7 +148,7 @@ function get_master_commits_since(checkpoint_sha)
                 break
             end
             push!(commits, sha)
-            commit_times[sha] = DateTime(ZonedDateTime(commit.commit.author.date), UTC) |> datetime2unix |> Int64
+            commit_times[sha] = commit_time_to_unix(commit.commit.author.date)
         end
 
         if found_checkpoint

@@ -9,6 +9,7 @@ CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 CodecZstd = "6b39b394-51ab-5f42-8807-6242bab2b4c2"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+GitHub = "bc5e4493-9b4d-5f90-b8aa-2b2bcaad7a26"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
@@ -17,4 +18,5 @@ Tar = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
 
 [compat]
+GitHub = "5.12.0"
 LibGit2 = "1.11.0"
