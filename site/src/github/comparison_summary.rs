@@ -83,7 +83,12 @@ async fn calculate_metric_comparison(
     .await
     {
         Ok(Some(c)) => Ok(c),
-        _ => Err("ERROR categorizing benchmark run!".to_owned()),
+        Ok(None) => {
+            Err("Error occured while categorizing benchmark run (missing comparison).".to_string())
+        }
+        Err(error) => Err(format!(
+            "Error occured while categorizing benchmark run:\n\n```{error}```"
+        )),
     }
 }
 
