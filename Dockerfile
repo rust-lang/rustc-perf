@@ -5,7 +5,7 @@ RUN cd site/frontend && npm ci
 RUN cd site/frontend && npm run check
 RUN cd site/frontend && npm run build
 
-FROM ubuntu:20.04 as base
+FROM ubuntu:24.04 as base
 
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 
@@ -47,7 +47,7 @@ COPY --from=frontend ./site/frontend/dist ./site/frontend/dist
 RUN bash -c 'source $HOME/.cargo/env && cargo build --release -p site'
 RUN bash -c 'source $HOME/.cargo/env && cargo build --release --bin postgres-to-sqlite'
 
-FROM ubuntu:20.04 as binary
+FROM ubuntu:24.04 as binary
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     ca-certificates \
