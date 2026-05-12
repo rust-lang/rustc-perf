@@ -10,7 +10,8 @@ use database::{metric::Metric, CommitType};
 use database::{selector, CodegenBackend, Target};
 use database::{ArtifactId, Profile};
 use headers::{ContentType, Header};
-use hyper::{Body, StatusCode};
+use hyper::body::Bytes;
+use hyper::StatusCode;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
@@ -19,7 +20,7 @@ pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
     ctxt: &SiteCtxt,
     allow_compression: bool,
-) -> http::Response<hyper::Body> {
+) -> http::Response<Bytes> {
     log::info!("handle_self_profile_processed_download({:?})", body);
     let mut params = body.params.clone();
     let diff_against = params.remove("base_commit");
@@ -180,7 +181,7 @@ pub async fn handle_self_profile_processed_download(
             }),
         )
     } else {
-        builder.body(hyper::Body::from(output.data)).unwrap()
+        builder.body(Bytes::from(output.data)).unwrap()
     }
 }
 
@@ -358,7 +359,7 @@ fn get_self_profile_delta(
 pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
     ctxt: &SiteCtxt,
-) -> http::Response<hyper::Body> {
+) -> http::Response<Bytes> {
     log::info!("handle_self_profile_raw_download({:?})", body);
 
     let id = match get_self_profile_id(
@@ -395,7 +396,7 @@ pub async fn handle_self_profile_raw_download(
         }
     };
 
-    let mut server_resp = http::Response::new(Body::from(bytes));
+    let mut server_resp = http::Response::new(Bytes::from(bytes));
     let mut header = vec![];
     ContentType::octet_stream().encode(&mut header);
     server_resp

@@ -20,9 +20,11 @@ serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "time"] }
 
 futures = "0.3"
-hyper = { version = "0.14", features = ["server", "stream"] }
-headers = "0.3"
-http = "0.2"
+hyper = { version = "1", features = ["server"] }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto"] }
+headers = "0.4"
+http = "1"
+http-body-util = "0.1"
 rmp-serde = "1.1"
 brotli = "3.3.3"
 semver = "1.0"
