@@ -86,10 +86,16 @@ async fn main() {
     futures::pin_mut!(fut);
     loop {
         futures::select! {
-            _s = server => {
-                eprintln!("Server completed unexpectedly.");
-                return;
-            }
+            result = server => match result {
+                Ok(()) => {
+                    eprintln!("Server finished unexpectedly.");
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("Server failed: {e:?}");
+                    return;
+                }
+            },
             l = fut => {
                 if let Err(e) = l {
                     eprintln!("Loading failed, exiting.");
