@@ -71,3 +71,4 @@ pub(super) const UNUSED_WARNINGS: &str = "unused-warnings";
 pub(super) const WF_PROJECTION_STRESS_65510: &str = "wf-projection-stress-65510";
 pub(super) const WG_GRAMMAR: &str = "wg-grammar";
 pub(super) const WG_GRAMMAR_NEW_SOLVER: &str = "wg-grammar-new-solver";
+pub(super) const NEW_TRAIT_STRESS: &str = "new-trait-stress";
