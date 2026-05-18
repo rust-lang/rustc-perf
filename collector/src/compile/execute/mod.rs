@@ -1,6 +1,7 @@
 //! Execute benchmarks.
 
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
+use crate::compile::benchmark::parallel::Parallel;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
@@ -132,6 +133,7 @@ pub struct CargoProcess<'a> {
     pub touch_file: Option<String>,
     pub jobserver: Option<jobserver::Client>,
     pub target: Target,
+    pub parallel: Parallel,
     pub workspace_package: Option<String>,
 }
 
@@ -358,13 +360,14 @@ impl<'a> CargoProcess<'a> {
     // really.
     pub async fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}, target={:?}, phase={}",
+            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}, target={:?}, parallel={}, phase={}",
             self.incremental,
             self.profile,
             self.processor_etc.as_ref().map(|v| v.1),
             self.processor_etc.as_ref().and_then(|v| v.3),
             self.backend,
             self.target,
+            self.parallel.0,
             if needs_final { "benchmark" } else { "dependencies" }
         );
 
@@ -406,6 +409,9 @@ impl<'a> CargoProcess<'a> {
 
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
+            if self.parallel.0 != 1 {
+                cmd.env("RUSTC_THREAD_COUNT", self.parallel.0.to_string());
+            }
             match self.profile {
                 Profile::Check => {
                     cmd.arg("--profile").arg("check");
@@ -537,6 +543,7 @@ impl<'a> CargoProcess<'a> {
                     patch,
                     backend: self.backend,
                     target: self.target,
+                    parallel: self.parallel,
                 };
                 match processor.process_output(&data, output).await {
                     Ok(Retry::No) => return Ok(()),
@@ -602,6 +609,7 @@ pub struct ProcessOutputData<'a> {
     patch: Option<&'a Patch>,
     backend: CodegenBackend,
     target: Target,
+    parallel: Parallel,
 }
 
 /// Trait used by `Benchmark::measure()` to provide different kinds of

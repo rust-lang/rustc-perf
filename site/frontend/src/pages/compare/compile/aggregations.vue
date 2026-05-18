@@ -89,6 +89,18 @@ const totalAfter = computed(() =>
             </div>
           </div>
           <div class="aggregation-section">
+            <div class="header">Parallel</div>
+            <div class="groups">
+              <div class="group" v-for="parallel in ['1', '4']">
+                <div class="group-header">par{{ parallel }}</div>
+                <SummaryTable
+                  :summary="calculateSummary('parallel', parallel)"
+                  :withLegend="false"
+                ></SummaryTable>
+              </div>
+            </div>
+          </div>
+          <div class="aggregation-section">
             <div class="header">Category</div>
             <div class="groups">
               <div class="group" v-for="category in ['primary', 'secondary']">
