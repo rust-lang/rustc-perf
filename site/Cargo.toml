@@ -21,7 +21,7 @@ tokio = { workspace = true, features = ["macros", "time"] }
 
 futures = "0.3"
 hyper = { version = "0.14", features = ["server", "stream"] }
-headers = "0.3"
+headers = "0.4"
 http = "0.2"
 rmp-serde = "1.1"
 brotli = "3.3.3"
