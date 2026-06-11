@@ -19,6 +19,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
   const stat = urlParams["stat"] ?? "instructions:u";
   const benchmark = urlParams["benchmark"] ?? null;
   const scenario = urlParams["scenario"] ?? null;
+  const parallel = urlParams["parallel"] ?? null;
   const profile = urlParams["profile"] ?? null;
   const target = urlParams["target"] ?? null;
   const backend = urlParams["backend"] ?? null;
@@ -29,6 +30,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     stat,
     benchmark,
     scenario,
+    parallel,
     profile,
     backend,
     target,
@@ -50,14 +52,15 @@ function filterBenchmarks(
 
 /*
  * Returns true if a specific subset of charts is selected by benchmark
- * name, profile or scenario. In that case, the regular aligned grid of charts
+ * name, profile, scenario or parallel. In that case, the regular aligned grid of charts
  * will not be shown.
  */
 function hasSpecificSelection(selector: GraphsSelector): boolean {
   return (
     selector.benchmark !== null ||
     selector.profile !== null ||
-    selector.scenario !== null
+    selector.scenario !== null ||
+    selector.parallel !== null
   );
 }
 
@@ -75,6 +78,9 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
     .map((benchmark) => Object.keys(graphData.benchmarks[benchmark]).length)
     .reduce((sum, item) => sum + item, 0);
 
+  if (wrapperRef.value == null) {
+    return;
+  }
   const parentWidth = wrapperRef.value.clientWidth;
   let columns = countGraphs === 1 ? 1 : 4;
 
@@ -98,7 +104,10 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
 
   // If we select a smaller subset of benchmarks, then just show them.
   if (hasSpecificSelection(selector)) {
-    renderPlots(graphData, selector, document.getElementById("charts"), opts);
+    let plotElem = document.getElementById("charts");
+    if (plotElem) {
+      renderPlots(graphData, selector, plotElem, opts);
+    }
   } else {
     // If we select all of them, we expect that there will be a regular grid.
 
@@ -109,7 +118,10 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
       graphData,
       (benchName) => !benchName.endsWith("-tiny")
     );
-    renderPlots(withoutTiny, selector, document.getElementById("charts"), opts);
+    let plotElem = document.getElementById("charts");
+    if (plotElem) {
+      renderPlots(withoutTiny, selector, plotElem, opts);
+    }
 
     // Then, render only the size-related ones in their own dedicated section as they are less
     // important than having the better grouping. So, we only include the benchmarks ending in
@@ -117,12 +129,10 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
     const onlyTiny = filterBenchmarks(graphData, (benchName) =>
       benchName.endsWith("-tiny")
     );
-    renderPlots(
-      onlyTiny,
-      selector,
-      document.getElementById("size-charts"),
-      opts
-    );
+    let sizeCharts = document.getElementById("size-charts");
+    if (sizeCharts) {
+      renderPlots(onlyTiny, selector, sizeCharts, opts);
+    }
   }
 }
 
@@ -141,7 +151,7 @@ function updateSelection(params: SelectionParams) {
 const info: BenchmarkInfo = await loadBenchmarkInfo();
 
 const loading = ref(true);
-const wrapperRef = ref(null);
+const wrapperRef = ref<HTMLDivElement | null>(null);
 
 const selector: GraphsSelector = loadSelectorFromUrl(getUrlParams());
 
@@ -155,7 +165,7 @@ loadGraphData(selector, loading);
     :kind="selector.kind"
     :stat="selector.stat"
     :info="info"
-    :target="selector.target"
+    :target="selector.target ?? ''"
     @change="updateSelection"
   ></DataSelector>
   <div>

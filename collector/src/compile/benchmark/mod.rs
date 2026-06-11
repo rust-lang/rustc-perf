@@ -1,5 +1,6 @@
 use crate::compile::benchmark::category::Category;
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
+use crate::compile::benchmark::parallel::Parallel;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
@@ -19,6 +20,7 @@ use tempfile::TempDir;
 
 pub mod category;
 pub mod codegen_backend;
+pub mod parallel;
 pub(crate) mod patch;
 pub mod profile;
 pub mod scenario;
@@ -195,6 +197,7 @@ impl Benchmark {
         profile: Profile,
         backend: CodegenBackend,
         target: Target,
+        parallel: Parallel,
     ) -> CargoProcess<'a> {
         let mut cargo_args = self
             .config
@@ -236,6 +239,7 @@ impl Benchmark {
             touch_file: self.config.touch_file.clone(),
             jobserver: None,
             target,
+            parallel,
             workspace_package: self.config.package.clone(),
         }
     }
@@ -251,6 +255,7 @@ impl Benchmark {
         toolchain: &Toolchain,
         iterations: Option<usize>,
         targets: &[Target],
+        parallels: &[Parallel],
         already_computed: &hashbrown::HashSet<CompileTestCase>,
     ) -> anyhow::Result<()> {
         if self.config.disabled {
@@ -288,6 +293,7 @@ impl Benchmark {
             profile: Profile,
             backend: CodegenBackend,
             target: Target,
+            parallel: Parallel,
         }
 
         // Materialize the test cases that we want to benchmark
@@ -297,32 +303,36 @@ impl Benchmark {
         for backend in backends {
             for profile in &profiles {
                 for target in targets {
-                    // Do we have any scenarios left to compute?
-                    let remaining_scenarios = scenarios
-                        .iter()
-                        .filter(|scenario| {
-                            self.should_run_scenario(
-                                scenario,
-                                profile,
-                                backend,
-                                target,
-                                already_computed,
-                            )
-                        })
-                        .copied()
-                        .collect::<Vec<Scenario>>();
-                    if remaining_scenarios.is_empty() {
-                        continue;
-                    }
+                    for parallel in parallels {
+                        // Do we have any scenarios left to compute?
+                        let remaining_scenarios = scenarios
+                            .iter()
+                            .filter(|scenario| {
+                                self.should_run_scenario(
+                                    scenario,
+                                    parallel,
+                                    profile,
+                                    backend,
+                                    target,
+                                    already_computed,
+                                )
+                            })
+                            .copied()
+                            .collect::<Vec<Scenario>>();
+                        if remaining_scenarios.is_empty() {
+                            continue;
+                        }
 
-                    let temp_dir = self.make_temp_dir(&self.path)?;
-                    benchmark_dirs.push(BenchmarkDir {
-                        dir: temp_dir,
-                        scenarios: remaining_scenarios,
-                        profile: *profile,
-                        backend: *backend,
-                        target: *target,
-                    });
+                        let temp_dir = self.make_temp_dir(&self.path)?;
+                        benchmark_dirs.push(BenchmarkDir {
+                            dir: temp_dir,
+                            scenarios: remaining_scenarios,
+                            profile: *profile,
+                            backend: *backend,
+                            target: *target,
+                            parallel: *parallel,
+                        });
+                    }
                 }
             }
         }
@@ -382,6 +392,7 @@ impl Benchmark {
                             benchmark_dir.profile,
                             benchmark_dir.backend,
                             benchmark_dir.target,
+                            benchmark_dir.parallel,
                         )
                         .jobserver(server)
                         .run_rustc(false)
@@ -421,9 +432,10 @@ impl Benchmark {
             let profile = benchmark_dir.profile;
             let target = benchmark_dir.target;
             let scenarios = &benchmark_dir.scenarios;
+            let parallel = benchmark_dir.parallel;
             eprintln!(
-                "Running {}: {:?} + {:?} + {:?} + {:?}",
-                self.name, profile, scenarios, backend, target,
+                "Running {}: {:?} + {:?} + {:?} + {:?} + {}",
+                self.name, profile, scenarios, backend, target, parallel,
             );
 
             // We want at least two runs for all benchmarks (since we run
@@ -445,7 +457,7 @@ impl Benchmark {
 
                 // A full non-incremental build.
                 if scenarios.contains(&Scenario::Full) {
-                    self.mk_cargo_process(toolchain, cwd, profile, backend, target)
+                    self.mk_cargo_process(toolchain, cwd, profile, backend, target, parallel)
                         .processor(processor, Scenario::Full, "Full", None)
                         .run_rustc(true)
                         .await?;
@@ -456,7 +468,7 @@ impl Benchmark {
                     // An incremental build from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
                     if scenarios.iter().any(|s| s.is_incr()) {
-                        self.mk_cargo_process(toolchain, cwd, profile, backend, target)
+                        self.mk_cargo_process(toolchain, cwd, profile, backend, target, parallel)
                             .incremental(true)
                             .processor(processor, Scenario::IncrFull, "IncrFull", None)
                             .run_rustc(true)
@@ -465,7 +477,7 @@ impl Benchmark {
 
                     // An incremental build with no changes (fastest incremental case).
                     if scenarios.contains(&Scenario::IncrUnchanged) {
-                        self.mk_cargo_process(toolchain, cwd, profile, backend, target)
+                        self.mk_cargo_process(toolchain, cwd, profile, backend, target, parallel)
                             .incremental(true)
                             .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
                             .run_rustc(true)
@@ -480,16 +492,13 @@ impl Benchmark {
                             // An incremental build with some changes (realistic
                             // incremental case).
                             let scenario_str = format!("IncrPatched{i}");
-                            self.mk_cargo_process(toolchain, cwd, profile, backend, target)
-                                .incremental(true)
-                                .processor(
-                                    processor,
-                                    Scenario::IncrPatched,
-                                    &scenario_str,
-                                    Some(patch),
-                                )
-                                .run_rustc(true)
-                                .await?;
+                            self.mk_cargo_process(
+                                toolchain, cwd, profile, backend, target, parallel,
+                            )
+                            .incremental(true)
+                            .processor(processor, Scenario::IncrPatched, &scenario_str, Some(patch))
+                            .run_rustc(true)
+                            .await?;
                         }
                     }
                 }
@@ -515,6 +524,7 @@ impl Benchmark {
     fn should_run_scenario(
         &self,
         scenario: &Scenario,
+        parallel: &Parallel,
         profile: &Profile,
         backend: &CodegenBackend,
         target: &Target,
@@ -529,6 +539,7 @@ impl Benchmark {
         let profile: database::Profile = (*profile).into();
         let backend: database::CodegenBackend = (*backend).into();
         let target: database::Target = (*target).into();
+        let parallel: database::Parallel = (*parallel).into();
 
         match scenario {
             // For these scenarios, we can simply check if they were benchmarked or not
@@ -544,6 +555,7 @@ impl Benchmark {
                         Scenario::IncrUnchanged => database::Scenario::IncrementalFresh,
                         Scenario::IncrPatched => unreachable!(),
                     },
+                    parallel,
                 };
                 !already_computed.contains(&test_case)
             }
@@ -557,6 +569,7 @@ impl Benchmark {
                     benchmark,
                     profile,
                     scenario: database::Scenario::IncrementalPatch(patch.name),
+                    parallel,
                     backend,
                     target,
                 };

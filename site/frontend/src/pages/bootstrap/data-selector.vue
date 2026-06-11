@@ -16,13 +16,13 @@ const startRef = ref<HTMLInputElement | null>(null);
 const endRef = ref<HTMLInputElement | null>(null);
 
 onMounted(() => {
-  startRef.value.value = props.start;
-  endRef.value.value = props.end;
+  if (startRef.value) startRef.value.value = props.start;
+  if (endRef.value) endRef.value.value = props.end;
 });
 
 function submitSettings() {
-  const start = startRef.value.value;
-  const end = endRef.value.value;
+  const start = startRef.value?.value ?? "";
+  const end = endRef.value?.value ?? "";
 
   const params = {start, end};
   emit("change", params);
