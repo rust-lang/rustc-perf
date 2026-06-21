@@ -104,7 +104,7 @@ Difficult cases: the merge was a rollup of multiple PRs.
 ### This Week in Rust 
 
 Once finished, file a PR adding a link to the log entry in [This Week in
-Rust](https://github.com/emberian/this-week-in-rust/).
+Rust](https://github.com/rust-lang/this-week-in-rust/).
 - See the previous This Week in Rust edition for how the log entry should be formatted.
 
 After you have finished the triage, also post a short summary to the
