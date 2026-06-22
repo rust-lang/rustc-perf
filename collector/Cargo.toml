@@ -43,7 +43,7 @@ regex = "1.7.1"
 analyzeme = "12.0.0"
 ratatui = "0.30"
 
-object_store = { version = "0.13", features = ["aws"], optional = true }
+object_store = { version = "0.14", features = ["aws"], optional = true }
 
 benchlib = { path = "benchlib" }
 database = { path = "../database" }
