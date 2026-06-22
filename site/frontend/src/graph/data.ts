@@ -8,6 +8,7 @@ export interface GraphsSelector {
   stat: string;
   benchmark: string | null;
   scenario: string | null;
+  parallel: string | null;
   profile: string | null;
   backend: string | null;
   target: string | null;
@@ -21,8 +22,8 @@ export interface Series {
 // Graph data received from the server
 export interface CompileGraphData {
   commits: Array<[number, string]>;
-  // benchmark -> profile -> scenario -> series
-  benchmarks: Dict<Dict<Dict<Series>>>;
+  // benchmark -> profile -> parallel -> scenario -> series
+  benchmarks: Dict<Dict<Dict<Dict<Series>>>>;
 }
 
 export interface RuntimeGraphData {

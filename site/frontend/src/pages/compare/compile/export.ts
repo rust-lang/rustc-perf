@@ -10,6 +10,7 @@ export function exportToMarkdown(
       "Benchmark",
       "Profile",
       "Scenario",
+      "Parallel",
       "% Change",
       "Significance Factor",
     ];
@@ -32,6 +33,7 @@ export function exportToMarkdown(
         comparison.testCase.benchmark,
         comparison.testCase.profile,
         comparison.testCase.scenario,
+        comparison.testCase.parallel.toString(),
         `${comparison.percent.toFixed(2)}%`,
         `${comparison.significanceFactor.toFixed(2)}x`,
       ];

@@ -29,7 +29,7 @@ use std::{
 
 use crate::{
     interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
-    CodegenBackend, Connection, Index, Lookup, Profile, Scenario, Target,
+    CodegenBackend, Connection, Index, Lookup, Parallel, Profile, Scenario, Target,
 };
 
 #[derive(Debug)]
@@ -193,6 +193,7 @@ pub struct CompileBenchmarkQuery {
     profile: Selector<Profile>,
     backend: Selector<CodegenBackend>,
     metric: Selector<crate::Metric>,
+    parallel: Selector<Parallel>,
     target: Selector<Target>,
 }
 
@@ -217,6 +218,11 @@ impl CompileBenchmarkQuery {
         self
     }
 
+    pub fn parallel(mut self, selector: Selector<Parallel>) -> Self {
+        self.parallel = selector;
+        self
+    }
+
     pub fn target(mut self, selector: Selector<Target>) -> Self {
         self.target = selector;
         self
@@ -233,6 +239,7 @@ impl CompileBenchmarkQuery {
             profile: Selector::All,
             scenario: Selector::All,
             backend: Selector::All,
+            parallel: Selector::All,
             metric: Selector::One(metric.as_str().into()),
             target: Selector::All,
         }
@@ -246,6 +253,7 @@ impl Default for CompileBenchmarkQuery {
             scenario: Selector::All,
             profile: Selector::All,
             backend: Selector::All,
+            parallel: Selector::All,
             metric: Selector::All,
             target: Selector::All,
         }
@@ -263,21 +271,23 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
     ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
         let mut statistic_descriptions: Vec<_> = index
             .compile_statistic_descriptions()
-            .filter(|(&(b, p, s, backend, target, metric), _)| {
+            .filter(|(&(b, p, s, backend, target, metric, parallel), _)| {
                 self.benchmark.matches(b)
                     && self.profile.matches(p)
                     && self.scenario.matches(s)
                     && self.backend.matches(backend)
                     && self.target.matches(target)
                     && self.metric.matches(metric)
+                    && self.parallel.matches(parallel)
             })
             .map(
-                |(&(benchmark, profile, scenario, backend, target, metric), sid)| {
+                |(&(benchmark, profile, scenario, backend, target, metric, parallel), sid)| {
                     (
                         CompileTestCase {
                             benchmark,
                             profile,
                             scenario,
+                            parallel,
                             backend,
                             target,
                         },
@@ -334,6 +344,7 @@ pub struct CompileTestCase {
     pub benchmark: Benchmark,
     pub profile: Profile,
     pub scenario: Scenario,
+    pub parallel: Parallel,
     pub backend: CodegenBackend,
     pub target: Target,
 }

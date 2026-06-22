@@ -4,6 +4,7 @@ export function chromeProfileUrl(
   commit: string,
   benchmark: string,
   scenario: string,
+  parallel: string,
   profile: string,
   backend: string,
   target: string
@@ -12,6 +13,7 @@ export function chromeProfileUrl(
     commit,
     benchmark,
     scenario,
+    parallel,
     profile,
     backend,
     target,
@@ -24,10 +26,11 @@ export function processedSelfProfileRelativeUrl(
   commit: string,
   benchmark: string,
   scenario: string,
+  parallel: string,
   profile: string,
   backend: string,
   target: string,
   type: string
 ): string {
-  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&backend=${backend}&target=${target}&type=${type}`;
+  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&parallel=${parallel}&backend=${backend}&target=${target}&type=${type}`;
 }
