@@ -33,7 +33,7 @@ cargo build -p collector --bin rustc-fake
 #        --cargo $bindir/cargo \
 #        --include helloworld \
 #        --scenarios Full \
-#        --parallels 1
+#        --frontend-threads 1
 #test -f results/perf-Test-helloworld-Check-Full-par1
 #grep -q "PERFILE" results/perf-Test-helloworld-Check-Full-par1
 
@@ -52,7 +52,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/cgout-Test-helloworld-Check-Full-par1
 grep -q "events: Ir" results/cgout-Test-helloworld-Check-Full-par1
 test -f results/cgann-Test-helloworld-Check-Full-par1
@@ -69,7 +69,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/clgout-Test-helloworld-Check-Full-par1
 grep -q "creator: callgrind" results/clgout-Test-helloworld-Check-Full-par1
 test -f results/clgann-Test-helloworld-Check-Full-par1
@@ -84,7 +84,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/dhout-Test-helloworld-Check-Full-par1
 grep -q "dhatFileVersion" results/dhout-Test-helloworld-Check-Full-par1
 
@@ -100,7 +100,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/dhcopy-Test-helloworld-Check-Full-par1
 grep -q "dhatFileVersion" results/dhcopy-Test-helloworld-Check-Full-par1
 
@@ -113,7 +113,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/msout-Test-helloworld-Check-Full-par1
 grep -q "snapshot=0" results/msout-Test-helloworld-Check-Full-par1
 
@@ -127,7 +127,7 @@ grep -q "snapshot=0" results/msout-Test-helloworld-Check-Full-par1
 #         --cargo $bindir/cargo \
 #         --include helloworld \
 #         --scenarios Full \
-#         --parallels 1
+#         --frontend-threads 1
 # test -f results/bhout-Test-helloworld-Check-Full-par1
 
 # eprintln. The output file is empty because a vanilla rustc doesn't print
@@ -140,7 +140,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test   -f results/eprintln-Test-helloworld-Check-Full-par1
 test ! -s results/eprintln-Test-helloworld-Check-Full-par1
 
@@ -156,7 +156,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld,regex-automata-0.4.8 \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/ll-Test-helloworld-Debug-Full-par1
 grep -q "Lines.*Copies.*Function name" results/ll-Test-helloworld-Debug-Full-par1
 test -f results/ll-Test-regex-automata-0.4.8-Debug-Full-par1
@@ -171,7 +171,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/llir-Test-helloworld-Debug-Full-par1
 grep -q "; ModuleID" results/llir-Test-helloworld-Debug-Full-par1
 
@@ -184,7 +184,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios Full \
-        --parallels 1
+        --frontend-threads 1
 test -f results/mono-items-Test-helloworld-Debug-Full-par1/raw
 grep -q "MONO_ITEM" results/mono-items-Test-helloworld-Debug-Full-par1/raw
 
@@ -197,7 +197,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios IncrFull \
-        --parallels 1
+        --frontend-threads 1
 test -f results/dep-graph-Test-helloworld-Check-IncrFull-par1.txt
 grep -q "hir_owner" results/dep-graph-Test-helloworld-Check-IncrFull-par1.txt
 
@@ -213,7 +213,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --id Builds1 \
         --cargo $bindir/cargo \
         --include helloworld \
-        --parallels 1
+        --frontend-threads 1
 test   -f results/eprintln-Builds1-helloworld-Check-Full-par1
 test   -f results/eprintln-Builds1-helloworld-Check-IncrFull-par1
 test   -f results/eprintln-Builds1-helloworld-Check-IncrPatched0-par1
@@ -240,7 +240,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --profiles Doc \
         --cargo $bindir/cargo \
         --include helloworld \
-        --parallels 1
+        --frontend-threads 1
 test ! -e results/eprintln-Builds2-helloworld-Check-Full-par1
 test ! -e results/eprintln-Builds2-helloworld-Check-IncrFull-par1
 test ! -e results/eprintln-Builds2-helloworld-Check-IncrUnchanged-par1
@@ -268,7 +268,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios IncrUnchanged \
-        --parallels 1
+        --frontend-threads 1
 test ! -e results/eprintln-Runs1-helloworld-Check-Full-par1
 test   -f results/eprintln-Runs1-helloworld-Check-IncrFull-par1
 test   -f results/eprintln-Runs1-helloworld-Check-IncrUnchanged-par1
@@ -284,7 +284,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --scenarios IncrPatched \
-        --parallels 1
+        --frontend-threads 1
 test ! -e results/eprintln-Runs2-helloworld-Check-Full-par1
 test   -f results/eprintln-Runs2-helloworld-Check-IncrFull-par1
 test ! -e results/eprintln-Runs2-helloworld-Check-IncrUnchanged-par1

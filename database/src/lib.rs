@@ -22,22 +22,22 @@ intern!(pub struct Benchmark);
 intern!(pub struct TargetName);
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Parallel(pub u32);
+pub struct FrontendThreads(pub u32);
 
-impl Parallel {
+impl FrontendThreads {
     pub fn par_n(self) -> String {
         format!("par{}", self.0)
     }
-    // Default parallel frontend options
-    pub fn default_opts() -> Vec<Parallel> {
-        vec![Parallel(1), Parallel(4)]
+    // Default thread counts for the parallel frontend
+    pub fn default_opts() -> Vec<FrontendThreads> {
+        vec![FrontendThreads(1), FrontendThreads(4)]
     }
     pub fn single(self) -> bool {
         self.0 == 1
     }
 }
 
-impl std::str::FromStr for Parallel {
+impl std::str::FromStr for FrontendThreads {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let v: u32 = s
@@ -595,7 +595,7 @@ pub struct Index {
         CodegenBackend,
         Target,
         Metric,
-        Parallel,
+        FrontendThreads,
     )>,
     /// Id lookup of runtime stat description ids
     runtime_pstat_series: Indexed<(Benchmark, Target, Metric)>,
@@ -719,7 +719,7 @@ pub enum DbLabel {
         backend: CodegenBackend,
         target: Target,
         metric: Metric,
-        parallel: Parallel,
+        frontend_threads: FrontendThreads,
     },
 }
 
@@ -739,9 +739,15 @@ impl Lookup for DbLabel {
                 backend,
                 metric,
                 target,
-                parallel,
+                frontend_threads,
             } => index.pstat_series.get(&(
-                *benchmark, *profile, *scenario, *backend, *target, *metric, *parallel,
+                *benchmark,
+                *profile,
+                *scenario,
+                *backend,
+                *target,
+                *metric,
+                *frontend_threads,
             )),
         }
     }
@@ -765,7 +771,7 @@ pub type CompileStatisticDescription = (
     CodegenBackend,
     Target,
     Metric,
-    Parallel,
+    FrontendThreads,
 );
 
 impl Index {

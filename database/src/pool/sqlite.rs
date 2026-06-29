@@ -6,7 +6,7 @@ use crate::{
     ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
     BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, Parallel, PendingBenchmarkRequests, Profile,
+    Commit, CommitType, CompileBenchmark, Date, FrontendThreads, PendingBenchmarkRequests, Profile,
     Target,
 };
 use crate::{ArtifactIdNumber, Index};
@@ -449,10 +449,10 @@ static MIGRATIONS: &[Migration] = &[
         ALTER TABLE runtime_pstat_series_with_target RENAME TO runtime_pstat_series;
     "#,
     ),
-    // Add parallel as an unique constraint, defaulting to '1'
+    // Add frontend_threads as an unique constraint, defaulting to '1'
     Migration::without_foreign_key_constraints(
         r#"
-        create table pstat_series_with_parallel(
+        create table pstat_series_with_frontend_threads(
             id integer primary key not null,
             crate text not null references benchmark(name) on delete cascade on update cascade,
             profile text not null,
@@ -460,12 +460,12 @@ static MIGRATIONS: &[Migration] = &[
             backend text not null,
             target text not null default 'x86_64-unknown-linux-gnu',
             metric text not null,
-            parallel integer not null default 1,
-            UNIQUE(crate, profile, scenario, backend, target, metric, parallel)
+            frontend_threads integer not null default 1,
+            UNIQUE(crate, profile, scenario, backend, target, metric, frontend_threads)
         );
-        insert into pstat_series_with_parallel select id, crate, profile, scenario, backend, 'x86_64-unknown-linux-gnu', metric, 1 from pstat_series;
+        insert into pstat_series_with_frontend_threads select id, crate, profile, scenario, backend, 'x86_64-unknown-linux-gnu', metric, 1 from pstat_series;
         drop table pstat_series;
-        alter table pstat_series_with_parallel rename to pstat_series;
+        alter table pstat_series_with_frontend_threads rename to pstat_series;
     "#,
     ),
 ];
@@ -595,7 +595,7 @@ impl Connection for SqliteConnection {
         let pstat_series = self
             .raw()
             .prepare(
-                "select id, crate, profile, scenario, backend, target, metric, parallel from pstat_series;",
+                "select id, crate, profile, scenario, backend, target, metric, frontend_threads from pstat_series;",
             )
             .unwrap()
             .query_map(params![], |row| {
@@ -608,7 +608,7 @@ impl Connection for SqliteConnection {
                         CodegenBackend::from_str(row.get::<_, String>(4)?.as_str()).unwrap(),
                         Target::from_str(row.get::<_, String>(5)?.as_str()).unwrap(),
                         row.get::<_, String>(6)?.as_str().into(),
-                        Parallel(row.get::<_, i32>(7)? as u32),
+                        FrontendThreads(row.get::<_, i32>(7)? as u32),
                     ),
                 ))
             })
@@ -745,30 +745,30 @@ impl Connection for SqliteConnection {
         backend: CodegenBackend,
         target: Target,
         metric: &str,
-        parallel: Parallel,
+        frontend_threads: FrontendThreads,
         value: f64,
     ) {
         let profile = profile.to_string();
         let scenario = scenario.to_string();
         let backend = backend.to_string();
         let target = target.to_string();
-        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, target, metric, parallel) VALUES (?, ?, ?, ?, ?, ?, ?)", params![
+        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, target, metric, frontend_threads) VALUES (?, ?, ?, ?, ?, ?, ?)", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
             &target,
             &metric,
-            &parallel.0,
+            &frontend_threads.0,
         ]).unwrap();
-        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and target = ? and metric = ? and parallel = ?", params![
+        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and target = ? and metric = ? and frontend_threads = ?", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
             &target,
             &metric,
-            &parallel.0,
+            &frontend_threads.0,
         ], |r| r.get(0)).unwrap();
         self.raw_ref()
             .execute(
@@ -1106,7 +1106,7 @@ impl Connection for SqliteConnection {
         Ok(self
             .raw_ref()
             .prepare_cached(
-                "SELECT DISTINCT crate, profile, scenario, backend, target, parallel
+                "SELECT DISTINCT crate, profile, scenario, backend, target, frontend_threads
                 FROM pstat_series
                 WHERE id IN (
                     SELECT DISTINCT series
@@ -1121,7 +1121,7 @@ impl Connection for SqliteConnection {
                     scenario: row.get::<_, String>(2)?.parse().unwrap(),
                     backend: row.get::<_, String>(3)?.parse().unwrap(),
                     target: row.get::<_, String>(4)?.parse().unwrap(),
-                    parallel: Parallel(row.get::<_, i32>(5)? as u32),
+                    frontend_threads: FrontendThreads(row.get::<_, i32>(5)? as u32),
                 })
             })?
             .collect::<Result<_, _>>()?)

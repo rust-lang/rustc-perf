@@ -243,7 +243,7 @@ struct PstatSeriesRow<'a> {
     backend: &'a str,
     target: &'a str,
     metric: &'a str,
-    parallel: u32,
+    frontend_threads: u32,
 }
 
 impl Table for PstatSeries {
@@ -252,11 +252,11 @@ impl Table for PstatSeries {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "id, crate, profile, scenario, backend, target, metric, parallel"
+        "id, crate, profile, scenario, backend, target, metric, frontend_threads"
     }
 
     fn postgres_attributes() -> &'static str {
-        "id, crate, profile, scenario, backend, target, metric, parallel"
+        "id, crate, profile, scenario, backend, target, metric, frontend_threads"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -273,7 +273,7 @@ impl Table for PstatSeries {
                 backend: row.get_ref(4).unwrap().as_str().unwrap(),
                 target: row.get_ref(5).unwrap().as_str().unwrap(),
                 metric: row.get_ref(6).unwrap().as_str().unwrap(),
-                parallel: row.get(7).unwrap(),
+                frontend_threads: row.get(7).unwrap(),
             })
             .unwrap();
     }

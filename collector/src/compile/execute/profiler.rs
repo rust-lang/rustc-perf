@@ -140,7 +140,7 @@ impl Processor for ProfileProcessor<'_> {
                     data.name,
                     data.profile,
                     data.scenario_str,
-                    data.parallel.par_n()
+                    data.frontend_threads.par_n()
                 )
             };
 

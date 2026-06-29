@@ -13,7 +13,7 @@ use database::{
     selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
     Target,
 };
-use database::{ArtifactId, Benchmark, Lookup, Parallel, Profile, Scenario};
+use database::{ArtifactId, Benchmark, FrontendThreads, Lookup, Profile, Scenario};
 use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
@@ -152,7 +152,7 @@ pub async fn handle_compare(
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
-            parallel: comparison.parallel.0.to_string(),
+            frontend_threads: comparison.frontend_threads.0.to_string(),
             backend: comparison.backend.to_string(),
             target: comparison.target.to_string(),
             comparison: comparison.comparison.into(),
@@ -744,7 +744,7 @@ async fn compare_given_commits(
         |test_case, comparison| CompileTestResultComparison {
             profile: test_case.profile,
             scenario: test_case.scenario,
-            parallel: test_case.parallel,
+            frontend_threads: test_case.frontend_threads,
             benchmark: test_case.benchmark,
             backend: test_case.backend,
             target: test_case.target,
@@ -1321,7 +1321,7 @@ pub struct CompileTestResultComparison {
     benchmark: Benchmark,
     profile: Profile,
     scenario: Scenario,
-    parallel: Parallel,
+    frontend_threads: FrontendThreads,
     backend: CodegenBackend,
     target: Target,
     comparison: TestResultComparison,
@@ -1338,7 +1338,7 @@ impl cmp::PartialEq for CompileTestResultComparison {
         self.benchmark == other.benchmark
             && self.profile == other.profile
             && self.scenario == other.scenario
-            && self.parallel == other.parallel
+            && self.frontend_threads == other.frontend_threads
             && self.backend == other.backend
     }
 }
@@ -1350,7 +1350,7 @@ impl std::hash::Hash for CompileTestResultComparison {
         self.benchmark.hash(state);
         self.profile.hash(state);
         self.scenario.hash(state);
-        self.parallel.hash(state);
+        self.frontend_threads.hash(state);
         self.backend.hash(state);
     }
 }

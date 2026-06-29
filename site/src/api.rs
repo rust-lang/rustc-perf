@@ -93,7 +93,7 @@ pub mod graph {
         pub benchmark: String,
         pub profile: String,
         pub scenario: String,
-        pub parallel: String,
+        pub frontend_threads: String,
         pub metric: String,
         pub start: Bound,
         pub end: Bound,
@@ -119,7 +119,7 @@ pub mod graphs {
         pub kind: GraphKind,
         pub benchmark: Option<String>,
         pub scenario: Option<String>,
-        pub parallel: Option<String>,
+        pub frontend_threads: Option<String>,
         pub profile: Option<String>,
         pub backend: Option<String>,
         pub target: Option<String>,
@@ -144,8 +144,8 @@ pub mod graphs {
         pub interpolated_indices: HashSet<u16>,
     }
 
-    pub type ParallelSeries = HashMap<String, Series>;
-    pub type ScenarioSeries = HashMap<String, ParallelSeries>;
+    pub type FrontendThreadsSeries = HashMap<String, Series>;
+    pub type ScenarioSeries = HashMap<String, FrontendThreadsSeries>;
     pub type ProfileSeries = HashMap<database::Profile, ScenarioSeries>;
 
     #[derive(Debug, PartialEq, Clone, Serialize)]
@@ -169,7 +169,7 @@ pub mod detail_graphs {
         pub stat: String,
         pub benchmark: String,
         pub scenario: String,
-        pub parallel: String,
+        pub frontend_threads: String,
         pub profile: String,
         pub backend: String,
         pub target: String,
@@ -194,7 +194,7 @@ pub mod detail_sections {
         pub end: Bound,
         pub benchmark: String,
         pub scenario: String,
-        pub parallel: String,
+        pub frontend_threads: String,
         pub profile: String,
         pub backend: String,
         pub target: String,
@@ -350,7 +350,7 @@ pub mod comparison {
         pub benchmark: String,
         pub profile: String,
         pub scenario: String,
-        pub parallel: String,
+        pub frontend_threads: String,
         pub backend: String,
         pub target: String,
         pub comparison: StatComparison,
@@ -465,7 +465,7 @@ pub mod self_profile_raw {
         pub profile: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
-        pub parallel: String,
+        pub frontend_threads: String,
         pub backend: String,
         pub target: String,
     }
@@ -489,7 +489,7 @@ pub mod self_profile_processed {
         pub benchmark: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
-        pub parallel: String,
+        pub frontend_threads: String,
         pub profile: String,
         pub backend: String,
         pub target: String,
@@ -512,7 +512,7 @@ pub mod self_profile {
         pub profile: String,
         #[serde(alias = "run_name")]
         pub scenario: String,
-        pub parallel: String,
+        pub frontend_threads: String,
         // These fields are kept optional for backwards compatibility
         // They can be made required in Q3 2026
         #[serde(default)]

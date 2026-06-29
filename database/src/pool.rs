@@ -5,7 +5,7 @@ use crate::{
     BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark,
     PendingBenchmarkRequests, Target,
 };
-use crate::{CollectionId, Index, Parallel, Profile, Scenario};
+use crate::{CollectionId, FrontendThreads, Index, Profile, Scenario};
 use chrono::{DateTime, Utc};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -59,7 +59,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         target: Target,
         metric: &str,
-        parallel: Parallel,
+        frontend_threads: FrontendThreads,
         value: f64,
     );
     async fn record_runtime_statistic(
@@ -744,7 +744,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Target::X86_64UnknownLinuxGnu,
                 Metric::CacheMisses.as_str(),
-                Parallel(1),
+                FrontendThreads(1),
                 1.0,
             )
             .await;
@@ -757,7 +757,7 @@ mod tests {
                     benchmark: "benchmark".into(),
                     profile: Profile::Check,
                     scenario: Scenario::IncrementalFresh,
-                    parallel: Parallel(1),
+                    frontend_threads: FrontendThreads(1),
                     backend: CodegenBackend::Llvm,
                     target: Target::X86_64UnknownLinuxGnu,
                 }])
