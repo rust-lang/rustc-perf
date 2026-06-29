@@ -38,15 +38,8 @@ pub async fn unroll_rollup(
         format!("[{display}]({})", commit_link(s))
     };
 
-    // Sort rolled up commits by their PR number in ascending order, so that they have the
-    // same ordering as in the rollup PR description.
-    let mut unrolled_builds: Vec<UnrolledCommit> =
-        enqueue_unrolled_try_builds(&gh_client, rollup_merges, previous_master).await?;
-    // The number should really be an integer, but if not, we will just sort the "non-integer" PRs
-    // first.
-    unrolled_builds.sort_by_cached_key(|commit| commit.original_pr_number.parse::<u64>().ok());
-
-    let mapping = unrolled_builds
+    let mapping = enqueue_unrolled_try_builds(&gh_client, rollup_merges, previous_master)
+        .await?
         .into_iter()
         .fold(String::new(), |mut string, c| {
             use std::fmt::Write;

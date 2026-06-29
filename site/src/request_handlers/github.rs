@@ -52,7 +52,6 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
     tokio::spawn(async move {
         let rollup_merges = commits
             .iter()
-            .rev()
             .filter(|c| c.message.starts_with("Rollup merge of #"));
         let result =
             unroll_rollup(gh_client, rollup_merges, &previous_master, rollup_pr_number).await;
