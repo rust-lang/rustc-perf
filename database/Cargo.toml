@@ -14,7 +14,7 @@ reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread"] }
 
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
 async-trait = "0.1"
 postgres-native-tls = "0.5"
