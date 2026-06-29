@@ -38,8 +38,6 @@ pub async fn unroll_rollup(
         format!("[{display}]({})", commit_link(s))
     };
 
-    // Sort rolled up commits by their PR number in ascending order, so that they have the
-    // same ordering as in the rollup PR description.
     let mapping = enqueue_unrolled_try_builds(&gh_client, rollup_merges, previous_master)
         .await?
         .into_iter()
