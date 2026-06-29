@@ -556,6 +556,8 @@ fn verify_gh(config: &Config, req: &http::request::Parts, body: &[u8]) -> bool {
 }
 
 fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
+    use hmac::KeyInit;
+
     type HmacSha256 = Hmac<Sha256>;
 
     let mut mac =
