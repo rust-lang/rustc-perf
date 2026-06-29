@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use ruzstd::StreamingDecoder;
+use ruzstd::decoding::StreamingDecoder;
 use std::io::Write;
 
 fn main() -> anyhow::Result<()> {
