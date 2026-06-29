@@ -9,10 +9,12 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use std::{fmt, str};
 
-use futures::{future::FutureExt, stream::StreamExt};
 use headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch};
 use http::header::CACHE_CONTROL;
+use http_body_util::{BodyExt, Full, Limited};
+use hyper::body::{Bytes, Incoming};
 use hyper::StatusCode;
+use hyper_util::rt::TokioIo;
 use log::{error, info};
 use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
@@ -29,15 +31,15 @@ use crate::resources::{Payload, ResourceResolver};
 
 use crate::job_queue::build_queue;
 
-pub type Request = http::Request<hyper::Body>;
-pub type Response = http::Response<hyper::Body>;
+pub type Request = http::Request<Incoming>;
+pub type Response = http::Response<Bytes>;
 
 macro_rules! check_http_method {
     ($lhs: expr, $rhs: expr) => {
         if $lhs != $rhs {
             return Ok(http::Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(hyper::Body::empty())
+                .body(Bytes::default())
                 .unwrap());
         }
     };
@@ -64,7 +66,7 @@ pub fn json_error_response(status: StatusCode, message: impl Into<String>) -> Re
     let payload = ServerJsonError {
         error: message.into(),
     };
-    let body = hyper::Body::from(serde_json::to_vec(&payload).unwrap());
+    let body = Bytes::from(serde_json::to_vec(&payload).unwrap());
     http::Response::builder()
         .status(status)
         .header_typed(ContentType::json())
@@ -86,7 +88,7 @@ impl Server {
         let result = handler(ctxt);
         Ok(http::Response::builder()
             .header_typed(ContentType::json())
-            .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
+            .body(Bytes::from(serde_json::to_string(&result).unwrap()))
             .unwrap())
     }
 
@@ -186,13 +188,13 @@ impl std::error::Error for ServerError {}
 async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError> {
     // Don't attempt to get lock if we're updating
     if server.ctxt.read().is_none() {
-        return Ok(Response::new(hyper::Body::from("no data yet, please wait")));
+        return Ok(Response::new(Bytes::from("no data yet, please wait")));
     }
 
     if req.method() == http::Method::OPTIONS {
         return Ok(http::Response::builder()
             .status(StatusCode::NO_CONTENT)
-            .body(hyper::Body::empty())
+            .body(Bytes::default())
             .unwrap());
     }
     let path = req.uri().path().to_owned();
@@ -247,13 +249,13 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             return match result {
                 Ok(result) => Ok(http::Response::builder()
                     .header_typed(ContentType::json())
-                    .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
+                    .body(Bytes::from(serde_json::to_string(&result).unwrap()))
                     .unwrap()),
                 Err(err) => Ok(http::Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .header_typed(ContentType::text_utf8())
                     .header_typed(CacheControl::new().with_no_cache().with_no_store())
-                    .body(hyper::Body::from(format!("{err:?}")))
+                    .body(Bytes::from(format!("{err:?}")))
                     .unwrap()),
             };
         }
@@ -319,21 +321,23 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     }
 
     // POST requests
-    let (req, mut body_stream) = req.into_parts();
+    let (req, body) = req.into_parts();
     check_http_method!(req.method, http::Method::POST);
     let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-    let mut body = Vec::new();
-    while let Some(chunk) = body_stream.next().await {
-        let chunk = chunk.map_err(|e| ServerError(format!("failed to read chunk: {e:?}")))?;
-        body.extend_from_slice(&chunk);
-        // More than 10 MB of data
-        if body.len() > 1024 * 1024 * 10 {
+    let body = match Limited::new(body, 1024 * 1024 * 10).collect().await {
+        Ok(body) => body.to_bytes(),
+        Err(err)
+            if err
+                .downcast_ref::<http_body_util::LengthLimitError>()
+                .is_some() =>
+        {
             return Ok(http::Response::builder()
                 .status(StatusCode::PAYLOAD_TOO_LARGE)
-                .body(hyper::Body::empty())
-                .unwrap());
+                .body(Bytes::default())
+                .unwrap())
         }
-    }
+        Err(err) => return Err(ServerError(format!("failed to read body: {err}"))),
+    };
 
     match path {
         "/perf/get" => Ok(to_response(
@@ -344,7 +348,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             if !verify_gh(&ctxt.config, &req, &body) {
                 return Ok(http::Response::builder()
                     .status(StatusCode::UNAUTHORIZED)
-                    .body(hyper::Body::empty())
+                    .body(Bytes::default())
                     .unwrap());
             }
             let event = req.headers.get("X-GitHub-Event").cloned();
@@ -354,7 +358,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 None => {
                     return Ok(http::Response::builder()
                         .status(StatusCode::OK)
-                        .body(hyper::Body::from("missing event header"))
+                        .body(Bytes::from("missing event header"))
                         .unwrap())
                 }
             };
@@ -369,7 +373,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 )),
                 _ => Ok(http::Response::builder()
                     .status(StatusCode::OK)
-                    .body(hyper::Body::from(format!("unknown event: {event}")))
+                    .body(Bytes::from(format!("unknown event: {event}")))
                     .unwrap()),
             }
         }
@@ -388,20 +392,20 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                         hyper::header::HeaderValue::from_static("*"),
                     );
                     let body = serde_json::to_vec(&result).unwrap();
-                    response.body(hyper::Body::from(body)).unwrap()
+                    response.body(Bytes::from(body)).unwrap()
                 }
                 Err(err) => http::Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .header_typed(ContentType::text_utf8())
                     .header_typed(CacheControl::new().with_no_cache().with_no_store())
-                    .body(hyper::Body::from(err))
+                    .body(Bytes::from(err))
                     .unwrap(),
             },
         ),
         _ => Ok(http::Response::builder()
             .header_typed(ContentType::html())
             .status(StatusCode::NOT_FOUND)
-            .body(hyper::Body::empty())
+            .body(Bytes::default())
             .unwrap()),
     }
 }
@@ -422,7 +426,7 @@ where
             Err(http::Response::builder()
                 .header_typed(ContentType::text_utf8())
                 .status(StatusCode::BAD_REQUEST)
-                .body(hyper::Body::from(format!(
+                .body(Bytes::from(format!(
                     "Failed to deserialize request: {err:?}"
                 )))
                 .unwrap())
@@ -449,7 +453,7 @@ where
         Err(err) => Err(http::Response::builder()
             .header_typed(ContentType::text_utf8())
             .status(StatusCode::BAD_REQUEST)
-            .body(hyper::Body::from(format!(
+            .body(Bytes::from(format!(
                 "Failed to deserialize request {uri}: {err:?}",
             )))
             .unwrap()),
@@ -461,11 +465,7 @@ static TEMPLATES: LazyLock<ResourceResolver> =
     LazyLock::new(|| ResourceResolver::new().expect("Cannot load resources"));
 
 /// Handle the case where the path is to a static file
-async fn handle_fs_path(
-    req: &Request,
-    path: &str,
-    use_compression: bool,
-) -> Option<http::Response<hyper::Body>> {
+async fn handle_fs_path(req: &Request, path: &str, use_compression: bool) -> Option<Response> {
     if path.contains("./") | path.contains("../") {
         return Some(not_found());
     }
@@ -525,21 +525,21 @@ async fn handle_fs_path(
         }
     }
 
-    Some(response.body(hyper::Body::from(source)).unwrap())
+    Some(response.body(Bytes::from(source)).unwrap())
 }
 
-fn not_modified(response: http::response::Builder) -> http::Response<hyper::Body> {
+fn not_modified(response: http::response::Builder) -> Response {
     response
         .status(StatusCode::NOT_MODIFIED)
-        .body(hyper::Body::empty())
+        .body(Bytes::default())
         .unwrap()
 }
 
-fn not_found() -> http::Response<hyper::Body> {
+fn not_found() -> Response {
     http::Response::builder()
         .header_typed(ContentType::html())
         .status(StatusCode::NOT_FOUND)
-        .body(hyper::Body::empty())
+        .body(Bytes::default())
         .unwrap()
 }
 
@@ -556,6 +556,8 @@ fn verify_gh(config: &Config, req: &http::request::Parts, body: &[u8]) -> bool {
 }
 
 fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
+    use hmac::KeyInit;
+
     type HmacSha256 = Hmac<Sha256>;
 
     let mut mac =
@@ -587,7 +589,7 @@ where
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .header_typed(ContentType::text_utf8())
             .header_typed(CacheControl::new().with_no_cache().with_no_store())
-            .body(hyper::Body::from(err))
+            .body(Bytes::from(err))
             .unwrap(),
     }
 }
@@ -598,14 +600,14 @@ pub fn maybe_compressed_response(
     compression: &Option<BrotliEncoderParams>,
 ) -> Response {
     match compression {
-        None => response.body(hyper::Body::from(body)).unwrap(),
+        None => response.body(Bytes::from(body)).unwrap(),
         Some(brotli_params) => {
             let compressed = compress_bytes(&body, brotli_params);
             let response = response.header(
                 hyper::header::CONTENT_ENCODING,
                 hyper::header::HeaderValue::from_static("br"),
             );
-            response.body(hyper::Body::from(compressed)).unwrap()
+            response.body(Bytes::from(compressed)).unwrap()
         }
     }
 }
@@ -620,51 +622,64 @@ fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
     match result {
         Ok(result) => {
             let response = http::Response::builder().header_typed(ContentType::text());
-            response.body(hyper::Body::from(result.0)).unwrap()
+            response.body(Bytes::from(result.0)).unwrap()
         }
         Err(err) => http::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .header_typed(ContentType::text_utf8())
-            .body(hyper::Body::from(err))
+            .body(Bytes::from(err))
             .unwrap(),
     }
 }
 
-async fn run_server(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) {
+async fn run_server(
+    ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>,
+    addr: SocketAddr,
+) -> anyhow::Result<()> {
     let server = Server::new(ctxt);
-    let svc = hyper::service::make_service_fn(move |_conn| {
-        let ctx = server.clone();
-        async move {
-            Ok::<_, hyper::Error>(hyper::service::service_fn(move |req| {
-                let start = std::time::Instant::now();
-                let desc = format!("{} {}", req.method(), req.uri());
-                serve_req(ctx.clone(), req)
-                    .inspect(move |r| {
-                        let dur = start.elapsed();
-                        info!("{}: {:?} {:?}", desc, r.as_ref().map(|r| r.status()), dur)
-                    })
-                    .map(|mut r| {
-                        if let Ok(r) = &mut r {
-                            r.headers_mut().insert(
-                                hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                                hyper::header::HeaderValue::from_static("*"),
-                            );
-                        }
-                        r
-                    })
-            }))
-        }
-    });
-    let server = hyper::server::Server::bind(&addr).serve(svc);
-    if let Err(e) = server.await {
-        eprintln!("server error: {e:?}");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                eprintln!("accept error: {e:?}");
+                continue;
+            }
+        };
+        let server = server.clone();
+        tokio::spawn(async move {
+            let svc = hyper::service::service_fn(move |req: Request| {
+                let ctx = server.clone();
+                async move {
+                    let start = std::time::Instant::now();
+                    let desc = format!("{} {}", req.method(), req.uri());
+                    let mut r = serve_req(ctx, req).await;
+                    let dur = start.elapsed();
+                    info!("{}: {:?} {:?}", desc, r.as_ref().map(|r| r.status()), dur);
+                    if let Ok(r) = &mut r {
+                        r.headers_mut().insert(
+                            hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                            hyper::header::HeaderValue::from_static("*"),
+                        );
+                    }
+                    r.map(|r| r.map(Full::new))
+                }
+            });
+            if let Err(e) =
+                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                    .serve_connection(TokioIo::new(stream), svc)
+                    .await
+            {
+                eprintln!("connection error: {e:?}");
+            }
+        });
     }
 }
 
-pub async fn start(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, port: u16) {
+pub async fn start(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, port: u16) -> anyhow::Result<()> {
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);
-    run_server(ctxt, server_address).await;
+    run_server(ctxt, server_address).await
 }
 
 pub trait ResponseHeaders {
