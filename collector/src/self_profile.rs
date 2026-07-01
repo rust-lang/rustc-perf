@@ -3,7 +3,8 @@ use crate::compile::execute::SelfProfileFiles;
 use analyzeme::ProfilingData;
 use anyhow::Context;
 use database::{
-    ArtifactId, ArtifactIdNumber, CodegenBackend, CollectionId, Profile, Scenario, Target,
+    ArtifactId, ArtifactIdNumber, CodegenBackend, CollectionId, FrontendThreads, Profile, Scenario,
+    Target,
 };
 use reqwest::StatusCode;
 use std::future::Future;
@@ -31,6 +32,7 @@ pub enum SelfProfileId {
         benchmark: BenchmarkName,
         profile: Profile,
         scenario: Scenario,
+        frontend_threads: FrontendThreads,
         backend: CodegenBackend,
         target: Target,
     },
@@ -53,13 +55,14 @@ impl SelfProfileId {
                 .join(profile.to_string())
                 .join(scenario.to_id())
                 .join(format!("self-profile-{collection}.mm_profdata.sz")),
-            //  self-profile/<artifact id>/<benchmark>/<target>/<backend>/<profile>/<scenario>
+            //  self-profile/<artifact id>/<benchmark>/<target>/<backend>/<profile>/<scenario>/<frontend_threads>
             //    /self-profile.mm_profdata.sz
             SelfProfileId::Simple {
                 artifact_id,
                 benchmark,
                 profile,
                 scenario,
+                frontend_threads,
                 backend: codegen_backend,
                 target,
             } => {
@@ -74,6 +77,7 @@ impl SelfProfileId {
                     .join(codegen_backend.to_string())
                     .join(profile.to_string())
                     .join(scenario.to_id())
+                    .join(frontend_threads.par_n())
                     .join("self-profile.mm_profdata.sz")
             }
         }

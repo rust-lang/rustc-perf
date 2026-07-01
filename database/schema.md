@@ -16,27 +16,28 @@ Below are some diagrams showing the basic layout of the database schema for thes
 
 Here is the diagram for compile-time benchmarks:
 ```
-  ┌────────────┐  ┌───────────────┐  ┌────────────┐   
-  │ benchmark  │  │ collection    │  │ artifact   │
-  ├────────────┤  ├───────────────┤  ├────────────┤
-┌►│ name *     │  │ id *          │◄┐│ id *       │◄┐
-│ │ stabilized │  │ perf_commit   │ ││ name       │ │
-│ │            │  │               │ ││ date       │ │
-│ │            │  │               │ ││ type       │ │
-│ └────────────┘  └───────────────┘ │└────────────┘ │
-│                                   │               │
-│                                   │               │
-│ ┌───────────────┐  ┌──────────┐   │               │
-│ │ pstat_series  │  │ pstat    │   │               │
-│ ├───────────────┤  ├──────────┤   │               │ 
-│ │ id *          │◄┐│ id *     │   │               │
-└─┤ crate         │ └┤ series   │   │               │ 
-  │ profile       │  │ aid      ├───┼───────────────┘
-  │ scenario      │  │ cid      │   │
-  │ backend       │  │ value    ├───┘
-  │ metric        │  └──────────┘
-  │ target        │
-  └───────────────┘
+  ┌────────────┐  ┌───────────────┐         ┌────────────┐
+  │ benchmark  │  │ collection    │         │ artifact   │
+  ├────────────┤  ├───────────────┤         ├────────────┤
+┌►│ name *     │  │ id *          │◄────┐   │ id *       │◄┐
+│ │ stabilized │  │ perf_commit   │     │   │ name       │ │
+│ │            │  │               │     │   │ date       │ │
+│ │            │  │               │     │   │ type       │ │
+│ └────────────┘  └───────────────┘     │   └────────────┘ │
+│                                       │                  │
+│                                       │                  │
+│ ┌───────────────────┐  ┌──────────┐   │                  │
+│ │ pstat_series      │  │ pstat    │   │                  │
+│ ├───────────────────┤  ├──────────┤   │                  │
+│ │ id *              │◄┐│ id *     │   │                  │
+└─┤ crate             │ └┤ series   │   │                  │
+  │ profile           │  │ aid      ├───┼──────────────────┘
+  │ scenario          │  │ cid      │   │
+  │ backend           │  │ value    ├───┘
+  │ metric            │  └──────────┘
+  │ target            |
+  │ frontend_threads  |
+  └───────────────────┘
 ```
 
 For runtime benchmarks the schema very similar, but there are different table names:
@@ -84,7 +85,7 @@ Columns:
 
 ### benchmark
 
-The different types of compile-time benchmarks that are run. 
+The different types of compile-time benchmarks that are run.
 
 The table stores the name of the benchmark, whether it is capable of being run using the stable compiler,
 and its category. The benchmark name is used as a foreign key in many of the other tables.
@@ -101,7 +102,7 @@ Columns:
 ### pstat_series
 
 Describes the parametrization of a compile-time benchmark. Contains a unique combination
-of a crate, profile, scenario and the metric being collected.
+of a crate, profile, scenario, metric and parallel frontend thread count being collected.
 
 Columns:
 
@@ -110,6 +111,7 @@ Columns:
 * **scenario** (`text`): Describes how much of the incremental cache is full. An empty incremental cache means that the compiler must do a full build.
 * **backend** (`text`): Codegen backend used for compilation, for example 'llvm'
 * **metric** (`text`): the type of metric being collected.
+* **frontend_threads** (`text`): Parallel frontend thread count ('-Zthreads=N').
 
 This corresponds to a [`statistic description`](../docs/glossary.md).
 
@@ -193,7 +195,7 @@ Columns:
 * **id** (`BIGINT` / `SERIAL`): Primary key identifier for the error row;
   auto increments with each new error.
 * **aid** (`INTERGER`): References the artifact id column.
-* **context** (`TEXT NOT NULL`): A little message to be able to understand a 
+* **context** (`TEXT NOT NULL`): A little message to be able to understand a
   bit more about why or where the error occured.
 * **message** (`TEXT NOT NULL`): The error message.
 * **job_id** (`INTEGER`): A nullable job_id which, if it exists it will inform
