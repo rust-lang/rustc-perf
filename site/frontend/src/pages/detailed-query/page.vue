@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {h, ref, Ref, computed} from "vue";
+import {ref, Ref, computed} from "vue";
 import {getUrlParams, changeUrl} from "../../utils/navigation";
 import {postMsgpack} from "../../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../../urls";
@@ -15,7 +15,14 @@ import {
   TableRowData,
 } from "./utils";
 
-const loading = ref(true);
+enum Status {
+  Loading = "LOADING",
+  Ready = "READY",
+  Failed = "FAILED",
+}
+
+const status = ref<Status>(Status.Loading);
+const errorMsg = ref("");
 const data: Ref<SelfProfileResponse | null> = ref(null);
 const selector: Ref<Selector | null> = ref(null);
 const showIncr = ref(true);
@@ -189,7 +196,8 @@ function storeSortToUrl() {
 
 async function loadData() {
   const params = getUrlParams();
-  const {commit, base_commit, benchmark, scenario, backend, target} = params;
+  const {commit, base_commit, benchmark, scenario, parallel, backend, target} =
+    params;
 
   // Load sort state from URL
   loadSortFromUrl(params);
@@ -206,19 +214,29 @@ async function loadData() {
     base_commit: base_commit ?? null,
     benchmark: benchmarkSeparate,
     scenario,
+    parallel,
     profile,
     backend,
     target,
   };
   selector.value = currentSelector;
-
-  const response = await postMsgpack<SelfProfileResponse>(
-    SELF_PROFILE_DATA_URL,
-    currentSelector
-  );
-  data.value = response;
-  populateUIData(response, currentSelector);
-  loading.value = false;
+  try {
+    const response = await postMsgpack<SelfProfileResponse>(
+      SELF_PROFILE_DATA_URL,
+      currentSelector,
+      false
+    );
+    data.value = response;
+    populateUIData(response, currentSelector);
+    status.value = Status.Ready;
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      errorMsg.value = error.message;
+    } else {
+      errorMsg.value = String(error);
+    }
+    status.value = Status.Failed;
+  }
 }
 
 function populateUIData(responseData: SelfProfileResponse, state: Selector) {
@@ -298,12 +316,16 @@ function DeltaComponent({delta}: {delta: DeltaData | null}) {
 }
 
 loadData();
+const LoadingStatus = Status;
 </script>
 
 <template>
   <div>
-    <div v-if="loading">
+    <div v-if="status === LoadingStatus.Loading">
       <p>Loading...</p>
+    </div>
+    <div v-else-if="status === LoadingStatus.Failed">
+      <p>{{ errorMsg }}</p>
     </div>
     <div v-else id="content">
       <h3 id="title">

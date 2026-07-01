@@ -27,6 +27,7 @@ pub struct RecordedSelfProfile {
     profile: database::Profile,
     codegen_backend: database::CodegenBackend,
     target: database::Target,
+    parallel: database::Parallel,
     files: SelfProfileFiles,
 }
 
@@ -87,6 +88,7 @@ impl<'a> BenchProcessor<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_stats(
         &mut self,
         collection: CollectionId,
@@ -95,6 +97,7 @@ impl<'a> BenchProcessor<'a> {
         backend: CodegenBackend,
         target: Target,
         stats: Stats,
+        parallel: database::Parallel,
     ) {
         let mut buf = FuturesUnordered::new();
         for (stat, value) in stats.iter() {
@@ -107,6 +110,7 @@ impl<'a> BenchProcessor<'a> {
                 backend.into(),
                 target.into(),
                 stat,
+                parallel,
                 value,
             ));
         }
@@ -168,6 +172,7 @@ impl Processor for BenchProcessor<'_> {
                             execute::store_documentation_size_into_stats(&mut res.0, &doc_dir);
                         }
                     }
+                    let parallel = database::Parallel(data.parallel.0);
 
                     let scenario = match data.scenario {
                         Scenario::Full => database::Scenario::Empty,
@@ -189,6 +194,7 @@ impl Processor for BenchProcessor<'_> {
                             profile,
                             codegen_backend: data.backend.into(),
                             target: data.target.into(),
+                            parallel,
                             files,
                         });
 
@@ -206,6 +212,7 @@ impl Processor for BenchProcessor<'_> {
                         data.backend,
                         data.target,
                         res.0,
+                        parallel,
                     )
                     .await;
 
@@ -255,6 +262,7 @@ impl Processor for BenchProcessor<'_> {
                         benchmark: self.benchmark.clone(),
                         profile: profile.profile,
                         scenario: profile.scenario,
+                        parallel: profile.parallel,
                         backend: profile.codegen_backend,
                         target: profile.target,
                     };
