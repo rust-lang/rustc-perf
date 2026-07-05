@@ -6,6 +6,12 @@ which displays graphs to the user.
 
 This also contains a GitHub bot to trigger on-demand benchmarking.
 
+The repository root [Dockerfile](../Dockerfile) does not build a standalone site
+binary image anymore. It builds the full production container, which runs the
+Julia orchestrator via [run.jl](../run.jl) and starts the embedded Rust site as
+part of that process. Use the instructions below when you want to work with the
+site binary directly.
+
 ## Setup
 You can build the website in multiple ways:
 - Download a precompiled [nightly build](https://github.com/rust-lang/rustc-perf/releases).

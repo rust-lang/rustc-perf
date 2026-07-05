@@ -1,0 +1,15 @@
+[Unit]
+Description=Public Caddy reverse proxy for rustc-perf
+After=network-online.target docker.service rustc-perf-site.service
+Wants=network-online.target rustc-perf-site.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rustc-perf-run-caddy
+ExecStop=/usr/bin/docker stop rustc-perf-caddy
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

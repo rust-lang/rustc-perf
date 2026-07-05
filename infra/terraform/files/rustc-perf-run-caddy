@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+docker rm -f rustc-perf-caddy >/dev/null 2>&1 || true
+exec docker run --name rustc-perf-caddy \
+  --network host \
+  --volume /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
+  --volume /var/lib/caddy/data:/data \
+  --volume /var/lib/caddy/config:/config \
+  caddy:2.8.4-alpine caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

@@ -1,0 +1,17 @@
+[Unit]
+Description=rustc-perf site container
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/rustc-perf-site.host.env
+ExecStartPre=/usr/local/bin/rustc-perf-restore-if-empty
+ExecStart=/usr/local/bin/rustc-perf-run-container
+ExecStop=/usr/bin/docker stop rustc-perf-site
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

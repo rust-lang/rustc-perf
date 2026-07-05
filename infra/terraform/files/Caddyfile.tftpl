@@ -1,0 +1,10 @@
+http://${public_ip} {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:${container_port}
+}
+%{ if public_hostname != "" ~}
+${public_hostname} {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:${container_port}
+}
+%{ endif ~}

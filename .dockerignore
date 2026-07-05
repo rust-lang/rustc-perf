@@ -1,4 +1,8 @@
 /*
+!/.state
+!/Manifest.toml
+!/Project.toml
+!/docker-entrypoint.sh
 !/database
 !/intern
 !/site
@@ -7,3 +11,5 @@
 !/collector
 !/Cargo.toml
 !/Cargo.lock
+!/run.jl
+!/src

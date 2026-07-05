@@ -1,0 +1,92 @@
+#!/bin/sh
+set -eu
+
+host_env_file="/etc/rustc-perf-site.host.env"
+if [ -f "$host_env_file" ]; then
+  set -a
+  . "$host_env_file"
+  set +a
+fi
+
+data_root="${RUSTC_PERF_DATA_DIR:-/var/lib/rustc-perf}"
+db_name="${RUSTC_PERF_DB_FILENAME:-julia.db}"
+runtime_uid="${RUSTC_PERF_RUNTIME_UID:-10001}"
+runtime_gid="${RUSTC_PERF_RUNTIME_GID:-10001}"
+backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:-}"
+backup_prefix="${RUSTC_PERF_BACKUP_PREFIX:-runtime}"
+caddy_data_dir="/var/lib/caddy/data"
+
+# Figure out what is missing. A fresh host (after a Terraform replacement) is
+# missing both; a normal restart is missing neither, so we do nothing.
+db_missing=0
+[ ! -s "${data_root}/${db_name}" ] && db_missing=1
+
+caddy_missing=0
+[ -z "$(ls -A "$caddy_data_dir" 2>/dev/null || true)" ] && caddy_missing=1
+
+if [ "$db_missing" -eq 0 ] && [ "$caddy_missing" -eq 0 ]; then
+  exit 0
+fi
+
+if [ -z "$backup_bucket" ]; then
+  echo "No backup bucket configured; leaving seeding to the operator." >&2
+  exit 0
+fi
+
+prefix_path=""
+if [ -n "$backup_prefix" ]; then
+  prefix_path="${backup_prefix}/"
+fi
+
+work_dir="$(mktemp -d)"
+archive="${work_dir}/restore.tar.gz"
+cleanup() {
+  rm -rf "$work_dir"
+}
+trap cleanup EXIT INT TERM
+
+if ! aws s3 cp "s3://${backup_bucket}/${prefix_path}latest.tar.gz" "$archive" --only-show-errors 2>/dev/null; then
+  # Fall back to the newest timestamped archive (e.g. backups written before the
+  # latest.tar.gz pointer existed). Keys end in <timestamp>.tar.gz, and the
+  # timestamp format sorts chronologically, so the greatest basename is newest.
+  newest_key="$(aws s3 ls "s3://${backup_bucket}/${prefix_path}" --recursive 2>/dev/null \
+    | awk '{print $4}' \
+    | grep -E '\.tar\.gz$' \
+    | grep -v '/latest\.tar\.gz$' \
+    | awk -F/ '{print $NF"\t"$0}' \
+    | sort \
+    | tail -n 1 \
+    | cut -f2-)"
+
+  if [ -z "$newest_key" ]; then
+    echo "No backup archive found under s3://${backup_bucket}/${prefix_path}; leaving seeding to the operator." >&2
+    exit 0
+  fi
+
+  if ! aws s3 cp "s3://${backup_bucket}/${newest_key}" "$archive" --only-show-errors; then
+    echo "Failed to download backup archive; leaving seeding to the operator." >&2
+    exit 0
+  fi
+fi
+
+tar -C "$work_dir" -xzf "$archive"
+
+if [ "$db_missing" -eq 1 ] && [ -s "${work_dir}/${db_name}" ]; then
+  install -d -m 750 -o "$runtime_uid" -g "$runtime_gid" "${data_root}" "${data_root}/.state"
+  cp -a "${work_dir}/${db_name}" "${data_root}/${db_name}"
+  rm -f "${data_root}/${db_name}-wal" "${data_root}/${db_name}-shm"
+  if [ -d "${work_dir}/.state" ]; then
+    rm -rf "${data_root}/.state"
+    cp -a "${work_dir}/.state" "${data_root}/.state"
+  fi
+  chown -R "${runtime_uid}:${runtime_gid}" "${data_root}"
+  chmod 750 "${data_root}" "${data_root}/.state"
+  chmod 640 "${data_root}/${db_name}"
+  echo "Restored ${db_name} from S3 backup." >&2
+fi
+
+if [ "$caddy_missing" -eq 1 ] && [ -d "${work_dir}/caddy-data" ]; then
+  install -d -m 755 "$caddy_data_dir"
+  cp -a "${work_dir}/caddy-data/." "$caddy_data_dir/"
+  echo "Restored Caddy certificate store from S3 backup." >&2
+fi

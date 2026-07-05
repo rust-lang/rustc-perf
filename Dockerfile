@@ -1,40 +1,16 @@
-FROM node:18 as frontend
+FROM node:20-bookworm-slim AS frontend
+
+WORKDIR /work
 
 COPY ./site/frontend ./site/frontend
+
 RUN cd site/frontend && npm ci
-RUN cd site/frontend && npm run check
 RUN cd site/frontend && npm run build
 
-FROM ubuntu:20.04 as base
+FROM rust:1-bookworm AS rust-build
 
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-
-RUN apt-get update -y && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      g++ \
-      curl \
-      ca-certificates \
-      libc6-dev \
-      make \
-      libssl-dev \
-      pkg-config \
-      git \
-      cmake \
-      zlib1g-dev
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
-    --default-toolchain stable --profile minimal -y
-
-RUN bash -c 'source $HOME/.cargo/env && cargo install cargo-chef'
-
-FROM base AS planner
-COPY . .
-RUN bash -c 'source $HOME/.cargo/env && cargo chef prepare --recipe-path recipe.json'
-
-FROM base as build
-COPY --from=planner recipe.json recipe.json
-
-RUN bash -c 'source $HOME/.cargo/env && cargo chef cook --release --recipe-path recipe.json'
+WORKDIR /work
 
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
@@ -42,18 +18,39 @@ COPY ./collector ./collector
 COPY ./database ./database
 COPY ./intern ./intern
 COPY ./site ./site
-COPY --from=frontend ./site/frontend/dist ./site/frontend/dist
+COPY --from=frontend /work/site/frontend/dist ./site/frontend/dist
 
-RUN bash -c 'source $HOME/.cargo/env && cargo build --release -p site'
-RUN bash -c 'source $HOME/.cargo/env && cargo build --release --bin postgres-to-sqlite'
+RUN cargo build --release -p site --bin site && \
+    cp ./target/release/site /tmp/prod_site
 
-FROM ubuntu:20.04 as binary
+FROM julia:1.12-bookworm AS runtime
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+ENV RUSTC_PERF_APP_ROOT=/app
+ENV JULIA_BIN=/usr/local/julia/bin/julia
+ENV JULIA_DEPOT_PATH=/usr/local/julia-depot
+ENV RUSTC_PERF_RUNTIME_UID=10001
+ENV RUSTC_PERF_RUNTIME_GID=10001
+WORKDIR /app
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
-    git
+    sqlite3 && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --system --gid "$RUSTC_PERF_RUNTIME_GID" rustc-perf && \
+    useradd --system --uid "$RUSTC_PERF_RUNTIME_UID" --gid "$RUSTC_PERF_RUNTIME_GID" --create-home --home-dir /home/rustc-perf rustc-perf
 
-COPY --from=build /target/release/postgres-to-sqlite /usr/local/bin/rustc-perf-postgres-to-sqlite
-COPY --from=build /target/release/site /usr/local/bin/rustc-perf-site
+COPY ./Project.toml ./Project.toml
+COPY ./Manifest.toml ./Manifest.toml
+COPY ./run.jl ./run.jl
+COPY ./src ./src
+COPY ./.state ./.state.dist
+COPY ./docker-entrypoint.sh /usr/local/bin/rustc-perf-entrypoint
+COPY --from=rust-build /tmp/prod_site ./prod_site
 
-CMD rustc-perf-site
+RUN install -d -m 755 "$JULIA_DEPOT_PATH" && \
+    chmod 755 /usr/local/bin/rustc-perf-entrypoint && \
+    "$JULIA_BIN" --project=/app -e 'using Pkg; Pkg.instantiate(); Pkg.precompile(); using Orchestrator' && \
+    chown -R "$RUSTC_PERF_RUNTIME_UID:$RUSTC_PERF_RUNTIME_GID" /app "$JULIA_DEPOT_PATH"
+
+ENTRYPOINT ["/usr/local/bin/rustc-perf-entrypoint"]

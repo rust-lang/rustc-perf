@@ -391,6 +391,7 @@ impl ConnectionManager for Sqlite {
     type Connection = Mutex<rusqlite::Connection>;
     async fn open(&self) -> Self::Connection {
         let mut conn = rusqlite::Connection::open(&self.0).unwrap();
+        conn.busy_timeout(Duration::from_secs(30)).unwrap();
         conn.pragma_update(None, "cache_size", -1280000).unwrap();
         conn.pragma_update(None, "journal_mode", "WAL").unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
@@ -434,7 +435,7 @@ impl SqliteConnection {
     pub fn raw(&mut self) -> &mut rusqlite::Connection {
         self.conn.get_mut().unwrap_or_else(|e| e.into_inner())
     }
-    pub fn raw_ref(&self) -> std::sync::MutexGuard<rusqlite::Connection> {
+    pub fn raw_ref(&self) -> std::sync::MutexGuard<'_, rusqlite::Connection> {
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
 }

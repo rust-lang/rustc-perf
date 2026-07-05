@@ -12,6 +12,7 @@ use std::{fmt, str};
 use futures::{future::FutureExt, stream::StreamExt};
 use headers::{Authorization, CacheControl, ContentType, ETag, Header, HeaderMapExt, IfNoneMatch};
 use http::header::CACHE_CONTROL;
+use hyper::header::{HeaderName, HeaderValue, ACCESS_CONTROL_ALLOW_ORIGIN};
 use hyper::StatusCode;
 use log::{debug, error, info};
 use parking_lot::{Mutex, RwLock};
@@ -776,6 +777,35 @@ fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
     }
 }
 
+fn apply_security_headers(response: &mut Response, forwarded_https: bool) {
+    let headers = response.headers_mut();
+    headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    headers.insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(
+        HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static(
+            "accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+        ),
+    );
+    if forwarded_https {
+        headers.insert(
+            HeaderName::from_static("strict-transport-security"),
+            HeaderValue::from_static("max-age=31536000"),
+        );
+    }
+}
+
 async fn run_server(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) {
     let server = Server::new(ctxt);
     let svc = hyper::service::make_service_fn(move |_conn: &hyper::server::conn::AddrStream| {
@@ -784,17 +814,19 @@ async fn run_server(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) 
             Ok::<_, hyper::Error>(hyper::service::service_fn(move |req| {
                 let start = std::time::Instant::now();
                 let desc = format!("{} {}", req.method(), req.uri());
+                let forwarded_https = req
+                    .headers()
+                    .get("x-forwarded-proto")
+                    .and_then(|value| value.to_str().ok())
+                    .map_or(false, |value| value.eq_ignore_ascii_case("https"));
                 serve_req(ctx.clone(), req)
                     .inspect(move |r| {
                         let dur = start.elapsed();
                         info!("{}: {:?} {:?}", desc, r.as_ref().map(|r| r.status()), dur)
                     })
-                    .map(|mut r| {
+                    .map(move |mut r| {
                         if let Ok(r) = &mut r {
-                            r.headers_mut().insert(
-                                hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                                hyper::header::HeaderValue::from_static("*"),
-                            );
+                            apply_security_headers(r, forwarded_https);
                         }
                         r
                     })

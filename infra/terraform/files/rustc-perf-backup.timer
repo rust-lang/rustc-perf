@@ -1,0 +1,10 @@
+[Unit]
+Description=Scheduled rustc-perf runtime backups
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,77 @@
+#!/bin/sh
+set -eu
+
+host_env_file="/etc/rustc-perf-site.host.env"
+if [ -f "$host_env_file" ]; then
+  set -a
+  . "$host_env_file"
+  set +a
+fi
+
+backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:-}"
+if [ -z "$backup_bucket" ]; then
+  echo "RUSTC_PERF_BACKUP_BUCKET is not configured." >&2
+  exit 1
+fi
+
+data_root="${RUSTC_PERF_DATA_DIR:-/var/lib/rustc-perf}"
+db_name="${RUSTC_PERF_DB_FILENAME:-julia.db}"
+state_root="${data_root}/.state"
+image_ref="${RUSTC_PERF_IMAGE_REF:-}"
+backup_prefix="${RUSTC_PERF_BACKUP_PREFIX:-runtime}"
+staging_root="${RUSTC_PERF_BACKUP_STAGING_ROOT:-/var/lib/rustc-perf-backup-staging}"
+lock_file="/var/lock/rustc-perf-backup.lock"
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+host_name="$(hostname -s)"
+snapshot_dir=""
+
+cleanup() {
+  [ -n "$snapshot_dir" ] && rm -rf "$snapshot_dir"
+}
+
+trap cleanup EXIT INT TERM
+
+exec 9>"$lock_file"
+flock -n 9
+
+if [ ! -s "${data_root}/${db_name}" ]; then
+  echo "Missing database at ${data_root}/${db_name}" >&2
+  exit 1
+fi
+
+install -d -m 700 "$staging_root"
+snapshot_dir="$(mktemp -d "$staging_root/${timestamp}.XXXXXX")"
+
+# Consistent online snapshot without stopping the service. In WAL mode the
+# SQLite backup API cooperates with the live writer and produces a single,
+# already checkpointed database file, so the -wal/-shm sidecars are not needed.
+sqlite3 "${data_root}/${db_name}" ".backup '${snapshot_dir}/${db_name}'"
+
+if [ -d "$state_root" ]; then
+  cp -a "$state_root" "${snapshot_dir}/.state"
+fi
+
+# Include Caddy's TLS certificate store so a replaced host reuses the existing
+# certificate instead of re-requesting one from Let's Encrypt.
+if [ -d /var/lib/caddy/data ]; then
+  cp -a /var/lib/caddy/data "${snapshot_dir}/caddy-data"
+fi
+
+cat >"${snapshot_dir}/metadata.txt" <<METADATA
+timestamp=${timestamp}
+hostname=${host_name}
+image=${image_ref}
+database=${db_name}
+METADATA
+
+object_key="${host_name}/${timestamp}.tar.gz"
+latest_key="latest.tar.gz"
+if [ -n "$backup_prefix" ]; then
+  object_key="${backup_prefix}/${object_key}"
+  latest_key="${backup_prefix}/latest.tar.gz"
+fi
+
+tar -C "$snapshot_dir" -czf - . | aws s3 cp - "s3://${backup_bucket}/${object_key}" --only-show-errors
+# Maintain a stable pointer to the most recent archive so a fresh or replaced
+# host can restore deterministically on boot.
+aws s3 cp "s3://${backup_bucket}/${object_key}" "s3://${backup_bucket}/${latest_key}" --only-show-errors

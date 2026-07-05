@@ -1,0 +1,36 @@
+#!/bin/sh
+set -eu
+
+host_env_file="/etc/rustc-perf-site.host.env"
+if [ -f "$host_env_file" ]; then
+  set -a
+  . "$host_env_file"
+  set +a
+fi
+
+service_name="${RUSTC_PERF_CONTAINER_NAME:-rustc-perf-site}"
+data_root="${RUSTC_PERF_DATA_DIR:-/var/lib/rustc-perf}"
+image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
+runtime_uid="${RUSTC_PERF_RUNTIME_UID:-10001}"
+runtime_gid="${RUSTC_PERF_RUNTIME_GID:-10001}"
+port="${RUSTC_PORT:-2346}"
+region="${AWS_REGION:-us-east-1}"
+
+registry="${image_ref%%/*}"
+
+case "$image_ref" in
+  *.dkr.ecr.*.amazonaws.com/*)
+    aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry"
+    ;;
+esac
+
+docker rm -f "$service_name" >/dev/null 2>&1 || true
+docker pull "$image_ref"
+exec docker run --name "$service_name" \
+  --publish "127.0.0.1:${port}:${port}" \
+  --user "${runtime_uid}:${runtime_gid}" \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  --env-file /etc/rustc-perf-site.container.env \
+  --mount type=bind,src="${data_root}",dst="${data_root}" \
+  "$image_ref"

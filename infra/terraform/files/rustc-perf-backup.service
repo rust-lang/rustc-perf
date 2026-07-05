@@ -1,0 +1,9 @@
+[Unit]
+Description=Backup rustc-perf runtime data to S3
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/rustc-perf-site.host.env
+ExecStart=/usr/local/bin/rustc-perf-backup
