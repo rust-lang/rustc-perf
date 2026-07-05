@@ -120,33 +120,19 @@ For the step-by-step flow and a registration check, see
 
 ## Deploying a new version
 
-Deploys are manual and immutable. To ship a new version:
-
-1. Build and push a new image to ECR and note its digest:
+Run the deploy script from this directory:
 
 ```bash
-ECR_URL="$(terraform output -raw ecr_repository_url)"
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$${ECR_URL%%/*}"
-docker build -t "$ECR_URL:build" ../..
-docker push "$ECR_URL:build"
-DIGEST="$(aws ecr describe-images --repository-name rustc-perf-site --image-ids imageTag=build --query 'imageDetails[0].imageDigest' --output text)"
+./deploy.sh
 ```
 
-2. Optionally take a fresh backup so the replacement restores current data (otherwise it restores the latest daily backup):
+It builds the image (for `linux/amd64`), pushes it to ECR, takes a pre-deploy backup, and runs `terraform apply` with the new digest — which replaces the instance. The new host restores the database and TLS certificates from the latest backup on boot. Terraform will show the plan and prompt before it replaces anything; pass `-auto-approve` (or any other `terraform apply` flag) through: `./deploy.sh -auto-approve`. Set `SKIP_BACKUP=1` to skip the pre-deploy backup.
 
-```bash
-INSTANCE_ID="$(terraform output -raw instance_id)"
-aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript \
-  --parameters 'commands=["sudo /usr/local/bin/rustc-perf-backup"]'
-```
+Expect a couple of minutes of downtime while the new instance boots, restores, and Julia warms up.
 
-3. Apply with the new digest. This replaces the instance; the new host restores the database and certificates on boot:
+Changing any host setting works the same way — edit the code and run `terraform apply` (or `./deploy.sh`). The instance is rebuilt from `user_data`, so the running machine never drifts from what the code says.
 
-```bash
-terraform apply -var "site_container_image=$ECR_URL@$DIGEST"
-```
-
-Changing any host setting works the same way — edit the code and `terraform apply`; the instance is rebuilt from `user_data`, so the running machine never drifts from what the code says.
+If you prefer to do it by hand, the script is just: `docker build --platform linux/amd64` → `docker push` → resolve the `@sha256` digest → `terraform apply -var "site_container_image=<ecr-url>@<digest>"`.
 
 ## Backups And Restore
 

@@ -133,29 +133,31 @@ Terraform exposes the site directly from the instance.
 
 ## Deploying A New Version
 
-Deploys are manual and immutable. Build and push a new image, then apply the new
-digest; Terraform replaces the instance and the new host restores its data and
-certificates on boot.
+Deploys are manual and immutable. The `deploy.sh` script does the whole flow —
+build the image, push it to ECR, take a pre-deploy backup, and `terraform apply`
+with the new digest, which replaces the instance. The new host restores its data
+and certificates from the latest backup on boot.
 
 ```bash
 cd infra/terraform
-ECR_URL="$(terraform output -raw ecr_repository_url)"
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${ECR_URL%%/*}"
-docker build -t "$ECR_URL:build" ../..
-docker push "$ECR_URL:build"
-DIGEST="$(aws ecr describe-images --repository-name rustc-perf-site --image-ids imageTag=build --query 'imageDetails[0].imageDigest' --output text)"
+./deploy.sh
+```
 
-# Optional: capture current data first (otherwise the new host restores the latest daily backup).
-INSTANCE_ID="$(terraform output -raw instance_id)"
-aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript \
-  --parameters 'commands=["sudo /usr/local/bin/rustc-perf-backup"]'
+Terraform prompts before replacing the instance. Pass `terraform apply` flags
+through (`./deploy.sh -auto-approve`), or set `SKIP_BACKUP=1` to skip the
+pre-deploy backup. Under the hood the script runs:
 
+```bash
+docker build --platform linux/amd64 -t "$ECR_URL:$TAG" ../..
+docker push "$ECR_URL:$TAG"
+DIGEST="$(aws ecr describe-images --repository-name <repo> --image-ids imageTag=$TAG \
+  --query 'imageDetails[0].imageDigest' --output text)"
 terraform apply -var "site_container_image=$ECR_URL@$DIGEST"
 ```
 
 Expect a couple of minutes of downtime while the new instance boots, restores,
 and Julia warms up. Any change to host configuration deploys the same way —
-edit the code and `terraform apply`.
+edit the code and run `./deploy.sh` (or `terraform apply`).
 
 ## Session Manager Access
 
