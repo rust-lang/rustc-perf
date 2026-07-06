@@ -8,13 +8,27 @@ if [ -f "$host_env_file" ]; then
   set +a
 fi
 
-data_root="${RUSTC_PERF_DATA_DIR:-/var/lib/rustc-perf}"
-db_name="${RUSTC_PERF_DB_FILENAME:-julia.db}"
-runtime_uid="${RUSTC_PERF_RUNTIME_UID:-10001}"
-runtime_gid="${RUSTC_PERF_RUNTIME_GID:-10001}"
+# The host env file written by Terraform is the single source of truth for
+# these; fail loudly instead of falling back to defaults that could drift.
+data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
+db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
+runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
+runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
 backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:-}"
-backup_prefix="${RUSTC_PERF_BACKUP_PREFIX:-runtime}"
+backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
 caddy_data_dir="/var/lib/caddy/data"
+
+# When the database is missing and cannot be restored, exit non-zero: this
+# script runs as ExecStartPre of the site unit, so failing here keeps the
+# unit visibly failing (and never reaches the docker pull in ExecStart)
+# instead of letting the container crash-loop against a missing database.
+fail_if_db_missing() {
+  if [ "$db_missing" -eq 1 ]; then
+    echo "Database ${data_root}/${db_name} is missing and was not restored; seed it (or fix backups), then restart rustc-perf-site." >&2
+    exit 1
+  fi
+  exit 0
+}
 
 # Figure out what is missing. A fresh host (after a Terraform replacement) is
 # missing both; a normal restart is missing neither, so we do nothing.
@@ -30,7 +44,7 @@ fi
 
 if [ -z "$backup_bucket" ]; then
   echo "No backup bucket configured; leaving seeding to the operator." >&2
-  exit 0
+  fail_if_db_missing
 fi
 
 prefix_path=""
@@ -46,9 +60,10 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if ! aws s3 cp "s3://${backup_bucket}/${prefix_path}latest.tar.gz" "$archive" --only-show-errors 2>/dev/null; then
-  # Fall back to the newest timestamped archive (e.g. backups written before the
-  # latest.tar.gz pointer existed). Keys end in <timestamp>.tar.gz, and the
-  # timestamp format sorts chronologically, so the greatest basename is newest.
+  # Fall back to the newest timestamped archive (covering both the current
+  # <prefix>/archive/<host>/<ts>.tar.gz layout and older flat layouts). Keys
+  # end in <timestamp>.tar.gz, and the timestamp format sorts chronologically,
+  # so the greatest basename is newest.
   newest_key="$(aws s3 ls "s3://${backup_bucket}/${prefix_path}" --recursive 2>/dev/null \
     | awk '{print $4}' \
     | grep -E '\.tar\.gz$' \
@@ -59,19 +74,23 @@ if ! aws s3 cp "s3://${backup_bucket}/${prefix_path}latest.tar.gz" "$archive" --
     | cut -f2-)"
 
   if [ -z "$newest_key" ]; then
-    echo "No backup archive found under s3://${backup_bucket}/${prefix_path}; leaving seeding to the operator." >&2
-    exit 0
+    echo "No backup archive found under s3://${backup_bucket}/${prefix_path}." >&2
+    fail_if_db_missing
   fi
 
   if ! aws s3 cp "s3://${backup_bucket}/${newest_key}" "$archive" --only-show-errors; then
-    echo "Failed to download backup archive; leaving seeding to the operator." >&2
-    exit 0
+    echo "Failed to download backup archive s3://${backup_bucket}/${newest_key}." >&2
+    fail_if_db_missing
   fi
 fi
 
 tar -C "$work_dir" -xzf "$archive"
 
-if [ "$db_missing" -eq 1 ] && [ -s "${work_dir}/${db_name}" ]; then
+if [ "$db_missing" -eq 1 ]; then
+  if [ ! -s "${work_dir}/${db_name}" ]; then
+    echo "Backup archive does not contain ${db_name}." >&2
+    fail_if_db_missing
+  fi
   install -d -m 750 -o "$runtime_uid" -g "$runtime_gid" "${data_root}" "${data_root}/.state"
   cp -a "${work_dir}/${db_name}" "${data_root}/${db_name}"
   rm -f "${data_root}/${db_name}-wal" "${data_root}/${db_name}-shm"

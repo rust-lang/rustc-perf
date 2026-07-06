@@ -11,6 +11,9 @@ prod_site
 .vscode/
 julia_last_processed_commit.txt
 reports_last_processed_commit.txt
+# The committed image seed checkpoints are exempt from the patterns above.
+!/.state.dist/julia_last_processed_commit.txt
+!/.state.dist/reports_last_processed_commit.txt
 .terraform/
 *.tfstate
 *.tfstate.*

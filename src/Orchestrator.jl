@@ -203,7 +203,15 @@ function main(install)
                 changed |= !isempty(artifact_size_df)
                 if !isempty(artifact_size_df)
                     kill_server()
-                    install && SQLite.load!(artifact_size_df, db, "artifact_size")
+                    if install
+                        # Re-processed artifacts may already have rows; replace them.
+                        # This runs inside the surrounding transaction, so the
+                        # delete and load commit or roll back together.
+                        for aid in unique(artifact_size_df.aid)
+                            DBInterface.execute(db, "DELETE FROM artifact_size WHERE aid=$(aid)")
+                        end
+                        SQLite.load!(artifact_size_df, db, "artifact_size")
+                    end
                 end
 
                 if !isnothing(first_unfinished_commit)
@@ -302,11 +310,7 @@ function process_logs(db::SQLite.DB, shas, commit_times; install)
         local res
         try
             commit_time = commit_times[sha]
-            artifact_size_row_count = nrow(artifact_size_df)
             res = process_commit!(artifact_size_df, pstat_df, artifact_id, sha, "master", identity, commit_time)
-            if install && !isempty(artifact_query) && nrow(artifact_size_df) > artifact_size_row_count
-                DBInterface.execute(db, "DELETE FROM artifact_size WHERE aid=$(artifact_id)")
-            end
         catch err
             println("Error processing $sha logs")
             Base.showerror(stdout, err, Base.catch_backtrace())

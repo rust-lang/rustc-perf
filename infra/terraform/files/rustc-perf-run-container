@@ -8,24 +8,30 @@ if [ -f "$host_env_file" ]; then
   set +a
 fi
 
-service_name="${RUSTC_PERF_CONTAINER_NAME:-rustc-perf-site}"
-data_root="${RUSTC_PERF_DATA_DIR:-/var/lib/rustc-perf}"
+# The host env file written by Terraform is the single source of truth for
+# these; fail loudly instead of falling back to defaults that could drift.
+service_name="${RUSTC_PERF_CONTAINER_NAME:?RUSTC_PERF_CONTAINER_NAME is not set}"
+data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
 image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
-runtime_uid="${RUSTC_PERF_RUNTIME_UID:-10001}"
-runtime_gid="${RUSTC_PERF_RUNTIME_GID:-10001}"
-port="${RUSTC_PORT:-2346}"
-region="${AWS_REGION:-us-east-1}"
+runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
+runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
+port="${RUSTC_PORT:?RUSTC_PORT is not set}"
+region="${AWS_REGION:?AWS_REGION is not set}"
 
 registry="${image_ref%%/*}"
 
-case "$image_ref" in
-  *.dkr.ecr.*.amazonaws.com/*)
-    aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry"
-    ;;
-esac
+# The image reference is digest-pinned, so a locally present image can never
+# be stale; skip the ECR round-trip on restarts (and in restart loops).
+if ! docker image inspect "$image_ref" >/dev/null 2>&1; then
+  case "$image_ref" in
+    *.dkr.ecr.*.amazonaws.com/*)
+      aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry"
+      ;;
+  esac
+  docker pull "$image_ref"
+fi
 
 docker rm -f "$service_name" >/dev/null 2>&1 || true
-docker pull "$image_ref"
 exec docker run --name "$service_name" \
   --publish "127.0.0.1:${port}:${port}" \
   --user "${runtime_uid}:${runtime_gid}" \

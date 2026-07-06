@@ -256,8 +256,12 @@ API while the service keeps running, so backups no longer cause downtime. In
 WAL mode `.backup` yields a single, already checkpointed database file, so the
 `-wal`/`-shm` sidecars are not archived. The snapshot is staged on the instance
 root volume rather than in `/tmp`, so large backups do not depend on a small
-tmpfs. Each run also updates a stable `latest.tar.gz` pointer in the bucket so a
-fresh host can restore deterministically on boot.
+tmpfs. Each run uploads a timestamped archive under
+`<prefix>/archive/<hostname>/` and refreshes a stable `<prefix>/latest.tar.gz`
+pointer so a fresh host can restore deterministically on boot. Only the
+timestamped archives are subject to the 30-day S3 lifecycle expiration;
+`latest.tar.gz` never expires, so the restore source survives even if backups
+stop running for longer than the retention window.
 
 ## Manual Backup And Inspection
 
@@ -287,8 +291,12 @@ A fresh host restores automatically. On service start, `rustc-perf-site` runs
 `rustc-perf-restore-if-empty`, which seeds `julia.db` and `.state` from
 `latest.tar.gz` (falling back to the newest timestamped archive) **only when no
 local database is present**. An existing database is never overwritten, so this
-is safe to run on every start. The manual procedure below is for restoring a
-specific, older archive over the current data.
+is safe to run on every start. If the database is missing and no backup can be
+restored (first bring-up with an empty bucket, or a download failure), the unit
+fails and keeps retrying instead of starting the container without data — seed
+`julia.db` (or fix the backups) and restart `rustc-perf-site`. The manual
+procedure below is for restoring a specific, older archive over the current
+data.
 
 1. Identify the backup object you want to restore.
 2. Stop the service:
@@ -345,7 +353,7 @@ Useful checks:
 ```bash
 cd infra/terraform
 terraform output -raw site_url
-terraform output -raw site_hostname
+terraform output -raw site_public_ip
 terraform output -raw backup_bucket_name
 ```
 
@@ -377,7 +385,7 @@ Useful interpretations:
 
 - Do not use mutable image tags for production deploys.
 - Do not change `site_container_image` in Terraform for routine rollouts.
-- Keep `RUSTC_PERF_SITE_URL` pointed at the stable HTTPS hostname, not the raw Elastic IP.
+- Share and bookmark the stable HTTPS hostname (the `site_url` output), not the raw Elastic IP.
 - Test a real restore from S3 before treating the backup path as production-ready.
 - Use Session Manager for operator access; this stack does not provision SSH ingress.
 - Expect first-start Julia precompilation to take a couple of minutes on a fresh host or fresh image and do not treat a short-lived Caddy `502` during that window as a proxy bug.

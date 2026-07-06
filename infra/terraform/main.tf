@@ -6,10 +6,11 @@ locals {
   }
 
   # Fixed settings that are not worth exposing as variables. Change them here.
-  data_mount_path       = "/var/lib/rustc-perf"
-  db_filename           = "julia.db"
-  db_path               = "${local.data_mount_path}/${local.db_filename}"
-  container_port        = 2346
+  data_mount_path = "/var/lib/rustc-perf"
+  db_filename     = "julia.db"
+  container_port  = 2346
+  # Must match RUSTC_PERF_RUNTIME_UID/GID in the root Dockerfile, where the
+  # container user is created.
   container_runtime_uid = 10001
   container_runtime_gid = 10001
   backup_prefix         = "runtime"
@@ -133,13 +134,30 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id
 
+  # Only the timestamped archives expire. The latest.tar.gz restore pointer
+  # lives outside archive/ and must never expire: it is the sole data source
+  # for a replaced instance, and it has to survive a stretch of failed or
+  # missed backups longer than the retention window.
   rule {
     id     = "expire-old-runtime-backups"
     status = "Enabled"
-    filter {}
+
+    filter {
+      prefix = "${local.backup_prefix}/archive/"
+    }
 
     expiration {
       days = local.backup_retention_days
+    }
+  }
+
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 }
@@ -260,12 +278,14 @@ resource "aws_instance" "site" {
   # S3 backup, so a replacement does not lose data or re-issue certificates.
   user_data_replace_on_change = true
 
-  user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
+  # Gzipped because the rendered cloud-init (with every script inlined) sits
+  # close to EC2's 16 KB user_data limit; cloud-init unpacks it transparently.
+  user_data_base64 = base64gzip(templatefile("${path.module}/cloud-init.yaml.tftpl", {
     files                 = local.user_data_files
     container_runtime_uid = local.container_runtime_uid
     container_runtime_gid = local.container_runtime_gid
     data_mount_path       = local.data_mount_path
-  })
+  }))
 
   depends_on = [
     aws_iam_role_policy_attachment.ssm_core,
@@ -274,6 +294,13 @@ resource "aws_instance" "site" {
   ]
 
   lifecycle {
+    # The SSM parameter tracks the newest AL2023 AMI, which changes every few
+    # weeks. Without this, a routine `terraform apply` would replace the
+    # instance (and roll the database back to the last backup) just because a
+    # new AMI was published. New AMIs are still picked up whenever the
+    # instance is replaced for a real reason (any deploy).
+    ignore_changes = [ami]
+
     precondition {
       condition     = length(regexall("@sha256:[0-9a-fA-F]{64}$", trimspace(var.site_container_image))) > 0
       error_message = "site_container_image must be set and pinned to an immutable @sha256 digest, e.g. <registry>/rustc-perf@sha256:<digest>. Create the ECR repository first with -target=aws_ecr_repository.site if you need to build the image before the full apply."

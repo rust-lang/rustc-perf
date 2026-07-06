@@ -126,19 +126,19 @@ Run the deploy script from this directory:
 ./deploy.sh
 ```
 
-It builds the image (for `linux/amd64`), pushes it to ECR, takes a pre-deploy backup, and runs `terraform apply` with the new digest — which replaces the instance. The new host restores the database and TLS certificates from the latest backup on boot. Terraform will show the plan and prompt before it replaces anything; pass `-auto-approve` (or any other `terraform apply` flag) through: `./deploy.sh -auto-approve`. Set `SKIP_BACKUP=1` to skip the pre-deploy backup.
+It builds the image (for `linux/amd64`), pushes it to ECR, takes a pre-deploy backup, and runs `terraform apply` with the new digest — which replaces the instance. The new host restores the database and TLS certificates from the latest backup on boot. Terraform will show the plan and prompt before it replaces anything; pass `-auto-approve` (or any other `terraform apply` flag) through: `./deploy.sh -auto-approve`. If the pre-deploy backup fails, the deploy aborts; set `SKIP_BACKUP=1` to skip the backup and accept rolling back to the last daily one.
 
 Expect a couple of minutes of downtime while the new instance boots, restores, and Julia warms up.
 
 Changing any host setting works the same way — edit the code and run `terraform apply` (or `./deploy.sh`). The instance is rebuilt from `user_data`, so the running machine never drifts from what the code says.
 
-If you prefer to do it by hand, the script is just: `docker build --platform linux/amd64` → `docker push` → resolve the `@sha256` digest → `terraform apply -var "site_container_image=<ecr-url>@<digest>"`.
+If you prefer to do it by hand, the script is just: `docker build --platform linux/amd64` → `docker push` → resolve the `@sha256` digest → `terraform apply -var "site_container_image=<ecr-url>@<digest>"`. Run `sudo /usr/local/bin/rustc-perf-backup` on the instance first — a manual apply that replaces the instance restores whatever the latest backup is.
 
 ## Backups And Restore
 
 Terraform creates a private, encrypted S3 bucket and installs a `rustc-perf-backup.timer` systemd timer on the instance.
 
-Backups use SQLite's online `.backup` API and do not stop the service. Each run uploads a timestamped archive and refreshes a stable `latest.tar.gz` pointer.
+Backups use SQLite's online `.backup` API and do not stop the service. Each run uploads a timestamped archive under `<prefix>/archive/<hostname>/` and refreshes a stable `<prefix>/latest.tar.gz` pointer. Timestamped archives expire after 30 days; `latest.tar.gz` never expires, so a replacement host always has a restore source even if backups have been failing.
 
 Each uploaded archive contains:
 

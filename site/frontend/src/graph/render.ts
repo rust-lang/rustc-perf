@@ -1,5 +1,5 @@
 import uPlot, {TypedArray} from "uplot";
-import {CompileGraphData, GraphsSelector, RuntimeGraphData} from "./data";
+import {CompileGraphData, GraphsSelector} from "./data";
 
 function tooltipPlugin({
   onclick,
@@ -335,7 +335,7 @@ function genPlotOpts({
   };
 }
 
-function intoSet(data: GraphData) {
+function intoSet(data: CompileGraphData) {
   for (const name of Object.keys(data.benchmarks)) {
     data.benchmarks[name].interpolated_indices = new Set(
       data.benchmarks[name].interpolated_indices

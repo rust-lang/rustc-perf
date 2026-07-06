@@ -1,5 +1,7 @@
-#!/bin/sh
-set -eu
+#!/bin/bash
+# pipefail matters: the tar | aws s3 cp upload below must fail when tar fails,
+# otherwise a truncated archive would be promoted to latest.tar.gz.
+set -euo pipefail
 
 host_env_file="/etc/rustc-perf-site.host.env"
 if [ -f "$host_env_file" ]; then
@@ -14,11 +16,13 @@ if [ -z "$backup_bucket" ]; then
   exit 1
 fi
 
-data_root="${RUSTC_PERF_DATA_DIR:-/var/lib/rustc-perf}"
-db_name="${RUSTC_PERF_DB_FILENAME:-julia.db}"
+# The host env file written by Terraform is the single source of truth for
+# these; fail loudly instead of falling back to defaults that could drift.
+data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
+db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
 state_root="${data_root}/.state"
 image_ref="${RUSTC_PERF_IMAGE_REF:-}"
-backup_prefix="${RUSTC_PERF_BACKUP_PREFIX:-runtime}"
+backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
 staging_root="${RUSTC_PERF_BACKUP_STAGING_ROOT:-/var/lib/rustc-perf-backup-staging}"
 lock_file="/var/lock/rustc-perf-backup.lock"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -64,7 +68,9 @@ image=${image_ref}
 database=${db_name}
 METADATA
 
-object_key="${host_name}/${timestamp}.tar.gz"
+# Timestamped archives live under archive/ so the S3 lifecycle rule can expire
+# them without ever touching the latest.tar.gz pointer next to it.
+object_key="archive/${host_name}/${timestamp}.tar.gz"
 latest_key="latest.tar.gz"
 if [ -n "$backup_prefix" ]; then
   object_key="${backup_prefix}/${object_key}"

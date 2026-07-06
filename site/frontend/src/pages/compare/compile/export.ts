@@ -2,14 +2,10 @@ import {computeSummary, TestCaseComparison} from "../data";
 import {CompileTestCase} from "./common";
 
 export function exportToMarkdown(
-  comparisons: TestCaseComparison<CompileTestCase>[],
+  comparisons: TestCaseComparison<CompileTestCase>[]
 ) {
   function changesTable(comparisons: TestCaseComparison<CompileTestCase>[]) {
-    let columns = [
-      "Benchmark",
-      "% Change",
-      "Significance Factor",
-    ];
+    let columns = ["Benchmark", "% Change", "Significance Factor"];
 
     const toMarkdownRow = (cells: string[]) => {
       return `| ${cells.join(" | ")} |\n`;
@@ -51,11 +47,17 @@ export function exportToMarkdown(
   content += "|:---:|:---:|:---:|:---:|:---:|\n";
   content += `| Regressions | ${formatRange(
     regressions.range
-  )} | ${regressions.geomean.toFixed(2)}% | ${regressions.median.toFixed(2)}% | ${regressions.count} |\n`;
+  )} | ${regressions.geomean.toFixed(2)}% | ${regressions.median.toFixed(
+    2
+  )}% | ${regressions.count} |\n`;
   content += `| Improvements | ${formatRange(
     improvements.range
-  )} | ${improvements.geomean.toFixed(2)}% | ${improvements.median.toFixed(2)}% | ${improvements.count} |\n`;
-  content += `| All | ${formatRange(all.range)} | ${all.geomean.toFixed(2)}% | ${all.median.toFixed(2)}% | ${all.count} |\n\n`;
+  )} | ${improvements.geomean.toFixed(2)}% | ${improvements.median.toFixed(
+    2
+  )}% | ${improvements.count} |\n`;
+  content += `| All | ${formatRange(all.range)} | ${all.geomean.toFixed(
+    2
+  )}% | ${all.median.toFixed(2)}% | ${all.count} |\n\n`;
 
   content += "# Benchmarks\n";
   content += changesTable(comparisons);

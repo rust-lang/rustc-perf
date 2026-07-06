@@ -1,14 +1,8 @@
 <script setup lang="ts">
 import {CompileTestCase} from "../common";
-import {computed, onMounted, Ref, ref} from "vue";
-import Tooltip from "../../tooltip.vue";
+import {computed} from "vue";
 import {ArtifactDescription} from "../../types";
 import {getPastDate, formatDate} from "./utils";
-import {
-  COMPILE_DETAIL_SECTIONS_RESOLVER,
-  CompileDetailSections,
-  CompileDetailSectionsSelector,
-} from "./detail-resolver";
 import ProfileShortcut from "./shortcuts/profile-shortcut.vue";
 import BenchmarkDetailGraph from "./benchmark-detail-graph.vue";
 

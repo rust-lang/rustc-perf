@@ -47,12 +47,15 @@ const opened = ref(false);
       <template #label>Do another comparison</template>
       <template #content>
         <div class="commits section">
-          <div
-            style="display: flex; flex-wrap: wrap; width: 100%"
-          >
+          <div style="display: flex; flex-wrap: wrap; width: 100%">
             <div class="section-heading">Commits</div>
             <div
-              style="display: flex; flex-wrap: wrap; flex-grow: 1; justify-content: space-around"
+              style="
+                display: flex;
+                flex-wrap: wrap;
+                flex-grow: 1;
+                justify-content: space-around;
+              "
             >
               <div class="commit-input">
                 <label for="start-bound">Before</label>

@@ -59,7 +59,9 @@ if [ "${SKIP_BACKUP:-0}" != "1" ]; then
     status="$(aws ssm get-command-invocation --region "$region" --command-id "$cmd_id" \
       --instance-id "$instance_id" --query 'Status' --output text 2>/dev/null || echo Unknown)"
     if [ "$status" != "Success" ]; then
-      echo "    Warning: backup status was '$status'; continuing. The new host will fall back to the latest daily backup." >&2
+      echo "Pre-deploy backup failed (status '$status'). Aborting: replacing the instance now would roll the database back to the last daily backup." >&2
+      echo "Fix the backup (or run SKIP_BACKUP=1 ./deploy.sh to accept that data loss) and retry." >&2
+      exit 1
     fi
   fi
 fi

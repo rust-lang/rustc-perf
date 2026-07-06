@@ -7,7 +7,10 @@ write_files:
     content: ${base64encode(f.content)}
 %{ endfor ~}
 runcmd:
-  - dnf install -y docker awscli tar gzip sqlite amazon-ssm-agent
+  # The AWS CLI v2 and amazon-ssm-agent ship preinstalled in the AL2023 AMI
+  # (and "awscli" is not a valid AL2023 package name, which would fail the
+  # whole transaction and leave docker uninstalled).
+  - dnf install -y docker tar gzip sqlite
   - systemctl enable --now docker amazon-ssm-agent
   - install -d -m 750 -o ${container_runtime_uid} -g ${container_runtime_gid} ${data_mount_path} ${data_mount_path}/.state
   - install -d -m 755 /var/lib/caddy/data /var/lib/caddy/config
