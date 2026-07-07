@@ -18,14 +18,16 @@ use crate::{
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::{HashMap, HashSet};
-use native_tls::{Certificate, TlsConnector};
-use postgres_native_tls::MakeTlsConnector;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::CertificateDer;
+use rustls::{ClientConfig, RootCertStore};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_postgres::Statement;
 use tokio_postgres::{GenericClient, Row};
+use tokio_postgres_rustls::MakeRustlsConnect;
 
 pub struct Postgres(String, std::sync::Once);
 
@@ -39,12 +41,11 @@ const CERT_URL: &str = "https://truststore.pki.rds.amazonaws.com/global/global-b
 
 pub async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
     if db_url.contains("rds.amazonaws.com") {
-        let mut builder = TlsConnector::builder();
-        for cert in make_certificates().await {
-            builder.add_root_certificate(cert);
-        }
-        let connector = builder.build().context("built TlsConnector")?;
-        let connector = MakeTlsConnector::new(connector);
+        let connector = MakeRustlsConnect::new(
+            ClientConfig::builder()
+                .with_root_certificates(make_certificates().await)
+                .with_no_client_auth(),
+        );
 
         let (db_client, connection) = match tokio_postgres::connect(db_url, connector).await {
             Ok(v) => v,
@@ -77,32 +78,33 @@ pub async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client>
         Ok(db_client)
     }
 }
-async fn make_certificates() -> Vec<Certificate> {
-    use x509_cert::der::pem::LineEnding;
-    use x509_cert::der::EncodePem;
 
-    static CERTIFICATE_PEMS: Mutex<Option<Vec<u8>>> = Mutex::const_new(None);
+async fn make_certificates() -> Arc<RootCertStore> {
+    static ROOTS: Mutex<Option<Arc<RootCertStore>>> = Mutex::const_new(None);
 
-    let mut guard = CERTIFICATE_PEMS.lock().await;
-    if guard.is_none() {
-        let client = reqwest::Client::new();
-        let resp = client
-            .get(CERT_URL)
-            .send()
-            .await
-            .expect("failed to get RDS cert");
-        let certificate_pems = resp
-            .bytes()
-            .await
-            .expect("failed to get RDS cert body")
-            .to_vec();
-        *guard = Some(certificate_pems.clone());
+    let mut guard = ROOTS.lock().await;
+    if let Some(roots) = &*guard {
+        return roots.clone();
     }
-    let certs = x509_cert::Certificate::load_pem_chain(&guard.as_ref().unwrap()[..]).unwrap();
-    certs
-        .into_iter()
-        .map(|cert| Certificate::from_pem(cert.to_pem(LineEnding::LF).unwrap().as_bytes()).unwrap())
-        .collect()
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(CERT_URL)
+        .send()
+        .await
+        .expect("failed to get RDS cert");
+    let certificate_pems = resp.bytes().await.expect("failed to get RDS cert body");
+    let roots = CertificateDer::pem_slice_iter(&certificate_pems)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("failed to parse RDS certs");
+
+    let mut store = RootCertStore::empty();
+    let (added, ignored) = store.add_parsable_certificates(roots);
+    assert!(added / 2 > ignored, "failed to add RDS certs");
+
+    let wrapped = Arc::new(store);
+    *guard = Some(wrapped.clone());
+    wrapped
 }
 
 static MIGRATIONS: &[&str] = &[
