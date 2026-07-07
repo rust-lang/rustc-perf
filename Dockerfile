@@ -7,8 +7,6 @@ RUN cd site/frontend && npm run build
 
 FROM ubuntu:24.04 as base
 
-ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       g++ \
@@ -16,7 +14,6 @@ RUN apt-get update -y && \
       ca-certificates \
       libc6-dev \
       make \
-      libssl-dev \
       pkg-config \
       git \
       cmake \
