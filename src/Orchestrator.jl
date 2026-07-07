@@ -165,8 +165,22 @@ function get_master_commits_since(checkpoint_sha)
     return commits, commit_times
 end
 
+# The Julia checkpoint is derivable from the database (the newest master
+# artifact), so a missing file is reconstructed instead of being an error.
+# The reports checkpoint has no equivalent in the database and must be seeded
+# from outside; read_checkpoint errors on it.
+function seed_julia_checkpoint_from_db(db, path)
+    df = DBInterface.execute(db, "SELECT name FROM artifact WHERE type='master' ORDER BY id DESC LIMIT 1") |> DataFrame
+    isempty(df) && return
+    write_checkpoint(path, df[1, "name"])
+    println("Derived Julia checkpoint $(df[1, "name"]) from the database")
+end
+
 function main(install)
     db = SQLite.DB(db_path)
+    if !isfile(julia_checkpoint_file)
+        seed_julia_checkpoint_from_db(db, julia_checkpoint_file)
+    end
     julia_last_processed = read_checkpoint(julia_checkpoint_file)
     reports_last_processed = read_checkpoint(reports_checkpoint_file)
 

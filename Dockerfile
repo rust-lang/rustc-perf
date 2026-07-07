@@ -56,8 +56,7 @@ WORKDIR /app
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates \
-    sqlite3 && \
+    ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --system --gid "$RUSTC_PERF_RUNTIME_GID" rustc-perf && \
     useradd --system --uid "$RUSTC_PERF_RUNTIME_UID" --gid "$RUSTC_PERF_RUNTIME_GID" --create-home --home-dir /home/rustc-perf rustc-perf
@@ -66,7 +65,6 @@ COPY ./Project.toml ./Project.toml
 COPY ./Manifest.toml ./Manifest.toml
 COPY ./run.jl ./run.jl
 COPY ./src ./src
-COPY ./.state.dist ./.state.dist
 COPY ./docker-entrypoint.sh /usr/local/bin/rustc-perf-entrypoint
 COPY --from=rust-build /tmp/prod_site ./prod_site
 
