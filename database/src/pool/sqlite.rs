@@ -827,7 +827,7 @@ impl Connection for SqliteConnection {
             .execute(
                 "insert or replace into artifact_size (aid, component, size)\
                 values (?, ?, ?)",
-                params![&artifact.0, &component, &size],
+                params![&artifact.0, &component, &(size as i64)],
             )
             .unwrap();
     }
@@ -837,7 +837,7 @@ impl Connection for SqliteConnection {
             .prepare("select component, size from artifact_size where aid = ?")
             .unwrap()
             .query_map(params![&aid.0], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
             })
             .unwrap()
             .map(|r| r.unwrap())
