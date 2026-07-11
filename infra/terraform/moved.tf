@@ -4,6 +4,16 @@
 # the existing resources instead of destroying and recreating them.
 
 moved {
+  from = aws_subnet.public[0]
+  to   = aws_subnet.public
+}
+
+moved {
+  from = aws_route_table_association.public[0]
+  to   = aws_route_table_association.public
+}
+
+moved {
   from = aws_ecr_repository.site[0]
   to   = aws_ecr_repository.site
 }

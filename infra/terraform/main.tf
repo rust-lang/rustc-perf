@@ -27,13 +27,9 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
-# A small dedicated VPC (the account has no default VPC): two public subnets,
-# an internet gateway, and a route to it. What is reachable from the internet
-# is governed by aws_security_group.instance below (only 80/443).
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
+# A minimal dedicated VPC (the account has no default VPC): one public subnet
+# with a route to an internet gateway. What is reachable from the internet is
+# governed by aws_security_group.instance below (only 80/443).
 resource "aws_vpc" "this" {
   cidr_block           = "10.42.0.0/16"
   enable_dns_support   = true
@@ -48,14 +44,11 @@ resource "aws_internet_gateway" "this" {
 }
 
 resource "aws_subnet" "public" {
-  count = 2
-
   vpc_id                  = aws_vpc.this.id
-  cidr_block              = "10.42.${count.index + 1}.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  cidr_block              = "10.42.1.0/24"
   map_public_ip_on_launch = true
 
-  tags = merge(local.common_tags, { Name = "${var.name_prefix}-public-${count.index + 1}" })
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-public" })
 }
 
 resource "aws_route_table" "public" {
@@ -70,9 +63,7 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route_table_association" "public" {
-  count = 2
-
-  subnet_id      = aws_subnet.public[count.index].id
+  subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
 
@@ -326,7 +317,7 @@ locals {
 resource "aws_instance" "site" {
   ami                         = data.aws_ssm_parameter.al2023_ami.value
   instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.public[0].id
+  subnet_id                   = aws_subnet.public.id
   vpc_security_group_ids      = [aws_security_group.instance.id]
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.instance.name

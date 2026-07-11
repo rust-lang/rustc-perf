@@ -57,8 +57,10 @@ Collect or choose these values before you begin:
 - Terraform `name_prefix`
 - Production hostname, for example `perf.example.com`
 
-You also need a default VPC in the region and AWS credentials that can create
-the Terraform resources used by the stack.
+You also need AWS credentials that can create the Terraform resources used by
+the stack (including IAM roles and a VPC); see the credentials note in
+[infra/terraform/README.md](../infra/terraform/README.md) if you authenticate
+with `aws login`.
 
 ## Bootstrap Once
 

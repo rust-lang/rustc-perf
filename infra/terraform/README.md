@@ -2,7 +2,7 @@
 
 This directory provisions a deliberately small rustc-perf deployment on AWS:
 
-- One EC2 instance running the production rustc-perf container in Docker, in the account's default VPC.
+- One EC2 instance running the production rustc-perf container in Docker, in a minimal dedicated VPC (one public subnet).
 - One Elastic IP attached directly to the site instance.
 - One Caddy reverse proxy on the site instance for HTTP and automatic Let's Encrypt HTTPS.
 - One encrypted gp3 root volume that stores the OS, Docker data, the SQLite file, and the orchestrator checkpoint state.
@@ -21,7 +21,7 @@ restore, and the deploy flow, see
 - SQLite wants a normal local filesystem. EFS is the wrong default.
 - One EC2 host is easy to understand, inspect, and roll back.
 - An Elastic IP plus Caddy keeps the public endpoint stable without depending on Route53, ACM, CloudFront, or an ALB.
-- It reuses the account's default VPC rather than building a bespoke network. Internet exposure is controlled entirely by the security group (only 80/443), so a dedicated VPC would add resources without adding security here.
+- The network is a minimal dedicated VPC: one public subnet and an internet gateway, nothing else. Internet exposure is controlled entirely by the security group (only 80/443).
 - Deploys are immutable: the image digest and every host setting live in `user_data`, so a new version is shipped by running `terraform apply`, which replaces the instance. There is nothing to drift, because the running machine is always exactly what the code describes.
 - Instance replacement is non-destructive: on boot a fresh host restores `julia.db`, `.state`, and Caddy's TLS certificates from the latest S3 backup, so it keeps the dataset and does not re-request certificates.
 - Runtime backups go to a private S3 bucket on a daily timer. They use SQLite's online `.backup`, so they do not stop the service.
@@ -29,7 +29,7 @@ restore, and the deploy flow, see
 
 ## Architecture
 
-- The EC2 instance lives in one of the default VPC's subnets with an Elastic IP so it can install packages, pull container images, and serve the public site without adding NAT.
+- The EC2 instance lives in the stack's public subnet with an Elastic IP so it can install packages, pull container images, and serve the public site without adding NAT.
 - The instance security group exposes only ports 80 and 443 publicly. Operator access is through Session Manager; this stack does not provision SSH ingress.
 - The SQLite file lives at `/var/lib/rustc-perf/julia.db` on the root gp3 volume.
 - The Julia orchestrator checkpoint files live at `/var/lib/rustc-perf/.state` and are persisted alongside the database.
@@ -48,9 +48,24 @@ State lives in a local `terraform.tfstate`, which is fine for a single operator 
 ## Prerequisites
 
 1. Terraform 1.6 or newer.
-2. A default VPC in the target region (standard on most accounts).
-3. AWS credentials with permission to create EC2, Elastic IP, ECR, S3, and IAM (create-role) resources. The instance profile is what gives the host Session Manager access and its S3 backup permissions.
-4. A container image built from the repository root [Dockerfile](../../Dockerfile).
+2. AWS credentials with permission to create EC2, VPC, Elastic IP, ECR, S3, and IAM (create-role) resources. The instance profile is what gives the host Session Manager access and its S3 backup permissions. Note that the PowerUserAccess permission set cannot manage IAM.
+3. A container image built from the repository root [Dockerfile](../../Dockerfile).
+
+The stack creates its own small VPC (one public subnet); no default VPC is required.
+
+### Credentials note for `aws login`
+
+The Terraform AWS provider cannot read credentials from the AWS CLI's browser-based `aws login` flow ([terraform-provider-aws#45316](https://github.com/hashicorp/terraform-provider-aws/issues/45316)). If that is how you authenticate, add a bridge profile to `~/.aws/config` that resolves credentials through the CLI, and run Terraform (and `deploy.sh`) with it:
+
+```ini
+[profile terraform]
+credential_process = aws configure export-credentials --profile default --format process
+region = us-east-1
+```
+
+```bash
+AWS_PROFILE=terraform ./deploy.sh
+```
 
 ## Minimal first deploy
 
