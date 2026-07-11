@@ -262,7 +262,7 @@ resource "aws_iam_role_policy" "app" {
       },
       {
         Effect   = "Allow"
-        Action   = ["s3:AbortMultipartUpload", "s3:GetObject", "s3:PutObject"]
+        Action   = ["s3:AbortMultipartUpload", "s3:GetObject", "s3:PutObject", "s3:GetObjectTagging"]
         Resource = "${aws_s3_bucket.backups.arn}/${local.backup_prefix}/*"
       },
     ]
