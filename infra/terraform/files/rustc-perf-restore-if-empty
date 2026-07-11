@@ -52,7 +52,11 @@ if [ -n "$backup_prefix" ]; then
   prefix_path="${backup_prefix}/"
 fi
 
-work_dir="$(mktemp -d)"
+# Stage on the root volume, not mktemp's default /tmp: on AL2023 /tmp is a
+# RAM-backed tmpfs far smaller than the extracted database.
+staging_root="/var/lib/rustc-perf-restore-staging"
+install -d -m 700 "$staging_root"
+work_dir="$(mktemp -d "${staging_root}/restore.XXXXXX")"
 archive="${work_dir}/restore.tar.gz"
 cleanup() {
   rm -rf "$work_dir"
