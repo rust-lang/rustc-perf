@@ -2,10 +2,12 @@
 set -eu
 umask 027
 
-app_root="${RUSTC_PERF_APP_ROOT:-/app}"
-data_root="${RUSTC_PERF_DATA_DIR:-/var/lib/rustc-perf}"
-db_name="${RUSTC_PERF_DB_FILENAME:-julia.db}"
-julia_bin="${JULIA_BIN:-/usr/local/julia/bin/julia}"
+# All four are defined by the image's ENV block (the host env file may
+# override the data dir and db name).
+app_root="${RUSTC_PERF_APP_ROOT:?RUSTC_PERF_APP_ROOT is not set}"
+data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
+db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
+julia_bin="${JULIA_BIN:?JULIA_BIN is not set}"
 state_root="${data_root}/.state"
 
 install -d -m 750 "${data_root}" "${state_root}"

@@ -10,18 +10,13 @@ if [ -f "$host_env_file" ]; then
   set +a
 fi
 
-backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:-}"
-if [ -z "$backup_bucket" ]; then
-  echo "RUSTC_PERF_BACKUP_BUCKET is not configured." >&2
-  exit 1
-fi
-
 # The host env file written by Terraform is the single source of truth for
 # these; fail loudly instead of falling back to defaults that could drift.
+backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:?RUSTC_PERF_BACKUP_BUCKET is not set}"
 data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
 db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
 state_root="${data_root}/.state"
-image_ref="${RUSTC_PERF_IMAGE_REF:-}"
+image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
 backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
 staging_root="/var/lib/rustc-perf-backup-staging"
 lock_file="/var/lock/rustc-perf-backup.lock"

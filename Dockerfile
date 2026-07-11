@@ -46,6 +46,8 @@ RUN cargo build --release -p site --bin site && \
 FROM julia:1.12-bookworm AS runtime
 
 ENV RUSTC_PERF_APP_ROOT=/app
+ENV RUSTC_PERF_DATA_DIR=/var/lib/rustc-perf
+ENV RUSTC_PERF_DB_FILENAME=julia.db
 ENV JULIA_BIN=/usr/local/julia/bin/julia
 ENV JULIA_DEPOT_PATH=/usr/local/julia-depot
 # Must match container_runtime_uid/gid in infra/terraform/main.tf, which owns

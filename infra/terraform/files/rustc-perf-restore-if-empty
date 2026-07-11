@@ -14,7 +14,7 @@ data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
 db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
 runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
 runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
-backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:-}"
+backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:?RUSTC_PERF_BACKUP_BUCKET is not set}"
 backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
 caddy_data_dir="/var/lib/caddy/data"
 
@@ -40,11 +40,6 @@ caddy_missing=0
 
 if [ "$db_missing" -eq 0 ] && [ "$caddy_missing" -eq 0 ]; then
   exit 0
-fi
-
-if [ -z "$backup_bucket" ]; then
-  echo "No backup bucket configured; leaving seeding to the operator." >&2
-  fail_if_db_missing
 fi
 
 prefix_path=""
