@@ -50,6 +50,11 @@ ENV RUSTC_PERF_DATA_DIR=/var/lib/rustc-perf
 ENV RUSTC_PERF_DB_FILENAME=julia.db
 ENV JULIA_BIN=/usr/local/julia/bin/julia
 ENV JULIA_DEPOT_PATH=/usr/local/julia-depot
+# Precompile for the same portable CPU targets Julia's official binaries use,
+# not the build machine's CPU. Otherwise the caches baked below are rejected
+# on hosts with a different microarchitecture (e.g. older EC2 CPUs) and Julia
+# re-precompiles everything on every container start.
+ENV JULIA_CPU_TARGET="generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)"
 # Must match container_runtime_uid/gid in infra/terraform/main.tf, which owns
 # the bind-mounted data directory on the host.
 ENV RUSTC_PERF_RUNTIME_UID=10001
