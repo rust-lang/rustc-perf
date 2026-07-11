@@ -257,11 +257,13 @@ WAL mode `.backup` yields a single, already checkpointed database file, so the
 `-wal`/`-shm` sidecars are not archived. The snapshot is staged on the instance
 root volume rather than in `/tmp`, so large backups do not depend on a small
 tmpfs. Each run uploads a timestamped archive under
-`<prefix>/archive/<hostname>/` and refreshes a stable `<prefix>/latest.tar.gz`
-pointer so a fresh host can restore deterministically on boot. Only the
-timestamped archives are subject to the 30-day S3 lifecycle expiration;
-`latest.tar.gz` never expires, so the restore source survives even if backups
-stop running for longer than the retention window.
+`<prefix>/archive/<hostname>/` and then refreshes `<prefix>/latest.tar.gz` so
+a fresh host can restore deterministically on boot. `latest.tar.gz` is an
+independent full copy of the newest archive (an S3 server-side copy), not a
+reference to it, so expiring the timestamped archives never invalidates it.
+Only the timestamped archives are subject to the 30-day S3 lifecycle
+expiration; `latest.tar.gz` never expires, so the restore source survives even
+if backups stop running for longer than the retention window.
 
 ## Manual Backup And Inspection
 

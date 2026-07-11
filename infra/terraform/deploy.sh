@@ -55,9 +55,20 @@ if [ "${SKIP_BACKUP:-0}" != "1" ]; then
       --document-name AWS-RunShellScript \
       --parameters 'commands=["sudo /usr/local/bin/rustc-perf-backup"]' \
       --query 'Command.CommandId' --output text)"
-    aws ssm wait command-executed --region "$region" --command-id "$cmd_id" --instance-id "$instance_id" || true
-    status="$(aws ssm get-command-invocation --region "$region" --command-id "$cmd_id" \
-      --instance-id "$instance_id" --query 'Status' --output text 2>/dev/null || echo Unknown)"
+    # Poll until the command reaches a terminal state. `aws ssm wait` is not
+    # usable here: its polling budget is fixed at 100 seconds, and the backup
+    # (snapshot + gzip + upload) takes minutes and grows with the database.
+    deadline=$((SECONDS + 900))
+    status="Pending"
+    while [ "$SECONDS" -lt "$deadline" ]; do
+      # The invocation may not exist for a moment right after send-command.
+      status="$(aws ssm get-command-invocation --region "$region" --command-id "$cmd_id" \
+        --instance-id "$instance_id" --query 'Status' --output text 2>/dev/null || echo Pending)"
+      case "$status" in
+        Success|Failed|Cancelled|TimedOut|Undeliverable|Terminated) break ;;
+      esac
+      sleep 10
+    done
     if [ "$status" != "Success" ]; then
       echo "Pre-deploy backup failed (status '$status'). Aborting: replacing the instance now would roll the database back to the last daily backup." >&2
       echo "Fix the backup (or run SKIP_BACKUP=1 ./deploy.sh to accept that data loss) and retry." >&2

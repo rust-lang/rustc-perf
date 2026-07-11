@@ -138,7 +138,7 @@ If you prefer to do it by hand, the script is just: `docker build --platform lin
 
 Terraform creates a private, encrypted S3 bucket and installs a `rustc-perf-backup.timer` systemd timer on the instance.
 
-Backups use SQLite's online `.backup` API and do not stop the service. Each run uploads a timestamped archive under `<prefix>/archive/<hostname>/` and refreshes a stable `<prefix>/latest.tar.gz` pointer. Timestamped archives expire after 30 days; `latest.tar.gz` never expires, so a replacement host always has a restore source even if backups have been failing.
+Backups use SQLite's online `.backup` API and do not stop the service. Each run uploads a timestamped archive under `<prefix>/archive/<hostname>/` and refreshes `<prefix>/latest.tar.gz`, an independent full copy of that archive (not a reference to it). Timestamped archives expire after 30 days; `latest.tar.gz` never expires, so a replacement host always has a restore source even if backups have been failing.
 
 Each uploaded archive contains:
 

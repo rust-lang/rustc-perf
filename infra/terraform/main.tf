@@ -15,7 +15,7 @@ locals {
   container_runtime_gid = 10001
   backup_prefix         = "runtime"
   backup_retention_days = 30
-  ecr_max_images        = 20
+  ecr_max_images        = 3
 
   ecr_repository_name = "${var.name_prefix}-site"
   backup_bucket_name  = lower("${var.name_prefix}-${data.aws_caller_identity.current.account_id}-${var.aws_region}-backups")
@@ -134,10 +134,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id
 
-  # Only the timestamped archives expire. The latest.tar.gz restore pointer
-  # lives outside archive/ and must never expire: it is the sole data source
-  # for a replaced instance, and it has to survive a stretch of failed or
-  # missed backups longer than the retention window.
+  # Only the timestamped archives expire. latest.tar.gz — an independent full
+  # copy of the newest archive, not a reference to it — lives outside archive/
+  # and must never expire: it is the sole data source for a replaced instance,
+  # and it has to survive a stretch of failed or missed backups longer than
+  # the retention window.
   rule {
     id     = "expire-old-runtime-backups"
     status = "Enabled"

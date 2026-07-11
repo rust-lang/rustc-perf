@@ -69,7 +69,7 @@ database=${db_name}
 METADATA
 
 # Timestamped archives live under archive/ so the S3 lifecycle rule can expire
-# them without ever touching the latest.tar.gz pointer next to it.
+# them without ever touching the latest.tar.gz copy next to it.
 object_key="archive/${host_name}/${timestamp}.tar.gz"
 latest_key="latest.tar.gz"
 if [ -n "$backup_prefix" ]; then
@@ -78,6 +78,8 @@ if [ -n "$backup_prefix" ]; then
 fi
 
 tar -C "$snapshot_dir" -czf - . | aws s3 cp - "s3://${backup_bucket}/${object_key}" --only-show-errors
-# Maintain a stable pointer to the most recent archive so a fresh or replaced
-# host can restore deterministically on boot.
+# Maintain a stable copy of the most recent archive so a fresh or replaced
+# host can restore deterministically on boot. This is a full, independent
+# server-side copy, not a reference: expiring the archive it came from does
+# not affect it.
 aws s3 cp "s3://${backup_bucket}/${object_key}" "s3://${backup_bucket}/${latest_key}" --only-show-errors
