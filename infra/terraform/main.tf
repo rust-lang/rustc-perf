@@ -27,18 +27,53 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
-# Use the account's default VPC and its subnets instead of building a bespoke
-# network. What is reachable from the internet is governed entirely by
-# aws_security_group.instance below (only 80/443), which is identical either way.
-data "aws_vpc" "default" {
-  default = true
+# A small dedicated VPC (the account has no default VPC): two public subnets,
+# an internet gateway, and a route to it. What is reachable from the internet
+# is governed by aws_security_group.instance below (only 80/443).
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+resource "aws_vpc" "this" {
+  cidr_block           = "10.42.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-vpc" })
+}
+
+resource "aws_internet_gateway" "this" {
+  vpc_id = aws_vpc.this.id
+  tags   = merge(local.common_tags, { Name = "${var.name_prefix}-igw" })
+}
+
+resource "aws_subnet" "public" {
+  count = 2
+
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = "10.42.${count.index + 1}.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
+
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-public-${count.index + 1}" })
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.this.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.this.id
   }
+
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-public" })
+}
+
+resource "aws_route_table_association" "public" {
+  count = 2
+
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
 }
 
 data "aws_ssm_parameter" "al2023_ami" {
@@ -46,9 +81,10 @@ data "aws_ssm_parameter" "al2023_ami" {
 }
 
 resource "aws_security_group" "instance" {
-  name        = "${var.name_prefix}-instance"
-  description = "Public ingress for the rustc-perf site instance (HTTP/HTTPS only)"
-  vpc_id      = data.aws_vpc.default.id
+  name = "${var.name_prefix}-instance"
+  # Immutable in EC2: changing this forces SG (and instance) replacement.
+  description = "Ingress for the rustc-perf site instance"
+  vpc_id      = aws_vpc.this.id
 
   ingress {
     description = "HTTP"
@@ -119,6 +155,28 @@ resource "aws_s3_bucket_public_access_block" "backups" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# Reject any non-TLS access to the backups.
+resource "aws_s3_bucket_policy" "backups" {
+  bucket = aws_s3_bucket.backups.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyInsecureTransport"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource = [
+        aws_s3_bucket.backups.arn,
+        "${aws_s3_bucket.backups.arn}/*",
+      ]
+      Condition = {
+        Bool = { "aws:SecureTransport" = "false" }
+      }
+    }]
+  })
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
@@ -268,7 +326,7 @@ locals {
 resource "aws_instance" "site" {
   ami                         = data.aws_ssm_parameter.al2023_ami.value
   instance_type               = var.instance_type
-  subnet_id                   = sort(data.aws_subnets.default.ids)[0]
+  subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.instance.id]
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.instance.name
