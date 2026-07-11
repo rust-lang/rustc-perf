@@ -66,6 +66,19 @@ with `aws login`.
 
 This is the exact sequence for the first real production bring-up.
 
+### 1. Fill In terraform.tfvars For Production
+
+E.g.
+
+```
+aws_region           = "us-east-1"
+name_prefix          = "rustc-perf"
+instance_type        = "t3a.medium"
+root_volume_size_gb  = 100
+site_hostname        = "rustserver.perf.julialang.org"
+```
+
+
 ### 1. Create Or Reuse The Image Repository
 
 If you are using the Terraform-managed ECR repository, create it first:
@@ -74,13 +87,12 @@ If you are using the Terraform-managed ECR repository, create it first:
 cd infra/terraform
 terraform init
 terraform apply -target=aws_ecr_repository.site
-terraform output -raw ecr_repository_url
 ```
 
 If you are using an existing registry, skip this step and use that repository
 instead.
 
-### 2. Build And Push The First Production Image
+### 2. Build And Push The First Production Image + apply
 
 Build and push the first production image before the full Terraform apply.
 
@@ -88,42 +100,17 @@ If you created the ECR repository through Terraform, a practical bootstrap flow
 is:
 
 ```bash
-ECR_URL="$(cd infra/terraform && terraform output -raw ecr_repository_url)"
-docker build -t rustc-perf:bootstrap .
-docker tag rustc-perf:bootstrap "$ECR_URL:bootstrap"
-docker push "$ECR_URL:bootstrap"
+SKIP_BACKUP=1 ./deploy.sh
 ```
 
 Then set `site_container_image` to the digest-pinned form of that image, not
 the mutable `:bootstrap` tag.
 
-### 3. Fill In terraform.tfvars For Production
-
-At minimum, set these values:
-
-- `site_container_image`
-- `site_hostname`
-
-If you are moving forward an existing dataset, plan to restore `julia.db` and
-`.state/` manually after the first host comes up.
-
-### 4. Run The First Full Apply
+### 3. Push a initial db
 
 ```bash
-cd infra/terraform
-terraform init
-terraform plan
-terraform apply
+aws s3 cp latest.tar.gz s3://rustc-perf-...-us-east-1-backups/runtime/latest.tar.gz
 ```
-
-### 5. Record The Important Outputs
-
-Useful outputs after the apply:
-
-- `site_url`
-- `site_public_ip` (create the DNS `A` record against this; useful before DNS propagates)
-- `ecr_repository_url`
-- `backup_bucket_name`
 
 ## Stable Hostname And HTTPS
 
