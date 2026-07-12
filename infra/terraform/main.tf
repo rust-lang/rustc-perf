@@ -9,6 +9,7 @@ locals {
   data_mount_path  = "/var/lib/rustc-perf"
   db_filename      = "julia.db"
   container_port   = 2346
+  datasette_port   = 8001
   caddy_image      = "caddy:2.8.4-alpine"
   caddy_data_dir   = "/var/lib/caddy/data"
   caddy_config_dir = "/var/lib/caddy/config"
@@ -289,17 +290,20 @@ locals {
   user_data_files = {
     "/usr/local/bin/rustc-perf-run-caddy"        = { mode = "0755", content = file("${path.module}/files/rustc-perf-run-caddy") }
     "/usr/local/bin/rustc-perf-run-container"    = { mode = "0755", content = file("${path.module}/files/rustc-perf-run-container") }
+    "/usr/local/bin/rustc-perf-run-datasette"    = { mode = "0755", content = file("${path.module}/files/rustc-perf-run-datasette") }
     "/usr/local/bin/rustc-perf-backup"           = { mode = "0755", content = file("${path.module}/files/rustc-perf-backup") }
     "/usr/local/bin/rustc-perf-restore-if-empty" = { mode = "0755", content = file("${path.module}/files/rustc-perf-restore-if-empty") }
 
-    "/etc/systemd/system/rustc-perf-site.service"   = { mode = "0644", content = file("${path.module}/files/rustc-perf-site.service") }
-    "/etc/systemd/system/rustc-perf-caddy.service"  = { mode = "0644", content = file("${path.module}/files/rustc-perf-caddy.service") }
-    "/etc/systemd/system/rustc-perf-backup.service" = { mode = "0644", content = file("${path.module}/files/rustc-perf-backup.service") }
-    "/etc/systemd/system/rustc-perf-backup.timer"   = { mode = "0644", content = file("${path.module}/files/rustc-perf-backup.timer") }
+    "/etc/systemd/system/rustc-perf-site.service"      = { mode = "0644", content = file("${path.module}/files/rustc-perf-site.service") }
+    "/etc/systemd/system/rustc-perf-datasette.service" = { mode = "0644", content = file("${path.module}/files/rustc-perf-datasette.service") }
+    "/etc/systemd/system/rustc-perf-caddy.service"     = { mode = "0644", content = file("${path.module}/files/rustc-perf-caddy.service") }
+    "/etc/systemd/system/rustc-perf-backup.service"    = { mode = "0644", content = file("${path.module}/files/rustc-perf-backup.service") }
+    "/etc/systemd/system/rustc-perf-backup.timer"      = { mode = "0644", content = file("${path.module}/files/rustc-perf-backup.timer") }
 
     "/etc/rustc-perf-site.host.env" = { mode = "0600", content = templatefile("${path.module}/files/host.env.tftpl", {
       aws_region            = var.aws_region
       container_port        = local.container_port
+      datasette_port        = local.datasette_port
       data_mount_path       = local.data_mount_path
       db_filename           = local.db_filename
       site_image_ref        = local.site_image_ref
@@ -318,6 +322,7 @@ locals {
       public_ip       = aws_eip.site.public_ip
       public_hostname = local.site_hostname
       container_port  = local.container_port
+      datasette_port  = local.datasette_port
     }) }
   }
 }

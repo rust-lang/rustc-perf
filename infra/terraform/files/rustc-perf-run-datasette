@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+host_env_file="/etc/rustc-perf-site.host.env"
+if [ -f "$host_env_file" ]; then
+  set -a
+  . "$host_env_file"
+  set +a
+fi
+
+data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
+db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
+image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
+runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
+runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
+port="${RUSTC_PERF_DATASETTE_PORT:?RUSTC_PERF_DATASETTE_PORT is not set}"
+
+if [ ! -s "${data_root}/${db_name}" ]; then
+  echo "Expected SQLite database at ${data_root}/${db_name}." >&2
+  exit 1
+fi
+
+docker rm -f rustc-perf-datasette >/dev/null 2>&1 || true
+exec docker run --name rustc-perf-datasette \
+  --publish "127.0.0.1:${port}:${port}" \
+  --user "${runtime_uid}:${runtime_gid}" \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  --mount type=bind,src="${data_root}",dst=/data,readonly \
+  --entrypoint /opt/datasette/bin/datasette \
+  "$image_ref" serve /data/"$db_name" \
+  --host 0.0.0.0 \
+  --port "$port" \
+  --setting base_url /db/ \
+  --setting default_allow_sql on \
+  --setting allow_download off \
+  --setting sql_time_limit_ms 1000 \
+  --setting max_returned_rows 1000 \
+  --setting num_sql_threads 1

@@ -47,6 +47,14 @@ The first start requires `runtime-data/julia.db` and both checkpoint files
 in production all of them are restored from the S3 backup. The orchestrator
 fails loudly if any of them is missing rather than guessing a starting point.
 
+## Public Database Queries
+
+Production exposes the live SQLite database through a read-only Datasette UI
+and API at `/db/`. It supports schema browsing, `SELECT` queries, and
+JSON/CSV exports; it does not expose a SQLite network port or database-file
+downloads. Public queries are limited to one second and 1,000 rows, and may
+briefly observe either side of an ingestion transaction.
+
 To publish and deploy a new version to production, run
 [infra/terraform/deploy.sh](./infra/terraform/deploy.sh): it builds the image
 for `linux/amd64`, pushes it to ECR, takes a pre-deploy backup, and replaces
@@ -61,4 +69,3 @@ and restore operations, see
 
 ## License
 The code of this repository is licensed under the `MIT` license, managed by the [`Reuse Specification`](REUSE.toml).
-

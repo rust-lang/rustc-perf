@@ -1,6 +1,14 @@
 (site_common) {
   encode zstd gzip
-  reverse_proxy 127.0.0.1:${container_port}
+  redir /db /db/ 308
+
+  handle /db/* {
+    reverse_proxy 127.0.0.1:${datasette_port}
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:${container_port}
+  }
 }
 
 http://${public_ip} {

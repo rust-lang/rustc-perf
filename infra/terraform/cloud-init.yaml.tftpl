@@ -15,4 +15,4 @@ runcmd:
   - install -d -m 750 -o ${container_runtime_uid} -g ${container_runtime_gid} ${data_mount_path} ${data_mount_path}/.state
   - install -d -m 755 ${caddy_data_dir} ${caddy_config_dir}
   - systemctl daemon-reload
-  - systemctl enable --now rustc-perf-backup.timer rustc-perf-site rustc-perf-caddy
+  - systemctl enable --now rustc-perf-backup.timer rustc-perf-site rustc-perf-datasette rustc-perf-caddy

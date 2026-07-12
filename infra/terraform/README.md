@@ -13,6 +13,8 @@ What the stack creates:
 - One Elastic IP attached to the instance. An optional external DNS `A` record
   (`site_hostname`) points at it.
 - Caddy on the instance for HTTP and automatic Let's Encrypt HTTPS.
+- A localhost-only Datasette container, exposed by Caddy at `/db/`, for public
+  read-only SQL queries against the live SQLite database.
 - One encrypted gp3 root volume holding the OS, Docker data, the SQLite
   database (`/var/lib/rustc-perf/julia.db`), and the orchestrator checkpoints
   (`/var/lib/rustc-perf/.state`).

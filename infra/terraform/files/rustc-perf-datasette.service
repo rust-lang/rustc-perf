@@ -1,0 +1,17 @@
+[Unit]
+Description=Public read-only Datasette query service for rustc-perf
+After=network-online.target docker.service rustc-perf-site.service
+Wants=network-online.target
+Requires=docker.service rustc-perf-site.service
+BindsTo=rustc-perf-site.service
+PartOf=rustc-perf-site.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rustc-perf-run-datasette
+ExecStop=/usr/bin/docker stop rustc-perf-datasette
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

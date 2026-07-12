@@ -111,6 +111,7 @@ Quick state checks:
 sudo systemctl status rustc-perf-site rustc-perf-caddy
 curl -I http://127.0.0.1:2346/   # the backend itself
 curl -I http://127.0.0.1/        # through Caddy
+curl -I http://127.0.0.1/db/     # Datasette through Caddy
 ```
 
 Things to know while reading:
@@ -131,6 +132,10 @@ Things to know while reading:
 - If the instance is missing from Session Manager, apply the stack (the IAM
   instance profile is what grants SSM), wait a minute or two, then check
   `aws ssm describe-instance-information`.
+- Datasette serves the public read-only query interface at `/db/`. Its
+  localhost listener is intentionally not reachable directly; query it through
+  Caddy. It reads the live WAL database, so a query can see either the state
+  before or after an ingestion transaction.
 
 There is no SSH ingress; Session Manager is the only operator path.
 

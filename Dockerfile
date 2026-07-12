@@ -52,6 +52,7 @@ ENV RUSTC_PERF_DATA_DIR=/var/lib/rustc-perf
 ENV RUSTC_PERF_DB_FILENAME=julia.db
 ENV JULIA_BIN=/usr/local/julia/bin/julia
 ENV JULIA_DEPOT_PATH=/usr/local/julia-depot
+ENV DATASETTE_BIN=/opt/datasette/bin/datasette
 # Precompile for the same portable CPU targets Julia's official binaries use,
 # not the build machine's CPU. Otherwise the caches baked below are rejected
 # on hosts with a different microarchitecture (e.g. older EC2 CPUs) and Julia
@@ -68,8 +69,10 @@ WORKDIR /app
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates && \
+    ca-certificates python3 python3-venv && \
     rm -rf /var/lib/apt/lists/* && \
+    python3 -m venv /opt/datasette && \
+    /opt/datasette/bin/pip install --no-cache-dir datasette==0.65.2 && \
     groupadd --system --gid "$RUSTC_PERF_RUNTIME_GID" rustc-perf && \
     useradd --system --uid "$RUSTC_PERF_RUNTIME_UID" --gid "$RUSTC_PERF_RUNTIME_GID" --create-home --home-dir /home/rustc-perf rustc-perf && \
     install -d -m 755 -o "$RUSTC_PERF_RUNTIME_UID" -g "$RUSTC_PERF_RUNTIME_GID" "$JULIA_DEPOT_PATH" && \
