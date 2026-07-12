@@ -4,49 +4,23 @@ using HTTP, JSON3, DataFrames, Dates
 
 export process_commit!
 
-function get_logs(page)
-    url = "https://buildkite.com/julialang/julia-master/builds?branch=master&page=$page"
+function get_log(sha, commit_time, pipeline)
+    url = "https://buildkite.com/julialang/$pipeline/builds?commit=$sha"
 
     r = HTTP.get(url)
     html = String(r.body)
 
-    build_urls = map(x -> x.match, eachmatch(r"julialang/julia-\w*/builds/(\d+)", html)) |> unique
-
-    sha_to_logs = Dict{String,String}()
-
-    for build_url in build_urls
-        details_url = "https://buildkite.com/" * build_url * ".json"
-        details_json = HTTP.get(details_url).body |> JSON3.read
-        idx = findfirst(x -> x.name == ":linux: build x86_64-linux-gnu", details_json.jobs)
-
-        logs_url = "https://buildkite.com/" * details_json.jobs[idx].base_path * "/raw_log"
-
-        log = HTTP.get(logs_url).body |> String
-        sha = details_json.commit_id
-
-        sha_to_logs[sha] = log
-    end
-
-    return sha_to_logs
-end
-
-function get_log(sha, branch, commit_time)
-    url = "https://buildkite.com/julialang/julia-$branch/builds?commit=$sha"
-
-    r = HTTP.get(url)
-    html = String(r.body)
-
-    build_num_matches = match(r"href=\"/julialang/julia-master/builds/(\d+)\"", html)
+    build_num_matches = match(r"href=\"/julialang/" * pipeline * r"/builds/(\d+)\"", html)
     if build_num_matches == nothing
         return :no_ci
     end
     build_num = build_num_matches.captures[1]
 
-    details_url = "https://buildkite.com/julialang/julia-$branch/builds/$build_num/data/jobs?include_retried_jobs=true&paginate=false"
+    details_url = "https://buildkite.com/julialang/$pipeline/builds/$build_num/data/jobs?include_retried_jobs=true&paginate=false"
     details_json = HTTP.get(details_url).body |> JSON3.read
     idx = findfirst(x -> x.name == ":linux: build x86_64-linux-gnu", details_json.records)
 
-    idx_launch_builds = findfirst(x -> x.name == "Launch build jobs",details_json.records)
+    idx_launch_builds = findfirst(x -> x.name == ":rocket: Launch jobs", details_json.records)
 
     try
         if details_json.records[idx_launch_builds].exit_status isa Integer && details_json.records[idx_launch_builds].exit_status != 0 && isnothing(idx)
@@ -115,7 +89,13 @@ function parse_logs!(sha_to_timings, sha_to_binary_sizes, sha_to_logs)
 end
 
 function process_commit!(artifact_size_df, pstat_df, aid, sha, branch, init_metric_to_series_id, commit_time)
-    log = get_log(sha, branch, commit_time)
+    log = get_log(sha, branch, commit_time, "julia-ci")
+    if log == :no_ci
+        log_pr = get_log(sha, branch, commit_time, "julia-pr")
+        if log_pr != :no_ci
+            log = log_pr
+        end
+    end
     if log isa Symbol
         return log
     end
