@@ -56,6 +56,20 @@ function write_checkpoint(path, checkpoint)
     write(path, "$checkpoint\n")
 end
 
+function report_error(context, err, backtrace)
+    println(context)
+    Base.showerror(stdout, err, backtrace)
+    println()
+end
+
+function rollback_transaction(db, context)
+    try
+        DBInterface.execute(db, "ROLLBACK")
+    catch err
+        report_error("Error rolling back $context transaction", err, Base.catch_backtrace())
+    end
+end
+
 function get_changed_benchmark_dirs(from_entries, to_entries)
     changed_dirs = Set{String}()
     for relpath in union(keys(from_entries), keys(to_entries))
@@ -175,8 +189,6 @@ function main(install)
     atexit(kill_server)
 
     while true
-        changed = false
-
         if install
             read_checkpoint(julia_checkpoint_file) == julia_last_processed || error("Julia checkpoint file changed unexpectedly")
             read_checkpoint(reports_checkpoint_file) == reports_last_processed || error("Reports checkpoint file changed unexpectedly")
@@ -189,9 +201,7 @@ function main(install)
             shas, commit_times = get_master_commits_since(julia_last_processed)
             julia_fetched = true
         catch err
-            println("Error fetching Julia commits from GitHub API")
-            Base.showerror(stdout, err, Base.catch_backtrace())
-            println()
+            report_error("Error fetching Julia commits from GitHub API", err, Base.catch_backtrace())
         end
 
         try
@@ -200,7 +210,7 @@ function main(install)
 
                 # I think I decided not to upload whatever timing stats we get from build logs
                 artifact_size_df, pstat_df, first_unfinished_commit = process_logs(db, shas, commit_times; install=install)
-                changed |= !isempty(artifact_size_df)
+
                 if !isempty(artifact_size_df)
                     kill_server()
                     if install
@@ -226,10 +236,9 @@ function main(install)
                 install && write_checkpoint(julia_checkpoint_file, next_julia_checkpoint)
                 julia_last_processed = next_julia_checkpoint
             end
-        catch
-            println("Error processing logs")
-            install && DBInterface.execute(db, "ROLLBACK")
-            rethrow()
+        catch err
+            report_error("Error processing logs", err, Base.catch_backtrace())
+            install && rollback_transaction(db, "logs")
         end
 
         reports_head = ""
@@ -242,9 +251,7 @@ function main(install)
             to_entries = get_benchmark_tree_entries(reports_repo_owner, reports_repo_name, reports_head)
             fetched = true
         catch err
-            println("Error fetching reports repo metadata from GitHub")
-            Base.showerror(stdout, err, Base.catch_backtrace())
-            println()
+            report_error("Error fetching reports repo metadata from GitHub", err, Base.catch_backtrace())
         end
 
         try
@@ -258,7 +265,6 @@ function main(install)
 
                 for benchmark_dir in changed_benchmark_dirs
                     benchmark_dir_exists(to_entries, benchmark_dir) || continue
-                    changed = true
                     kill_server()
                     println("$(benchmark_dir) changed")
                     with_downloaded_benchmark_dir(to_entries, reports_head, benchmark_dir) do local_benchmark_dir
@@ -270,13 +276,12 @@ function main(install)
                 install && write_checkpoint(reports_checkpoint_file, reports_head)
                 reports_last_processed = reports_head
             end
-        catch
-            println("Error processing benchmarks")
-            install && DBInterface.execute(db, "ROLLBACK")
-            rethrow()
+        catch err
+            report_error("Error processing benchmarks", err, Base.catch_backtrace())
+            install && rollback_transaction(db, "benchmark")
         end
 
-        if changed
+        if isnothing(proc[])
             start_server()
         end
         sleep(sleep_time)
