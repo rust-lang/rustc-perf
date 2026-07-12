@@ -1,10 +1,12 @@
 [Unit]
 Description=Public read-only Datasette query service for rustc-perf
+# Ordered after the site so a first boot waits for the DB restore in its
+# ExecStartPre, but deliberately not Requires/BindsTo on it: dependency
+# propagation would stop this unit when the site crashes (a clean stop, so
+# Restart= does not apply) and nothing would ever start it again.
 After=network-online.target docker.service rustc-perf-site.service
 Wants=network-online.target
-Requires=docker.service rustc-perf-site.service
-BindsTo=rustc-perf-site.service
-PartOf=rustc-perf-site.service
+Requires=docker.service
 
 [Service]
 Type=simple

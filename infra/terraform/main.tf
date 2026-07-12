@@ -10,6 +10,7 @@ locals {
   db_filename      = "julia.db"
   container_port   = 2346
   datasette_port   = 8001
+  datasette_image  = "datasetteproject/datasette:0.65.2"
   caddy_image      = "caddy:2.8.4-alpine"
   caddy_data_dir   = "/var/lib/caddy/data"
   caddy_config_dir = "/var/lib/caddy/config"
@@ -316,6 +317,7 @@ locals {
       caddy_image           = local.caddy_image
       caddy_data_dir        = local.caddy_data_dir
       caddy_config_dir      = local.caddy_config_dir
+      datasette_image       = local.datasette_image
     }) }
 
     "/etc/caddy/Caddyfile" = { mode = "0644", content = templatefile("${path.module}/files/Caddyfile.tftpl", {

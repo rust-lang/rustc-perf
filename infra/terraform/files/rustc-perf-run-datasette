@@ -10,7 +10,7 @@ fi
 
 data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
 db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
-image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
+image_ref="${RUSTC_PERF_DATASETTE_IMAGE:?RUSTC_PERF_DATASETTE_IMAGE is not set}"
 runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
 runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
 port="${RUSTC_PERF_DATASETTE_PORT:?RUSTC_PERF_DATASETTE_PORT is not set}"
@@ -29,13 +29,8 @@ exec docker run --name rustc-perf-datasette \
   --security-opt no-new-privileges:true \
   --cap-drop ALL \
   --mount type=bind,src="${data_root}",dst=/data,readonly \
-  --entrypoint /opt/datasette/bin/datasette \
-  "$image_ref" serve /data/"$db_name" \
+  "$image_ref" datasette serve /data/"$db_name" \
   --host 0.0.0.0 \
   --port "$port" \
   --setting base_url /db/ \
-  --setting default_allow_sql on \
-  --setting allow_download off \
-  --setting sql_time_limit_ms 1000 \
-  --setting max_returned_rows 1000 \
-  --setting num_sql_threads 1
+  --setting allow_download off
