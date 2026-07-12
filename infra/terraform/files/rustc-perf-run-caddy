@@ -1,10 +1,19 @@
 #!/bin/sh
 set -eu
 
+host_env_file="/etc/rustc-perf-site.host.env"
+if [ -f "$host_env_file" ]; then
+  set -a
+  . "$host_env_file"
+  set +a
+fi
+
+caddy_data_dir="${RUSTC_PERF_CADDY_DATA_DIR:?RUSTC_PERF_CADDY_DATA_DIR is not set}"
+
 docker rm -f rustc-perf-caddy >/dev/null 2>&1 || true
 exec docker run --name rustc-perf-caddy \
   --network host \
   --volume /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
-  --volume /var/lib/caddy/data:/data \
+  --volume "${caddy_data_dir}":/data \
   --volume /var/lib/caddy/config:/config \
   caddy:2.8.4-alpine caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

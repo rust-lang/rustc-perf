@@ -7,6 +7,9 @@ Requires=docker.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/rustc-perf-site.host.env
+# The restore in ExecStartPre downloads and extracts the full backup archive
+# on a fresh host, which takes well over systemd's default 90s start budget.
+TimeoutStartSec=300
 ExecStartPre=/usr/local/bin/rustc-perf-restore-if-empty
 ExecStart=/usr/local/bin/rustc-perf-run-container
 ExecStop=/usr/bin/docker stop rustc-perf-site

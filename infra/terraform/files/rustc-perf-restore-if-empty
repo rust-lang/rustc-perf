@@ -16,7 +16,9 @@ runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
 runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
 backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:?RUSTC_PERF_BACKUP_BUCKET is not set}"
 backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
-caddy_data_dir="/var/lib/caddy/data"
+archive_dir="${RUSTC_PERF_BACKUP_ARCHIVE_DIR:?RUSTC_PERF_BACKUP_ARCHIVE_DIR is not set}"
+latest_name="${RUSTC_PERF_BACKUP_LATEST_NAME:?RUSTC_PERF_BACKUP_LATEST_NAME is not set}"
+caddy_data_dir="${RUSTC_PERF_CADDY_DATA_DIR:?RUSTC_PERF_CADDY_DATA_DIR is not set}"
 
 # When the database is missing and cannot be restored, exit non-zero: this
 # script runs as ExecStartPre of the site unit, so failing here keeps the
@@ -58,19 +60,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if ! aws s3 cp "s3://${backup_bucket}/${prefix_path}latest.tar.gz" "$archive" --only-show-errors 2>/dev/null; then
-  # Fall back to the newest timestamped archive (covering both the current
-  # <prefix>/archive/<host>/<ts>.tar.gz layout and older flat layouts). Keys
-  # end in <timestamp>.tar.gz, and the timestamp format sorts chronologically,
-  # so the greatest basename is newest.
-  newest_key="$(aws s3 ls "s3://${backup_bucket}/${prefix_path}" --recursive 2>/dev/null \
-    | awk '{print $4}' \
-    | grep -E '\.tar\.gz$' \
-    | grep -v '/latest\.tar\.gz$' \
-    | awk -F/ '{print $NF"\t"$0}' \
-    | sort \
-    | tail -n 1 \
-    | cut -f2-)"
+if ! aws s3 cp "s3://${backup_bucket}/${prefix_path}${latest_name}" "$archive" --only-show-errors 2>/dev/null; then
+  # Fall back to the most recently uploaded timestamped archive. Sort by
+  # LastModified, not Key: keys are <archive_dir>/<host>/<ts>.tar.gz and each
+  # replacement instance gets a new hostname, so key order is not time order.
+  newest_key="$(aws s3api list-objects-v2 --bucket "$backup_bucket" \
+    --prefix "${prefix_path}${archive_dir}/" \
+    --query 'sort_by(Contents, &LastModified)[-1].Key' --output text 2>/dev/null || true)"
+  [ "$newest_key" = "None" ] && newest_key=""
 
   if [ -z "$newest_key" ]; then
     echo "No backup archive found under s3://${backup_bucket}/${prefix_path}." >&2

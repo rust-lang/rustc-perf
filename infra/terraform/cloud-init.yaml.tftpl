@@ -13,7 +13,7 @@ runcmd:
   - dnf install -y docker tar gzip sqlite
   - systemctl enable --now docker amazon-ssm-agent
   - install -d -m 750 -o ${container_runtime_uid} -g ${container_runtime_gid} ${data_mount_path} ${data_mount_path}/.state
-  - install -d -m 755 /var/lib/caddy/data /var/lib/caddy/config
+  - install -d -m 755 ${caddy_data_dir} /var/lib/caddy/config
   - systemctl daemon-reload
   - systemctl enable rustc-perf-site rustc-perf-caddy
   - systemctl enable --now rustc-perf-backup.timer

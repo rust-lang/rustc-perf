@@ -18,6 +18,9 @@ db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
 state_root="${data_root}/.state"
 image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
 backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
+archive_dir="${RUSTC_PERF_BACKUP_ARCHIVE_DIR:?RUSTC_PERF_BACKUP_ARCHIVE_DIR is not set}"
+latest_name="${RUSTC_PERF_BACKUP_LATEST_NAME:?RUSTC_PERF_BACKUP_LATEST_NAME is not set}"
+caddy_data_dir="${RUSTC_PERF_CADDY_DATA_DIR:?RUSTC_PERF_CADDY_DATA_DIR is not set}"
 staging_root="/var/lib/rustc-perf-backup-staging"
 lock_file="/var/lock/rustc-perf-backup.lock"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -44,7 +47,10 @@ snapshot_dir="$(mktemp -d "$staging_root/${timestamp}.XXXXXX")"
 # Consistent online snapshot without stopping the service. In WAL mode the
 # SQLite backup API cooperates with the live writer and produces a single,
 # already checkpointed database file, so the -wal/-shm sidecars are not needed.
-sqlite3 "${data_root}/${db_name}" ".backup '${snapshot_dir}/${db_name}'"
+# The .timeout (in ms: 30s, same as the app's busy_timeout in
+# database/src/pool/sqlite.rs) keeps the backup from failing with SQLITE_BUSY
+# when it fires while the orchestrator holds a write transaction.
+sqlite3 -cmd ".timeout 30000" "${data_root}/${db_name}" ".backup '${snapshot_dir}/${db_name}'"
 
 if [ -d "$state_root" ]; then
   cp -a "$state_root" "${snapshot_dir}/.state"
@@ -52,8 +58,8 @@ fi
 
 # Include Caddy's TLS certificate store so a replaced host reuses the existing
 # certificate instead of re-requesting one from Let's Encrypt.
-if [ -d /var/lib/caddy/data ]; then
-  cp -a /var/lib/caddy/data "${snapshot_dir}/caddy-data"
+if [ -d "$caddy_data_dir" ]; then
+  cp -a "$caddy_data_dir" "${snapshot_dir}/caddy-data"
 fi
 
 cat >"${snapshot_dir}/metadata.txt" <<METADATA
@@ -63,13 +69,14 @@ image=${image_ref}
 database=${db_name}
 METADATA
 
-# Timestamped archives live under archive/ so the S3 lifecycle rule can expire
-# them without ever touching the latest.tar.gz copy next to it.
-object_key="archive/${host_name}/${timestamp}.tar.gz"
-latest_key="latest.tar.gz"
+# Timestamped archives live under the archive dir so the S3 lifecycle rule can
+# expire them without ever touching the latest copy next to it. Both names come
+# from the host env file, which the Terraform lifecycle rule is rendered from.
+object_key="${archive_dir}/${host_name}/${timestamp}.tar.gz"
+latest_key="$latest_name"
 if [ -n "$backup_prefix" ]; then
   object_key="${backup_prefix}/${object_key}"
-  latest_key="${backup_prefix}/latest.tar.gz"
+  latest_key="${backup_prefix}/${latest_name}"
 fi
 
 tar -C "$snapshot_dir" -czf - . | aws s3 cp - "s3://${backup_bucket}/${object_key}" --only-show-errors

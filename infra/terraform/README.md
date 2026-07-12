@@ -43,7 +43,7 @@ restore, and the deploy flow, see
 
 State lives in a local `terraform.tfstate`, which is fine for a single operator running applies from one machine. Losing it is recoverable (re-import the ~15 resources; no data is at risk, since the database and certificates live in the S3 backup bucket). If more than one person will ever apply, add a remote S3 backend with locking in [versions.tf](versions.tf) and run `terraform init -migrate-state`.
 
-`user_data_replace_on_change = true`, so any change to the image or host configuration replaces the instance on the next `terraform apply`. That is the intended deploy mechanism, not an accident: the new host restores `julia.db`, `.state`, and Caddy's certificates from the latest S3 backup on boot. The daily backup means a replacement loses at most the last day of ingested data (which the orchestrator re-derives). To lose nothing, take a fresh backup right before applying — see [docs/production-deployment.md](../../docs/production-deployment.md).
+`user_data_replace_on_change = true`, so any change to the image or host configuration replaces the instance on the next `terraform apply`. That is the intended deploy mechanism, not an accident: the new host restores `julia.db`, `.state`, and Caddy's certificates from the latest S3 backup on boot. The daily backup means a replacement loses at most the last day of ingested data (which the orchestrator re-derives), and `deploy.sh` takes a fresh pre-deploy backup automatically — see [docs/production-deployment.md](../../docs/production-deployment.md).
 
 ## Prerequisites
 
@@ -109,7 +109,7 @@ The EC2 instance will log in to ECR automatically before pulling the image when 
 
 The ECR repository is created with immutable tags so a later push cannot silently replace an already referenced image tag.
 
-After the first apply, ship new versions by bumping `site_container_image` to the new digest and running `terraform apply` (see "Deploying a new version" below).
+After the first apply, ship new versions with `./deploy.sh`, which builds, pushes, and applies with the new digest (see "Deploying a new version" below).
 
 ## Stable Hostname And HTTPS
 
@@ -145,7 +145,7 @@ It builds the image (for `linux/amd64`), pushes it to ECR, takes a pre-deploy ba
 
 Expect a couple of minutes of downtime while the new instance boots, restores, and Julia warms up.
 
-Changing any host setting works the same way — edit the code and run `terraform apply` (or `./deploy.sh`). The instance is rebuilt from `user_data`, so the running machine never drifts from what the code says.
+Changing any host setting works the same way — edit the code and run `./deploy.sh`. The instance is rebuilt from `user_data`, so the running machine never drifts from what the code says. A bare `terraform apply` does not work: the image digest is only ever passed by `deploy.sh` as `-var site_container_image=...` (it is deliberately not persisted in `terraform.tfvars`), so an apply without it fails the digest precondition.
 
 If you prefer to do it by hand, the script is just: `docker build --platform linux/amd64` → `docker push` → resolve the `@sha256` digest → `terraform apply -var "site_container_image=<ecr-url>@<digest>"`. Run `sudo /usr/local/bin/rustc-perf-backup` on the instance first — a manual apply that replaces the instance restores whatever the latest backup is.
 
@@ -161,7 +161,7 @@ Each uploaded archive contains:
 - `.state/`
 - `metadata.txt` with a timestamp, hostname, and image reference
 
-A fresh or replaced host restores itself automatically: on service start, `rustc-perf-restore-if-empty` seeds `julia.db`, `.state`, and Caddy's certificate store from `latest.tar.gz`, but **only for whichever of those is missing**, so existing data is never overwritten. To restore a specific older archive over the current data, follow the manual procedure in [docs/production-deployment.md](../../docs/production-deployment.md).
+A fresh or replaced host restores itself automatically: on service start, `rustc-perf-restore-if-empty` seeds `julia.db` and `.state` when the database is missing, and Caddy's certificate store when it is missing, so existing data is never overwritten. To restore a specific older archive over the current data, follow the manual procedure in [docs/production-deployment.md](../../docs/production-deployment.md).
 
 ## How to test the deployment
 

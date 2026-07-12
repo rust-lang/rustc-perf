@@ -1,383 +1,200 @@
 # Production Deployment Runbook
 
-This document is the source of truth for bootstrapping the stack, operating
-backups, deploying new versions, and restoring the service.
+Source of truth for bootstrapping the stack, deploying, debugging, backups,
+and restore. Infrastructure details live in
+[infra/terraform/README.md](../infra/terraform/README.md).
 
-## Current Model
+## The Model
 
-The production setup is intentionally simple:
+- One EC2 instance runs the site container. Caddy on the same host terminates
+  HTTP/HTTPS behind an Elastic IP, with an optional external DNS `A` record.
+- The image digest and all host configuration live in `user_data`, so every
+  deploy replaces the instance and the running host never drifts from the code.
+- On boot the new host restores `julia.db`, `.state/`, and Caddy's certificate
+  store from the latest S3 backup. The daily backup timer alone bounds a
+  replacement's data loss to about a day; the pre-deploy backup in `deploy.sh`
+  shrinks that to the few minutes before the apply.
+- The runtime environment is fixed and non-secret
+  (`/etc/rustc-perf-site.host.env` on the host). If the app ever needs a secret
+  (for example a GitHub token to avoid rate limits), add it as an SSM
+  SecureString and wire it into that env file and the instance IAM policy.
 
-- One EC2 instance runs the production container.
-- One Elastic IP attaches directly to the instance.
-- One optional external DNS `A` record points at that Elastic IP.
-- One Caddy reverse proxy runs on the instance and terminates HTTP or HTTPS.
-- The image digest and all host configuration live in `user_data`.
-- The container's runtime environment is fixed and non-secret, written once on the host.
-- One encrypted S3 bucket stores `julia.db`, `.state`, and Caddy's TLS certificates.
+## First-Time Bootstrap
 
-Deploys are immutable and manual. You ship a new version by running
-`terraform apply` with a new image digest, which replaces the instance. On
-boot the new host restores `julia.db`, `.state`, and the certificate store from
-the latest S3 backup, so nothing is lost and no certificate is re-requested.
-Because the whole machine is rebuilt from `user_data` on every apply, the
-running host never drifts from what the code describes.
+You need AWS credentials that can create IAM roles and a VPC; see the
+credentials note in [infra/terraform/README.md](../infra/terraform/README.md)
+if you authenticate with `aws login`.
 
-A replacement restores from the most recent backup, so the daily timer bounds
-the loss to about a day of ingested data (which the orchestrator re-derives).
-To lose nothing, take a fresh backup right before applying:
+1. Fill in `infra/terraform/terraform.tfvars`:
 
-```bash
-INSTANCE_ID="$(cd infra/terraform && terraform output -raw instance_id)"
-aws ssm send-command \
-  --instance-ids "$INSTANCE_ID" \
-  --document-name AWS-RunShellScript \
-  --parameters 'commands=["sudo /usr/local/bin/rustc-perf-backup"]'
-```
+   ```
+   aws_region          = "us-east-1"
+   name_prefix         = "rustc-perf"
+   instance_type       = "t3a.medium"
+   root_volume_size_gb = 100
+   site_hostname       = "rustserver.perf.julialang.org"
+   ```
 
-## What You Need To Do
+2. Create the image repository and backup bucket first, so the image push and
+   the database seed have somewhere to go:
 
-The shortest bring-up checklist, in order:
+   ```bash
+   cd infra/terraform
+   terraform init
+   terraform apply -target=aws_ecr_repository.site -target=aws_s3_bucket.backups
+   ```
 
-1. Decide the production hostname and make sure you can create an external DNS `A` record for it.
-2. Build and push the first production image and record its digest.
-3. Fill in `infra/terraform/terraform.tfvars` with the image digest and hostname.
-4. Run the full Terraform apply.
-5. Record the Terraform outputs you will need later.
-6. Create the DNS `A` record pointing at `site_public_ip`.
-7. Verify the public URL.
+3. Seed the initial database — an archive containing `julia.db` and `.state/`
+   (with both checkpoint files), in the layout a backup produces:
 
-The remaining sections expand each of those steps.
+   ```bash
+   aws s3 cp latest.tar.gz s3://<name_prefix>-<account-id>-<region>-backups/runtime/latest.tar.gz
+   ```
 
-## Before You Start
+4. Build, push, and apply:
 
-Collect or choose these values before you begin:
+   ```bash
+   SKIP_BACKUP=1 ./deploy.sh   # no instance exists yet, so nothing to back up
+   ```
 
-- AWS account ID
-- AWS region
-- Terraform `name_prefix`
-- Production hostname, for example `perf.example.com`
+5. Point DNS at the instance: create an `A` record for `site_hostname` →
+   `terraform output -raw site_public_ip`. Caddy obtains the Let's Encrypt
+   certificate automatically once the name resolves. Until then (or if
+   `site_hostname` is unset) the site serves plain HTTP on the Elastic IP.
 
-You also need AWS credentials that can create the Terraform resources used by
-the stack (including IAM roles and a VPC); see the credentials note in
-[infra/terraform/README.md](../infra/terraform/README.md) if you authenticate
-with `aws login`.
-
-## Bootstrap Once
-
-This is the exact sequence for the first real production bring-up.
-
-### 1. Fill In terraform.tfvars For Production
-
-E.g.
-
-```
-aws_region           = "us-east-1"
-name_prefix          = "rustc-perf"
-instance_type        = "t3a.medium"
-root_volume_size_gb  = 100
-site_hostname        = "rustserver.perf.julialang.org"
-```
-
-
-### 1. Create Or Reuse The Image Repository
-
-If you are using the Terraform-managed ECR repository, create it first:
-
-```bash
-cd infra/terraform
-terraform init
-terraform apply -target=aws_ecr_repository.site
-```
-
-If you are using an existing registry, skip this step and use that repository
-instead.
-
-### 2. Build And Push The First Production Image + apply
-
-Build and push the first production image before the full Terraform apply.
-
-If you created the ECR repository through Terraform, a practical bootstrap flow
-is:
-
-```bash
-SKIP_BACKUP=1 ./deploy.sh
-```
-
-Then set `site_container_image` to the digest-pinned form of that image, not
-the mutable `:bootstrap` tag.
-
-### 3. Push a initial db
-
-```bash
-aws s3 cp latest.tar.gz s3://rustc-perf-...-us-east-1-backups/runtime/latest.tar.gz
-```
-
-## Stable Hostname And HTTPS
-
-Terraform exposes the site directly from the instance.
-
-- `http://<site_public_ip>` works for direct testing.
-- `https://<site_hostname>` works after you create the DNS `A` record and Caddy obtains a Let's Encrypt certificate.
-- If `site_hostname` is not set, the stack stays in plain HTTP mode on the Elastic IP.
+6. Run the post-bootstrap checklist at the bottom of this document.
 
 ## Deploying A New Version
-
-Deploys are manual and immutable. The `deploy.sh` script does the whole flow —
-build the image, push it to ECR, take a pre-deploy backup, and `terraform apply`
-with the new digest, which replaces the instance. The new host restores its data
-and certificates from the latest backup on boot.
 
 ```bash
 cd infra/terraform
 ./deploy.sh
 ```
 
-Terraform prompts before replacing the instance. Pass `terraform apply` flags
-through (`./deploy.sh -auto-approve`), or set `SKIP_BACKUP=1` to skip the
-pre-deploy backup. Under the hood the script runs:
+The script starts a backup on the instance, builds and pushes the image while
+the backup runs, waits for the backup to succeed, then runs `terraform apply`
+with the new digest — which replaces the instance. Terraform prompts before
+replacing anything. Pass `terraform apply` flags through
+(`./deploy.sh -auto-approve`), or set `SKIP_BACKUP=1` to skip the backup and
+accept rolling back to the last daily one.
 
-```bash
-docker build --platform linux/amd64 -t "$ECR_URL:$TAG" ../..
-docker push "$ECR_URL:$TAG"
-DIGEST="$(aws ecr describe-images --repository-name <repo> --image-ids imageTag=$TAG \
-  --query 'imageDetails[0].imageDigest' --output text)"
-terraform apply -var "site_container_image=$ECR_URL@$DIGEST"
-```
+Host-configuration changes deploy the same way — edit the code and run
+`./deploy.sh`. A bare `terraform apply` fails the image-digest precondition on
+purpose: only `deploy.sh` supplies `-var site_container_image=...`, so every
+replacement ships an image that was just built and pushed.
 
 Expect a couple of minutes of downtime while the new instance boots, restores,
-and Julia warms up. Any change to host configuration deploys the same way —
-edit the code and run `./deploy.sh` (or `terraform apply`).
+and Julia warms up.
 
-## Session Manager Access
+## When Something Goes Wrong
 
-Use Systems Manager Session Manager as the default operator access path for
-this stack. You should not need to open port `22` for normal debugging or
-day-2 operations.
-
-This Terraform stack attaches an EC2 instance profile with
-`AmazonSSMManagedInstanceCore` directly to the site instance. The AWS console
-may still mention Default Host Management Configuration, but this deployment
-does not depend on DHMC. The expected path is a per-instance IAM role plus the
-SSM agent on the host.
-
-Find the running instance and open a shell:
+Log on with Session Manager and read the site unit's journal — that is the
+right first move for almost any problem:
 
 ```bash
-INSTANCE_ID="$(aws ec2 describe-instances \
-  --filters \
-    'Name=tag:Name,Values=rustc-perf-site' \
-    'Name=instance-state-name,Values=running' \
-  --query 'Reservations[0].Instances[0].InstanceId' \
-  --output text)"
-
+INSTANCE_ID="$(cd infra/terraform && terraform output -raw instance_id)"
 aws ssm start-session --target "$INSTANCE_ID"
+
+sudo journalctl -u rustc-perf-site -n 200 --no-pager   # or -f to follow
 ```
 
-If the instance does not appear in Session Manager yet:
+The unit runs the container in the foreground, so the journal carries all app
+output (restore, Julia orchestrator, site binary); `sudo docker logs
+rustc-perf-site` shows the same stream. For certificate issuance and proxy
+errors, read the Caddy unit instead:
+`sudo journalctl -u rustc-perf-caddy -n 200 --no-pager`.
 
-1. Run `terraform plan` and `terraform apply` so the instance has the expected IAM instance profile.
-2. Wait a minute or two for the instance to register after the profile is attached.
-3. Confirm registration with `aws ssm describe-instance-information`.
-
-Example registration check:
+Quick state checks:
 
 ```bash
-aws ssm describe-instance-information \
-  --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
-  --query 'InstanceInformationList[0].PingStatus' \
-  --output text
+sudo systemctl status rustc-perf-site rustc-perf-caddy
+curl -I http://127.0.0.1:2346/   # the backend itself
+curl -I http://127.0.0.1/        # through Caddy
 ```
 
-This stack does not provision SSH or Terraform-driven local SQLite uploads.
-Use Session Manager plus the documented restore procedure if you need to bring
-forward existing runtime data.
+Things to know while reading:
 
-## Readiness And Warm-Up
+- First start on a fresh host or image: Julia precompilation takes a couple of
+  minutes. The unit shows `active` and Caddy returns `502 Bad Gateway` while
+  the journal streams precompile output. The service is ready when
+  `curl -I http://127.0.0.1:2346/` returns a normal HTTP response — not merely
+  when the unit is running.
+- If the restore finds no database and no usable backup (empty bucket,
+  download failure), `rustc-perf-restore-if-empty` fails the unit on purpose
+  and systemd keeps retrying instead of starting an empty site. Seed the
+  backup bucket (or fix backups), then
+  `sudo systemctl restart rustc-perf-site`.
+- If the instance is missing from Session Manager, apply the stack (the IAM
+  instance profile is what grants SSM), wait a minute or two, then check
+  `aws ssm describe-instance-information`.
 
-The first time a fresh host starts `rustc-perf-site`, Julia package precompilation can take a couple of minutes. During that warm-up window:
+There is no SSH ingress; Session Manager is the only operator path.
 
-- `rustc-perf-site` may show as active in systemd even though the HTTP service is not ready yet.
-- `rustc-perf-caddy` may return `502 Bad Gateway` because the backend on `127.0.0.1:2346` is not answering normally yet.
-- `docker logs rustc-perf-site` will show a long stream of `Precompiling packages...` output.
+## Backups
 
-Treat the service as ready only when the backend is returning a normal HTTP response, not merely when the systemd unit is running.
+Terraform installs a daily `rustc-perf-backup.timer`. Each run takes an online
+snapshot with SQLite's `.backup` API (no downtime; a 30s busy timeout rides
+out the orchestrator's write transactions), stages it under
+`/var/lib/rustc-perf-backup-staging` on the root volume, and uploads:
 
-Practical readiness checks on the instance:
+- a timestamped archive at `<prefix>/archive/<hostname>/<ts>.tar.gz`, expired
+  by S3 lifecycle after 30 days;
+- `<prefix>/latest.tar.gz` — an independent full copy (an S3 server-side copy,
+  not a reference), which never expires. It is the restore source for a
+  replaced host and survives arbitrarily long backup outages.
 
-```bash
-sudo systemctl status rustc-perf-site
-sudo docker logs rustc-perf-site --tail 100
-curl -I http://127.0.0.1:2346/
-curl -I http://127.0.0.1/
-sudo ss -ltnp | grep -E ':(80|443|2346)\b'
-```
+Each archive contains `julia.db`, `.state/`, `caddy-data/` (the TLS
+certificate store, so a replaced host reuses its certificate instead of
+re-requesting from Let's Encrypt), and a `metadata.txt` with timestamp,
+hostname, and image reference.
 
-What to look for:
-
-- `curl -I http://127.0.0.1:2346/` returns `200 OK` or another normal HTTP response instead of `Empty reply from server` or connection resets.
-- `curl -I http://127.0.0.1/` returns a normal response through Caddy instead of `502 Bad Gateway`.
-- `docker logs rustc-perf-site` has moved past the long precompile output and stopped printing fresh package compilation lines.
-
-## Runtime Environment
-
-The container's runtime environment is fixed and non-secret. Cloud-init writes
-`/etc/rustc-perf-site.container.env` once with the port, data directory, and
-database filename. There are no secrets to resolve at start time. If the app
-later needs a secret (for example a GitHub API token to avoid rate limits),
-add it as a single SSM SecureString and wire it into the env file and the
-instance IAM policy.
-
-## Backup Model
-
-- Terraform creates a private, encrypted S3 bucket.
-- The instance gets `rustc-perf-backup.service` and a daily `rustc-perf-backup.timer`.
-- You can also run the backup by hand before a deploy (see "Deploying A New Version").
-
-Each backup archive contains:
-
-- `julia.db`
-- `.state/`
-- `caddy-data/` — Caddy's TLS certificate store, so a replaced host reuses the existing certificate
-- `metadata.txt` with a timestamp, hostname, and image reference
-
-The backup script takes a consistent online snapshot with SQLite's `.backup`
-API while the service keeps running, so backups no longer cause downtime. In
-WAL mode `.backup` yields a single, already checkpointed database file, so the
-`-wal`/`-shm` sidecars are not archived. The snapshot is staged on the instance
-root volume rather than in `/tmp`, so large backups do not depend on a small
-tmpfs. Each run uploads a timestamped archive under
-`<prefix>/archive/<hostname>/` and then refreshes `<prefix>/latest.tar.gz` so
-a fresh host can restore deterministically on boot. `latest.tar.gz` is an
-independent full copy of the newest archive (an S3 server-side copy), not a
-reference to it, so expiring the timestamped archives never invalidates it.
-Only the timestamped archives are subject to the 30-day S3 lifecycle
-expiration; `latest.tar.gz` never expires, so the restore source survives even
-if backups stop running for longer than the retention window.
-
-## Manual Backup And Inspection
-
-On the instance:
+Manual run and inspection:
 
 ```bash
 sudo /usr/local/bin/rustc-perf-backup
-systemctl status rustc-perf-backup.timer
-sudo systemctl status rustc-perf-backup.service
 sudo journalctl -u rustc-perf-backup.service -n 100 --no-pager
 systemctl list-timers rustc-perf-backup.timer
+aws s3 ls s3://<backup-bucket>/runtime/ --recursive
 ```
 
-From AWS:
+If a backup fails, check that journal and root-volume free space.
 
-```bash
-aws s3 ls s3://<backup-bucket>/<backup-prefix>/ --recursive
-```
+## Restore
 
-If a backup fails, check both the backup service logs and root-volume free
-space. The snapshot is staged under `/var/lib/rustc-perf-backup-staging`
-before it is streamed to S3.
+Automatic: on every service start, `rustc-perf-restore-if-empty` seeds
+`julia.db`, `.state/`, and the Caddy store from `latest.tar.gz` (falling back
+to the newest timestamped archive) — but **only when no local database is
+present**. An existing database is never overwritten, so this is safe on every
+start.
 
-## Restore Procedure
+Manual (restoring a specific, older archive over current data):
 
-A fresh host restores automatically. On service start, `rustc-perf-site` runs
-`rustc-perf-restore-if-empty`, which seeds `julia.db` and `.state` from
-`latest.tar.gz` (falling back to the newest timestamped archive) **only when no
-local database is present**. An existing database is never overwritten, so this
-is safe to run on every start. If the database is missing and no backup can be
-restored (first bring-up with an empty bucket, or a download failure), the unit
-fails and keeps retrying instead of starting the container without data — seed
-`julia.db` (or fix the backups) and restart `rustc-perf-site`. The manual
-procedure below is for restoring a specific, older archive over the current
-data.
+1. `sudo systemctl stop rustc-perf-site`
+2. Download and unpack the archive; replace the contents of
+   `/var/lib/rustc-perf` with it.
+3. Fix ownership, permissions, and stale SQLite sidecars:
 
-1. Identify the backup object you want to restore.
-2. Stop the service:
+   ```bash
+   sudo chown -R 10001:10001 /var/lib/rustc-perf
+   sudo chmod 750 /var/lib/rustc-perf /var/lib/rustc-perf/.state
+   sudo chmod 640 /var/lib/rustc-perf/julia.db
+   sudo rm -f /var/lib/rustc-perf/julia.db-wal /var/lib/rustc-perf/julia.db-shm
+   ```
 
-```bash
-sudo systemctl stop rustc-perf-site
-```
+4. `sudo systemctl start rustc-perf-site && sudo systemctl restart rustc-perf-caddy`
+5. Verify with the checks in "When Something Goes Wrong".
 
-3. Download and unpack the archive on the host.
-4. Replace the live runtime data under `data_mount_path`.
-5. Restore the expected ownership and permissions:
+Test a real restore from S3 once before treating the backup path as
+production-ready.
 
-```bash
-sudo chown -R 10001:10001 /var/lib/rustc-perf
-sudo chmod 750 /var/lib/rustc-perf /var/lib/rustc-perf/.state
-sudo chmod 640 /var/lib/rustc-perf/julia.db
-```
+## Post-Bootstrap Checklist
 
-6. Start the service again:
-
-```bash
-sudo systemctl start rustc-perf-site
-sudo systemctl restart rustc-perf-caddy
-sudo systemctl is-active rustc-perf-site
-```
-
-7. Verify the backend and public URL both return normal HTTP responses.
-
-If you restore onto a replacement host, remove any stale SQLite sidecars before
-starting the service:
-
-```bash
-sudo rm -f /var/lib/rustc-perf/julia.db-wal /var/lib/rustc-perf/julia.db-shm
-```
-
-## Verification Checklist
-
-After the first full apply, verify all of these conditions:
-
-1. `terraform output -raw site_url` returns the stable HTTPS URL.
-2. The site opens successfully in a browser over HTTPS.
-3. If `site_hostname` is set, the DNS `A` record resolves to `site_public_ip`.
-4. Caddy is listening on ports `80` and `443` on the instance.
-5. `curl -I http://127.0.0.1:2346/` succeeds on the instance.
-6. `/var/lib/rustc-perf/julia.db` exists and is non-empty.
-7. `/var/lib/rustc-perf/.state/` exists and contains the checkpoint files.
-8. The S3 backup bucket contains at least one uploaded archive.
-9. A deploy (`terraform apply` with a new digest) replaces the instance, and the new host comes back with its data and certificate intact.
-
-## Day-2 Operations
-
-Useful checks:
-
-```bash
-cd infra/terraform
-terraform output -raw site_url
-terraform output -raw site_public_ip
-terraform output -raw backup_bucket_name
-```
-
-On the instance:
-
-```bash
-sudo systemctl status rustc-perf-site
-sudo systemctl status rustc-perf-caddy
-sudo journalctl -u rustc-perf-site -n 100 --no-pager
-sudo journalctl -u rustc-perf-caddy -n 100 --no-pager
-sudo docker ps
-sudo docker logs rustc-perf-site --tail 100
-sudo docker logs rustc-perf-caddy --tail 100
-curl -I http://127.0.0.1:2346/
-curl -I http://127.0.0.1/
-sudo ss -ltnp | grep -E ':(80|443|2346)\b'
-ls -lh /var/lib/rustc-perf
-```
-
-Useful interpretations:
-
-- `rustc-perf-caddy` logs are the first place to look for certificate issuance, listener startup, and proxy errors.
-- Use `sudo journalctl -u rustc-perf-caddy -f` when you want to watch certificate issuance or live proxy failures in real time.
-- `rustc-perf-site` logs are the first place to look for Julia precompile progress and app startup failures.
-- A temporary `502 Bad Gateway` from Caddy during first boot usually means the backend is still warming up.
-- `rustc-perf-site` is not truly ready until `curl -I http://127.0.0.1:2346/` returns a normal HTTP response.
-
-## Operational Rules
-
-- Do not use mutable image tags for production deploys.
-- Do not change `site_container_image` in Terraform for routine rollouts.
-- Share and bookmark the stable HTTPS hostname (the `site_url` output), not the raw Elastic IP.
-- Test a real restore from S3 before treating the backup path as production-ready.
-- Use Session Manager for operator access; this stack does not provision SSH ingress.
-- Expect first-start Julia precompilation to take a couple of minutes on a fresh host or fresh image and do not treat a short-lived Caddy `502` during that window as a proxy bug.
-- Use this document as the operator checklist for first bring-up and deploys.
+1. `terraform output -raw site_url` opens in a browser — over HTTPS if
+   `site_hostname` is set and its `A` record resolves to `site_public_ip`.
+2. On the instance: `curl -I http://127.0.0.1:2346/` succeeds,
+   `/var/lib/rustc-perf/julia.db` is non-empty, and
+   `/var/lib/rustc-perf/.state/` contains both checkpoint files.
+3. The backup bucket has a timestamped archive after the first timer run (or
+   run `sudo /usr/local/bin/rustc-perf-backup` by hand).
+4. `./deploy.sh` replaces the instance and the new host comes back with its
+   data and certificate intact.

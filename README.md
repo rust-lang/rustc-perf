@@ -41,12 +41,11 @@ docker run --rm -p 2346:2346 \
 	rustc-perf:latest
 ```
 
-The first start requires `runtime-data/julia.db` and
-`runtime-data/.state/reports_last_processed_commit.txt` to already exist
-(in production both are restored from the S3 backup). The Julia master
-checkpoint is the only piece the orchestrator can reconstruct: if
-`.state/julia_last_processed_commit.txt` is missing, it is derived from the
-database on startup.
+The first start requires `runtime-data/julia.db` and both checkpoint files
+(`runtime-data/.state/julia_last_processed_commit.txt` and
+`runtime-data/.state/reports_last_processed_commit.txt`) to already exist —
+in production all of them are restored from the S3 backup. The orchestrator
+fails loudly if any of them is missing rather than guessing a starting point.
 
 To publish the image:
 

@@ -9,13 +9,22 @@ locals {
   data_mount_path = "/var/lib/rustc-perf"
   db_filename     = "julia.db"
   container_port  = 2346
-  # Must match RUSTC_PERF_RUNTIME_UID/GID in the root Dockerfile, where the
-  # container user is created.
+  caddy_data_dir  = "/var/lib/caddy/data"
+  # Owned here; deploy.sh passes these to `docker build` so the container user
+  # is created with the same UID/GID that owns the host data directory. The
+  # Dockerfile's ARG defaults only matter for images built outside deploy.sh.
   container_runtime_uid = 10001
   container_runtime_gid = 10001
   backup_prefix         = "runtime"
+  # Timestamped archives live under this subdirectory of backup_prefix; the
+  # lifecycle rule below and both backup scripts derive their layout from it.
+  backup_archive_dir    = "archive"
+  backup_latest_name    = "latest.tar.gz"
   backup_retention_days = 30
-  ecr_max_images        = 3
+  # Every deploy.sh run pushes an image before its abort points (failed
+  # pre-deploy backup, rejected plan), so keep enough headroom that a run of
+  # aborted deploys cannot expire the digest the live instance still runs.
+  ecr_max_images = 10
 
   ecr_repository_name = "${var.name_prefix}-site"
   backup_bucket_name  = lower("${var.name_prefix}-${data.aws_caller_identity.current.account_id}-${var.aws_region}-backups")
@@ -193,7 +202,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
     status = "Enabled"
 
     filter {
-      prefix = "${local.backup_prefix}/archive/"
+      prefix = "${local.backup_prefix}/${local.backup_archive_dir}/"
     }
 
     expiration {
@@ -298,12 +307,9 @@ locals {
       container_runtime_gid = local.container_runtime_gid
       backup_bucket_name    = aws_s3_bucket.backups.bucket
       backup_prefix         = local.backup_prefix
-    }) }
-
-    "/etc/rustc-perf-site.container.env" = { mode = "0600", content = templatefile("${path.module}/files/container.env.tftpl", {
-      container_port  = local.container_port
-      data_mount_path = local.data_mount_path
-      db_filename     = local.db_filename
+      backup_archive_dir    = local.backup_archive_dir
+      backup_latest_name    = local.backup_latest_name
+      caddy_data_dir        = local.caddy_data_dir
     }) }
 
     "/etc/caddy/Caddyfile" = { mode = "0644", content = templatefile("${path.module}/files/Caddyfile.tftpl", {
@@ -335,6 +341,7 @@ resource "aws_instance" "site" {
     container_runtime_uid = local.container_runtime_uid
     container_runtime_gid = local.container_runtime_gid
     data_mount_path       = local.data_mount_path
+    caddy_data_dir        = local.caddy_data_dir
   }))
 
   depends_on = [

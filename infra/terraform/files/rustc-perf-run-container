@@ -12,6 +12,7 @@ fi
 # these; fail loudly instead of falling back to defaults that could drift.
 service_name="${RUSTC_PERF_CONTAINER_NAME:?RUSTC_PERF_CONTAINER_NAME is not set}"
 data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
+db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
 image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
 runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
 runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
@@ -32,11 +33,19 @@ if ! docker image inspect "$image_ref" >/dev/null 2>&1; then
 fi
 
 docker rm -f "$service_name" >/dev/null 2>&1 || true
+# The env values come straight from the host env file sourced above, so the
+# container always sees the same paths Terraform configured on the host.
+# The log cap matters on this long-lived host: the container logs every HTTP
+# request, and the default json-file driver never rotates.
 exec docker run --name "$service_name" \
   --publish "127.0.0.1:${port}:${port}" \
   --user "${runtime_uid}:${runtime_gid}" \
   --security-opt no-new-privileges:true \
   --cap-drop ALL \
-  --env-file /etc/rustc-perf-site.container.env \
+  --env RUSTC_PORT="$port" \
+  --env RUSTC_PERF_DATA_DIR="$data_root" \
+  --env RUSTC_PERF_DB_FILENAME="$db_name" \
+  --log-opt max-size=100m \
+  --log-opt max-file=3 \
   --mount type=bind,src="${data_root}",dst="${data_root}" \
   "$image_ref"

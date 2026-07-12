@@ -15,8 +15,7 @@ install -d -m 750 "${data_root}" "${state_root}"
 # Both SQLite.jl and rusqlite silently create a missing database file, so
 # without this guard a host whose restore found nothing would come up as a
 # healthy-looking empty site instead of failing. Checkpoint files are the
-# orchestrator's concern: it derives the Julia checkpoint from the database
-# and errors clearly if the reports checkpoint is missing.
+# orchestrator's concern: it errors clearly if either checkpoint is missing.
 if [ ! -s "${data_root}/${db_name}" ]; then
     echo "Expected SQLite database at ${data_root}/${db_name}. Seed it before starting the container." >&2
     exit 1

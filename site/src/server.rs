@@ -777,26 +777,14 @@ fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
     }
 }
 
+// No X-Frame-Options here: the site is deliberately embeddable in cross-origin
+// iframes (see the postMessage integration in templates/layout.html).
 fn apply_security_headers(response: &mut Response, forwarded_https: bool) {
     let headers = response.headers_mut();
     headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
     headers.insert(
         HeaderName::from_static("x-content-type-options"),
         HeaderValue::from_static("nosniff"),
-    );
-    headers.insert(
-        HeaderName::from_static("x-frame-options"),
-        HeaderValue::from_static("DENY"),
-    );
-    headers.insert(
-        HeaderName::from_static("referrer-policy"),
-        HeaderValue::from_static("no-referrer"),
-    );
-    headers.insert(
-        HeaderName::from_static("permissions-policy"),
-        HeaderValue::from_static(
-            "accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()",
-        ),
     );
     if forwarded_https {
         headers.insert(

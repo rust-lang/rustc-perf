@@ -22,3 +22,15 @@ output "backup_bucket_name" {
   description = "S3 bucket holding julia.db/.state backup archives."
   value       = aws_s3_bucket.backups.bucket
 }
+
+# deploy.sh passes these to `docker build` so the container user matches the
+# UID/GID that owns the host data directory.
+output "container_runtime_uid" {
+  description = "UID the container runtime user is created with."
+  value       = local.container_runtime_uid
+}
+
+output "container_runtime_gid" {
+  description = "GID the container runtime user is created with."
+  value       = local.container_runtime_gid
+}
