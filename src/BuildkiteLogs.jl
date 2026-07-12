@@ -89,9 +89,9 @@ function parse_logs!(sha_to_timings, sha_to_binary_sizes, sha_to_logs)
 end
 
 function process_commit!(artifact_size_df, pstat_df, aid, sha, branch, init_metric_to_series_id, commit_time)
-    log = get_log(sha, branch, commit_time, "julia-ci")
+    log = get_log(sha, commit_time, "julia-ci")
     if log == :no_ci
-        log_pr = get_log(sha, branch, commit_time, "julia-pr")
+        log_pr = get_log(sha, commit_time, "julia-pr")
         if log_pr != :no_ci
             log = log_pr
         end
