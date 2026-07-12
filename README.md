@@ -47,30 +47,16 @@ The first start requires `runtime-data/julia.db` and both checkpoint files
 in production all of them are restored from the S3 backup. The orchestrator
 fails loudly if any of them is missing rather than guessing a starting point.
 
-To publish the image:
-
-```bash
-docker build -t rustc-perf:latest .
-docker tag rustc-perf:latest <registry>/rustc-perf:latest
-docker push <registry>/rustc-perf:latest
-```
-
-Pin the production deploy to the pushed digest rather than a mutable tag, for
-example `<registry>/rustc-perf@sha256:...`, before updating Terraform.
-
-After the first production apply, day-to-day deploys should move that digest
-forward by updating the SSM image parameter from GitHub Actions and restarting
-the existing host in place. That keeps `julia.db` and `.state/` on disk instead
-of turning every application rollout into an EC2 replacement.
-
-For now, the Terraform stack exposes the site through the ALB DNS name over
-plain HTTP so it can deploy without CloudFront account verification.
+To publish and deploy a new version to production, run
+[infra/terraform/deploy.sh](./infra/terraform/deploy.sh): it builds the image
+for `linux/amd64`, pushes it to ECR, takes a pre-deploy backup, and replaces
+the instance with the new digest-pinned image.
 
 Additional documentation on running and setting up the frontend and backend can
 be found in the `README` files in the `collector` and `site` directories.
 
-For the step-by-step production bring-up checklist, including backups, GitHub
-Actions, HTTPS, and restore operations, see
+For the step-by-step production bring-up checklist, including deploys, backups,
+and restore operations, see
 [docs/production-deployment.md](./docs/production-deployment.md).
 
 ## License

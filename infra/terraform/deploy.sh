@@ -23,15 +23,15 @@ cd "$script_dir"
 
 echo "==> Reading Terraform outputs"
 ecr_url="$(terraform output -raw ecr_repository_url 2>/dev/null || true)"
-if [ -z "$ecr_url" ] || [ "$ecr_url" = "null" ]; then
+if [ -z "$ecr_url" ]; then
   echo "Could not read ecr_repository_url. Apply the stack once first (see README.md)." >&2
   exit 1
 fi
+region="$(terraform output -raw aws_region)"
 runtime_uid="$(terraform output -raw container_runtime_uid)"
 runtime_gid="$(terraform output -raw container_runtime_gid)"
 registry="${ecr_url%%/*}"
 repo="${ecr_url##*/}"
-region="$(printf '%s' "$registry" | sed -E 's/.*\.ecr\.([^.]+)\.amazonaws\.com$/\1/')"
 tag="deploy-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$repo_root" rev-parse --short HEAD 2>/dev/null || echo nogit)"
 
 # Kick the backup off first: send-command returns immediately, so the backup
@@ -41,7 +41,7 @@ tag="deploy-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$repo_root" rev-parse --short H
 backup_cmd_id=""
 if [ "${SKIP_BACKUP:-0}" != "1" ]; then
   instance_id="$(terraform output -raw instance_id 2>/dev/null || true)"
-  if [ -n "$instance_id" ] && [ "$instance_id" != "null" ]; then
+  if [ -n "$instance_id" ]; then
     echo "==> Starting pre-deploy backup on $instance_id (runs during the build)"
     backup_cmd_id="$(aws ssm send-command --region "$region" --instance-ids "$instance_id" \
       --document-name AWS-RunShellScript \

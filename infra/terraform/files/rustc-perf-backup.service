@@ -5,5 +5,4 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/rustc-perf-site.host.env
 ExecStart=/usr/local/bin/rustc-perf-backup

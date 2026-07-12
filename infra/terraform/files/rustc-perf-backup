@@ -17,7 +17,7 @@ data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
 db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
 state_root="${data_root}/.state"
 image_ref="${RUSTC_PERF_IMAGE_REF:?RUSTC_PERF_IMAGE_REF is not set}"
-backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
+backup_prefix="${RUSTC_PERF_BACKUP_PREFIX:?RUSTC_PERF_BACKUP_PREFIX is not set}"
 archive_dir="${RUSTC_PERF_BACKUP_ARCHIVE_DIR:?RUSTC_PERF_BACKUP_ARCHIVE_DIR is not set}"
 latest_name="${RUSTC_PERF_BACKUP_LATEST_NAME:?RUSTC_PERF_BACKUP_LATEST_NAME is not set}"
 caddy_data_dir="${RUSTC_PERF_CADDY_DATA_DIR:?RUSTC_PERF_CADDY_DATA_DIR is not set}"
@@ -72,12 +72,8 @@ METADATA
 # Timestamped archives live under the archive dir so the S3 lifecycle rule can
 # expire them without ever touching the latest copy next to it. Both names come
 # from the host env file, which the Terraform lifecycle rule is rendered from.
-object_key="${archive_dir}/${host_name}/${timestamp}.tar.gz"
-latest_key="$latest_name"
-if [ -n "$backup_prefix" ]; then
-  object_key="${backup_prefix}/${object_key}"
-  latest_key="${backup_prefix}/${latest_name}"
-fi
+object_key="${backup_prefix}/${archive_dir}/${host_name}/${timestamp}.tar.gz"
+latest_key="${backup_prefix}/${latest_name}"
 
 tar -C "$snapshot_dir" -czf - . | aws s3 cp - "s3://${backup_bucket}/${object_key}" --only-show-errors
 # Maintain a stable copy of the most recent archive so a fresh or replaced

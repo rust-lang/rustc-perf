@@ -1,61 +1,85 @@
 # AWS Terraform Deployment
 
-This directory provisions a deliberately small rustc-perf deployment on AWS:
+This directory provisions a deliberately small deployment of the site on AWS.
+This file documents the infrastructure's shape and the decisions behind it;
+the operational runbook (first bring-up, deploys, debugging, backups, restore)
+is [docs/production-deployment.md](../../docs/production-deployment.md).
 
-- One EC2 instance running the production rustc-perf container in Docker, in a minimal dedicated VPC (one public subnet).
-- One Elastic IP attached directly to the site instance.
-- One Caddy reverse proxy on the site instance for HTTP and automatic Let's Encrypt HTTPS.
-- One encrypted gp3 root volume that stores the OS, Docker data, the SQLite file, and the orchestrator checkpoint state.
-- One ECR repository for the site image.
-- One private, encrypted S3 bucket for runtime backups of `julia.db` and `.state`.
-- Systems Manager Session Manager access as the default debugging and operational shell path.
+What the stack creates:
 
-The container entrypoint is [run.jl](../../run.jl) invoked with `--install`. It starts the Julia orchestrator, launches the embedded `prod_site` Rust binary, and keeps ingesting fresh data over time.
+- One EC2 instance running the production container in Docker, in a minimal
+  dedicated VPC: one public subnet, an internet gateway, and a security group
+  exposing only ports 80 and 443.
+- One Elastic IP attached to the instance. An optional external DNS `A` record
+  (`site_hostname`) points at it.
+- Caddy on the instance for HTTP and automatic Let's Encrypt HTTPS.
+- One encrypted gp3 root volume holding the OS, Docker data, the SQLite
+  database (`/var/lib/rustc-perf/julia.db`), and the orchestrator checkpoints
+  (`/var/lib/rustc-perf/.state`).
+- One ECR repository for the site image, with immutable tags so a push cannot
+  silently replace a referenced image.
+- One private, encrypted S3 bucket for runtime backups.
+- An instance profile granting Session Manager access (the only operator path;
+  no SSH ingress) and the S3 backup permissions.
 
-For the end-to-end operational checklist, including first bring-up, backups,
-restore, and the deploy flow, see
-[docs/production-deployment.md](../../docs/production-deployment.md).
+The container entrypoint runs [run.jl](../../run.jl) with `--install`: the
+Julia orchestrator ingests fresh data continuously and runs the embedded
+`prod_site` Rust binary.
 
 ## Why this shape
 
-- SQLite wants a normal local filesystem. EFS is the wrong default.
-- One EC2 host is easy to understand, inspect, and roll back.
-- An Elastic IP plus Caddy keeps the public endpoint stable without depending on Route53, ACM, CloudFront, or an ALB.
-- The network is a minimal dedicated VPC: one public subnet and an internet gateway, nothing else. Internet exposure is controlled entirely by the security group (only 80/443).
-- Deploys are immutable: the image digest and every host setting live in `user_data`, so a new version is shipped by running `terraform apply`, which replaces the instance. There is nothing to drift, because the running machine is always exactly what the code describes.
-- Instance replacement is non-destructive: on boot a fresh host restores `julia.db`, `.state`, and Caddy's TLS certificates from the latest S3 backup, so it keeps the dataset and does not re-request certificates.
-- Runtime backups go to a private S3 bucket on a daily timer. They use SQLite's online `.backup`, so they do not stop the service.
-- The host boot path is hardened enough for a public test deployment: IMDSv2 is required, Caddy terminates TLS on the host, and the container runs as a fixed non-root UID/GID with `no-new-privileges` and no Linux capabilities.
+- SQLite wants a normal local filesystem, and one EC2 host is easy to
+  understand, inspect, and roll back. EFS would be the wrong default.
+- An Elastic IP plus Caddy keeps the public endpoint stable without Route53,
+  ACM, CloudFront, or an ALB.
+- Deploys are immutable: the image digest and every host setting live in
+  `user_data` (`user_data_replace_on_change = true`), so `./deploy.sh`
+  replaces the instance and the running machine never drifts from the code.
+  Replacement is non-destructive — on boot the new host restores `julia.db`,
+  `.state`, and Caddy's TLS certificates from the latest S3 backup, so no data
+  is lost and no certificate is re-requested.
+- Backups run on a daily timer using SQLite's online `.backup` (no downtime),
+  and `deploy.sh` takes a fresh pre-deploy backup automatically.
+- Hardening appropriate for a public deployment: IMDSv2 required, only 80/443
+  exposed, the container runs as a fixed non-root UID/GID with
+  `no-new-privileges` and no Linux capabilities, and the data directory is
+  private to that user (`0750` directories, `0640` database).
 
-## Architecture
+## Configuration
 
-- The EC2 instance lives in the stack's public subnet with an Elastic IP so it can install packages, pull container images, and serve the public site without adding NAT.
-- The instance security group exposes only ports 80 and 443 publicly. Operator access is through Session Manager; this stack does not provision SSH ingress.
-- The SQLite file lives at `/var/lib/rustc-perf/julia.db` on the root gp3 volume.
-- The Julia orchestrator checkpoint files live at `/var/lib/rustc-perf/.state` and are persisted alongside the database.
-- The active image digest is baked into `user_data` by Terraform and recorded in the host env file the container runner reads.
-- The container's runtime environment is fixed and non-secret, written once by cloud-init.
-- The backup timer uploads tarballs containing `julia.db`, `.state/`, and a small metadata file to S3.
-- Browser traffic reaches Caddy on the instance over HTTP and HTTPS. When `site_hostname` is set and points at the Elastic IP, Caddy provisions Let's Encrypt certificates automatically.
-- The deployment expects the mounted data directory to stay private to the service: Terraform and cloud-init set the directory to `0750` and the SQLite file to `0640` for the container runtime user.
+`terraform.tfvars` is committed with the production values (region, instance
+type, volume size, hostname); there is nothing to fill in. The remaining fixed
+settings — paths, port, UID/GID, backup layout, retention — are locals at the
+top of [main.tf](main.tf) and flow from there into the host env file, the
+scripts, and `docker build` arguments, so each value has one home.
 
-## State And Instance Lifecycle
+`site_container_image` is deliberately not in `terraform.tfvars`: `deploy.sh`
+passes the freshly pushed digest as `-var site_container_image=...`, and an
+instance precondition rejects anything not `@sha256`-pinned. A bare
+`terraform apply` therefore fails by design — every instance replacement ships
+an image that was just built and pushed.
 
-State lives in a local `terraform.tfstate`, which is fine for a single operator running applies from one machine. Losing it is recoverable (re-import the ~15 resources; no data is at risk, since the database and certificates live in the S3 backup bucket). If more than one person will ever apply, add a remote S3 backend with locking in [versions.tf](versions.tf) and run `terraform init -migrate-state`.
+## State
 
-`user_data_replace_on_change = true`, so any change to the image or host configuration replaces the instance on the next `terraform apply`. That is the intended deploy mechanism, not an accident: the new host restores `julia.db`, `.state`, and Caddy's certificates from the latest S3 backup on boot. The daily backup means a replacement loses at most the last day of ingested data (which the orchestrator re-derives), and `deploy.sh` takes a fresh pre-deploy backup automatically — see [docs/production-deployment.md](../../docs/production-deployment.md).
+State lives in a local `terraform.tfstate`, which is fine for a single
+operator. Losing it is recoverable (re-import the ~15 resources; the database
+and certificates live in the S3 backup bucket, so no data is at risk). If more
+than one person will ever apply, add a remote S3 backend with locking in
+[versions.tf](versions.tf) and run `terraform init -migrate-state`.
 
 ## Prerequisites
 
-1. Terraform 1.6 or newer.
-2. AWS credentials with permission to create EC2, VPC, Elastic IP, ECR, S3, and IAM (create-role) resources. The instance profile is what gives the host Session Manager access and its S3 backup permissions. Note that the PowerUserAccess permission set cannot manage IAM.
-3. A container image built from the repository root [Dockerfile](../../Dockerfile).
-
-The stack creates its own small VPC (one public subnet); no default VPC is required.
+1. Terraform 1.6+, Docker, and the AWS CLI.
+2. AWS credentials that can create EC2, VPC, ECR, S3, and IAM (create-role)
+   resources. Note that the PowerUserAccess permission set cannot manage IAM.
 
 ### Credentials note for `aws login`
 
-The Terraform AWS provider cannot read credentials from the AWS CLI's browser-based `aws login` flow ([terraform-provider-aws#45316](https://github.com/hashicorp/terraform-provider-aws/issues/45316)). If that is how you authenticate, add a bridge profile to `~/.aws/config` that resolves credentials through the CLI, and run Terraform (and `deploy.sh`) with it:
+The Terraform AWS provider cannot read credentials from the CLI's
+browser-based `aws login` flow
+([terraform-provider-aws#45316](https://github.com/hashicorp/terraform-provider-aws/issues/45316)).
+If that is how you authenticate, bridge it in `~/.aws/config` and run
+Terraform (and `deploy.sh`) with that profile:
 
 ```ini
 [profile terraform]
@@ -67,136 +91,42 @@ region = us-east-1
 AWS_PROFILE=terraform ./deploy.sh
 ```
 
-## Minimal first deploy
+## First deploy
 
-This stack exposes the site through the instance Elastic IP and, when `site_hostname` is set, through a stable HTTPS hostname served by Caddy.
-
-1. Copy [terraform.tfvars.example](terraform.tfvars.example) to `terraform.tfvars`.
-2. Set `site_container_image` to the first digest-pinned image reference. It is baked into the instance's `user_data`.
-3. Set `site_hostname` to the public hostname you will point at the instance Elastic IP.
-4. Use the generated `site_public_ip` output to create the external DNS `A` record.
-5. Run:
-
-```bash
-terraform init
-terraform plan
-terraform apply
-```
-
-6. Point your DNS record at `site_public_ip`, wait for propagation, then open the `site_url` output.
-
-## Optional ECR bootstrap
-
-If you want Terraform to create the ECR repository before the instance exists, run:
-
-```bash
-terraform apply -target=aws_ecr_repository.site
-terraform output -raw ecr_repository_url
-```
-
-Then build and push the image, set `site_container_image`, and run the full apply.
-
-Example build and push flow:
-
-```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 123456789012.dkr.ecr.us-east-1.amazonaws.com
-docker build -t rustc-perf:latest ../..
-docker tag rustc-perf:latest 123456789012.dkr.ecr.us-east-1.amazonaws.com/rustc-perf-site:latest
-docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/rustc-perf-site:latest
-```
-
-The EC2 instance will log in to ECR automatically before pulling the image when `site_container_image` points at an ECR registry.
-
-The ECR repository is created with immutable tags so a later push cannot silently replace an already referenced image tag.
-
-After the first apply, ship new versions with `./deploy.sh`, which builds, pushes, and applies with the new digest (see "Deploying a new version" below).
-
-## Stable Hostname And HTTPS
-
-Set `site_hostname` to the stable public hostname you want to serve, then point that name at `site_public_ip` in your external DNS provider.
-
-Caddy runs on the instance and obtains Let's Encrypt certificates automatically once the hostname resolves to the Elastic IP. The generated `site_url` output switches to `https://<site_hostname>` when `site_hostname` is configured.
-
-## Existing Data
-
-This stack no longer automates local SQLite uploads or provisions SSH for bootstrap.
-If you need to move existing runtime data onto a fresh host, do the first apply,
-then restore `julia.db` and `.state/` manually using the procedure in
-[docs/production-deployment.md](../../docs/production-deployment.md).
-
-## Session Manager Access
-
-Use Session Manager as the normal operator access path. The Terraform stack
-attaches an EC2 instance profile with `AmazonSSMManagedInstanceCore` directly to
-the EC2 instance, so you do not need SSH for routine debugging.
-
-For the step-by-step flow and a registration check, see
-[docs/production-deployment.md](../../docs/production-deployment.md).
+Follow "First-Time Bootstrap" in
+[docs/production-deployment.md](../../docs/production-deployment.md): a
+targeted apply creates the ECR repository and backup bucket, you seed the
+initial database into the bucket, and `SKIP_BACKUP=1 ./deploy.sh` does the
+rest.
 
 ## Deploying a new version
-
-Run the deploy script from this directory:
 
 ```bash
 ./deploy.sh
 ```
 
-It builds the image (for `linux/amd64`), pushes it to ECR, takes a pre-deploy backup, and runs `terraform apply` with the new digest — which replaces the instance. The new host restores the database and TLS certificates from the latest backup on boot. Terraform will show the plan and prompt before it replaces anything; pass `-auto-approve` (or any other `terraform apply` flag) through: `./deploy.sh -auto-approve`. If the pre-deploy backup fails, the deploy aborts; set `SKIP_BACKUP=1` to skip the backup and accept rolling back to the last daily one.
+It starts a pre-deploy backup on the instance, builds and pushes the image
+(for `linux/amd64`) while the backup runs, then applies with the new digest —
+which replaces the instance. Terraform prompts before replacing anything; pass
+`terraform apply` flags through (`./deploy.sh -auto-approve`), or set
+`SKIP_BACKUP=1` to skip the backup and accept rolling back to the last daily
+one. Host-setting changes ship the same way: edit the code, run `./deploy.sh`.
 
-Expect a couple of minutes of downtime while the new instance boots, restores, and Julia warms up.
+Downtime is a couple of minutes, dominated by the new host pulling the image
+and restoring the database from S3 — Julia precompilation is baked into the
+image.
 
-Changing any host setting works the same way — edit the code and run `./deploy.sh`. The instance is rebuilt from `user_data`, so the running machine never drifts from what the code says. A bare `terraform apply` does not work: the image digest is only ever passed by `deploy.sh` as `-var site_container_image=...` (it is deliberately not persisted in `terraform.tfvars`), so an apply without it fails the digest precondition.
+If something looks wrong afterwards, log on with Session Manager and read the
+site journal — see "When Something Goes Wrong" in
+[docs/production-deployment.md](../../docs/production-deployment.md).
 
-If you prefer to do it by hand, the script is just: `docker build --platform linux/amd64` → `docker push` → resolve the `@sha256` digest → `terraform apply -var "site_container_image=<ecr-url>@<digest>"`. Run `sudo /usr/local/bin/rustc-perf-backup` on the instance first — a manual apply that replaces the instance restores whatever the latest backup is.
+## Backups and restore
 
-## Backups And Restore
-
-Terraform creates a private, encrypted S3 bucket and installs a `rustc-perf-backup.timer` systemd timer on the instance.
-
-Backups use SQLite's online `.backup` API and do not stop the service. Each run uploads a timestamped archive under `<prefix>/archive/<hostname>/` and refreshes `<prefix>/latest.tar.gz`, an independent full copy of that archive (not a reference to it). Timestamped archives expire after 30 days; `latest.tar.gz` never expires, so a replacement host always has a restore source even if backups have been failing.
-
-Each uploaded archive contains:
-
-- `julia.db`
-- `.state/`
-- `metadata.txt` with a timestamp, hostname, and image reference
-
-A fresh or replaced host restores itself automatically: on service start, `rustc-perf-restore-if-empty` seeds `julia.db` and `.state` when the database is missing, and Caddy's certificate store when it is missing, so existing data is never overwritten. To restore a specific older archive over the current data, follow the manual procedure in [docs/production-deployment.md](../../docs/production-deployment.md).
-
-## How to test the deployment
-
-1. Check the generated URL:
-
-```bash
-terraform output -raw site_url
-```
-
-2. If the page does not load, inspect the instance with Session Manager:
-
-```bash
-sudo systemctl status rustc-perf-site
-sudo systemctl status rustc-perf-caddy
-sudo journalctl -u rustc-perf-site -n 100 --no-pager
-sudo journalctl -u rustc-perf-caddy -n 100 --no-pager
-sudo docker ps
-sudo docker logs rustc-perf-site --tail 100
-sudo docker logs rustc-perf-caddy --tail 100
-ls -lh /var/lib/rustc-perf
-```
-
-Useful things to confirm on-host:
-
-- `/var/lib/rustc-perf/julia.db` exists and is non-empty.
-- `/var/lib/rustc-perf/.state/` contains both checkpoint files.
-- The container is listening on `127.0.0.1:2346` and Caddy is listening on ports 80 and 443.
-
-3. Use Session Manager for operator access; no SSH ingress is provisioned by this stack.
-
-## After the first successful deploy
-
-Once the basic path is working, the next sensible upgrades are:
-
-1. Keep the production verification URL pointed at the stable HTTPS hostname rather than the raw Elastic IP.
-2. Exercise a full restore from the S3 backup bucket before relying on the stack for production recovery.
-
-This stack is intentionally biased toward clarity over flexibility.
+A daily timer uploads archives of `julia.db`, `.state/`, and Caddy's
+certificate store. Timestamped archives expire after 30 days;
+`<prefix>/latest.tar.gz` — an independent full copy, not a reference — never
+expires and is the automatic restore source for a replaced host. On service
+start, `rustc-perf-restore-if-empty` seeds whatever is missing and never
+overwrites an existing database. Details, manual backups, and the manual
+restore procedure are in
+[docs/production-deployment.md](../../docs/production-deployment.md).

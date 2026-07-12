@@ -12,10 +12,11 @@ fi
 # these; fail loudly instead of falling back to defaults that could drift.
 data_root="${RUSTC_PERF_DATA_DIR:?RUSTC_PERF_DATA_DIR is not set}"
 db_name="${RUSTC_PERF_DB_FILENAME:?RUSTC_PERF_DB_FILENAME is not set}"
+state_root="${data_root}/.state"
 runtime_uid="${RUSTC_PERF_RUNTIME_UID:?RUSTC_PERF_RUNTIME_UID is not set}"
 runtime_gid="${RUSTC_PERF_RUNTIME_GID:?RUSTC_PERF_RUNTIME_GID is not set}"
 backup_bucket="${RUSTC_PERF_BACKUP_BUCKET:?RUSTC_PERF_BACKUP_BUCKET is not set}"
-backup_prefix="${RUSTC_PERF_BACKUP_PREFIX?RUSTC_PERF_BACKUP_PREFIX is not set}"
+backup_prefix="${RUSTC_PERF_BACKUP_PREFIX:?RUSTC_PERF_BACKUP_PREFIX is not set}"
 archive_dir="${RUSTC_PERF_BACKUP_ARCHIVE_DIR:?RUSTC_PERF_BACKUP_ARCHIVE_DIR is not set}"
 latest_name="${RUSTC_PERF_BACKUP_LATEST_NAME:?RUSTC_PERF_BACKUP_LATEST_NAME is not set}"
 caddy_data_dir="${RUSTC_PERF_CADDY_DATA_DIR:?RUSTC_PERF_CADDY_DATA_DIR is not set}"
@@ -44,58 +45,57 @@ if [ "$db_missing" -eq 0 ] && [ "$caddy_missing" -eq 0 ]; then
   exit 0
 fi
 
-prefix_path=""
-if [ -n "$backup_prefix" ]; then
-  prefix_path="${backup_prefix}/"
-fi
-
 # Stage on the root volume, not mktemp's default /tmp: on AL2023 /tmp is a
 # RAM-backed tmpfs far smaller than the extracted database.
 staging_root="/var/lib/rustc-perf-restore-staging"
 install -d -m 700 "$staging_root"
 work_dir="$(mktemp -d "${staging_root}/restore.XXXXXX")"
-archive="${work_dir}/restore.tar.gz"
 cleanup() {
   rm -rf "$work_dir"
 }
 trap cleanup EXIT INT TERM
 
-if ! aws s3 cp "s3://${backup_bucket}/${prefix_path}${latest_name}" "$archive" --only-show-errors 2>/dev/null; then
+restore_key="${backup_prefix}/${latest_name}"
+if ! aws s3api head-object --bucket "$backup_bucket" --key "$restore_key" >/dev/null 2>&1; then
   # Fall back to the most recently uploaded timestamped archive. Sort by
   # LastModified, not Key: keys are <archive_dir>/<host>/<ts>.tar.gz and each
   # replacement instance gets a new hostname, so key order is not time order.
-  newest_key="$(aws s3api list-objects-v2 --bucket "$backup_bucket" \
-    --prefix "${prefix_path}${archive_dir}/" \
+  restore_key="$(aws s3api list-objects-v2 --bucket "$backup_bucket" \
+    --prefix "${backup_prefix}/${archive_dir}/" \
     --query 'sort_by(Contents, &LastModified)[-1].Key' --output text 2>/dev/null || true)"
-  [ "$newest_key" = "None" ] && newest_key=""
+  [ "$restore_key" = "None" ] && restore_key=""
 
-  if [ -z "$newest_key" ]; then
-    echo "No backup archive found under s3://${backup_bucket}/${prefix_path}." >&2
-    fail_if_db_missing
-  fi
-
-  if ! aws s3 cp "s3://${backup_bucket}/${newest_key}" "$archive" --only-show-errors; then
-    echo "Failed to download backup archive s3://${backup_bucket}/${newest_key}." >&2
+  if [ -z "$restore_key" ]; then
+    echo "No backup archive found under s3://${backup_bucket}/${backup_prefix}/." >&2
     fail_if_db_missing
   fi
 fi
 
-tar -C "$work_dir" -xzf "$archive"
+# Stream the download straight into tar so the compressed archive never
+# touches the disk (this ExecStartPre blocks site start on a fresh host).
+# sh has no pipefail, but a failed download still fails the pipeline: tar
+# exits non-zero on the truncated gzip stream.
+if ! aws s3 cp "s3://${backup_bucket}/${restore_key}" - --only-show-errors | tar -C "$work_dir" -xz; then
+  echo "Failed to download or extract backup archive s3://${backup_bucket}/${restore_key}." >&2
+  fail_if_db_missing
+fi
 
 if [ "$db_missing" -eq 1 ]; then
   if [ ! -s "${work_dir}/${db_name}" ]; then
     echo "Backup archive does not contain ${db_name}." >&2
     fail_if_db_missing
   fi
-  install -d -m 750 -o "$runtime_uid" -g "$runtime_gid" "${data_root}" "${data_root}/.state"
-  cp -a "${work_dir}/${db_name}" "${data_root}/${db_name}"
+  install -d -m 750 -o "$runtime_uid" -g "$runtime_gid" "${data_root}" "$state_root"
+  # The staging dir is on the same filesystem, so mv is a rename — it avoids
+  # writing the multi-GB database a second time on this boot-blocking path.
+  mv "${work_dir}/${db_name}" "${data_root}/${db_name}"
   rm -f "${data_root}/${db_name}-wal" "${data_root}/${db_name}-shm"
   if [ -d "${work_dir}/.state" ]; then
-    rm -rf "${data_root}/.state"
-    cp -a "${work_dir}/.state" "${data_root}/.state"
+    rm -rf "$state_root"
+    mv "${work_dir}/.state" "$state_root"
   fi
   chown -R "${runtime_uid}:${runtime_gid}" "${data_root}"
-  chmod 750 "${data_root}" "${data_root}/.state"
+  chmod 750 "${data_root}" "$state_root"
   chmod 640 "${data_root}/${db_name}"
   echo "Restored ${db_name} from S3 backup." >&2
 fi

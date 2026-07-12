@@ -6,10 +6,12 @@ locals {
   }
 
   # Fixed settings that are not worth exposing as variables. Change them here.
-  data_mount_path = "/var/lib/rustc-perf"
-  db_filename     = "julia.db"
-  container_port  = 2346
-  caddy_data_dir  = "/var/lib/caddy/data"
+  data_mount_path  = "/var/lib/rustc-perf"
+  db_filename      = "julia.db"
+  container_port   = 2346
+  caddy_image      = "caddy:2.8.4-alpine"
+  caddy_data_dir   = "/var/lib/caddy/data"
+  caddy_config_dir = "/var/lib/caddy/config"
   # Owned here; deploy.sh passes these to `docker build` so the container user
   # is created with the same UID/GID that owns the host data directory. The
   # Dockerfile's ARG defaults only matter for images built outside deploy.sh.
@@ -29,9 +31,9 @@ locals {
   ecr_repository_name = "${var.name_prefix}-site"
   backup_bucket_name  = lower("${var.name_prefix}-${data.aws_caller_identity.current.account_id}-${var.aws_region}-backups")
 
-  site_hostname        = try(trimspace(var.site_hostname), "") == "" ? null : trimspace(var.site_hostname)
-  public_site_hostname = coalesce(local.site_hostname, aws_eip.site.public_ip)
-  site_url_scheme      = local.site_hostname == null ? "http" : "https"
+  site_image_ref = trimspace(var.site_container_image)
+  # Empty when no hostname is configured; the site is then plain HTTP on the EIP.
+  site_hostname = trimspace(coalesce(var.site_hostname, ""))
 }
 
 data "aws_caller_identity" "current" {}
@@ -44,12 +46,12 @@ resource "aws_vpc" "this" {
   enable_dns_support   = true
   enable_dns_hostnames = true
 
-  tags = merge(local.common_tags, { Name = "${var.name_prefix}-vpc" })
+  tags = { Name = "${var.name_prefix}-vpc" }
 }
 
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
-  tags   = merge(local.common_tags, { Name = "${var.name_prefix}-igw" })
+  tags   = { Name = "${var.name_prefix}-igw" }
 }
 
 resource "aws_subnet" "public" {
@@ -57,7 +59,7 @@ resource "aws_subnet" "public" {
   cidr_block              = "10.42.1.0/24"
   map_public_ip_on_launch = true
 
-  tags = merge(local.common_tags, { Name = "${var.name_prefix}-public" })
+  tags = { Name = "${var.name_prefix}-public" }
 }
 
 resource "aws_route_table" "public" {
@@ -68,7 +70,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.this.id
   }
 
-  tags = merge(local.common_tags, { Name = "${var.name_prefix}-public" })
+  tags = { Name = "${var.name_prefix}-public" }
 }
 
 resource "aws_route_table_association" "public" {
@@ -109,7 +111,7 @@ resource "aws_security_group" "instance" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = merge(local.common_tags, { Name = "${var.name_prefix}-instance" })
+  tags = { Name = "${var.name_prefix}-instance" }
 }
 
 resource "aws_ecr_repository" "site" {
@@ -124,7 +126,7 @@ resource "aws_ecr_repository" "site" {
     encryption_type = "AES256"
   }
 
-  tags = merge(local.common_tags, { Name = local.ecr_repository_name })
+  tags = { Name = local.ecr_repository_name }
 }
 
 resource "aws_ecr_lifecycle_policy" "site" {
@@ -146,7 +148,7 @@ resource "aws_ecr_lifecycle_policy" "site" {
 # Private, encrypted, auto-expiring bucket for julia.db/.state backups.
 resource "aws_s3_bucket" "backups" {
   bucket = local.backup_bucket_name
-  tags   = merge(local.common_tags, { Name = "${var.name_prefix}-backups" })
+  tags   = { Name = "${var.name_prefix}-backups" }
 }
 
 resource "aws_s3_bucket_public_access_block" "backups" {
@@ -232,8 +234,6 @@ resource "aws_iam_role" "instance" {
       Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
-
-  tags = local.common_tags
 }
 
 # Session Manager access (operator shell, and the SSM Run Command deploy path).
@@ -302,19 +302,21 @@ locals {
       container_port        = local.container_port
       data_mount_path       = local.data_mount_path
       db_filename           = local.db_filename
-      site_image_ref        = trimspace(var.site_container_image)
+      site_image_ref        = local.site_image_ref
       container_runtime_uid = local.container_runtime_uid
       container_runtime_gid = local.container_runtime_gid
       backup_bucket_name    = aws_s3_bucket.backups.bucket
       backup_prefix         = local.backup_prefix
       backup_archive_dir    = local.backup_archive_dir
       backup_latest_name    = local.backup_latest_name
+      caddy_image           = local.caddy_image
       caddy_data_dir        = local.caddy_data_dir
+      caddy_config_dir      = local.caddy_config_dir
     }) }
 
     "/etc/caddy/Caddyfile" = { mode = "0644", content = templatefile("${path.module}/files/Caddyfile.tftpl", {
       public_ip       = aws_eip.site.public_ip
-      public_hostname = local.site_hostname == null ? "" : local.site_hostname
+      public_hostname = local.site_hostname
       container_port  = local.container_port
     }) }
   }
@@ -342,6 +344,7 @@ resource "aws_instance" "site" {
     container_runtime_gid = local.container_runtime_gid
     data_mount_path       = local.data_mount_path
     caddy_data_dir        = local.caddy_data_dir
+    caddy_config_dir      = local.caddy_config_dir
   }))
 
   depends_on = [
@@ -359,7 +362,7 @@ resource "aws_instance" "site" {
     ignore_changes = [ami]
 
     precondition {
-      condition     = length(regexall("@sha256:[0-9a-fA-F]{64}$", trimspace(var.site_container_image))) > 0
+      condition     = length(regexall("@sha256:[0-9a-fA-F]{64}$", local.site_image_ref)) > 0
       error_message = "site_container_image must be set and pinned to an immutable @sha256 digest, e.g. <registry>/rustc-perf@sha256:<digest>. Create the ECR repository first with -target=aws_ecr_repository.site if you need to build the image before the full apply."
     }
   }
@@ -375,12 +378,12 @@ resource "aws_instance" "site" {
     http_tokens   = "required" # require IMDSv2
   }
 
-  tags = merge(local.common_tags, { Name = "${var.name_prefix}-site" })
+  tags = { Name = "${var.name_prefix}-site" }
 }
 
 resource "aws_eip" "site" {
   domain = "vpc"
-  tags   = merge(local.common_tags, { Name = "${var.name_prefix}-site-eip" })
+  tags   = { Name = "${var.name_prefix}-site-eip" }
 }
 
 resource "aws_eip_association" "site" {

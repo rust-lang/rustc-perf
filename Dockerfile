@@ -80,16 +80,10 @@ RUN apt-get update && \
 # in an extra image layer.
 USER rustc-perf
 
-# Third-party dependencies precompile in a layer keyed only on the manifests;
-# a stub module stands in for Orchestrator so app-code changes reuse it.
 COPY --chown=rustc-perf:rustc-perf ./Project.toml ./Manifest.toml ./
-RUN mkdir src && echo 'module Orchestrator end' > src/Orchestrator.jl && \
-    "$JULIA_BIN" --project=/app -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()' && \
-    rm -r src
-
 COPY --chown=rustc-perf:rustc-perf ./run.jl ./run.jl
 COPY --chown=rustc-perf:rustc-perf ./src ./src
-RUN "$JULIA_BIN" --project=/app -e 'using Pkg; Pkg.precompile(); using Orchestrator'
+RUN "$JULIA_BIN" --project=/app -e 'using Pkg; Pkg.instantiate(); Pkg.precompile(); using Orchestrator'
 
 # The entrypoint and the site binary land last: a Rust-only change must not
 # invalidate the Julia precompile layers above.

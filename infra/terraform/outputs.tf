@@ -1,6 +1,12 @@
 output "site_url" {
   description = "Primary URL for the site."
-  value       = "${local.site_url_scheme}://${local.public_site_hostname}"
+  value       = local.site_hostname == "" ? "http://${aws_eip.site.public_ip}" : "https://${local.site_hostname}"
+}
+
+# deploy.sh reads this back so its AWS CLI calls target the stack's region.
+output "aws_region" {
+  description = "AWS region the stack is deployed in."
+  value       = var.aws_region
 }
 
 output "site_public_ip" {

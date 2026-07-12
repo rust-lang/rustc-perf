@@ -14,4 +14,9 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+
+  # Applied to every resource; per-resource `tags` only add a Name on top.
+  default_tags {
+    tags = local.common_tags
+  }
 }

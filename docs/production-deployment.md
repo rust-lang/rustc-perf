@@ -48,7 +48,7 @@ if you authenticate with `aws login`.
    (with both checkpoint files), in the layout a backup produces:
 
    ```bash
-   aws s3 cp latest.tar.gz s3://<name_prefix>-<account-id>-<region>-backups/runtime/latest.tar.gz
+   aws s3 cp latest.tar.gz "s3://$(terraform output -raw backup_bucket_name)/runtime/latest.tar.gz"
    ```
 
 4. Build, push, and apply:
@@ -83,8 +83,9 @@ Host-configuration changes deploy the same way — edit the code and run
 purpose: only `deploy.sh` supplies `-var site_container_image=...`, so every
 replacement ships an image that was just built and pushed.
 
-Expect a couple of minutes of downtime while the new instance boots, restores,
-and Julia warms up.
+Expect a couple of minutes of downtime while the new instance boots, pulls the
+image, and restores the database from S3. Julia precompilation is baked into
+the image, so it does not add to this.
 
 ## When Something Goes Wrong
 
@@ -114,11 +115,14 @@ curl -I http://127.0.0.1/        # through Caddy
 
 Things to know while reading:
 
-- First start on a fresh host or image: Julia precompilation takes a couple of
-  minutes. The unit shows `active` and Caddy returns `502 Bad Gateway` while
-  the journal streams precompile output. The service is ready when
+- First start on a fresh host takes a minute or two — image pull plus the S3
+  restore — during which the unit shows `active` and Caddy returns
+  `502 Bad Gateway`. The service is ready when
   `curl -I http://127.0.0.1:2346/` returns a normal HTTP response — not merely
-  when the unit is running.
+  when the unit is running. Julia precompilation is baked into the image; if
+  the journal streams `Precompiling` output on start, the baked caches were
+  rejected because `JULIA_CPU_TARGET` in the Dockerfile does not cover this
+  host's CPU — fix that rather than waiting it out.
 - If the restore finds no database and no usable backup (empty bucket,
   download failure), `rustc-perf-restore-if-empty` fails the unit on purpose
   and systemd keeps retrying instead of starting an empty site. Seed the

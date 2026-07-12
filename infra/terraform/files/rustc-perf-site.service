@@ -6,10 +6,12 @@ Requires=docker.service
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/rustc-perf-site.host.env
 # The restore in ExecStartPre downloads and extracts the full backup archive
-# on a fresh host, which takes well over systemd's default 90s start budget.
-TimeoutStartSec=300
+# on a fresh host — minutes, and it grows with the database. A finite timeout
+# would eventually kill a half-finished restore and retry it in a loop; the
+# aws/tar pipeline inside the script already fails on its own on network
+# errors, so this cannot hang silently.
+TimeoutStartSec=infinity
 ExecStartPre=/usr/local/bin/rustc-perf-restore-if-empty
 ExecStart=/usr/local/bin/rustc-perf-run-container
 ExecStop=/usr/bin/docker stop rustc-perf-site
