@@ -352,7 +352,9 @@ fn try_run_body(is_regression: bool, deserves_attention: bool) -> String {
     // We don't remove `rollup=never` if perf does not deserve attention, as sometimes there are multiple perf. runs on the same PR,
     // and it's not always the case that the latest version that gets approved is the one for which we ran perf.
     let rollup_never = if deserves_attention {
-        "@bors rollup=never"
+        // We set the PR note to "rustc-perf", which will be interpreted by bors to mark the PR
+        // as having significant performance results.
+        "@bors rollup=never rustc-perf"
     } else {
         ""
     };
