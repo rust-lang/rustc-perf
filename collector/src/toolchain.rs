@@ -565,7 +565,11 @@ pub fn get_local_toolchain(
             })?)
         } else if profiles.iter().any(|p| p.is_doc()) {
             // We need a `rustdoc`. Look for one next to `rustc`.
-            if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
+            if let Ok(rustdoc) = rustc
+                .with_file_name("rustdoc")
+                .with_extension(rustc.extension().unwrap_or_default())
+                .canonicalize()
+            {
                 debug!("found rustdoc: {:?}", &rustdoc);
                 Some(rustdoc)
             } else {
