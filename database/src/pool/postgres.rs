@@ -522,6 +522,7 @@ pub struct CachedStatements {
     get_runtime_pstat: Statement,
     record_artifact_size: Statement,
     get_artifact_size: Statement,
+    get_artifacts_size: Statement,
     load_benchmark_request_index: Statement,
     get_compile_test_cases_with_measurements: Statement,
     get_runtime_benchmarks_with_measurements: Statement,
@@ -682,6 +683,11 @@ impl PostgresConnection {
                     select component, size from artifact_size
                     where aid = $1
                 ").await.unwrap(),
+                get_artifacts_size: conn.prepare(r#"
+                    SELECT aid, component, size
+                    FROM artifact_size
+                    WHERE aid = ANY($1)
+                "#).await.unwrap(),
                 load_benchmark_request_index: conn.prepare("
                     SELECT tag
                     FROM benchmark_request
@@ -2089,6 +2095,40 @@ where
 
     fn supports_job_queue(&self) -> bool {
         true
+    }
+
+    async fn get_artifacts_size(
+        &self,
+        aids: &[ArtifactIdNumber],
+    ) -> HashMap<String, Vec<Option<u64>>> {
+        let mut result = HashMap::new();
+        let aid_to_idx = aids
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(idx, v)| (v, idx))
+            .collect::<HashMap<ArtifactIdNumber, usize>>();
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_artifacts_size,
+                &[&aids.iter().map(|v| v.0 as i32).collect::<Vec<_>>()],
+            )
+            .await
+            .unwrap();
+
+        for row in rows {
+            let aid = ArtifactIdNumber(row.get::<_, i32>(0) as u32);
+            let component = row.get::<_, String>(1);
+            let size = row.get::<_, i32>(2);
+
+            let v = result
+                .entry(component)
+                .or_insert_with(|| vec![None; aids.len()]);
+            v[aid_to_idx[&aid]] = Some(size as u64);
+        }
+
+        result
     }
 }
 
