@@ -552,9 +552,10 @@ impl<'a> CargoProcess<'a> {
 
 static FAKE_RUSTC: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut fake_rustc = env::current_exe().unwrap();
+    let extension = fake_rustc.extension().map(|ext| ext.to_owned());
     fake_rustc.pop();
     fake_rustc.push("rustc-fake");
-    fake_rustc
+    fake_rustc.with_extension(extension.unwrap_or_default())
 });
 static FAKE_RUSTDOC: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut fake_rustdoc = env::current_exe().unwrap();
