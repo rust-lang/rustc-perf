@@ -22,7 +22,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 pub use crate::api::{
-    self, bootstrap, comparison, dashboard, github, graphs, info, self_profile, status, triage,
+    self, comparison, dashboard, github, graphs, info, self_profile, status, toolchain, triage,
     ServerResult,
 };
 use crate::load::{Config, SiteCtxt};
@@ -381,8 +381,8 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             request_handlers::handle_self_profile(check!(parse_body(&body)), &ctxt).await,
             &compression,
         )),
-        "/perf/bootstrap" => Ok(
-            match request_handlers::handle_bootstrap(check!(parse_body(&body)), &ctxt).await {
+        "/perf/toolchain" => Ok(
+            match request_handlers::handle_toolchain(check!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
                     let mut response = http::Response::builder()
                         .header_typed(ContentType::json())
@@ -492,8 +492,10 @@ async fn handle_fs_path(req: &Request, path: &str, use_compression: bool) -> Opt
     let relative_path = path.trim_start_matches('/');
     let source = match path {
         "" | "/" | "/index.html" => resolve_template("graphs.html").await,
-        "/bootstrap.html"
-        | "/compare.html"
+        // /bootstrap.html is kept for backwards compatibility, the URL was renamed to
+        // /toolchain.html
+        "/toolchain.html" | "/bootstrap.html" => resolve_template("toolchain.html").await,
+        "/compare.html"
         | "/dashboard.html"
         | "/detailed-query.html"
         | "/help.html"

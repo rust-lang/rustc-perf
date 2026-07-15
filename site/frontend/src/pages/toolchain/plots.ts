@@ -1,5 +1,5 @@
 import uPlot, {TypedArray} from "uplot";
-import {BootstrapData, BootstrapSelector} from "./state";
+import {ToolchainData, ToolchainSelector} from "./state";
 
 function tooltipPlugin({onclick, commits, shiftX = 10, shiftY = 10}) {
   let tooltipLeftOffset = 0;
@@ -158,7 +158,7 @@ function genPlotOpts({
   };
 }
 
-export function renderPlots(data: BootstrapData, selector: BootstrapSelector) {
+export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
   let byChartSeriesOpts = [{}];
   let xVals = data.commits.map((c) => c[0]);
   let byChartPlotData = [xVals];

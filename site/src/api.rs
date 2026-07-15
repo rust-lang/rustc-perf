@@ -238,7 +238,7 @@ pub mod runtime_detail_graphs {
     }
 }
 
-pub mod bootstrap {
+pub mod toolchain {
     use collector::Bound;
     use hashbrown::HashMap;
     use serde::{Deserialize, Serialize};

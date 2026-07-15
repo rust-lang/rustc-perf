@@ -1,11 +1,10 @@
-mod bootstrap;
 mod dashboard;
 mod github;
 mod graph;
 mod self_profile;
 mod status_page;
+mod toolchain;
 
-pub use bootstrap::handle_bootstrap;
 pub use dashboard::handle_dashboard;
 pub use github::handle_github_webhook;
 pub use graph::{
@@ -16,6 +15,7 @@ pub use self_profile::{
     handle_self_profile, handle_self_profile_processed_download, handle_self_profile_raw_download,
 };
 pub use status_page::handle_status_page;
+pub use toolchain::handle_toolchain;
 
 use crate::api::info;
 use crate::load::SiteCtxt;

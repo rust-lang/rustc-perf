@@ -3,8 +3,8 @@ import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {renderPlots} from "./plots";
-import {BootstrapData, BootstrapSelector} from "./state";
-import {BOOTSTRAP_DATA_URL} from "../../urls";
+import {ToolchainData, ToolchainSelector} from "./state";
+import {TOOLCHAIN_DATA_URL} from "../../urls";
 import {
   createUrlWithAppendedParams,
   getUrlParams,
@@ -13,21 +13,21 @@ import {
 
 import {postJson} from "../../utils/requests";
 
-async function loadBootstrapData(
-  selector: BootstrapSelector,
+async function loadToolchainData(
+  selector: ToolchainSelector,
   loading: Ref<boolean>
 ) {
-  const bootstrapData: BootstrapData = await withLoading(loading, () =>
-    postJson<BootstrapData>(BOOTSTRAP_DATA_URL, selector)
+  const data: ToolchainData = await withLoading(loading, () =>
+    postJson<ToolchainData>(TOOLCHAIN_DATA_URL, selector)
   );
 
   // Wait for the UI to be updated, which also resets the plot HTML elements.
   // Then draw the plots.
   await nextTick();
-  renderPlots(bootstrapData, selector);
+  renderPlots(data, selector);
 }
 
-function loadSelectorFromUrl(urlParams: Dict<string>): BootstrapSelector {
+function loadSelectorFromUrl(urlParams: Dict<string>): ToolchainSelector {
   const start = urlParams["start"] ?? "";
   const end = urlParams["end"] ?? "";
   return {
@@ -48,8 +48,8 @@ function updateSelection(params: SelectionParams) {
 
 const loading = ref(true);
 
-const selector: BootstrapSelector = loadSelectorFromUrl(getUrlParams());
-loadBootstrapData(selector, loading);
+const selector: ToolchainSelector = loadSelectorFromUrl(getUrlParams());
+loadToolchainData(selector, loading);
 </script>
 
 <template>

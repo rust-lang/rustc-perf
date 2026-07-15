@@ -39,8 +39,8 @@
       "source": "src/pages/status.ts",
       "distDir": "dist/scripts"
     },
-    "bootstrap": {
-      "source": "src/pages/bootstrap.ts",
+    "toolchain": {
+      "source": "src/pages/toolchain.ts",
       "distDir": "dist/scripts"
     },
     "graphs": {

@@ -1,16 +1,16 @@
 use futures::stream::{FuturesOrdered, StreamExt};
 
-use crate::api::{bootstrap, ServerResult};
+use crate::api::{toolchain, ServerResult};
 use crate::load::SiteCtxt;
 use database::ArtifactId;
 
 use std::time::Duration;
 
-pub async fn handle_bootstrap(
-    body: bootstrap::Request,
+pub async fn handle_toolchain(
+    body: toolchain::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<bootstrap::Response> {
-    log::info!("handle_bootstrap({:?})", body);
+) -> ServerResult<toolchain::Response> {
+    log::info!("handle_toolchain({:?})", body);
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Vec<ArtifactId> = range
         .into_iter()
@@ -59,7 +59,7 @@ pub async fn handle_bootstrap(
         .map(|v| v.map(duration_as_nanos_u64))
         .collect();
 
-    Ok(bootstrap::Response {
+    Ok(toolchain::Response {
         commits: commits
             .into_iter()
             .map(|v| match v {
