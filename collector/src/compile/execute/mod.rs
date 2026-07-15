@@ -370,11 +370,19 @@ impl<'a> CargoProcess<'a> {
 
         loop {
             // Make sure that Cargo.lock isn't changed by the build
-            let _guard = EnsureImmutableFile::new(
-                &self.cwd.join("Cargo.lock"),
-                self.processor_name.0.clone(),
-            )
-            .context("cannot resolve Cargo.lock")?;
+            let _guard = if cfg!(target_os = "linux") {
+                Some(
+                    EnsureImmutableFile::new(
+                        &self.cwd.join("Cargo.lock"),
+                        self.processor_name.0.clone(),
+                    )
+                    .context("cannot resolve Cargo.lock")?,
+                )
+            } else {
+                // We develop on Linux; if we try to build on Windows, the lockfiles would be
+                // re-generated, so we just avoid checking
+                None
+            };
 
             // Get the subcommand. If it's not `rustc` it should be a
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`

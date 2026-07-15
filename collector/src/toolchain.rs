@@ -591,7 +591,11 @@ pub fn get_local_toolchain(
         )
     } else if profiles.contains(&Profile::Clippy) {
         // We need a `clippy`. Look for one next to `rustc`.
-        if let Ok(clippy) = rustc.with_file_name("clippy-driver").canonicalize() {
+        if let Ok(clippy) = rustc
+            .with_file_name("clippy-driver")
+            .with_extension(rustc.extension().unwrap_or_default())
+            .canonicalize()
+        {
             debug!("found clippy: {:?}", &clippy);
             Some(clippy)
         } else {
