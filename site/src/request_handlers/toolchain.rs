@@ -59,15 +59,18 @@ pub async fn handle_toolchain(
         .map(|v| v.map(duration_as_nanos_u64))
         .collect();
 
+    let artifact_sizes = conn.get_artifacts_size(&ids).await;
+
     Ok(toolchain::Response {
         commits: commits
             .into_iter()
             .map(|v| match v {
                 ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha),
-                ArtifactId::Tag(_) => todo!(),
+                ArtifactId::Tag(_) => unreachable!(),
             })
             .collect(),
         by_crate_build_times,
         total_build_times,
+        artifact_sizes,
     })
 }

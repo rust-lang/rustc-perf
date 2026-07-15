@@ -67,7 +67,8 @@ loadToolchainData(selector, loading);
       See <a href="/compare.html">compare page</a> for descriptions of what the
       names mean.
     </div>
-    <div id="byCrateChart"></div>
-    <div id="totalChart"></div>
+    <div id="artifactSizeChart"></div>
+    <div id="bootstrapByCrateChart"></div>
+    <div id="bootstrapTotalChart"></div>
   </div>
 </template>

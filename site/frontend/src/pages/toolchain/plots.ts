@@ -1,7 +1,7 @@
 import uPlot, {TypedArray} from "uplot";
 import {ToolchainData, ToolchainSelector} from "./state";
 
-function tooltipPlugin({onclick, commits, shiftX = 10, shiftY = 10}) {
+function tooltipPlugin({onclick, commits, kind, shiftX = 10, shiftY = 10}) {
   let tooltipLeftOffset = 0;
   let tooltipTopOffset = 0;
 
@@ -42,15 +42,18 @@ function tooltipPlugin({onclick, commits, shiftX = 10, shiftY = 10}) {
     tooltip.style.top = tooltipTopOffset + top + shiftX + "px";
     tooltip.style.left = tooltipLeftOffset + lft + shiftY + "px";
 
-    tooltip.textContent =
-      formatDate(new Date(u.data[0][dataIdx] * 1e3)) +
-      " - " +
-      commits[dataIdx][1].slice(0, 10) +
-      "\n" +
-      u.series[seriesIdx].label +
-      ": " +
-      u.data[seriesIdx][dataIdx] / 1e9 +
-      " seconds";
+    const data = u.data[seriesIdx][dataIdx];
+    let dataLabel = "";
+    if (kind === "time") {
+      dataLabel = `${normalizeValue(data, kind)} seconds`;
+    } else if (kind === "size") {
+      dataLabel = `${normalizeValue(data, kind)} MiB`;
+    }
+
+    tooltip.textContent = `${formatDate(
+      new Date(u.data[0][dataIdx] * 1e3)
+    )} - ${commits[dataIdx][1].slice(0, 10)}
+${u.series[seriesIdx].label}: ${dataLabel}`;
   }
 
   return {
@@ -106,6 +109,15 @@ function tooltipPlugin({onclick, commits, shiftX = 10, shiftY = 10}) {
   };
 }
 
+function normalizeValue(data: number, kind: "size" | "time"): string {
+  if (kind === "time") {
+    return (data / 1e9).toFixed(2);
+  } else if (kind === "size") {
+    return (data / (1024 * 1024)).toFixed(2);
+  }
+  return data.toFixed(2);
+}
+
 function genPlotOpts({
   title,
   height,
@@ -114,6 +126,7 @@ function genPlotOpts({
   commits,
   alpha = 0.3,
   prox = 5,
+  kind = "time",
 }) {
   return {
     title,
@@ -141,7 +154,13 @@ function genPlotOpts({
         label: yAxisLabel,
         space: 24,
         values: (_self, splits) => {
-          return splits.map((v) => v / 1e9 + " sec");
+          if (kind === "time") {
+            return splits.map((v) => `${normalizeValue(v, kind)} sec`);
+          } else if (kind === "size") {
+            return splits.map((v) => `${normalizeValue(v, kind)} MiB`);
+          } else {
+            throw new Error(`Unknown chart kind ${kind}`);
+          }
         },
       },
     ],
@@ -153,15 +172,14 @@ function genPlotOpts({
           window.open(`/compare.html?start=${prevCommit}&end=${thisCommit}`);
         },
         commits,
+        kind,
       }),
     ],
   };
 }
 
 export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
-  let byChartSeriesOpts = [{}];
   let xVals = data.commits.map((c) => c[0]);
-  let byChartPlotData = [xVals];
   // https://sashamaps.net/docs/resources/20-colors/
   let colors = [
     "#e6194b",
@@ -179,12 +197,62 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
     "blue",
     "purple",
   ];
+
+  let artifactSizeSeriesOpts = [{}];
+  let artifactSizePlotData = [xVals];
+
+  let components = Object.keys(data.artifact_sizes).sort();
+  const artifactSizeTotal = [];
+  for (let i = 0; i < xVals.length; i++) {
+    let total = 0;
+    for (const component of components) {
+      const size = data.artifact_sizes[component][i];
+      if (size !== null && size !== undefined) {
+        total += size;
+      }
+    }
+    artifactSizeTotal.push(total);
+  }
+  artifactSizePlotData.push(artifactSizeTotal);
+  artifactSizeSeriesOpts.push({
+    label: "Total",
+    stroke: "black",
+  });
+
+  let colorIndex = colors.length - 1;
+  for (const component of components) {
+    artifactSizePlotData.push(data.artifact_sizes[component]);
+    artifactSizeSeriesOpts.push({
+      label: component,
+      stroke: colorIndex > 0 ? colors[colorIndex] : "black",
+    });
+    colorIndex -= 1;
+  }
+
+  let artifactSizePlotOpts = genPlotOpts({
+    title: `Toolchain size`,
+    height: window.innerHeight * 0.4,
+    yAxisLabel: "",
+    series: artifactSizeSeriesOpts,
+    commits: data.commits,
+    kind: "size",
+  });
+
+  new uPlot(
+    artifactSizePlotOpts,
+    artifactSizePlotData as any as TypedArray[],
+    document.querySelector<HTMLElement>("#artifactSizeChart")
+  );
+
+  colorIndex = colors.length - 1;
+  let byChartSeriesOpts = [{}];
+  let byChartPlotData = [xVals];
   let crates = Object.keys(data.by_crate_build_times).sort();
   for (let crate of crates) {
     byChartPlotData.push(data.by_crate_build_times[crate]);
     byChartSeriesOpts.push({
       label: crate,
-      stroke: colors.length ? colors.pop() : "black",
+      stroke: colorIndex > 0 ? colors[colorIndex] : "black",
     });
   }
 
@@ -194,12 +262,13 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
     yAxisLabel: "",
     series: byChartSeriesOpts,
     commits: data.commits,
+    kind: "time",
   });
 
   new uPlot(
     byChartPlotOpts,
     byChartPlotData as any as TypedArray[],
-    document.querySelector<HTMLElement>("#byCrateChart")
+    document.querySelector<HTMLElement>("#bootstrapByCrateChart")
   );
 
   let totalPlotData = [xVals, data.total_build_times];
@@ -209,11 +278,12 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
     yAxisLabel: "",
     series: [{}, {label: "rustc", stroke: "#7cb5ec"}],
     commits: data.commits,
+    kind: "time",
   });
 
   new uPlot(
     totalPlotOpts,
     totalPlotData as any as TypedArray[],
-    document.querySelector<HTMLElement>("#totalChart")
+    document.querySelector<HTMLElement>("#bootstrapTotalChart")
   );
 }

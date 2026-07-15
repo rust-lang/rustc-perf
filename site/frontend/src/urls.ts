@@ -1,4 +1,5 @@
 const BASE_URL = window.location.origin + "/perf";
+// const BASE_URL = "https://perf.rust-lang.org/perf";
 
 export const INFO_URL = `${BASE_URL}/info`;
 
