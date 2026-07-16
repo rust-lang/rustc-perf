@@ -139,6 +139,15 @@ pub fn version_supports_incremental(version_str: &str) -> bool {
     }
 }
 
+pub fn version_supports_parallel_frontend(version_str: &str) -> bool {
+    if let Ok(version) = version_str.parse::<semver::Version>() {
+        version >= semver::Version::new(1, 33, 0)
+    } else {
+        assert!(version_str.starts_with("beta") || version_str.starts_with("master"));
+        true
+    }
+}
+
 /// Rounds serialized and deserialized floats to 2 decimal places.
 pub mod round_float {
     use serde::{Deserialize, Deserializer, Serializer};

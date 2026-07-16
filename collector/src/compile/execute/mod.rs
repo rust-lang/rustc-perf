@@ -1,6 +1,7 @@
 //! Execute benchmarks.
 
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
+use crate::compile::benchmark::parallel_frontend::FrontendThreads;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
@@ -132,6 +133,7 @@ pub struct CargoProcess<'a> {
     pub touch_file: Option<String>,
     pub jobserver: Option<jobserver::Client>,
     pub target: Target,
+    pub frontend_threads: FrontendThreads,
     pub workspace_package: Option<String>,
 }
 
@@ -358,13 +360,14 @@ impl<'a> CargoProcess<'a> {
     // really.
     pub async fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}, target={:?}, phase={}",
+            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}, target={:?}, frontend_threads={}, phase={}",
             self.incremental,
             self.profile,
             self.processor_etc.as_ref().map(|v| v.1),
             self.processor_etc.as_ref().and_then(|v| v.3),
             self.backend,
             self.target,
+            self.frontend_threads.get(),
             if needs_final { "benchmark" } else { "dependencies" }
         );
 
@@ -414,6 +417,12 @@ impl<'a> CargoProcess<'a> {
 
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
+            // Whatever arguments were passed from the external environment, we only look
+            // at the config value
+            cmd.env(
+                "RUSTC_THREAD_COUNT",
+                self.frontend_threads.get().to_string(),
+            );
             match self.profile {
                 Profile::Check => {
                     cmd.arg("--profile").arg("check");
@@ -545,6 +554,7 @@ impl<'a> CargoProcess<'a> {
                     patch,
                     backend: self.backend,
                     target: self.target,
+                    frontend_threads: self.frontend_threads,
                 };
                 match processor.process_output(&data, output).await {
                     Ok(Retry::No) => return Ok(()),
@@ -611,6 +621,7 @@ pub struct ProcessOutputData<'a> {
     patch: Option<&'a Patch>,
     backend: CodegenBackend,
     target: Target,
+    frontend_threads: FrontendThreads,
 }
 
 /// Trait used by `Benchmark::measure()` to provide different kinds of

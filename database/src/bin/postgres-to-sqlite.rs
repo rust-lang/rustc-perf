@@ -189,12 +189,13 @@ impl Table for PstatSeries {
     }
 
     fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
-        "select id, crate, profile, scenario, backend, target, metric from ".to_string()
+        "SELECT id, crate, profile, scenario, backend, target, frontend_threads, metric FROM "
+            .to_string()
             + self.name()
     }
 
     fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into pstat_series (id, crate, profile, scenario, backend, target, metric) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO pstat_series (id, crate, profile, scenario, backend, target, frontend_threads, metric) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     }
 
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {

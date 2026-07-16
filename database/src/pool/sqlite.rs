@@ -6,7 +6,8 @@ use crate::{
     ArtifactId, Benchmark, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
     BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
     BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, PendingBenchmarkRequests, Profile, Target,
+    Commit, CommitType, CompileBenchmark, Date, FrontendThreads, PendingBenchmarkRequests, Profile,
+    Target,
 };
 use crate::{ArtifactIdNumber, Index};
 use chrono::{DateTime, TimeZone, Utc};
@@ -448,6 +449,25 @@ static MIGRATIONS: &[Migration] = &[
         ALTER TABLE runtime_pstat_series_with_target RENAME TO runtime_pstat_series;
     "#,
     ),
+    // Add frontend_threads as an unique constraint, defaulting to '1'
+    Migration::without_foreign_key_constraints(
+        r#"
+        CREATE TABLE pstat_series_with_frontend_threads(
+            id               INTEGER PRIMARY KEY NOT NULL,
+            crate            TEXT NOT NULL REFERENCES benchmark(name) ON DELETE CASCADE ON UPDATE CASCADE,
+            profile          TEXT NOT NULL,
+            scenario         TEXT NOT NULL,
+            backend          TEXT NOT NULL,
+            target           TEXT NOT NULL DEFAULT 'x86_64-unknown-linux-gnu',
+            frontend_threads INTEGER NOT NULL DEFAULT 1,
+            metric           TEXT NOT NULL,
+            UNIQUE(crate, profile, scenario, backend, target, frontend_threads, metric)
+        );
+        INSERT INTO pstat_series_with_frontend_threads select id, crate, profile, scenario, backend, 'x86_64-unknown-linux-gnu', 1, metric FROM pstat_series;
+        DROP TABLE pstat_series;
+        ALTER TABLE pstat_series_with_frontend_threads RENAME TO pstat_series;
+    "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -575,7 +595,7 @@ impl Connection for SqliteConnection {
         let pstat_series = self
             .raw()
             .prepare(
-                "select id, crate, profile, scenario, backend, target, metric from pstat_series;",
+                "select id, crate, profile, scenario, backend, target, frontend_threads, metric from pstat_series;",
             )
             .unwrap()
             .query_map(params![], |row| {
@@ -587,7 +607,8 @@ impl Connection for SqliteConnection {
                         row.get::<_, String>(3)?.as_str().parse().unwrap(),
                         CodegenBackend::from_str(row.get::<_, String>(4)?.as_str()).unwrap(),
                         Target::from_str(row.get::<_, String>(5)?.as_str()).unwrap(),
-                        row.get::<_, String>(6)?.as_str().into(),
+                        FrontendThreads(row.get::<_, i32>(6)? as u32),
+                        row.get::<_, String>(7)?.as_str().into(),
                     ),
                 ))
             })
@@ -723,6 +744,7 @@ impl Connection for SqliteConnection {
         scenario: crate::Scenario,
         backend: CodegenBackend,
         target: Target,
+        frontend_threads: FrontendThreads,
         metric: &str,
         value: f64,
     ) {
@@ -730,20 +752,22 @@ impl Connection for SqliteConnection {
         let scenario = scenario.to_string();
         let backend = backend.to_string();
         let target = target.to_string();
-        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, target, metric) VALUES (?, ?, ?, ?, ?, ?)", params![
+        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, scenario, backend, target, frontend_threads, metric) VALUES (?, ?, ?, ?, ?, ?, ?)", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
             &target,
+            &frontend_threads.0,
             &metric,
         ]).unwrap();
-        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and target = ? and metric = ?", params![
+        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and scenario = ? and backend = ? and target = ? and frontend_threads = ? and metric = ?", params![
             &benchmark,
             &profile,
             &scenario,
             &backend,
             &target,
+            &frontend_threads.0,
             &metric,
         ], |r| r.get(0)).unwrap();
         self.raw_ref()
@@ -1082,7 +1106,7 @@ impl Connection for SqliteConnection {
         Ok(self
             .raw_ref()
             .prepare_cached(
-                "SELECT DISTINCT crate, profile, scenario, backend, target
+                "SELECT DISTINCT crate, profile, scenario, backend, target, frontend_threads
                 FROM pstat_series
                 WHERE id IN (
                     SELECT DISTINCT series
@@ -1097,6 +1121,7 @@ impl Connection for SqliteConnection {
                     scenario: row.get::<_, String>(2)?.parse().unwrap(),
                     backend: row.get::<_, String>(3)?.parse().unwrap(),
                     target: row.get::<_, String>(4)?.parse().unwrap(),
+                    frontend_threads: FrontendThreads(row.get::<_, i32>(5)? as u32),
                 })
             })?
             .collect::<Result<_, _>>()?)
