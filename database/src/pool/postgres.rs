@@ -7,10 +7,10 @@ use crate::{
     BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
     BenchmarkRequestInsertResult, BenchmarkRequestStatus, BenchmarkRequestType,
     BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, Index, PendingBenchmarkRequests, Profile, Scenario,
-    Target, BENCHMARK_JOB_STATUS_FAILURE_STR, BENCHMARK_JOB_STATUS_IN_PROGRESS_STR,
-    BENCHMARK_JOB_STATUS_QUEUED_STR, BENCHMARK_JOB_STATUS_SUCCESS_STR,
-    BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
+    Commit, CommitType, CompileBenchmark, Date, FrontendThreads, Index, PendingBenchmarkRequests,
+    Profile, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
+    BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
     BENCHMARK_REQUEST_TRY_STR,
@@ -443,6 +443,12 @@ static MIGRATIONS: &[&str] = &[
     "#,
     r#"ALTER TABLE job_queue ADD COLUMN is_optional BOOLEAN NOT NULL DEFAULT FALSE"#,
     r#"ALTER TABLE benchmark_request ADD COLUMN targets TEXT NOT NULL DEFAULT ''"#,
+    // Add frontend_threads to pstat_series
+    r#"
+    ALTER TABLE pstat_series ADD frontend_threads INT NOT NULL DEFAULT 1;
+    ALTER TABLE pstat_series DROP CONSTRAINT test_case;
+    ALTER TABLE pstat_series ADD CONSTRAINT test_case UNIQUE(crate, profile, scenario, backend, target, frontend_threads, metric);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -635,8 +641,8 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 get_error: conn.prepare("select context, message from error where aid = $1").await.unwrap(),
-                insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, target, metric) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
-                select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and target = $5 and metric = $6").await.unwrap(),
+                insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, scenario, backend, target, frontend_threads, metric) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and scenario = $3 and backend = $4 and target = $5 and frontend_threads = $6 and metric = $7").await.unwrap(),
                 collection_id: conn.prepare("insert into collection (perf_commit) VALUES ($1) returning id").await.unwrap(),
                 get_benchmarks: conn.prepare("
                     select name, category
@@ -688,7 +694,7 @@ impl PostgresConnection {
                     WHERE tag IS NOT NULL
                 ").await.unwrap(),
                 get_compile_test_cases_with_measurements: conn.prepare("
-                    SELECT DISTINCT crate, profile, scenario, backend, target
+                    SELECT DISTINCT crate, profile, scenario, backend, target, frontend_threads
                     FROM pstat_series
                     WHERE id IN (
                         SELECT DISTINCT series
@@ -887,7 +893,7 @@ where
             pstat_series: self
                 .conn()
                 .query(
-                    "select id, crate, profile, scenario, backend, target, metric from pstat_series;",
+                    "select id, crate, profile, scenario, backend, target, frontend_threads, metric from pstat_series;",
                     &[],
                 )
                 .await
@@ -902,7 +908,8 @@ where
                             row.get::<_, String>(3).as_str().parse().unwrap(),
                             CodegenBackend::from_str(row.get::<_, String>(4).as_str()).unwrap(),
                             Target::from_str(row.get::<_, String>(5).as_str()).unwrap(),
-                            row.get::<_, String>(6).as_str().into(),
+                            FrontendThreads(row.get::<_, i32>(6) as u32),
+                            row.get::<_, String>(7).as_str().into(),
                         ),
                     )
                 })
@@ -1022,6 +1029,7 @@ where
         scenario: Scenario,
         backend: CodegenBackend,
         target: Target,
+        frontend_threads: FrontendThreads,
         metric: &str,
         stat: f64,
     ) {
@@ -1029,11 +1037,20 @@ where
         let scenario = scenario.to_string();
         let backend = backend.to_string();
         let target = target.to_string();
+        let frontend_threads = frontend_threads.0 as i32;
         let sid = self
             .conn()
             .query_opt(
                 &self.statements().select_pstat_series,
-                &[&benchmark, &profile, &scenario, &backend, &target, &metric],
+                &[
+                    &benchmark,
+                    &profile,
+                    &scenario,
+                    &backend,
+                    &target,
+                    &frontend_threads,
+                    &metric,
+                ],
             )
             .await
             .unwrap();
@@ -1043,14 +1060,30 @@ where
                 self.conn()
                     .query_opt(
                         &self.statements().insert_pstat_series,
-                        &[&benchmark, &profile, &scenario, &backend, &target, &metric],
+                        &[
+                            &benchmark,
+                            &profile,
+                            &scenario,
+                            &backend,
+                            &target,
+                            &frontend_threads,
+                            &metric,
+                        ],
                     )
                     .await
                     .unwrap();
                 self.conn()
                     .query_one(
                         &self.statements().select_pstat_series,
-                        &[&benchmark, &profile, &scenario, &backend, &target, &metric],
+                        &[
+                            &benchmark,
+                            &profile,
+                            &scenario,
+                            &backend,
+                            &target,
+                            &frontend_threads,
+                            &metric,
+                        ],
                     )
                     .await
                     .unwrap()
@@ -1627,6 +1660,7 @@ where
                 scenario: row.get::<_, &str>(2).parse().unwrap(),
                 backend: CodegenBackend::from_str(row.get::<_, &str>(3)).unwrap(),
                 target: Target::from_str(row.get::<_, &str>(4)).unwrap(),
+                frontend_threads: FrontendThreads(row.get::<_, i32>(5) as u32),
             })
             .collect())
     }

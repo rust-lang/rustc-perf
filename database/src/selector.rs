@@ -29,7 +29,7 @@ use std::{
 
 use crate::{
     interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
-    CodegenBackend, Connection, Index, Lookup, Profile, Scenario, Target,
+    CodegenBackend, Connection, FrontendThreads, Index, Lookup, Profile, Scenario, Target,
 };
 
 #[derive(Debug)]
@@ -192,8 +192,9 @@ pub struct CompileBenchmarkQuery {
     scenario: Selector<Scenario>,
     profile: Selector<Profile>,
     backend: Selector<CodegenBackend>,
-    metric: Selector<crate::Metric>,
     target: Selector<Target>,
+    frontend_threads: Selector<FrontendThreads>,
+    metric: Selector<crate::Metric>,
 }
 
 impl CompileBenchmarkQuery {
@@ -217,6 +218,11 @@ impl CompileBenchmarkQuery {
         self
     }
 
+    pub fn frontend_threads(mut self, selector: Selector<FrontendThreads>) -> Self {
+        self.frontend_threads = selector;
+        self
+    }
+
     pub fn target(mut self, selector: Selector<Target>) -> Self {
         self.target = selector;
         self
@@ -233,8 +239,9 @@ impl CompileBenchmarkQuery {
             profile: Selector::All,
             scenario: Selector::All,
             backend: Selector::All,
-            metric: Selector::One(metric.as_str().into()),
             target: Selector::All,
+            frontend_threads: Selector::All,
+            metric: Selector::One(metric.as_str().into()),
         }
     }
 }
@@ -246,8 +253,9 @@ impl Default for CompileBenchmarkQuery {
             scenario: Selector::All,
             profile: Selector::All,
             backend: Selector::All,
-            metric: Selector::All,
             target: Selector::All,
+            frontend_threads: Selector::All,
+            metric: Selector::All,
         }
     }
 }
@@ -263,21 +271,28 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
     ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
         let mut statistic_descriptions: Vec<_> = index
             .compile_statistic_descriptions()
-            .filter(|(&(b, p, s, backend, target, metric), _)| {
-                self.benchmark.matches(b)
-                    && self.profile.matches(p)
-                    && self.scenario.matches(s)
-                    && self.backend.matches(backend)
-                    && self.target.matches(target)
-                    && self.metric.matches(metric)
-            })
+            .filter(
+                |(&(b, p, s, backend, target, frontend_threads, metric), _)| {
+                    self.benchmark.matches(b)
+                        && self.profile.matches(p)
+                        && self.scenario.matches(s)
+                        && self.backend.matches(backend)
+                        && self.target.matches(target)
+                        && self.frontend_threads.matches(frontend_threads)
+                        && self.metric.matches(metric)
+                },
+            )
             .map(
-                |(&(benchmark, profile, scenario, backend, target, metric), sid)| {
+                |(
+                    &(benchmark, profile, scenario, backend, target, frontend_threads, metric),
+                    sid,
+                )| {
                     (
                         CompileTestCase {
                             benchmark,
                             profile,
                             scenario,
+                            frontend_threads,
                             backend,
                             target,
                         },
@@ -336,6 +351,7 @@ pub struct CompileTestCase {
     pub scenario: Scenario,
     pub backend: CodegenBackend,
     pub target: Target,
+    pub frontend_threads: FrontendThreads,
 }
 
 impl TestCase for CompileTestCase {}

@@ -5,7 +5,7 @@ use crate::{
     BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectorConfig, CompileBenchmark,
     PendingBenchmarkRequests, Target,
 };
-use crate::{CollectionId, Index, Profile, Scenario};
+use crate::{CollectionId, FrontendThreads, Index, Profile, Scenario};
 use chrono::{DateTime, Utc};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -58,6 +58,7 @@ pub trait Connection: Send + Sync {
         scenario: Scenario,
         backend: CodegenBackend,
         target: Target,
+        frontend_threads: FrontendThreads,
         metric: &str,
         value: f64,
     );
@@ -720,6 +721,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_compile_test_cases_with_data() {
+        const MOCK_FRONTEND_THREADS: FrontendThreads = FrontendThreads(1);
         run_db_test(|ctx| async {
             let db = ctx.db();
 
@@ -742,6 +744,7 @@ mod tests {
                 Scenario::IncrementalFresh,
                 CodegenBackend::Llvm,
                 Target::X86_64UnknownLinuxGnu,
+                MOCK_FRONTEND_THREADS,
                 Metric::CacheMisses.as_str(),
                 1.0,
             )
@@ -755,6 +758,7 @@ mod tests {
                     benchmark: "benchmark".into(),
                     profile: Profile::Check,
                     scenario: Scenario::IncrementalFresh,
+                    frontend_threads: MOCK_FRONTEND_THREADS,
                     backend: CodegenBackend::Llvm,
                     target: Target::X86_64UnknownLinuxGnu,
                 }])

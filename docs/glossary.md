@@ -1,6 +1,6 @@
 # Glossary
 
-The following is a glossary of domain specific terminology. Although benchmarks are a seemingly simple domain, they have a surprising amount of complexity. It is therefore useful to ensure that the vocabulary used to describe the domain is consistent and precise to avoid confusion. 
+The following is a glossary of domain specific terminology. Although benchmarks are a seemingly simple domain, they have a surprising amount of complexity. It is therefore useful to ensure that the vocabulary used to describe the domain is consistent and precise to avoid confusion.
 
 ## Common terms
 
@@ -15,8 +15,8 @@ The following is a glossary of domain specific terminology. Although benchmarks 
   - `check` corresponds to running `cargo check`.
   - `debug` corresponds to running `cargo build`.
   - `opt` corresponds to running `cargo build --release`.
-  - `doc` corresponds to running rustdoc with the JSON output format.
-  - `doc-json` corresponds to running rustdoc.
+  - `doc` corresponds to running rustdoc.
+  - `doc-json` corresponds to running rustdoc with the JSON output format.
   - `clippy` corresponds to running `cargo clippy`.
 * **scenario**: describes the incremental cache state and an optional change in the source since last compilation.
   - `full`: incremental compilation is not used.
@@ -28,6 +28,8 @@ The following is a glossary of domain specific terminology. Although benchmarks 
   - `cranelift`: experimental backend designed for quicker non-optimized builds
 * **target**: compilation target for which the benchmark is compiled.
   - `x86_64-unknown-linux-gnu`: the default x64 Linux target
+* **frontend threads**: an integer corresponding to number of threads used by the frontend part
+    of the compiler. Maps directly to the `-Zthreads` rustc option.
 * **category**: a high-level group of benchmarks. Currently, there are three categories, primary (mostly real-world crates), secondary (mostly stress tests), and stable (old real-world crates, only used for the dashboard).
 * **artifact type**: describes what kind of artifact does the benchmark build. Either `library` or `binary`.
 
@@ -47,7 +49,7 @@ The following is a glossary of domain specific terminology. Although benchmarks 
     - For compile-time benchmarks, it is a combination of a benchmark, a profile, a scenario, a codegen backend and a target.
     - For runtime benchmarks, it a combination of a benchmark and a target.
 * **test**: the act of running an artifact under a test case. Each test is composed of many iterations.
-* **test iteration**: a single iteration that makes up a test. Note: we currently normally run 3 test iterations for each test. 
+* **test iteration**: a single iteration that makes up a test. Note: we currently normally run 3 test iterations for each test.
 * **test result**: the set of all gathered statistics from running a test. Currently, the minimum value of a statistic from all the test iterations is used for analysis calculations and the website.
 * **statistic**: a single measured value of a metric in a test iteration
 * **statistic description**: the combination of a metric and a test case which describes a statistic.
@@ -57,7 +59,7 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 ## Analysis
 
 * **artifact comparisons**: the comparison of two artifacts. This is composed of many test result comparisons. The [comparison page](https://perf.rust-lang.org/compare.html) shows a single artifact comparison between two artifacts.
-* **test result comparison**: the delta between two test results for the same test case but different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result comparisons as percentages between two runs.  
+* **test result comparison**: the delta between two test results for the same test case but different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result comparisons as percentages between two runs.
 * **significance threshold**: the threshold at which a test result comparison is considered "significant" (i.e., a real change in performance and not just noise). You can see how this is calculated [here](https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant).
 * **significant test result comparison**: a test result comparison above the significance threshold. Significant test result comparisons can be thought of as being "statistically significant".
 * **relevant test result comparison**: a test result comparison can be significant but still not be relevant (i.e., worth paying attention to). Relevance is a factor of the test result comparison's significance and magnitude. Comparisons are considered relevant if they are significant and have at least a small magnitude .
@@ -67,9 +69,9 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 
 These terms are related to the [job queue system](./job-queue.md) that distributes benchmarking jobs across available collectors.
 
-- **benchmark request**: a request for a benchmarking a *run* on a given *artifact*. Can be either created from a try build on a PR, or it is automatically created from merged master/release *artifacts*. 
+- **benchmark request**: a request for a benchmarking a *run* on a given *artifact*. Can be either created from a try build on a PR, or it is automatically created from merged master/release *artifacts*.
 - **collector**: a machine that performs benchmarks.
-- **benchmark set**: a subset of a compile/runtime/bootstrap benchmark suite that is executed by a collector in a single job. 
+- **benchmark set**: a subset of a compile/runtime/bootstrap benchmark suite that is executed by a collector in a single job.
 - **job**: a high-level "work item" that defines a set of *test cases* that should be benchmarked on a specific collector.
 - **job queue**: a queue of *jobs*.
 

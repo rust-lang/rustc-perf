@@ -6,7 +6,7 @@ use crate::server::{maybe_compressed_response, Response, ResponseHeaders};
 use brotli::enc::BrotliEncoderParams;
 use collector::compile::benchmark::BenchmarkName;
 use collector::SelfProfileId;
-use database::{metric::Metric, CommitType};
+use database::{metric::Metric, CommitType, FrontendThreads};
 use database::{selector, CodegenBackend, Target};
 use database::{ArtifactId, Profile};
 use headers::{ContentType, Header};
@@ -225,6 +225,7 @@ async fn get_self_profile_id(
             &scenario.to_id(),
         )
         .await;
+    const MOCK_FRONTEND_THREADS: FrontendThreads = FrontendThreads(1);
 
     let id = match aids_and_cids.first().copied() {
         // We have a record in the DB, assume that it is the legacy ID
@@ -243,6 +244,7 @@ async fn get_self_profile_id(
             scenario,
             backend,
             target,
+            frontend_threads: MOCK_FRONTEND_THREADS,
         },
     };
 

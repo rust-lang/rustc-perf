@@ -10,11 +10,11 @@ use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, 
 use crate::load::SiteCtxt;
 use crate::self_profile::fetch_self_profile;
 
-use database::interpolate::IsInterpolated;
 use database::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
 use database::{self, ArtifactId, CodegenBackend, Profile, Scenario, Target};
+use database::{interpolate::IsInterpolated, FrontendThreads};
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.
@@ -99,6 +99,7 @@ pub async fn handle_compile_detail_sections(
         backend: CodegenBackend,
         target: Target,
     ) -> Option<CompilationSections> {
+        const MOCK_FRONTEND_THREADS: FrontendThreads = FrontendThreads(1);
         let id = SelfProfileId::Simple {
             artifact_id: aid,
             benchmark: benchmark.into(),
@@ -106,6 +107,7 @@ pub async fn handle_compile_detail_sections(
             scenario,
             backend,
             target,
+            frontend_threads: MOCK_FRONTEND_THREADS,
         };
         fetch_self_profile(ctxt, id, None)
             .await

@@ -27,6 +27,7 @@ pub struct RecordedSelfProfile {
     profile: database::Profile,
     codegen_backend: database::CodegenBackend,
     target: database::Target,
+    frontend_threads: database::FrontendThreads,
     files: SelfProfileFiles,
 }
 
@@ -87,6 +88,7 @@ impl<'a> BenchProcessor<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_stats(
         &mut self,
         collection: CollectionId,
@@ -94,6 +96,7 @@ impl<'a> BenchProcessor<'a> {
         profile: database::Profile,
         backend: CodegenBackend,
         target: Target,
+        frontend_threads: database::FrontendThreads,
         stats: Stats,
     ) {
         let mut buf = FuturesUnordered::new();
@@ -106,6 +109,7 @@ impl<'a> BenchProcessor<'a> {
                 scenario,
                 backend.into(),
                 target.into(),
+                frontend_threads,
                 stat,
                 value,
             ));
@@ -168,6 +172,7 @@ impl Processor for BenchProcessor<'_> {
                             execute::store_documentation_size_into_stats(&mut res.0, &doc_dir);
                         }
                     }
+                    let frontend_threads = database::FrontendThreads::from(data.frontend_threads);
 
                     let scenario = match data.scenario {
                         Scenario::Full => database::Scenario::Empty,
@@ -189,6 +194,7 @@ impl Processor for BenchProcessor<'_> {
                             profile,
                             codegen_backend: data.backend.into(),
                             target: data.target.into(),
+                            frontend_threads,
                             files,
                         });
 
@@ -205,6 +211,7 @@ impl Processor for BenchProcessor<'_> {
                         profile,
                         data.backend,
                         data.target,
+                        frontend_threads,
                         res.0,
                     )
                     .await;
@@ -255,6 +262,7 @@ impl Processor for BenchProcessor<'_> {
                         benchmark: self.benchmark.clone(),
                         profile: profile.profile,
                         scenario: profile.scenario,
+                        frontend_threads: profile.frontend_threads,
                         backend: profile.codegen_backend,
                         target: profile.target,
                     };

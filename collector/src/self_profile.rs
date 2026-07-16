@@ -3,7 +3,8 @@ use crate::compile::execute::SelfProfileFiles;
 use analyzeme::ProfilingData;
 use anyhow::Context;
 use database::{
-    ArtifactId, ArtifactIdNumber, CodegenBackend, CollectionId, Profile, Scenario, Target,
+    ArtifactId, ArtifactIdNumber, CodegenBackend, CollectionId, FrontendThreads, Profile, Scenario,
+    Target,
 };
 use reqwest::StatusCode;
 use std::future::Future;
@@ -12,7 +13,12 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Instant;
 
-/// Uniquely identifies a self-profile archive.
+/// Identifies a self-profile archive. Provides a single location to write the archive to.
+///
+/// However, this struct provides several paths for possible archive locations to support
+/// already recorded legacy profiles. These paths are orthogonal to SelfProfileId enum variants
+/// and are not dependent on the database layout.
+/// Currently works for `/<frontend_threads>/` part only.
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum SelfProfileId {
     /// Legacy ID with artifact ID number and collection ID
@@ -29,15 +35,49 @@ pub enum SelfProfileId {
     Simple {
         artifact_id: ArtifactId,
         benchmark: BenchmarkName,
+        target: Target,
+        backend: CodegenBackend,
         profile: Profile,
         scenario: Scenario,
-        backend: CodegenBackend,
-        target: Target,
+        frontend_threads: FrontendThreads,
     },
 }
 
 impl SelfProfileId {
-    fn relative_file_path(&self) -> PathBuf {
+    /// FIXME: DRY when removing SelfProfileId::Legacy support
+    fn relative_file_path_to_read_variants(&self) -> Vec<PathBuf> {
+        match self {
+            Self::Legacy { .. } => vec![self.relative_file_path_to_write()],
+            // Here we don't include the `frontend_threads` part
+            Self::Simple {
+                artifact_id,
+                benchmark,
+                target,
+                backend: codegen_backend,
+                profile,
+                scenario,
+                ..
+            } => {
+                let primary = self.relative_file_path_to_write();
+                let secondary = {
+                    let artifact_name = match artifact_id {
+                        ArtifactId::Commit(c) => &c.sha,
+                        ArtifactId::Tag(name) => name,
+                    };
+                    PathBuf::from("self-profile")
+                        .join(artifact_name)
+                        .join(benchmark.0.as_str())
+                        .join(target.to_string())
+                        .join(codegen_backend.to_string())
+                        .join(profile.to_string())
+                        .join(scenario.to_id())
+                        .join("self-profile.mm_profdata.sz")
+                };
+                vec![primary, secondary]
+            }
+        }
+    }
+    fn relative_file_path_to_write(&self) -> PathBuf {
         match self {
             //  self-profile/<artifact id number>/<benchmark>/<profile>/<scenario>
             //    /self-profile-<collection-id>.mm_profdata.sz
@@ -53,13 +93,22 @@ impl SelfProfileId {
                 .join(profile.to_string())
                 .join(scenario.to_id())
                 .join(format!("self-profile-{collection}.mm_profdata.sz")),
-            //  self-profile/<artifact id>/<benchmark>/<target>/<backend>/<profile>/<scenario>
-            //    /self-profile.mm_profdata.sz
+
+            // self-profile/
+            // <artifact id>/
+            // <benchmark>/
+            // <target>/
+            // <backend>/
+            // <profile>/
+            // <scenario>/
+            // <frontend_threads>/
+            // self-profile.mm_profdata.sz
             SelfProfileId::Simple {
                 artifact_id,
                 benchmark,
                 profile,
                 scenario,
+                frontend_threads,
                 backend: codegen_backend,
                 target,
             } => {
@@ -74,6 +123,7 @@ impl SelfProfileId {
                     .join(codegen_backend.to_string())
                     .join(profile.to_string())
                     .join(scenario.to_id())
+                    .join(format!("frontend_threads_{}", frontend_threads.0))
                     .join("self-profile.mm_profdata.sz")
             }
         }
@@ -108,6 +158,8 @@ pub trait SelfProfileStorage {
 
     /// Load the raw byte data of the self-profile with the given ID.
     /// Returns `None` if data for the ID was not found.
+    ///
+    /// It's this function's responsibility to run through possible read path variants
     #[allow(clippy::type_complexity)]
     fn load_raw(
         &self,
@@ -131,8 +183,15 @@ impl LocalSelfProfileStorage {
         Self::new(Path::new("self-profile-storage"))
     }
 
-    fn path(&self, id: &SelfProfileId) -> PathBuf {
-        self.directory.join(id.relative_file_path())
+    fn path_to_write(&self, id: &SelfProfileId) -> PathBuf {
+        self.directory.join(id.relative_file_path_to_write())
+    }
+
+    fn path_to_read_variants(&self, id: &SelfProfileId) -> Vec<PathBuf> {
+        id.relative_file_path_to_read_variants()
+            .into_iter()
+            .map(|p| self.directory.join(p))
+            .collect()
     }
 }
 
@@ -142,7 +201,7 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
         id: SelfProfileId,
         files: SelfProfileFiles,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        let path = self.path(&id);
+        let path = self.path_to_write(&id);
         Box::pin(async move {
             tokio::fs::create_dir_all(path.parent().unwrap()).await?;
             match files {
@@ -159,15 +218,18 @@ impl SelfProfileStorage for LocalSelfProfileStorage {
         &self,
         id: SelfProfileId,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
-        let path = self.path(&id);
+        let path_variants = self.path_to_read_variants(&id);
         Box::pin(async move {
-            if !path.is_file() {
-                return Ok(None);
+            for path in path_variants {
+                if !path.is_file() {
+                    continue;
+                }
+                let data = tokio::fs::read(&path).await.with_context(|| {
+                    anyhow::anyhow!("Cannot read self-profile data from {}", path.display())
+                })?;
+                return Ok(Some(data));
             }
-            let data = tokio::fs::read(&path).await.with_context(|| {
-                anyhow::anyhow!("Cannot read self-profile data from {}", path.display())
-            })?;
-            Ok(Some(data))
+            Ok(None)
         })
     }
 }
@@ -238,7 +300,7 @@ impl SelfProfileStorage for S3SelfProfileStorage {
 
             let ctx = self.write_ctx.clone();
             Box::pin(async move {
-                let file_path = _id.relative_file_path();
+                let file_path = _id.relative_file_path_to_write();
                 let compressed = match _files {
                     SelfProfileFiles::Eight { file } => {
                         let start = Instant::now();
@@ -309,55 +371,64 @@ impl SelfProfileStorage for S3SelfProfileStorage {
         &self,
         id: SelfProfileId,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send>> {
-        let path = id.relative_file_path();
-        let url = format!(
-            "https://perf-data.rust-lang.org/{}",
-            path.to_str().expect("Non UTF-8 path used for self-profile")
-        );
-        Box::pin(async move {
-            log::trace!("Downloading {url}");
-            let start = Instant::now();
-            let resp = match reqwest::get(&url).await {
-                Ok(r) => r,
-                Err(e) => return Err(anyhow::anyhow!("{e:?}")),
-            };
-
-            if !resp.status().is_success() {
-                // Hitting an unknown path is returned as forbidden
-                if resp.status() == StatusCode::FORBIDDEN {
-                    return Ok(None);
-                }
-                return Err(anyhow::anyhow!(
-                    "Upstream status {:?} is not successful.\nurl={url}",
-                    resp.status(),
-                ));
-            }
-
-            let compressed = match resp.bytes().await {
-                Ok(b) => b,
-                Err(e) => {
-                    return Err(anyhow::anyhow!("Could not download from upstream: {e:?}"));
-                }
-            };
-
-            log::trace!(
-                "downloaded {} bytes in {:?}",
-                compressed.len(),
-                start.elapsed()
-            );
-
-            // The decompression is blocking, so we should not do it in the async task directly
-            let data = tokio::task::spawn_blocking(move || {
-                let mut data = Vec::new();
-                match snap::read::FrameDecoder::new(Cursor::new(compressed)).read_to_end(&mut data)
-                {
-                    Ok(_) => Ok(data),
-                    Err(e) => Err(anyhow::anyhow!("Could not decode self-profile data: {e:?}")),
-                }
+        let path_variants = id.relative_file_path_to_read_variants();
+        let url_variants: Vec<_> = path_variants
+            .iter()
+            .map(|p| {
+                format!(
+                    "https://perf-data.rust-lang.org/{}",
+                    p.to_str().expect("Non UTF-8 path used for self-profile")
+                )
             })
-            .await??;
+            .collect();
+        Box::pin(async move {
+            for url in url_variants {
+                log::trace!("Downloading {url}");
+                let start = Instant::now();
+                let resp = match reqwest::get(&url).await {
+                    Ok(r) => r,
+                    Err(e) => return Err(anyhow::anyhow!("{e:?}")),
+                };
 
-            Ok(Some(data))
+                if !resp.status().is_success() {
+                    // Hitting an unknown path is returned as forbidden
+                    if resp.status() == StatusCode::FORBIDDEN {
+                        continue;
+                    }
+                    return Err(anyhow::anyhow!(
+                        "Upstream status {:?} is not successful.\nurl={url}",
+                        resp.status(),
+                    ));
+                }
+
+                let compressed = match resp.bytes().await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("Could not download from upstream: {e:?}"));
+                    }
+                };
+
+                log::trace!(
+                    "downloaded {} bytes in {:?}",
+                    compressed.len(),
+                    start.elapsed()
+                );
+
+                // The decompression is blocking, so we should not do it in the async task directly
+                let data = tokio::task::spawn_blocking(move || {
+                    let mut data = Vec::new();
+                    match snap::read::FrameDecoder::new(Cursor::new(compressed))
+                        .read_to_end(&mut data)
+                    {
+                        Ok(_) => Ok(data),
+                        Err(e) => Err(anyhow::anyhow!("Could not decode self-profile data: {e:?}")),
+                    }
+                })
+                .await??;
+
+                return Ok(Some(data));
+            }
+            Ok(None)
         })
     }
 }
