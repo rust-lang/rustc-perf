@@ -67,8 +67,10 @@ loadToolchainData(selector, loading);
       See <a href="/compare.html">compare page</a> for descriptions of what the
       names mean.
     </div>
-    <div id="artifactSizeChart"></div>
-    <div id="bootstrapByCrateChart"></div>
-    <div id="bootstrapTotalChart"></div>
   </div>
+  <!-- These elements are always present and use v-once to avoid Vue recreating
+       them -->
+  <div v-once id="artifactSizeChart"></div>
+  <div v-once id="bootstrapByCrateChart"></div>
+  <div v-once id="bootstrapTotalChart"></div>
 </template>

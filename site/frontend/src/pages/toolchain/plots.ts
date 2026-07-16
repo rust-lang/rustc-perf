@@ -1,4 +1,4 @@
-import uPlot, {TypedArray} from "uplot";
+import uPlot, {AlignedData} from "uplot";
 import {ToolchainData, ToolchainSelector} from "./state";
 
 function tooltipPlugin({onclick, commits, kind, shiftX = 10, shiftY = 10}) {
@@ -240,7 +240,7 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
 
   new uPlot(
     artifactSizePlotOpts,
-    artifactSizePlotData as any as TypedArray[],
+    artifactSizePlotData as AlignedData,
     document.querySelector<HTMLElement>("#artifactSizeChart")
   );
 
@@ -267,7 +267,7 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
 
   new uPlot(
     byChartPlotOpts,
-    byChartPlotData as any as TypedArray[],
+    byChartPlotData as AlignedData,
     document.querySelector<HTMLElement>("#bootstrapByCrateChart")
   );
 
@@ -283,7 +283,7 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
 
   new uPlot(
     totalPlotOpts,
-    totalPlotData as any as TypedArray[],
+    totalPlotData as AlignedData,
     document.querySelector<HTMLElement>("#bootstrapTotalChart")
   );
 }
