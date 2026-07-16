@@ -12,9 +12,19 @@ export async function loadGraphs(
     stat: selector.stat,
     benchmark: selector.benchmark,
     scenario: selector.scenario,
+    parallel: selector.parallel,
     profile: selector.profile,
     backend: selector.backend,
     target: selector.target,
   };
-  return await getJson<CompileGraphData>(GRAPH_DATA_URL, params);
+  const dict: Dict<string> = Object.entries(params).reduce(
+    (acc, [key, value]) => {
+      if (value !== null && value !== undefined) {
+        acc[key] = value;
+      }
+      return acc;
+    },
+    {} as Dict<string>
+  );
+  return await getJson<CompileGraphData>(GRAPH_DATA_URL, dict);
 }

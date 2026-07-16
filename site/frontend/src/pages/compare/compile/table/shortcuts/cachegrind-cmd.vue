@@ -4,7 +4,7 @@
  **/
 
 import {CompileTestCase} from "../../common";
-import {computed} from "vue";
+import {computed, ref} from "vue";
 import {normalizeProfile} from "./utils";
 import {cargo_collector_command} from "../../../../../utils/cargo";
 
@@ -34,16 +34,39 @@ function normalizeScenario(scenario: string): string {
   }
   return "<invalid scenario>";
 }
+
+const codeBlock = ref<HTMLElement | null>(null);
+const buttonText = ref("Copy");
+
+const copyCode = async () => {
+  if (codeBlock.value) {
+    const textToCopy = codeBlock.value.innerText;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      buttonText.value = "Copied!";
+      setTimeout(() => {
+        buttonText.value = "Copy";
+      }, 2000);
+    } catch (err) {
+      console.error("Copy error:", err);
+      buttonText.value = "Error";
+    }
+  }
+};
 </script>
 
 <template>
-  <pre><code>{{ cargo_collector_command() }} \
+  <button style="margin-left: 10px" @click="copyCode">
+    {{ buttonText }}
+  </button>
+  <pre><code ref="codeBlock">{{ cargo_collector_command() }} \
     profile_local cachegrind \
     +{{ firstCommit }} \<template v-if="props.baselineCommit !== undefined">
     --rustc2 +{{ props.commit }} \</template>
     --exact-match {{ testCase.benchmark }} \
     --profiles {{ normalizeProfile(testCase.profile) }} \
-    --scenarios {{ normalizeScenario(testCase.scenario) }}</code></pre>
+    --scenarios {{ normalizeScenario(testCase.scenario) }} \
+    --parallels {{ testCase.parallel }}</code></pre>
 </template>
 
 <style scoped lang="scss">

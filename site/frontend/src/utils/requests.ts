@@ -69,7 +69,11 @@ export async function getJson<T>(
   return json as T;
 }
 
-export async function postMsgpack<T>(path: string, body: any): Promise<T> {
+export async function postMsgpack<T>(
+  path: string,
+  body: any,
+  doAlert: boolean = true
+): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     body: JSON.stringify(body),
@@ -80,7 +84,9 @@ export async function postMsgpack<T>(path: string, body: any): Promise<T> {
     return decode(new Uint8Array(buffer));
   } else {
     const text = await response.text();
-    alert(text);
+    if (doAlert) {
+      alert(text);
+    }
     throw new Error(`Invalid response from server: ${text}`);
   }
 }

@@ -376,10 +376,14 @@ function genPlotOpts({
 
 function normalizeData(data: CompileGraphData) {
   function optInterpolated(profile) {
-    for (const scenario in profile) {
-      profile[scenario].interpolated_indices = new Set(
-        profile[scenario].interpolated_indices
-      );
+    for (const parallel in profile) {
+      let par = profile[parallel];
+      for (const scenario in par) {
+        par[scenario].interpolated_indices = new Set(
+          par[scenario].interpolated_indices
+        );
+      }
+      profile[parallel] = par;
     }
 
     return profile;
@@ -430,10 +434,7 @@ export function renderPlots(
     let i = 0;
 
     for (let profile in profiles) {
-      let scenarios = profiles[profile];
-      let scenarioNames = Object.keys(scenarios);
-      scenarioNames.sort();
-
+      let parallels = profiles[profile];
       let yAxis = selector.stat;
       let yAxisUnit = null;
 
@@ -486,23 +487,33 @@ export function renderPlots(
       let plotData = [xVals];
 
       let otherColorIdx = 0;
+      let indices = null;
 
-      for (let scenarioName of scenarioNames) {
-        let yVals = scenarios[scenarioName].points;
-        let color =
-          commonCacheStateColors[scenarioName] ||
-          otherCacheStateColors[otherColorIdx++];
+      for (let parallel in parallels) {
+        let scenarios = parallels[parallel];
+        let scenarioNames = Object.keys(scenarios);
+        scenarioNames.sort();
 
-        plotData.push(yVals);
+        for (let scenarioName of scenarioNames) {
+          let yVals = scenarios[scenarioName].points;
+          if (indices === null) {
+            indices = scenarios[scenarioName].interpolated_indices;
+          }
+          let color =
+            parallel == "1"
+              ? commonCacheStateColors[scenarioName] ||
+                otherCacheStateColors[otherColorIdx++]
+              : otherCacheStateColors[otherColorIdx++];
 
-        seriesOpts.push({
-          label: scenarioName,
-          width: devicePixelRatio,
-          stroke: color,
-        });
+          plotData.push(yVals);
+
+          seriesOpts.push({
+            label: scenarioName + "_par" + parallel,
+            width: devicePixelRatio,
+            stroke: color,
+          });
+        }
       }
-
-      let indices = scenarios[Object.keys(scenarios)[0]].interpolated_indices;
 
       let plotOpts = genPlotOpts({
         width,

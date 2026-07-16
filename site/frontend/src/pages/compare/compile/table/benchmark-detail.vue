@@ -35,6 +35,7 @@ function createSectionsSelector(): CompileDetailSectionsSelector {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
+    parallel: props.testCase.parallel.toString(),
     backend: props.testCase.backend,
     target: props.testCase.target,
     start: props.baseArtifact.commit,
@@ -54,8 +55,9 @@ function detailedQueryLink(
   commit: ArtifactDescription,
   baseCommit?: ArtifactDescription
 ): string {
-  const {benchmark, profile, scenario, backend, target} = props.testCase;
-  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&backend=${backend}&target=${target}`;
+  const {benchmark, profile, scenario, parallel, backend, target} =
+    props.testCase;
+  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&parallel=${parallel}&backend=${backend}&target=${target}`;
   if (baseCommit !== undefined) {
     link += `&base_commit=${baseCommit.commit}`;
   }
@@ -68,17 +70,19 @@ function graphLink(
   testCase: CompileTestCase
 ): string {
   // Move to `30 days ago` to display history of the test case
-  const start = formatDate(getPastDate(new Date(commit.date), 30));
+  const start = formatDate(
+    getPastDate(commit.date ? new Date(commit.date) : new Date(), 30)
+  );
   const end = commit.commit;
-  const {benchmark, profile, scenario, target, backend} = testCase;
-  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&target=${target}&backend=${backend}&stat=${metric}`;
+  const {benchmark, profile, scenario, parallel, target, backend} = testCase;
+  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&parallel=${parallel}&target=${target}&backend=${backend}&stat=${metric}`;
 }
 
 const metadata = computed(
   (): CompileBenchmarkMetadata =>
     props.benchmarkMap[props.testCase.benchmark] ?? null
 );
-const cargoProfile = computed((): CargoProfileMetadata => {
+const cargoProfile = computed((): CargoProfileMetadata | undefined => {
   if (
     props.testCase.profile === "opt" &&
     metadata?.value.release_profile !== null
@@ -120,6 +124,10 @@ onMounted(() => {
               <td>{{ testCase.scenario }}</td>
             </tr>
             <tr>
+              <td>Parallel</td>
+              <td>{{ testCase.parallel }}</td>
+            </tr>
+            <tr>
               <td>Category</td>
               <td>{{ testCase.category }}</td>
             </tr>
@@ -136,15 +144,15 @@ onMounted(() => {
             </tr>
             <tr v-if="(cargoProfile?.lto ?? null) !== null">
               <td>LTO</td>
-              <td>{{ cargoProfile.lto }}</td>
+              <td>{{ cargoProfile?.lto }}</td>
             </tr>
             <tr v-if="(cargoProfile?.debug ?? null) !== null">
               <td>Debuginfo</td>
-              <td>{{ cargoProfile.debug }}</td>
+              <td>{{ cargoProfile?.debug }}</td>
             </tr>
             <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
               <td>Codegen units</td>
-              <td>{{ cargoProfile.codegen_units }}</td>
+              <td>{{ cargoProfile?.codegen_units }}</td>
             </tr>
           </tbody>
         </table>
@@ -224,8 +232,8 @@ onMounted(() => {
               (sectionsDetail?.before ?? null) !== null &&
               (sectionsDetail?.after ?? null) !== null
             "
-            :before="sectionsDetail.before"
-            :after="sectionsDetail.after"
+            :before="sectionsDetail?.before"
+            :after="sectionsDetail?.after"
           />
           <span v-else-if="sectionsDetail === null">Loading…</span>
           <span v-else>Not available</span>

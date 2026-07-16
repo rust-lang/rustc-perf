@@ -4,18 +4,20 @@ export function chromeProfileUrl(
   commit: string,
   benchmark: string,
   scenario: string,
+  parallel: string,
   profile: string,
   backend: string,
-  target: string
+  target: string,
 ): string {
   const relativeUrl = processedSelfProfileRelativeUrl(
     commit,
     benchmark,
     scenario,
+    parallel,
     profile,
     backend,
     target,
-    "crox"
+    "crox",
   );
   return window.location.origin + relativeUrl;
 }
@@ -24,10 +26,11 @@ export function processedSelfProfileRelativeUrl(
   commit: string,
   benchmark: string,
   scenario: string,
+  parallel: string,
   profile: string,
   backend: string,
   target: string,
-  type: string
+  type: string,
 ): string {
-  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&backend=${backend}&target=${target}&type=${type}`;
+  return `/perf/processed-self-profile?commit=${commit}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&parallel=${parallel}&backend=${backend}&target=${target}&type=${type}`;
 }
