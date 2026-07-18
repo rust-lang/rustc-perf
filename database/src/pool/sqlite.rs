@@ -868,6 +868,39 @@ impl Connection for SqliteConnection {
             .collect()
     }
 
+    async fn get_artifacts_size(
+        &self,
+        aids: &[ArtifactIdNumber],
+    ) -> HashMap<String, Vec<Option<u64>>> {
+        let mut results = HashMap::new();
+
+        for (idx, aid) in aids.iter().copied().enumerate() {
+            let rows: Vec<(String, i64)> = self
+                .raw_ref()
+                .prepare(
+                    r#"
+            SELECT component, MIN(size)
+            FROM artifact_size WHERE aid = ?
+            GROUP BY component"#,
+                )
+                .unwrap()
+                .query_map(params![&aid.0], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+            for (component, size) in rows {
+                let v = results
+                    .entry(component)
+                    .or_insert_with(|| vec![None; aids.len()]);
+                v[idx] = Some(size as u64);
+            }
+        }
+
+        results
+    }
+
     async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {
         aids.iter()
             .map(|aid| {
@@ -920,7 +953,6 @@ impl Connection for SqliteConnection {
 
         results
     }
-
     async fn get_pstats(
         &self,
         series: &[u32],
@@ -986,6 +1018,7 @@ impl Connection for SqliteConnection {
             })
             .collect()
     }
+
     async fn get_error(&self, aid: crate::ArtifactIdNumber) -> HashMap<String, String> {
         self.raw_ref()
             .prepare_cached("select context, message from error where aid = ?")

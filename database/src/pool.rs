@@ -93,6 +93,13 @@ pub trait Connection: Send + Sync {
     /// Returns the sizes of individual components of a single artifact.
     async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64>;
 
+    /// Returns the sizes of individual components of multiple artifacts.
+    /// The key of the hashmap is the name of the component.
+    async fn get_artifacts_size(
+        &self,
+        aids: &[ArtifactIdNumber],
+    ) -> HashMap<String, Vec<Option<u64>>>;
+
     /// Returns vector of bootstrap build times for the given artifacts. The kth
     /// element is the minimum build time for the kth artifact in `aids`, across
     /// all collections for the artifact, or none if there is no bootstrap data

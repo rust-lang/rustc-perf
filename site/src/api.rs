@@ -238,7 +238,7 @@ pub mod runtime_detail_graphs {
     }
 }
 
-pub mod bootstrap {
+pub mod toolchain {
     use collector::Bound;
     use hashbrown::HashMap;
     use serde::{Deserialize, Serialize};
@@ -258,6 +258,8 @@ pub mod bootstrap {
         pub by_crate_build_times: HashMap<String, Vec<Option<u64>>>,
         // Each commit's total rustc build time in nanoseconds
         pub total_build_times: Vec<Option<u64>>,
+        // Artifact sizes of various components for the individual toolchains
+        pub artifact_sizes: HashMap<String, Vec<Option<u64>>>,
     }
 }
 

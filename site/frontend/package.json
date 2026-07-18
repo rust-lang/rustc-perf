@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "install-perfetto": "./download_perfetto.sh",
-    "watch": "parcel watch",
+    "watch": "parcel watch --no-hmr",
     "build": "parcel build",
     "fmt": "prettier --write src",
     "check": "vue-tsc -p tsconfig.json --noEmit && prettier --check src"
@@ -39,8 +39,8 @@
       "source": "src/pages/status.ts",
       "distDir": "dist/scripts"
     },
-    "bootstrap": {
-      "source": "src/pages/bootstrap.ts",
+    "toolchain": {
+      "source": "src/pages/toolchain.ts",
       "distDir": "dist/scripts"
     },
     "graphs": {
