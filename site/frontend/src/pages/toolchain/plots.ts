@@ -181,21 +181,21 @@ function genPlotOpts({
 export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
   let xVals = data.commits.map((c) => c[0]);
   // https://sashamaps.net/docs/resources/20-colors/
-  let colors = [
-    "#e6194b",
-    "#3cb44b",
-    "#ffe119",
-    "#4363d8",
-    "#f58231",
-    "#911eb4",
-    "#46f0f0",
-    "#f032e6",
-    "#a09b13",
-    "#0ab0be",
-    "red",
-    "green",
-    "blue",
+  const colors = [
     "purple",
+    "blue",
+    "green",
+    "red",
+    "#0ab0be",
+    "#a09b13",
+    "#f032e6",
+    "#46f0f0",
+    "#911eb4",
+    "#f58231",
+    "#4363d8",
+    "#ffe119",
+    "#3cb44b",
+    "#e6194b",
   ];
 
   let artifactSizeSeriesOpts = [{}];
@@ -219,14 +219,12 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
     stroke: "black",
   });
 
-  let colorIndex = colors.length - 1;
-  for (const component of components) {
+  for (const [colorIndex, component] of components.entries()) {
     artifactSizePlotData.push(data.artifact_sizes[component]);
     artifactSizeSeriesOpts.push({
       label: component,
-      stroke: colorIndex > 0 ? colors[colorIndex] : "black",
+      stroke: colorIndex < colors.length ? colors[colorIndex] : "black",
     });
-    colorIndex -= 1;
   }
 
   let artifactSizePlotOpts = genPlotOpts({
@@ -244,15 +242,14 @@ export function renderPlots(data: ToolchainData, selector: ToolchainSelector) {
     document.querySelector<HTMLElement>("#artifactSizeChart")
   );
 
-  colorIndex = colors.length - 1;
   let byChartSeriesOpts = [{}];
   let byChartPlotData = [xVals];
   let crates = Object.keys(data.by_crate_build_times).sort();
-  for (let crate of crates) {
+  for (const [colorIndex, crate] of crates.entries()) {
     byChartPlotData.push(data.by_crate_build_times[crate]);
     byChartSeriesOpts.push({
       label: crate,
-      stroke: colorIndex > 0 ? colors[colorIndex] : "black",
+      stroke: colorIndex < colors.length ? colors[colorIndex] : "black",
     });
   }
 
