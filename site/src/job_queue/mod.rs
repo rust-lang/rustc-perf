@@ -1,7 +1,7 @@
 mod utils;
 
 use crate::github::comparison_summary::post_comparison_comment;
-use crate::job_queue::utils::{parse_release_string, partition_in_place, ExtractIf};
+use crate::job_queue::utils::{parse_release_string, partition_in_place};
 use crate::load::SiteCtxt;
 use anyhow::Context;
 use chrono::Utc;
@@ -198,9 +198,12 @@ pub async fn build_queue(
     let mut pending = conn.load_pending_benchmark_requests().await?;
 
     // The queue starts with in progress
-    let mut queue: Vec<BenchmarkRequest> = pending.requests.extract_if_stable(|request| {
-        matches!(request.status(), BenchmarkRequestStatus::InProgress)
-    });
+    let mut queue: Vec<BenchmarkRequest> = pending
+        .requests
+        .extract_if(.., |request| {
+            matches!(request.status(), BenchmarkRequestStatus::InProgress)
+        })
+        .collect();
 
     // We sort the in-progress ones based on their created date
     queue.sort_unstable_by_key(|req| req.created_at());
@@ -223,7 +226,8 @@ pub async fn build_queue(
     // Add release artifacts ordered by the release tag (1.87.0 before 1.88.0) and `created_at`.
     let mut release_artifacts: Vec<BenchmarkRequest> = pending
         .requests
-        .extract_if_stable(|request| request.is_release());
+        .extract_if(.., |request| request.is_release())
+        .collect();
 
     release_artifacts.sort_unstable_by(|a, b| {
         a.tag()

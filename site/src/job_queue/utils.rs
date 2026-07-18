@@ -3,33 +3,6 @@ use regex::Regex;
 use std::path::Path;
 use std::sync::LazyLock;
 
-pub trait ExtractIf<T> {
-    fn extract_if_stable<F>(&mut self, predicate: F) -> Vec<T>
-    where
-        F: FnMut(&T) -> bool;
-}
-
-/// Vec method `extract_if` is unstable, this very simple implementation
-/// can be deleted once it is stable
-impl<T> ExtractIf<T> for Vec<T> {
-    fn extract_if_stable<F>(&mut self, mut predicate: F) -> Vec<T>
-    where
-        F: FnMut(&T) -> bool,
-    {
-        let mut extracted = Vec::new();
-        let mut i = 0;
-
-        while i < self.len() {
-            if predicate(&self[i]) {
-                extracted.push(self.remove(i));
-            } else {
-                i += 1;
-            }
-        }
-        extracted
-    }
-}
-
 /// Parses strings in the following formats extracting the Date & release tag
 /// `static.rust-lang.org/dist/2016-05-24/channel-rust-1.9.0.toml`
 /// `static.rust-lang.org/dist/2016-05-31/channel-rust-nightly.toml`
