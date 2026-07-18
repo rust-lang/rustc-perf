@@ -2,6 +2,7 @@
 import {ArtifactDescription} from "../types";
 import {diffClass, formatPercentChange, formatSize} from "../shared";
 import Tooltip from "../tooltip.vue";
+import {formatDate, getPastDate} from "../compile/table/utils";
 
 const props = defineProps<{
   a: ArtifactDescription;
@@ -104,10 +105,20 @@ function generateTitle(component: string): string {
     return ""; // Unknown component
   }
 }
+
+function historyLink(commit: ArtifactDescription): string {
+  // Move to `30 days ago` to display recent history
+  const start = formatDate(getPastDate(new Date(commit.date), 30));
+  const end = commit.commit;
+  return `/toolchain.html?start=${start}&end=${end}`;
+}
 </script>
 
 <template>
   <div class="category-title">Artifact component sizes</div>
+  <div style="text-align: center">
+    <a :href="historyLink(b)">View 30 day history</a>
+  </div>
   <div class="wrapper">
     <table>
       <thead>
