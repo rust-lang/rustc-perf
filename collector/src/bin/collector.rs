@@ -1701,6 +1701,27 @@ async fn create_benchmark_configs(
         .collect();
 
     let compile_config = if bench_rustc || !benchmarks.is_empty() {
+        if toolchain.components.rustdoc.is_none()
+            && matches!(
+                job.profile(),
+                database::Profile::Doc | database::Profile::DocJson
+            )
+        {
+            return Err(anyhow::anyhow!(
+                "Trying to run a {} profile, but the toolchain doesn't have rustdoc available",
+                job.profile()
+            ));
+        }
+
+        if toolchain.components.clippy.is_none()
+            && matches!(job.profile(), database::Profile::Clippy)
+        {
+            return Err(anyhow::anyhow!(
+                "Trying to run a {} profile, but the toolchain doesn't have clippy available",
+                job.profile()
+            ));
+        }
+
         Some(CompileBenchmarkConfig {
             benchmarks,
             profiles: vec![job.profile().into()],
