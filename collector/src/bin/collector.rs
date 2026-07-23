@@ -1207,6 +1207,7 @@ fn main_result() -> anyhow::Result<i32> {
                     Path::new(TOOLCHAIN_CACHE_DIRECTORY),
                     commit.sha,
                     &require_host_target_tuple(),
+                    Profile::Check,
                     &codegen_backends.0,
                 ))
                 .map_err(SysrootDownloadError::as_anyhow_error)?;
@@ -1585,6 +1586,7 @@ async fn run_benchmark_job(
                 Path::new(TOOLCHAIN_CACHE_DIRECTORY),
                 commit.sha.clone(),
                 job.target().as_str(),
+                job.profile().into(),
                 &[job.backend().into()],
             )
             .await

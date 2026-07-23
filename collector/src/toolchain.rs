@@ -41,6 +41,7 @@ impl Sysroot {
         cache_directory: &Path,
         sha: String,
         triple: &str,
+        profile: Profile,
         backends: &[CodegenBackend],
     ) -> Result<Self, SysrootDownloadError> {
         // The structure of this directory is load-bearing.
@@ -59,6 +60,7 @@ impl Sysroot {
         };
 
         let requires_cranelift = backends.contains(&CodegenBackend::Cranelift);
+        let requires_clippy = profile == Profile::Clippy;
 
         let stamp = SysrootStamp::load_from_dir(&cache_directory);
         match stamp {
@@ -68,6 +70,9 @@ impl Sysroot {
                 // download optional components
                 if requires_cranelift && !stamp.cranelift {
                     download.get_and_extract(Component::Cranelift).await?;
+                }
+                if requires_clippy && !stamp.clippy {
+                    download.get_and_extract(Component::Clippy).await?;
                 }
             }
             Err(_) => {
@@ -83,12 +88,16 @@ impl Sysroot {
                 if requires_cranelift {
                     download.get_and_extract(Component::Cranelift).await?;
                 }
+                if requires_clippy {
+                    download.get_and_extract(Component::Clippy).await?;
+                }
             }
         }
 
         // Update the stamp
         let stamp = SysrootStamp {
             cranelift: requires_cranelift,
+            clippy: requires_clippy,
         };
         stamp
             .store_to_dir(&cache_directory)
@@ -127,6 +136,8 @@ const SYSROOT_STAMP_FILENAME: &str = ".sysroot-stamp.json";
 struct SysrootStamp {
     /// Was Cranelift downloaded as a part of the sysroot?
     cranelift: bool,
+    /// Was Clippy downloaded as a part of the sysroot?
+    clippy: bool,
 }
 
 impl SysrootStamp {
@@ -158,6 +169,7 @@ enum Component {
     Std,
     RustSrc,
     Cranelift,
+    Clippy,
 }
 
 impl fmt::Display for Component {
@@ -168,6 +180,7 @@ impl fmt::Display for Component {
             Component::Std => write!(f, "rust-std"),
             Component::RustSrc => write!(f, "rust-src"),
             Component::Cranelift => write!(f, "rustc-codegen-cranelift"),
+            Component::Clippy => write!(f, "clippy"),
         }
     }
 }
@@ -280,12 +293,13 @@ impl SysrootDownload {
         let mut archive = Archive::new(reader);
         let prefix = match component {
             Component::Std => format!("rust-std-{}", self.triple),
-            Component::Cranelift => format!("{component}-preview"),
-            _ => component.to_string(),
+            Component::Clippy | Component::Cranelift => format!("{component}-preview"),
+            Component::Cargo | Component::Rustc | Component::RustSrc => component.to_string(),
         };
 
         let unpack_into = &self.cache_directory;
 
+        let mut file_found = false;
         for entry in archive.entries()? {
             let mut entry = entry?;
             let path = entry.path()?.into_owned();
@@ -298,6 +312,7 @@ impl SysrootDownload {
             } else {
                 continue;
             };
+            file_found = true;
             fs::create_dir_all(path.parent().unwrap()).with_context(|| {
                 format!(
                     "could not create intermediate directories for {}",
@@ -305,6 +320,13 @@ impl SysrootDownload {
                 )
             })?;
             entry.unpack(path)?;
+        }
+
+        if !file_found {
+            eprintln!("Did not find any file to unpack in component {component:?}");
+            return Err(anyhow::anyhow!(
+                "Did not find any file to unpack in component {component:?}"
+            ));
         }
 
         Ok(())
@@ -496,6 +518,9 @@ pub fn get_local_toolchain(
             let mut additional_components = vec![];
             if codegen_backends.contains(&CodegenBackend::Cranelift) {
                 additional_components.push("rustc-codegen-cranelift");
+            }
+            if profiles.contains(&Profile::Clippy) {
+                additional_components.push("clippy");
             }
 
             let mut cmd = Command::new("rustup-toolchain-install-master");
