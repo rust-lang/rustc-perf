@@ -1,9 +1,21 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::path::PathBuf;
+use std::io::BufRead;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+// Vendored from
+// <https://github.com/rust-lang/rust/blob/008fa22ce3f8d3c8dfaca2e6486043c2b21851eb/src/build_helper/src/arg_file_command.rs>.
+//
+// Let us keep it byte-for-byte identical,
+// which is easy to audit if any drift happens
+#[rustfmt::skip]
+#[path = "../arg_file_command.rs"]
+mod arg_file_command;
+
+use arg_file_command::ArgFileCommand;
 
 fn determinism_env(cmd: &mut Command) {
     // Since rust-lang/rust#89836, rustc stable crate IDs include a hash of the
@@ -49,10 +61,9 @@ fn create_self_profile_dir() -> PathBuf {
 }
 
 fn main() {
-    let mut args_os = env::args_os();
-    let name = args_os.next().unwrap().into_string().unwrap();
+    let name = env::args_os().next().unwrap().into_string().unwrap();
 
-    let mut args = args_os.collect::<Vec<_>>();
+    let mut args = collect_args();
 
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let actually_rustdoc = name.ends_with("rustdoc-fake");
@@ -93,6 +104,9 @@ fn main() {
 
         benchlib::process::raise_process_priority();
 
+        let expanded_args = args;
+        let (args, _argfile) = pack_args(expanded_args.clone());
+
         // These strings come from `PerfTool::name()`.
         match wrapper {
             "PerfStat" | "PerfStatSelfProfile" => {
@@ -128,7 +142,7 @@ fn main() {
                 print_memory();
                 print_time(dur);
                 if wrapper == "PerfStatSelfProfile" {
-                    process_self_profile_output(prof_out_dir, &args[..]);
+                    process_self_profile_output(prof_out_dir, &expanded_args[..]);
                 }
             }
 
@@ -209,7 +223,7 @@ fn main() {
                 println!("!counters-file:{}", counters_file.to_str().unwrap());
 
                 if wrapper == "XperfStatSelfProfile" {
-                    process_self_profile_output(prof_out_dir, &args[..]);
+                    process_self_profile_output(prof_out_dir, &expanded_args[..]);
                 }
             }
 
@@ -433,11 +447,56 @@ fn main() {
             }
         }
 
+        let (args, _argfile) = pack_args(args);
         let mut cmd = Command::new(&tool);
         determinism_env(&mut cmd);
         cmd.args(&args);
         exec(&mut cmd);
     }
+}
+
+/// Collect all the command line arguments, including the arguments from any `@argfile`
+///
+// Adapted from
+// <https://github.com/rust-lang/rust/blob/008fa22ce3f8d3c8dfaca2e6486043c2b21851eb/src/bootstrap/src/utils/shared_helpers.rs#L132-L144>.
+fn collect_args() -> Vec<OsString> {
+    let mut args = Vec::with_capacity(env::args_os().len());
+    for arg in env::args_os().skip(1) {
+        if let Some(path) = arg.to_str().and_then(|s| s.strip_prefix('@')) {
+            args.extend(args_from_argfile(Path::new(path)));
+        } else {
+            args.push(arg)
+        }
+    }
+    args
+}
+
+/// Reads all the arguments from argfile given by `path`.
+// Adapted from
+// <https://github.com/rust-lang/rust/blob/008fa22ce3f8d3c8dfaca2e6486043c2b21851eb/src/bootstrap/src/utils/shared_helpers.rs#L146-L156>.
+fn args_from_argfile(path: &Path) -> Vec<OsString> {
+    fn collect_lines(path: &Path) -> Result<Vec<OsString>, std::io::Error> {
+        let file = std::fs::File::open(path)?;
+        std::io::BufReader::new(file)
+            .lines()
+            .map(|r| r.map(OsString::from))
+            .collect()
+    }
+    collect_lines(path).expect("read args from argfile {path:?}")
+}
+
+/// Packs the arguments into an `@argfile` when they are too long.
+///
+/// The returned tempfile guard must stay alive until the tool has finished running.
+fn pack_args(args: Vec<OsString>) -> (Vec<OsString>, Option<tempfile::NamedTempFile>) {
+    // The program is never executed. Let's just give it a placeholder.
+    let mut cmd = ArgFileCommand::new("unused");
+    cmd.args(args);
+    let (cmd, argfile) = cmd.build().expect("failed to build argfile");
+    (
+        cmd.get_args().map(|arg| arg.to_os_string()).collect(),
+        argfile,
+    )
 }
 
 fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
