@@ -8,7 +8,7 @@ export interface GraphsSelector {
   stat: string;
   benchmark: string | null;
   scenario: string | null;
-  parallel: string | null;
+  frontendThreads: string | null;
   profile: string | null;
   backend: string | null;
   target: string | null;

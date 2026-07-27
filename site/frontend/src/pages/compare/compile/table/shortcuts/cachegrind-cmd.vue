@@ -66,7 +66,7 @@ const copyCode = async () => {
     --exact-match {{ testCase.benchmark }} \
     --profiles {{ normalizeProfile(testCase.profile) }} \
     --scenarios {{ normalizeScenario(testCase.scenario) }} \
-    --parallels {{ testCase.parallel }}</code></pre>
+    --parallels {{ testCase.frontendThreads }}</code></pre>
 </template>
 
 <style scoped lang="scss">

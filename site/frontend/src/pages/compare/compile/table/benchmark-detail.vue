@@ -35,7 +35,7 @@ function createSectionsSelector(): CompileDetailSectionsSelector {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
-    parallel: props.testCase.parallel.toString(),
+    frontendThreads: props.testCase.frontendThreads.toString(),
     backend: props.testCase.backend,
     target: props.testCase.target,
     start: props.baseArtifact.commit,
@@ -57,7 +57,7 @@ function detailedQueryLink(
 ): string {
   const {benchmark, profile, scenario, parallel, backend, target} =
     props.testCase;
-  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&parallel=${parallel}&backend=${backend}&target=${target}`;
+  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&parallel=${frontendThreads}&backend=${backend}&target=${target}`;
   if (baseCommit !== undefined) {
     link += `&base_commit=${baseCommit.commit}`;
   }
@@ -75,7 +75,7 @@ function graphLink(
   );
   const end = commit.commit;
   const {benchmark, profile, scenario, parallel, target, backend} = testCase;
-  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&parallel=${parallel}&target=${target}&backend=${backend}&stat=${metric}`;
+  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&parallel=${frontendThreads}&target=${target}&backend=${backend}&stat=${metric}`;
 }
 
 const metadata = computed(
@@ -125,7 +125,7 @@ onMounted(() => {
             </tr>
             <tr>
               <td>Parallel</td>
-              <td>{{ testCase.parallel }}</td>
+              <td>{{ testCase.frontendThreads }}</td>
             </tr>
             <tr>
               <td>Category</td>

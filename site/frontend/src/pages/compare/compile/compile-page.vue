@@ -91,9 +91,17 @@ function loadFilterFromUrl(
         defaultFilter.scenario.incrPatched
       ),
     },
-    parallel: {
-      par1: getBoolOrDefault(urlParams, "par1", defaultFilter.parallel.par1),
-      par4: getBoolOrDefault(urlParams, "par4", defaultFilter.parallel.par4),
+    frontendThreads: {
+      threads_1: getBoolOrDefault(
+        urlParams,
+        "threads_1",
+        defaultFilter.frontendThreads.threads_1
+      ),
+      threads_4: getBoolOrDefault(
+        urlParams,
+        "threads_4",
+        defaultFilter.frontendThreads.threads_4
+      ),
     },
     backend: {
       llvm: getBoolOrDefault(
@@ -230,15 +238,15 @@ function storeFilterToUrl(
   );
   storeOrResetBool(
     urlParams,
-    "par1",
-    filter.parallel.par1,
-    defaultFilter.parallel.par1
+    "threads_1",
+    filter.frontendThreads.threads_1,
+    defaultFilter.frontendThreads.threads_1
   );
   storeOrResetBool(
     urlParams,
-    "par4",
-    filter.parallel.par4,
-    defaultFilter.parallel.par4
+    "threads_4",
+    filter.frontendThreads.threads_4,
+    defaultFilter.frontendThreads.threads_4
   );
   storeOrResetBool(
     urlParams,

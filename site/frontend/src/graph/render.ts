@@ -376,14 +376,14 @@ function genPlotOpts({
 
 function normalizeData(data: CompileGraphData) {
   function optInterpolated(profile) {
-    for (const parallel in profile) {
-      let par = profile[parallel];
-      for (const scenario in par) {
-        par[scenario].interpolated_indices = new Set(
-          par[scenario].interpolated_indices
+    for (const frontendThreads in profile) {
+      let threads = profile[frontendThreads];
+      for (const scenario in threads) {
+        threads[scenario].interpolated_indices = new Set(
+          threads[scenario].interpolated_indices
         );
       }
-      profile[parallel] = par;
+      profile[frontendThreads] = threads;
     }
 
     return profile;
@@ -434,7 +434,7 @@ export function renderPlots(
     let i = 0;
 
     for (let profile in profiles) {
-      let parallels = profiles[profile];
+      let frontendThreadsCounts = profiles[profile];
       let yAxis = selector.stat;
       let yAxisUnit = null;
 
@@ -489,8 +489,8 @@ export function renderPlots(
       let otherColorIdx = 0;
       let indices = null;
 
-      for (let parallel in parallels) {
-        let scenarios = parallels[parallel];
+      for (let frontendThreads in frontendThreadsCounts) {
+        let scenarios = frontendThreadsCounts[frontendThreads];
         let scenarioNames = Object.keys(scenarios);
         scenarioNames.sort();
 
@@ -500,7 +500,7 @@ export function renderPlots(
             indices = scenarios[scenarioName].interpolated_indices;
           }
           let color =
-            parallel == "1"
+            frontendThreads == "1"
               ? commonCacheStateColors[scenarioName] ||
                 otherCacheStateColors[otherColorIdx++]
               : otherCacheStateColors[otherColorIdx++];
@@ -508,7 +508,7 @@ export function renderPlots(
           plotData.push(yVals);
 
           seriesOpts.push({
-            label: scenarioName + "_par" + parallel,
+            label: scenarioName + "_par" + frontendThreads,
             width: devicePixelRatio,
             stroke: color,
           });

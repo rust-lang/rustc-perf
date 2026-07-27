@@ -19,7 +19,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
   const stat = urlParams["stat"] ?? "instructions:u";
   const benchmark = urlParams["benchmark"] ?? null;
   const scenario = urlParams["scenario"] ?? null;
-  const parallel = urlParams["parallel"] ?? null;
+  const frontendThreads = urlParams["frontendThreads"] ?? null;
   const profile = urlParams["profile"] ?? null;
   const target = urlParams["target"] ?? null;
   const backend = urlParams["backend"] ?? null;
@@ -60,7 +60,7 @@ function hasSpecificSelection(selector: GraphsSelector): boolean {
     selector.benchmark !== null ||
     selector.profile !== null ||
     selector.scenario !== null ||
-    selector.parallel !== null
+    selector.frontendThreads !== null
   );
 }
 

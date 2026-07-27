@@ -92,7 +92,7 @@ const totalAfter = computed(() =>
             <div class="header">Parallel</div>
             <div class="groups">
               <div class="group" v-for="parallel in ['1', '4']">
-                <div class="group-header">par{{ parallel }}</div>
+                <div class="group-header">par{{ frontendThreads }}</div>
                 <SummaryTable
                   :summary="calculateSummary('parallel', parallel)"
                   :withLegend="false"

@@ -12,7 +12,7 @@ export async function loadGraphs(
     stat: selector.stat,
     benchmark: selector.benchmark,
     scenario: selector.scenario,
-    parallel: selector.parallel,
+    frontendThreads: selector.frontendThreads,
     profile: selector.profile,
     backend: selector.backend,
     target: selector.target,

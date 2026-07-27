@@ -12,7 +12,7 @@ export interface CompileDetailGraphsSelector {
   stat: string;
   benchmark: string;
   scenario: string;
-  parallel: string;
+  frontendThreads: string;
   profile: string;
   backend: string;
   target: string;
@@ -33,7 +33,7 @@ export interface CompileDetailSectionsSelector {
   end: string;
   benchmark: string;
   scenario: string;
-  parallel: string;
+  frontendThreads: string;
   profile: string;
   backend: string;
   target: string;
@@ -68,7 +68,7 @@ export const COMPILE_DETAIL_GRAPHS_RESOLVER: CachedDataLoader<
   CompileDetailGraphs
 > = new CachedDataLoader(
   (key: CompileDetailGraphsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.parallel};${key.backend};${key.start};${key.end};${key.stat};${key.kinds};${key.target}`,
+    `${key.benchmark};${key.profile};${key.scenario};${key.frontendThreads};${key.backend};${key.start};${key.end};${key.stat};${key.kinds};${key.target}`,
   loadGraphsDetail
 );
 
@@ -81,7 +81,7 @@ async function loadGraphsDetail(
     stat: selector.stat,
     benchmark: selector.benchmark,
     scenario: selector.scenario,
-    parallel: selector.parallel,
+    frontendThreads: selector.frontendThreads,
     profile: selector.profile,
     backend: selector.backend,
     target: selector.target,
@@ -99,7 +99,7 @@ export const COMPILE_DETAIL_SECTIONS_RESOLVER: CachedDataLoader<
   CompileDetailSections
 > = new CachedDataLoader(
   (key: CompileDetailSectionsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.parallel};${key.backend};${key.target};${key.start};${key.end}`,
+    `${key.benchmark};${key.profile};${key.scenario};${key.frontendThreads};${key.backend};${key.target};${key.start};${key.end}`,
   loadSectionsDetail
 );
 
@@ -111,7 +111,7 @@ async function loadSectionsDetail(
     end: selector.end,
     benchmark: selector.benchmark,
     scenario: selector.scenario,
-    parallel: selector.parallel,
+    frontendThreads: selector.frontendThreads,
     profile: selector.profile,
     backend: selector.backend,
     target: selector.target,

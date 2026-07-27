@@ -17,9 +17,9 @@ export type CompileBenchmarkFilter = {
     incrUnchanged: boolean;
     incrPatched: boolean;
   };
-  parallel: {
-    par1: boolean;
-    par4: boolean;
+  frontendThreads: {
+    threads_1: boolean;
+    threads_4: boolean;
   };
   backend: {
     llvm: boolean;
@@ -58,9 +58,9 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     incrUnchanged: true,
     incrPatched: true,
   },
-  parallel: {
-    par1: true,
-    par4: true,
+  frontendThreads: {
+    threads_1: true,
+    threads_4: true,
   },
   backend: {
     llvm: true,
@@ -108,7 +108,7 @@ export interface CompileBenchmarkComparison {
   benchmark: string;
   profile: Profile;
   scenario: string;
-  parallel: number;
+  frontendThreads: number;
   backend: CodegenBackend;
   target: Target;
   comparison: StatComparison;
@@ -118,7 +118,7 @@ export interface CompileTestCase {
   benchmark: string;
   profile: Profile;
   scenario: string;
-  parallel: string;
+  frontendThreads: string;
   backend: CodegenBackend;
   target: Target;
   category: Category;
@@ -160,11 +160,11 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
-  function parallelFilter(parallel: string): boolean {
-    if (parallel === "1") {
-      return filter.parallel.par1;
-    } else if (parallel === "4") {
-      return filter.parallel.par4;
+  function parallelFilter(frontendThreads: string): boolean {
+    if (frontendThreads === "1") {
+      return filter.frontendThreads.threads_1;
+    } else if (frontendThreads === "4") {
+      return filter.frontendThreads.threads_4;
     } else {
       // Unknown, but by default we should show things
       return true;
@@ -214,7 +214,7 @@ export function computeCompileComparisonsWithNonRelevant(
     return (
       profileFilter(comparison.testCase.profile) &&
       scenarioFilter(comparison.testCase.scenario) &&
-      parallelFilter(comparison.testCase.parallel) &&
+      parallelFilter(comparison.testCase.frontendThreads) &&
       backendFilter(comparison.testCase.backend) &&
       targetMatchesFilter(comparison.testCase.target, filter.target) &&
       categoryFilter(comparison.testCase.category) &&
@@ -231,7 +231,7 @@ export function computeCompileComparisonsWithNonRelevant(
           benchmark: c.benchmark,
           profile: c.profile,
           scenario: c.scenario,
-          parallel: c.parallel.toString(),
+          frontendThreads: c.frontendThreads.toString(),
           backend: c.backend,
           target: c.target,
           category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
@@ -263,7 +263,7 @@ export function createCompileBenchmarkMap(
 }
 
 export function testCaseKey(testCase: CompileTestCase): string {
-  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.parallel};${testCase.backend};${testCase.category}`;
+  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.frontendThreads};${testCase.backend};${testCase.category}`;
 }
 
 // Transform compile comparisons to compare LLVM vs Cranelift, instead of
@@ -280,11 +280,11 @@ export function transformDataForBackendComparison(
       profile: Profile;
       target: Target;
       scenario: string;
-      parallel: number;
+      frontendThreads: number;
     }
   > = new Map();
   for (const comparison of comparisons) {
-    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario};${comparison.parallel};${comparison.target}`;
+    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario};${comparison.frontendThreads};${comparison.target}`;
     if (!benchmarkMap.has(key)) {
       benchmarkMap.set(key, {
         llvm: null,
@@ -292,7 +292,7 @@ export function transformDataForBackendComparison(
         benchmark: comparison.benchmark,
         profile: comparison.profile,
         scenario: comparison.scenario,
-        parallel: comparison.parallel,
+        frontendThreads: comparison.frontendThreads,
         target: comparison.target,
       });
     }
@@ -309,7 +309,7 @@ export function transformDataForBackendComparison(
       benchmark: entry.benchmark,
       profile: entry.profile,
       scenario: entry.scenario,
-      parallel: entry.parallel,
+      frontendThreads: entry.frontendThreads,
       // Treat LLVM as the baseline
       backend: "llvm",
       target: entry.target,

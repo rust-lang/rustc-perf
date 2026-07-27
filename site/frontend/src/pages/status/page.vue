@@ -261,7 +261,7 @@ loadStatusData(loading);
                 <td>
                   {{ formatStatus(req)
                   }}{{
-                    req.status === "Completed" && req.hasPendingJobs ? "*" : ""
+req.status === "Completed" && req.hasPendingJobs ? "*" : ""
                   }}
                 </td>
                 <td>

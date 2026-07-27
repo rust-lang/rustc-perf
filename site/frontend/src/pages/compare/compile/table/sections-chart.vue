@@ -154,14 +154,14 @@ function deactivate() {
                   </div>
                   <div>
                     {{
-                      getSectionByName(
+getSectionByName(
                         props.before,
                         section.name
                       )?.value?.toLocaleString() ?? "??"
                     }}
                     ->
                     {{
-                      getSectionByName(
+getSectionByName(
                         props.after,
                         section.name
                       )?.value.toLocaleString() ?? "??"

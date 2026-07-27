@@ -38,7 +38,7 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
-    parallel: props.testCase.parallel.toString(),
+    frontendThreads: props.testCase.frontendThreads.toString(),
     backend: props.testCase.backend,
     stat: props.metric,
     start,
@@ -67,7 +67,7 @@ async function renderGraphs(detail: CompileDetailGraphs) {
           // The server returns profiles capitalized, so we need to match that
           // here, so that the graph code can find the expected profile.
           [capitalize(selector.profile)]: {
-            [selector.parallel]: {
+            [selector.frontendThreads]: {
               [selector.scenario]: detail.graphs[index],
             },
           },
@@ -78,7 +78,7 @@ async function renderGraphs(detail: CompileDetailGraphs) {
       benchmark: selector.benchmark,
       profile: selector.profile,
       scenario: selector.scenario,
-      parallel: selector.parallel,
+      frontendThreads: selector.frontendThreads,
       stat: selector.stat,
       start: selector.start,
       end: selector.end,

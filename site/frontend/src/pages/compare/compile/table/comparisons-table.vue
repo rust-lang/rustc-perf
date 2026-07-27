@@ -49,7 +49,7 @@ const unit = computed(() => {
     <slot name="header"></slot>
     <div v-if="comparisons.length === 0" style="text-align: center">
       {{
-        hasNonRelevant
+hasNonRelevant
           ? "No relevant results (enable Filters -> Show non-relevant results to see all)"
           : "No results"
       }}
@@ -102,7 +102,7 @@ const unit = computed(() => {
                 {{ comparison.testCase.profile }}
               </td>
               <td>{{ comparison.testCase.scenario }}</td>
-              <td>{{ comparison.testCase.parallel }}</td>
+              <td>{{ comparison.testCase.frontendThreads }}</td>
               <td v-if="showBackend">{{ comparison.testCase.backend }}</td>
               <td :title="comparison.testCase.target">
                 {{ formatTarget(comparison.testCase.target) }}
@@ -118,7 +118,7 @@ const unit = computed(() => {
                 <div class="numeric-aligned">
                   <div>
                     {{
-                      comparison.significanceThreshold
+comparison.significanceThreshold
                         ? comparison.significanceThreshold.toFixed(2) + "%"
                         : "-"
                     }}
@@ -129,7 +129,7 @@ const unit = computed(() => {
                 <div class="numeric-aligned">
                   <div>
                     {{
-                      comparison.significanceFactor
+comparison.significanceFactor
                         ? comparison.significanceFactor.toFixed(2) + "x"
                         : "-"
                     }}
