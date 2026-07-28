@@ -136,6 +136,10 @@ pub mod graphs {
         PercentRelative,
     }
 
+    // The collection nesting looks like this:
+    // Benchmarks(String) -> ProfileSeries(Profile) -> ScenarioSeries(String)
+    //     -> FrontendThreadsSeries(String) -> Series
+
     #[derive(Debug, PartialEq, Clone, Serialize)]
     pub struct Series {
         // y-values
@@ -144,15 +148,27 @@ pub mod graphs {
         pub interpolated_indices: HashSet<u16>,
     }
 
-    pub type FrontendThreadsSeries = HashMap<String, Series>;
-    pub type ScenarioSeries = HashMap<String, FrontendThreadsSeries>;
-    pub type ProfileSeries = HashMap<database::Profile, ScenarioSeries>;
+    #[derive(Debug, PartialEq, Clone, Serialize, Default)]
+    #[serde(transparent)]
+    pub struct FrontendThreadsSeries(pub HashMap<String, Series>);
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Default)]
+    #[serde(transparent)]
+    pub struct ScenarioSeries(pub HashMap<String, FrontendThreadsSeries>);
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Default)]
+    #[serde(transparent)]
+    pub struct ProfileSeries(pub HashMap<database::Profile, ScenarioSeries>);
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Default)]
+    #[serde(transparent)]
+    pub struct Benchmarks(pub HashMap<String, ProfileSeries>);
 
     #[derive(Debug, PartialEq, Clone, Serialize)]
     pub struct Response {
         // (UTC timestamp in seconds, sha)
         pub commits: Vec<(i64, String)>,
-        pub benchmarks: HashMap<String, ProfileSeries>,
+        pub benchmarks: Benchmarks,
     }
 }
 

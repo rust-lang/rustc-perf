@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use collector::{Bound, SelfProfileId};
 
-use crate::api::graphs::GraphKind;
+use crate::api::graphs::{Benchmarks, FrontendThreadsSeries, GraphKind, ScenarioSeries};
 use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
 use crate::api::{detail_sections::CompilationSections, graphs::ProfileSeries};
 use crate::load::SiteCtxt;
@@ -241,7 +241,7 @@ async fn create_graphs(
         request.start,
         request.end,
     ));
-    let mut benchmarks: HashMap<String, ProfileSeries> = HashMap::new();
+    let mut benchmarks = Benchmarks::default();
 
     fn create_selector<T: FromStr>(filter: &Option<String>) -> Option<Result<Selector<T>, T::Err>> {
         filter
@@ -289,7 +289,9 @@ async fn create_graphs(
             .transpose()?;
         let summary_benchmark =
             create_summary(ctxt, &interpolated_responses, request.kind, request_profile)?;
-        benchmarks.insert("Summary".to_string(), summary_benchmark);
+        benchmarks
+            .0
+            .insert("Summary".to_string(), summary_benchmark);
     }
 
     for response in interpolated_responses {
@@ -300,12 +302,16 @@ async fn create_graphs(
         let graph_series = graph_series(response.series.into_iter(), request.kind);
 
         benchmarks
+            .0
             .entry(benchmark)
-            .or_insert_with(HashMap::new)
+            .or_insert_with(ProfileSeries::default)
+            .0
             .entry(profile)
-            .or_insert_with(HashMap::new)
+            .or_insert_with(ScenarioSeries::default)
+            .0
             .entry(frontend_threads)
-            .or_insert_with(HashMap::new)
+            .or_insert_with(FrontendThreadsSeries::default)
+            .0
             .insert(scenario, graph_series);
     }
 
@@ -346,9 +352,9 @@ fn create_summary(
     >],
     graph_kind: GraphKind,
     profile: Option<Profile>,
-) -> ServerResult<HashMap<Profile, HashMap<String, HashMap<String, graphs::Series>>>> {
+) -> ServerResult<ProfileSeries> {
     let mut baselines = HashMap::new();
-    let mut summary_benchmark = HashMap::new();
+    let mut summary_benchmark = ProfileSeries::default();
     let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
         profile.map_or_else(Profile::default_profiles, |p| vec![p]),
@@ -393,10 +399,13 @@ fn create_summary(
         let graph_series = graph_series(avg_vs_baseline, graph_kind);
 
         summary_benchmark
+            .0
             .entry(profile)
-            .or_insert_with(HashMap::new)
+            .or_insert_with(ScenarioSeries::default)
+            .0
             .entry(format!("{}", frontend_threads.0))
-            .or_insert_with(HashMap::new)
+            .or_insert_with(FrontendThreadsSeries::default)
+            .0
             .insert(scenario.to_string(), graph_series);
     }
     Ok(summary_benchmark)
