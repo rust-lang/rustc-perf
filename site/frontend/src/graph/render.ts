@@ -508,7 +508,7 @@ export function renderPlots(
           plotData.push(yVals);
 
           seriesOpts.push({
-            label: scenarioName + "_par" + frontendThreads,
+            label: scenarioName + "_threads_" + frontendThreads,
             width: devicePixelRatio,
             stroke: color,
           });

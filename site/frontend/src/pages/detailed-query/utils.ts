@@ -96,7 +96,7 @@ export function perfettoProfilerData(
     backend,
     target
   );
-  const traceTitle = `${benchmark}-${scenario}-par${frontendThreads} (${commit})`;
+  const traceTitle = `${benchmark}-${scenario}-threads_${frontendThreads} (${commit})`;
   return {link, traceTitle};
 }
 
@@ -116,7 +116,7 @@ export function createTitleData(selector: Selector | null): {
   let selfHref = "";
 
   if (state.base_commit) {
-    const args = `&scenario=${state.scenario}&parallel=${state.frontendThreads}&benchmark=${state.benchmark}-${state.profile}&backend=${state.backend}&target=${state.target}`;
+    const args = `&scenario=${state.scenario}&frontendThreads=${state.frontendThreads}&benchmark=${state.benchmark}-${state.profile}&backend=${state.backend}&target=${state.target}`;
     selfHref = `/detailed-query.html?commit=${state.commit}${args}`;
     baseHref = `/detailed-query.html?commit=${state.base_commit}${args}`;
   }
@@ -181,7 +181,7 @@ export function createDownloadLinksData(selector: Selector | null): {
       : "???";
 
   const createLinks = (commit: string) => ({
-    raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&parallel=${state.frontendThreads}&backend=${state.backend}&target=${state.target}`,
+    raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&frontendThreads=${state.frontendThreads}&backend=${state.backend}&target=${state.target}`,
     flamegraph: processedSelfProfileRelativeUrl(
       commit,
       state.benchmark,
@@ -238,7 +238,7 @@ export function createDownloadLinksData(selector: Selector | null): {
   const newLinks = createLinks(state.commit);
 
   const diffLink = state.base_commit
-    ? `/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&parallel=${state.frontendThreads}&backend=${state.backend}&target=${state.target}&type=codegen-schedule`
+    ? `/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&frontendThreads=${state.frontendThreads}&backend=${state.backend}&target=${state.target}&type=codegen-schedule`
     : "";
 
   function cachegrindCommand(
