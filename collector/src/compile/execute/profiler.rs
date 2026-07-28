@@ -134,7 +134,7 @@ impl Processor for ProfileProcessor<'_> {
             // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$PROFILE-$SCENARIO-$FRONTEND_THREADS_<N>.
             let out_file = |prefix: &str| -> String {
                 format!(
-                    "{}-{}-{}-{:?}-{}-frontend_threads_{}",
+                    "{}-{}-{}-{:?}-{}-Threads{}",
                     prefix,
                     self.id,
                     data.name,
