@@ -191,7 +191,7 @@ fn generate_diffs(
                 }) {
                     let filename = |prefix, id| {
                         format!(
-                            "{}-{}-{}-{:?}-{}-frontend_threads_{}{}",
+                            "{}-{}-{}-{:?}-{}-Threads{}{}",
                             prefix,
                             id,
                             benchmark.name,
