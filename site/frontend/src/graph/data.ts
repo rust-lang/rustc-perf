@@ -19,11 +19,34 @@ export interface Series {
   interpolated_indices: Set<number>;
 }
 
+class DictWrapper<T> {
+  constructor(public readonly data: Dict<T>) {}
+
+  get(key: string): T | undefined {
+    return this.data[key];
+  }
+
+  keys(): string[] {
+    return Object.keys(this.data);
+  }
+
+  toJSON(): Dict<T> {
+    return this.data;
+  }
+}
+
+export class FrontendThreadsSeries extends DictWrapper<Series> {}
+export class ScenarioSeries extends DictWrapper<FrontendThreadsSeries> {}
+export class ProfileSeries extends DictWrapper<ScenarioSeries> {}
+export class Benchmarks extends DictWrapper<ProfileSeries> {}
+
 // Graph data received from the server
-export interface CompileGraphData {
+export class CompileGraphData {
   commits: Array<[number, string]>;
   // benchmark -> profile -> parallel -> scenario -> series
-  benchmarks: Dict<Dict<Dict<Dict<Series>>>>;
+  // WARNING: now uses new layout:
+  // benchmark -> profile -> scenario -> frontend_threads -> series
+  benchmarks: Benchmarks;
 }
 
 export interface RuntimeGraphData {

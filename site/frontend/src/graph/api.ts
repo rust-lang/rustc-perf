@@ -1,6 +1,19 @@
-import {CompileGraphData, GraphsSelector} from "./data";
+import {
+  Benchmarks,
+  CompileGraphData,
+  FrontendThreadsSeries,
+  GraphsSelector,
+  ProfileSeries,
+  ScenarioSeries,
+  Series,
+} from "./data";
 import {getJson} from "../utils/requests";
 import {GRAPH_DATA_URL} from "../urls";
+
+interface CompileGraphDataRaw {
+  commits: Array<[number, string]>;
+  benchmarks: Dict<Dict<Dict<Dict<Series>>>>;
+}
 
 export async function loadGraphs(
   selector: GraphsSelector
@@ -26,5 +39,30 @@ export async function loadGraphs(
     },
     {} as Dict<string>
   );
-  return await getJson<CompileGraphData>(GRAPH_DATA_URL, dict);
+  const raw = await getJson<CompileGraphDataRaw>(GRAPH_DATA_URL, dict);
+  return {
+    commits: raw.commits,
+    benchmarks: new Benchmarks(
+      Object.fromEntries(
+        Object.entries(raw.benchmarks).map(([benchmark, profiles]) => [
+          benchmark,
+          new ProfileSeries(
+            Object.fromEntries(
+              Object.entries(profiles).map(([profile, scenarios]) => [
+                profile,
+                new ScenarioSeries(
+                  Object.fromEntries(
+                    Object.entries(scenarios).map(([scenario, threads]) => [
+                      scenario,
+                      new FrontendThreadsSeries(threads),
+                    ])
+                  )
+                ),
+              ])
+            )
+          ),
+        ])
+      )
+    ),
+  };
 }

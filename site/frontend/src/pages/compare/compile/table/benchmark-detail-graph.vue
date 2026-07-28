@@ -6,9 +6,13 @@ import {
   CompileDetailGraphsSelector,
 } from "./detail-resolver";
 import {
+  Benchmarks,
   CompileGraphData,
+  FrontendThreadsSeries,
   GraphKind,
   GraphsSelector,
+  ProfileSeries,
+  ScenarioSeries,
 } from "../../../../graph/data";
 import {CompileTestCase} from "../common";
 import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
@@ -62,17 +66,17 @@ async function renderGraphs(detail: CompileDetailGraphs) {
   ): [CompileGraphData, GraphsSelector] {
     const data: CompileGraphData = {
       commits: detail.commits,
-      benchmarks: {
-        [selector.benchmark]: {
+      benchmarks: new Benchmarks({
+        [selector.benchmark]: new ProfileSeries({
           // The server returns profiles capitalized, so we need to match that
           // here, so that the graph code can find the expected profile.
-          [capitalize(selector.profile)]: {
-            [selector.frontendThreads]: {
+          [capitalize(selector.profile)]: new ScenarioSeries({
+            [selector.frontendThreads]: new FrontendThreadsSeries({
               [selector.scenario]: detail.graphs[index],
-            },
-          },
-        },
-      },
+            }),
+          }),
+        }),
+      }),
     };
     const graphSelector = {
       benchmark: selector.benchmark,
