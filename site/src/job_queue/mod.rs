@@ -864,8 +864,8 @@ mod tests {
                 .unwrap()
                 .remove("foo")
                 .unwrap();
-            // runtime + rustc + 8 compile-time jobs (two x64 sets)
-            assert_eq!(jobs.len(), 10);
+            // runtime + rustc + 10 compile-time jobs (two x64 sets)
+            assert_eq!(jobs.len(), 12);
 
             Ok(ctx)
         })
