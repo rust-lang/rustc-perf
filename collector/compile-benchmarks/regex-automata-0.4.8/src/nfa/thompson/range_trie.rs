@@ -725,18 +725,21 @@ impl NextInsert {
 /// below. It's plausible that the number of cases is not actually minimal,
 /// but it's important for this code to remain at least somewhat readable.
 ///
-/// Given [a,b] and [x,y], where a <= b, x <= y, b < 256 and y < 256, we define
+/// Given `[a,b]` and `[x,y]`, where a <= b, x <= y, b < 256 and y < 256, we define
 /// the follow distinct relationships where at least one must apply. The order
 /// of these matters, since multiple can match. The first to match applies.
 ///
+/// ```
 ///   1. b < x <=> [a,b] < [x,y]
 ///   2. y < a <=> [x,y] < [a,b]
+/// ```
 ///
 /// In the case of (1) and (2), these are the only cases where there is no
-/// overlap. Or otherwise, the intersection of [a,b] and [x,y] is empty. In
+/// overlap. Or otherwise, the intersection of `[a,b]` and `[x,y]` is empty. In
 /// order to compute the intersection, one can do [max(a,x), min(b,y)]. The
 /// intersection in all of the following cases is non-empty.
 ///
+/// ```
 ///    3. a = x && b = y <=> [a,b] == [x,y]
 ///    4. a = x && b < y <=> [x,y] right-extends [a,b]
 ///    5. b = y && a > x <=> [x,y] left-extends [a,b]
@@ -748,10 +751,12 @@ impl NextInsert {
 ///   11. y = a && x < b <=> [x,y] is left-adjacent to [a,b]
 ///   12. b > x && b < y <=> [a,b] left-overlaps [x,y]
 ///   13. y > a && y < b <=> [x,y] left-overlaps [a,b]
+/// ```
 ///
 /// In cases 3-13, we can form rules that partition the ranges into a
 /// non-overlapping ordered sequence of ranges:
 ///
+/// ```
 ///    3. [a,b]
 ///    4. [a,b], [b+1,y]
 ///    5. [x,a-1], [a,b]
@@ -763,10 +768,11 @@ impl NextInsert {
 ///   11. [x,y-1], [y,y], [y+1,b]
 ///   12. [a,x-1], [x,b], [b+1,y]
 ///   13. [x,a-1], [a,y], [y+1,b]
+/// ```
 ///
 /// In the code below, we go a step further and identify each of the above
 /// outputs as belonging either to the overlap of the two ranges or to one
-/// of [a,b] or [x,y] exclusively.
+/// of `[a,b]` or `[x,y]` exclusively.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Split {
     partitions: [SplitRange; 3],
