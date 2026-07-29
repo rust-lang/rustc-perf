@@ -315,7 +315,7 @@ pub(crate) fn u32s_to_pattern_ids(slice: &[u32]) -> &[PatternID] {
 /// Checks that the given slice has an alignment that matches `T`.
 ///
 /// This is useful for checking that a slice has an appropriate alignment
-/// before casting it to a &[T]. Note though that alignment is not itself
+/// before casting it to a `&[T]`. Note though that alignment is not itself
 /// sufficient to perform the cast for any `T`.
 pub(crate) fn check_alignment<T>(
     slice: &[u8],

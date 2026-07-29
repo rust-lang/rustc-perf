@@ -96,7 +96,7 @@ pub(crate) struct SparseSet {
     /// Sparse maps ids to their location in dense.
     ///
     /// A state ID is in the set if and only if
-    /// sparse[id] < len && id == dense[sparse[id]].
+    /// `sparse[id] < len && id == dense[sparse[id]]`.
     ///
     /// Note that these are indices into 'dense'. It's a little weird to use
     /// StateID here, but we know our length can never exceed the bounds of

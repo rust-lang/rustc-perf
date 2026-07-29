@@ -378,11 +378,11 @@ impl StateBuilderNFA {
 /// represent each pattern ID, in order, that this match state represents.
 ///
 /// After the pattern IDs (if any), NFA state IDs are delta encoded as
-/// varints.[1] The first NFA state ID is encoded as itself, and each
+/// varints.`[1]` The first NFA state ID is encoded as itself, and each
 /// subsequent NFA state ID is encoded as the difference between itself and the
 /// previous NFA state ID.
 ///
-/// [1] - https://developers.google.com/protocol-buffers/docs/encoding#varints
+/// `[1] - https://developers.google.com/protocol-buffers/docs/encoding#varints`
 struct Repr<'a>(&'a [u8]);
 
 impl<'a> Repr<'a> {
