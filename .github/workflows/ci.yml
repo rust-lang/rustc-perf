@@ -107,8 +107,8 @@ jobs:
         #
         # We want the four parts to have similar runtimes.
         BENCH_INCLUDE_EXCLUDE_OPTS: [
-          "--include cargo-0.87.1,stm32f4-0.15.1",
-          "--exclude cargo-0.87.1,stm32f4-0.15.1",
+          "--include cargo-0.87.1,stm32f4-0.15.1,cranelift-codegen-0.119.0,diesel-2.2.10,eza-0.21.2",
+          "--exclude cargo-0.87.1,stm32f4-0.15.1,cranelift-codegen-0.119.0,diesel-2.2.10,eza-0.21.2",
         ]
         PROFILES: [
           "Check,Debug,Doc",
