@@ -102,17 +102,17 @@ jobs:
         #   few of the most expensive ones). In the other half we run
         #   everything but the benchmarks listed here.
         #
-        # - Dimension 2: In one half we run the Check, Debug, and Doc profiles.
-        #   In the other half we run the Opt profiles.
+        # - Dimension 2: In one half we run the Check/Debug/Doc profiles.
+        #   In the other half we run the Opt/DocJson profiles.
         #
         # We want the four parts to have similar runtimes.
-        BENCH_INCLUDE_EXCLUDE_OPTS: [
-          "--include cargo-0.87.1,stm32f4-0.15.1",
-          "--exclude cargo-0.87.1,stm32f4-0.15.1",
-        ]
         PROFILES: [
           "Check,Debug,Doc",
-          "Opt",
+          "Opt,DocJson",
+        ]
+        BENCH_INCLUDE_EXCLUDE_OPTS: [
+          "--include cargo-0.87.1,stm32f4-0.15.1,diesel-2.2.10,eza-0.21.2",
+          "--exclude cargo-0.87.1,stm32f4-0.15.1,diesel-2.2.10,eza-0.21.2",
         ]
     name: Test benchmarks on Linux
     runs-on: ubuntu-22.04
