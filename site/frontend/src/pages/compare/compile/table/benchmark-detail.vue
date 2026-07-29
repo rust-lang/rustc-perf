@@ -55,9 +55,9 @@ function detailedQueryLink(
   commit: ArtifactDescription,
   baseCommit?: ArtifactDescription
 ): string {
-  const {benchmark, profile, scenario, parallel, backend, target} =
+  const {benchmark, profile, scenario, frontendThreads, backend, target} =
     props.testCase;
-  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&parallel=${frontendThreads}&backend=${backend}&target=${target}`;
+  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&frontendThreads=${frontendThreads}&backend=${backend}&target=${target}`;
   if (baseCommit !== undefined) {
     link += `&base_commit=${baseCommit.commit}`;
   }
@@ -74,8 +74,9 @@ function graphLink(
     getPastDate(commit.date ? new Date(commit.date) : new Date(), 30)
   );
   const end = commit.commit;
-  const {benchmark, profile, scenario, parallel, target, backend} = testCase;
-  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&parallel=${frontendThreads}&target=${target}&backend=${backend}&stat=${metric}`;
+  const {benchmark, profile, scenario, frontendThreads, target, backend} =
+    testCase;
+  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&frontendThreads=${frontendThreads}&target=${target}&backend=${backend}&stat=${metric}`;
 }
 
 const metadata = computed(
@@ -124,7 +125,7 @@ onMounted(() => {
               <td>{{ testCase.scenario }}</td>
             </tr>
             <tr>
-              <td>Parallel</td>
+              <td>FrontendThreads</td>
               <td>{{ testCase.frontendThreads }}</td>
             </tr>
             <tr>

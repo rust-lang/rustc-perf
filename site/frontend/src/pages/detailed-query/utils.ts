@@ -254,7 +254,7 @@ export function createDownloadLinksData(selector: Selector | null): {
     cmd += ` --exact-match ${state.benchmark}`;
     cmd += ` --profiles ${profile(state.profile)}`;
     cmd += ` --scenarios ${scenarioFilter(state.scenario)}`;
-    cmd += ` --parallels ${state.frontendThreads}`;
+    cmd += ` --frontend-threads ${state.frontendThreads}`;
     return cmd;
   }
 

@@ -208,7 +208,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           <div class="section section-list-wrapper">
             <div class="section-heading">
               <div style="width: 160px">
-                <span>Parallels</span>
+                <span>Frontend Threads</span>
                 <Tooltip
                   >The different parallel frontend options (-Zthreads=N).
                 </Tooltip>
@@ -219,10 +219,10 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                 <label>
                   <input
                     type="checkbox"
-                    id="build-par1"
-                    v-model="filter.parallel.par1"
+                    id="build-threads_1"
+                    v-model="filter.frontendThreads.threads_1"
                   />
-                  <span class="label">par1</span>
+                  <span class="label">1</span>
                 </label>
                 <Tooltip>Single-threaded rustc frontend. </Tooltip>
               </li>
@@ -230,10 +230,10 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                 <label>
                   <input
                     type="checkbox"
-                    id="build-par4"
-                    v-model="filter.parallel.par4"
+                    id="build-threads_4"
+                    v-model="filter.frontendThreads.threads_4"
                   />
-                  <span class="label">par4</span>
+                  <span class="label">4</span>
                 </label>
                 <Tooltip>Parallel rustc frontend with 4 threads. </Tooltip>
               </li>

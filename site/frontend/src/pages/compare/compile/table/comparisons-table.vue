@@ -61,7 +61,7 @@ const unit = computed(() => {
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
-          <th>Parallel</th>
+          <th>FrontendThreads</th>
           <th v-if="showBackend">Backend</th>
           <th>Target</th>
           <th>% Change</th>

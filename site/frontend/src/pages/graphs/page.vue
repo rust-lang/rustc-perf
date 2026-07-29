@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
-import {CompileGraphData, GraphKind, GraphsSelector} from "../../graph/data";
+import {
+  Benchmarks,
+  CompileGraphData,
+  GraphKind,
+  GraphsSelector,
+} from "../../graph/data";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {
   createUrlWithAppendedParams,
@@ -30,7 +35,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     stat,
     benchmark,
     scenario,
-    parallel,
+    frontendThreads,
     profile,
     backend,
     target,
@@ -41,8 +46,10 @@ function filterBenchmarks(
   data: CompileGraphData,
   filter: (key: string) => boolean
 ): CompileGraphData {
-  const benchmarks = Object.fromEntries(
-    Object.entries(data.benchmarks).filter(([key, _]) => filter(key))
+  const benchmarks = new Benchmarks(
+    Object.fromEntries(
+      Object.entries(data.benchmarks.data).filter(([key, _]) => filter(key))
+    )
   );
   return {
     ...data,
@@ -75,7 +82,7 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   await nextTick();
 
   const countGraphs = Object.keys(graphData.benchmarks)
-    .map((benchmark) => Object.keys(graphData.benchmarks[benchmark]).length)
+    .map((benchmark) => Object.keys(graphData.benchmarks.get(benchmark)).length)
     .reduce((sum, item) => sum + item, 0);
 
   if (wrapperRef.value == null) {

@@ -160,7 +160,7 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
-  function parallelFilter(frontendThreads: string): boolean {
+  function frontendThreadsFilter(frontendThreads: string): boolean {
     if (frontendThreads === "1") {
       return filter.frontendThreads.threads_1;
     } else if (frontendThreads === "4") {
@@ -214,7 +214,7 @@ export function computeCompileComparisonsWithNonRelevant(
     return (
       profileFilter(comparison.testCase.profile) &&
       scenarioFilter(comparison.testCase.scenario) &&
-      parallelFilter(comparison.testCase.frontendThreads) &&
+      frontendThreadsFilter(comparison.testCase.frontendThreads) &&
       backendFilter(comparison.testCase.backend) &&
       targetMatchesFilter(comparison.testCase.target, filter.target) &&
       categoryFilter(comparison.testCase.category) &&

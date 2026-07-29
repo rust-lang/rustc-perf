@@ -22,7 +22,7 @@ export interface Series {
 class DictWrapper<T> {
   constructor(public readonly data: Dict<T>) {}
 
-  get(key: string): T | undefined {
+  get(key: string): T {
     return this.data[key];
   }
 
