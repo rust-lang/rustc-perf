@@ -32,7 +32,7 @@ function changeMetric(e: Event) {
       :title="metric.description"
     >
       <a :href="createUrlForMetric(metric.metric).toString()">{{
-metric.label
+        metric.label
       }}</a>
     </div>
     <select class="stats" @change="changeMetric" v-if="metrics.length > 0">

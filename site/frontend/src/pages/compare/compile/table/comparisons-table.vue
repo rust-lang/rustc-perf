@@ -49,7 +49,7 @@ const unit = computed(() => {
     <slot name="header"></slot>
     <div v-if="comparisons.length === 0" style="text-align: center">
       {{
-hasNonRelevant
+        hasNonRelevant
           ? "No relevant results (enable Filters -> Show non-relevant results to see all)"
           : "No results"
       }}
@@ -118,7 +118,7 @@ hasNonRelevant
                 <div class="numeric-aligned">
                   <div>
                     {{
-comparison.significanceThreshold
+                      comparison.significanceThreshold
                         ? comparison.significanceThreshold.toFixed(2) + "%"
                         : "-"
                     }}
@@ -129,7 +129,7 @@ comparison.significanceThreshold
                 <div class="numeric-aligned">
                   <div>
                     {{
-comparison.significanceFactor
+                      comparison.significanceFactor
                         ? comparison.significanceFactor.toFixed(2) + "x"
                         : "-"
                     }}

@@ -134,7 +134,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
           :class="{[diffClass(bootstrapB - bootstrapA)]: bootstrapValid}"
         >
           {{ ((bootstrapB - bootstrapA) / 10e8).toFixed(1) }}s ({{
-(((bootstrapB - bootstrapA) / bootstrapA) * 100).toFixed(3)
+            (((bootstrapB - bootstrapA) / bootstrapA) * 100).toFixed(3)
           }}%)
         </div>
       </template>
@@ -157,7 +157,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
         >
           {{ totalSizeB < totalSizeA ? "-" : ""
           }}{{ formatSize(Math.abs(totalSizeB - totalSizeA)) }} ({{
-formatPercentChange(totalSizeA, totalSizeB)
+            formatPercentChange(totalSizeA, totalSizeB)
           }})
         </div>
       </template>

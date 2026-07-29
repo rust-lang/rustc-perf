@@ -167,7 +167,7 @@ function averageCollectorDuration(collector: CollectorConfig): string {
       <div class="collector-name">
         <span>
           <strong class="collector-sm-padding-right">{{
-props.collector.name
+            props.collector.name
           }}</strong>
           <span
             class="collector-sm-padding-left-right collector-left-divider"

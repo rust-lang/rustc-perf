@@ -103,7 +103,7 @@ const unit = computed(() => {
                 <div class="numeric-aligned">
                   <div>
                     {{
-comparison.significanceThreshold
+                      comparison.significanceThreshold
                         ? comparison.significanceThreshold.toFixed(2) + "%"
                         : "-"
                     }}
@@ -114,7 +114,7 @@ comparison.significanceThreshold
                 <div class="numeric-aligned">
                   <div>
                     {{
-comparison.significanceFactor
+                      comparison.significanceFactor
                         ? comparison.significanceFactor.toFixed(2) + "x"
                         : "-"
                     }}
