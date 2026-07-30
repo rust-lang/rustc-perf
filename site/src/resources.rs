@@ -24,6 +24,8 @@ struct StaticAssets;
 #[include = "*.js"]
 #[include = "*.br"]
 #[include = "*.css"]
+// Source maps for debugging; only in debug mode since it increases binary size by ~6%
+#[cfg_attr(debug_assertions, include = "*.map")]
 struct StaticCompiledAssets;
 
 /// HTML template files that will be rendered by `tera`.
