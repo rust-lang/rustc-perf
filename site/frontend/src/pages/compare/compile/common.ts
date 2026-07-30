@@ -9,6 +9,7 @@ export type CompileBenchmarkFilter = {
     debug: boolean;
     opt: boolean;
     doc: boolean;
+    docJson: boolean;
   };
   scenario: {
     full: boolean;
@@ -45,6 +46,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     debug: true,
     opt: true,
     doc: true,
+    docJson: true,
   },
   scenario: {
     full: true,
@@ -126,6 +128,8 @@ export function computeCompileComparisonsWithNonRelevant(
       return filter.profile.opt;
     } else if (profile === "doc") {
       return filter.profile.doc;
+    } else if (profile === "doc-json") {
+      return filter.profile.docJson;
     } else {
       return true;
     }
