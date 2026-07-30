@@ -40,6 +40,7 @@ export async function loadGraphs(
     {} as Dict<string>
   );
   const raw = await getJson<CompileGraphDataRaw>(GRAPH_DATA_URL, dict);
+  console.debug(`raw (CompileGraphDataRaw):\n${JSON.stringify(raw, null, 2)}`);
   return {
     commits: raw.commits,
     benchmarks: new Benchmarks(
