@@ -119,6 +119,20 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                   produced by `rustdoc`.
                 </Tooltip>
               </li>
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    id="profile-doc-json"
+                    v-model="filter.profile.docJson"
+                  />
+                  <span class="label">doc-json</span>
+                </label>
+                <Tooltip
+                  >Documentation build that produces JSON data produced by
+                  `rustdoc`.
+                </Tooltip>
+              </li>
             </ul>
           </div>
           <div class="section section-list-wrapper">

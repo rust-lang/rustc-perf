@@ -67,6 +67,11 @@ function loadFilterFromUrl(
       debug: getBoolOrDefault(urlParams, "debug", defaultFilter.profile.debug),
       opt: getBoolOrDefault(urlParams, "opt", defaultFilter.profile.opt),
       doc: getBoolOrDefault(urlParams, "doc", defaultFilter.profile.doc),
+      docJson: getBoolOrDefault(
+        urlParams,
+        "doc-json",
+        defaultFilter.profile.docJson
+      ),
     },
     scenario: {
       full: getBoolOrDefault(urlParams, "full", defaultFilter.scenario.full),
@@ -188,6 +193,12 @@ function storeFilterToUrl(
     "doc",
     filter.profile.doc,
     defaultFilter.profile.doc
+  );
+  storeOrResetBool(
+    urlParams,
+    "doc-json",
+    filter.profile.docJson,
+    defaultFilter.profile.docJson
   );
   storeOrResetBool(
     urlParams,
