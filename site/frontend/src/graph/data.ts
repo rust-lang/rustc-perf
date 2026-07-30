@@ -1,3 +1,5 @@
+import {mapFromJSON, MapWrapperE} from "../utils/map-wrapper.ts";
+
 export type GraphKind = "raw" | "percentfromfirst" | "percentrelative";
 
 // Parameters used to filter graph data
@@ -19,29 +21,34 @@ export interface Series {
   interpolated_indices: Set<number>;
 }
 
-class DictWrapper<T> {
-  constructor(public readonly data: Dict<T>) {}
-
-  get(key: string): T {
-    return this.data[key];
-  }
-
-  keys(): string[] {
-    return Object.keys(this.data);
-  }
-
-  toJSON(): Dict<T> {
-    return this.data;
+export class FrontendThreadsSeries extends MapWrapperE<Series> {
+  static fromJSON(json: Dict<Series>): FrontendThreadsSeries {
+    return new FrontendThreadsSeries(mapFromJSON(json, (s) => s));
   }
 }
 
-export class FrontendThreadsSeries extends DictWrapper<Series> {}
-export class ScenarioSeries extends DictWrapper<FrontendThreadsSeries> {}
-export class ProfileSeries extends DictWrapper<ScenarioSeries> {}
-export class Benchmarks extends DictWrapper<ProfileSeries> {}
+export class ScenarioSeries extends MapWrapperE<FrontendThreadsSeries> {
+  static fromJSON(json: Dict<Dict<Series>>): ScenarioSeries {
+    return new ScenarioSeries(
+      mapFromJSON(json, FrontendThreadsSeries.fromJSON)
+    );
+  }
+}
+
+export class ProfileSeries extends MapWrapperE<ScenarioSeries> {
+  static fromJSON(json: Dict<Dict<Dict<Series>>>): ProfileSeries {
+    return new ProfileSeries(mapFromJSON(json, ScenarioSeries.fromJSON));
+  }
+}
+
+export class Benchmarks extends MapWrapperE<ProfileSeries> {
+  static fromJSON(json: Dict<Dict<Dict<Dict<Series>>>>): Benchmarks {
+    return new Benchmarks(mapFromJSON(json, ProfileSeries.fromJSON));
+  }
+}
 
 // Graph data received from the server
-export class CompileGraphData {
+export interface CompileGraphData {
   commits: Array<[number, string]>;
   // benchmark -> profile -> parallel -> scenario -> series
   // WARNING: now uses new layout:
