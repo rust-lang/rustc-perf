@@ -81,9 +81,12 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // Then draw the plots.
   await nextTick();
 
-  const countGraphs = Object.keys(graphData.benchmarks)
-    .map((benchmark) => Object.keys(graphData.benchmarks.get(benchmark)).length)
-    .reduce((sum, item) => sum + item, 0);
+  // const countGraphs = Object.keys(graphData.benchmarks)
+  //   .map((benchmark) => Object.keys(graphData.benchmarks.get(benchmark)).length)
+  // .reduce((sum, item) => sum + item, 0);
+  const countGraphs = graphData.benchmarks
+    .map_entries((_key, value) => value.size)
+    .reduce_entries((sum, _key, value) => sum + value, 0);
 
   if (wrapperRef.value == null) {
     return;

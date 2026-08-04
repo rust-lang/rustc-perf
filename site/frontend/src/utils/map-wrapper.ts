@@ -1,5 +1,11 @@
-export class MapWrapperE<T> {
-  constructor(public readonly data: Map<string, T>) {}
+export class MapWrapper<T> {
+  readonly data: Map<string, T>;
+
+  constructor(data: Map<string, T>);
+  constructor(data: Dict<T>);
+  constructor(data: Map<string, T> | Dict<T>) {
+    this.data = data instanceof Map ? data : new Map(Object.entries(data));
+  }
 
   get(key: string): T | undefined {
     return this.data.get(key);
@@ -23,15 +29,31 @@ export class MapWrapperE<T> {
     return this.data[Symbol.iterator]();
   }
 
-  filter(predicate: (key: string, value: T) => boolean): Map<string, T> {
+  filter(predicate: (key: string, value: T) => boolean): MapWrapper<T> {
     const result = new Map<string, T>();
     for (const [key, value] of this.data) {
       if (predicate(key, value)) result.set(key, value);
     }
-    return result;
+    return new MapWrapper(result);
   }
 
-  toJSON(): Dict<T> {
+  reduce_entries<R>(f: (acc: R, key: string, value: T) => R, initial: R): R {
+    let acc = initial;
+    for (const [key, value] of this.data) {
+      acc = f(acc, key, value);
+    }
+    return acc;
+  }
+
+  map_entries<R>(f: (key: string, value: T) => R): MapWrapper<R> {
+    const result = new Map<string, R>();
+    for (const [key, value] of this.data) {
+      result.set(key, f(key, value));
+    }
+    return new MapWrapper(result);
+  }
+
+  toDict(): Dict<T> {
     return Object.fromEntries(this.data.entries());
   }
 }

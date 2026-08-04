@@ -1,4 +1,4 @@
-import {mapFromJSON, MapWrapperE} from "../utils/map-wrapper.ts";
+import {mapFromJSON, MapWrapper} from "../utils/map-wrapper.ts";
 
 export type GraphKind = "raw" | "percentfromfirst" | "percentrelative";
 
@@ -21,13 +21,13 @@ export interface Series {
   interpolated_indices: Set<number>;
 }
 
-export class FrontendThreadsSeries extends MapWrapperE<Series> {
+export class FrontendThreadsSeries extends MapWrapper<Series> {
   static fromJSON(json: Dict<Series>): FrontendThreadsSeries {
     return new FrontendThreadsSeries(mapFromJSON(json, (s) => s));
   }
 }
 
-export class ScenarioSeries extends MapWrapperE<FrontendThreadsSeries> {
+export class ScenarioSeries extends MapWrapper<FrontendThreadsSeries> {
   static fromJSON(json: Dict<Dict<Series>>): ScenarioSeries {
     return new ScenarioSeries(
       mapFromJSON(json, FrontendThreadsSeries.fromJSON)
@@ -35,13 +35,13 @@ export class ScenarioSeries extends MapWrapperE<FrontendThreadsSeries> {
   }
 }
 
-export class ProfileSeries extends MapWrapperE<ScenarioSeries> {
+export class ProfileSeries extends MapWrapper<ScenarioSeries> {
   static fromJSON(json: Dict<Dict<Dict<Series>>>): ProfileSeries {
     return new ProfileSeries(mapFromJSON(json, ScenarioSeries.fromJSON));
   }
 }
 
-export class Benchmarks extends MapWrapperE<ProfileSeries> {
+export class Benchmarks extends MapWrapper<ProfileSeries> {
   static fromJSON(json: Dict<Dict<Dict<Dict<Series>>>>): Benchmarks {
     return new Benchmarks(mapFromJSON(json, ProfileSeries.fromJSON));
   }
