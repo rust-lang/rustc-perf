@@ -1,5 +1,10 @@
 import uPlot, {TypedArray} from "uplot";
-import {CompileGraphData, GraphsSelector, RuntimeGraphData} from "./data";
+import {
+  CompileGraphData,
+  GraphsSelector,
+  RuntimeGraphData,
+  ScenarioSeries,
+} from "./data";
 
 const commonCacheStateColors = {
   full: "#7cb5ec",
@@ -17,7 +22,7 @@ const otherCacheStateColors = [
   "#91e8e1",
 ];
 const interpolatedColor = "#fcb0f1";
-const profiles = ["Check", "Debug", "Opt", "Doc"];
+const KNOWN_PROFILES_CAMELCASE = ["Check", "Debug", "Opt", "Doc"];
 
 function tooltipPlugin({
   onclick,
@@ -390,12 +395,46 @@ function normalizeData(data: CompileGraphData) {
   }
 
   for (const name of Object.keys(data.benchmarks)) {
-    for (const profile of profiles) {
+    for (const profile of KNOWN_PROFILES_CAMELCASE) {
       if (data.benchmarks[name].hasOwnProperty(profile)) {
         data.benchmarks[name][profile.toLowerCase()] = optInterpolated(
           data.benchmarks[name][profile]
         );
         delete data.benchmarks[name][profile];
+      }
+    }
+  }
+}
+
+function normalizeData_(data: CompileGraphData) {
+  function optInterpolated(profile) {
+    for (const frontendThreads in profile) {
+      let threads = profile[frontendThreads];
+      for (const scenario in threads) {
+        threads[scenario].interpolated_indices = new Set(
+          threads[scenario].interpolated_indices
+        );
+      }
+      profile[frontendThreads] = threads;
+    }
+
+    return profile;
+  }
+
+  for (const name of data.benchmarks.keys()) {
+    for (const profileCamelCased of KNOWN_PROFILES_CAMELCASE) {
+      if (data.benchmarks.get(name).has(profileCamelCased)) {
+        let scenarios: ScenarioSeries = data.benchmarks
+          .get(name)
+          .get(profileCamelCased);
+        data.benchmarks
+          .get(name)
+          // .get(profile.toLowerCase())
+          .set(
+            profileCamelCased.toLowerCase(),
+            optInterpolated(data.benchmarks.get(name).get(profileCamelCased))
+          );
+        delete data.benchmarks[name][profileCamelCased];
       }
     }
   }
@@ -429,12 +468,12 @@ export function renderPlots(
   const benchNames = Object.keys(data.benchmarks).sort();
 
   for (const benchName of benchNames) {
-    let profiles = data.benchmarks[benchName];
+    let profiles = data.benchmarks.get(benchName);
 
     let i = 0;
 
-    for (let profile in profiles) {
-      let frontendThreadsCounts = profiles[profile];
+    for (let [profileName, scenario] of profiles.entries()) {
+      // let frontendThreadsCounts = profiles[profile];
       let yAxis = selector.stat;
       let yAxisUnit = null;
 
@@ -489,15 +528,14 @@ export function renderPlots(
       let otherColorIdx = 0;
       let indices = null;
 
-      for (let frontendThreads in frontendThreadsCounts) {
-        let scenarios = frontendThreadsCounts[frontendThreads];
-        let scenarioNames = Object.keys(scenarios);
-        scenarioNames.sort();
-
-        for (let scenarioName of scenarioNames) {
-          let yVals = scenarios[scenarioName].points;
+      let scenarioNames = Array.from(profiles.keys());
+      scenarioNames.sort();
+      for (let scenarioName of scenarioNames) {
+        let frontendThreadsCounts = scenario.get(scenarioName);
+        for (let [frontendThreads, series] of frontendThreadsCounts.entries()) {
+          let yVals = series.points;
           if (indices === null) {
-            indices = scenarios[scenarioName].interpolated_indices;
+            indices = series.interpolated_indices;
           }
           let color =
             frontendThreads == "1"
@@ -528,11 +566,12 @@ export function renderPlots(
         absoluteMode: selector.kind == "raw",
         hooks,
       });
+      const profileNameToRender = profileKeyToLowercase(profileName);
       if (renderTitle) {
-        plotOpts["title"] = `${benchName}-${profile}`;
+        plotOpts["title"] = `${benchName}-${profileNameToRender}`;
       }
 
-      new uPlot(plotOpts, plotData as any as TypedArray[], plotElement);
+      new uPlot(plotOpts, plotData as unknown as TypedArray[], plotElement);
 
       i++;
     }

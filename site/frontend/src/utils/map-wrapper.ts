@@ -10,6 +10,14 @@ export class MapWrapper<T> {
   get(key: string): T | undefined {
     return this.data.get(key);
   }
+  set(key: string, value): this {
+    this.data.set(key, value);
+    return this;
+  }
+  delete(key: string): boolean {
+    return this.data.delete(key);
+  }
+
   has(key: string): boolean {
     return this.data.has(key);
   }
@@ -29,12 +37,12 @@ export class MapWrapper<T> {
     return this.data[Symbol.iterator]();
   }
 
-  filter(predicate: (key: string, value: T) => boolean): MapWrapper<T> {
+  filter(predicate: (key: string, value: T) => boolean): this {
     const result = new Map<string, T>();
     for (const [key, value] of this.data) {
       if (predicate(key, value)) result.set(key, value);
     }
-    return new MapWrapper(result);
+    return new (this.constructor as new (data: Map<string, T>) => this)(result);
   }
 
   reduce_entries<R>(f: (acc: R, key: string, value: T) => R, initial: R): R {
