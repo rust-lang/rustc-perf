@@ -439,7 +439,7 @@ fn main() {
             // ... but not if we're just getting the rustc version.
             if !args
                 .iter()
-                .any(|arg| arg == "-vV" || arg == "--print=file-names")
+                .any(|arg| arg == "-vV" || arg == "--print=file-names" || arg == "--print=sysroot")
             {
                 eprintln!("{tool:?} {args:?}");
                 eprintln!("exiting -- non-wrapped rustc");
