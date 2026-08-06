@@ -1,51 +1,52 @@
-export class MapWrapper<T> {
-  readonly data: Map<string, T>;
+export class MapWrapper<K extends string, V> {
+  readonly data: Map<K, V>;
 
-  constructor(data: Map<string, T>);
-  constructor(data: Dict<T>);
-  constructor(data: Map<string, T> | Dict<T>) {
-    this.data = data instanceof Map ? data : new Map(Object.entries(data));
+  constructor(data: Map<K, V>);
+  constructor(data: Dict<V>);
+  constructor(data: Map<K, V> | Dict<V>) {
+    this.data =
+      data instanceof Map ? data : new Map(Object.entries(data) as [K, V][]);
   }
 
-  get(key: string): T | undefined {
+  get(key: K): V | undefined {
     return this.data.get(key);
   }
-  set(key: string, value): this {
+  set(key: K, value): this {
     this.data.set(key, value);
     return this;
   }
-  delete(key: string): boolean {
+  delete(key: K): boolean {
     return this.data.delete(key);
   }
 
-  has(key: string): boolean {
+  has(key: K): boolean {
     return this.data.has(key);
   }
-  keys(): MapIterator<string> {
+  keys(): MapIterator<K> {
     return this.data.keys();
   }
-  values(): MapIterator<T> {
+  values(): MapIterator<V> {
     return this.data.values();
   }
-  entries(): MapIterator<[string, T]> {
+  entries(): MapIterator<[K, V]> {
     return this.data.entries();
   }
   get size(): number {
     return this.data.size;
   }
-  [Symbol.iterator](): MapIterator<[string, T]> {
+  [Symbol.iterator](): MapIterator<[K, V]> {
     return this.data[Symbol.iterator]();
   }
 
-  filter(predicate: (key: string, value: T) => boolean): this {
-    const result = new Map<string, T>();
+  filter(predicate: (key: K, value: V) => boolean): this {
+    const result = new Map<K, V>();
     for (const [key, value] of this.data) {
       if (predicate(key, value)) result.set(key, value);
     }
-    return new (this.constructor as new (data: Map<string, T>) => this)(result);
+    return new (this.constructor as new (data: Map<K, V>) => this)(result);
   }
 
-  reduce_entries<R>(f: (acc: R, key: string, value: T) => R, initial: R): R {
+  reduce_entries<V2>(f: (acc: V2, key: K, value: V) => V2, initial: V2): V2 {
     let acc = initial;
     for (const [key, value] of this.data) {
       acc = f(acc, key, value);
@@ -53,15 +54,15 @@ export class MapWrapper<T> {
     return acc;
   }
 
-  map_entries<R>(f: (key: string, value: T) => R): MapWrapper<R> {
-    const result = new Map<string, R>();
+  map_entries<V2>(f: (key: K, value: V) => V2): MapWrapper<K, V2> {
+    const result = new Map<K, V2>();
     for (const [key, value] of this.data) {
       result.set(key, f(key, value));
     }
     return new MapWrapper(result);
   }
 
-  toDict(): Dict<T> {
+  toDict(): Dict<V> {
     return Object.fromEntries(this.data.entries());
   }
 }

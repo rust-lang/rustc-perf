@@ -2,8 +2,8 @@ import uPlot, {TypedArray} from "uplot";
 import {
   CompileGraphData,
   GraphsSelector,
+  profileKeyForGraphDisplay,
   RuntimeGraphData,
-  ScenarioSeries,
 } from "./data";
 
 const commonCacheStateColors = {
@@ -22,7 +22,6 @@ const otherCacheStateColors = [
   "#91e8e1",
 ];
 const interpolatedColor = "#fcb0f1";
-const KNOWN_PROFILES_CAMELCASE = ["Check", "Debug", "Opt", "Doc"];
 
 function tooltipPlugin({
   onclick,
@@ -379,67 +378,6 @@ function genPlotOpts({
   };
 }
 
-function normalizeData(data: CompileGraphData) {
-  function optInterpolated(profile) {
-    for (const frontendThreads in profile) {
-      let threads = profile[frontendThreads];
-      for (const scenario in threads) {
-        threads[scenario].interpolated_indices = new Set(
-          threads[scenario].interpolated_indices
-        );
-      }
-      profile[frontendThreads] = threads;
-    }
-
-    return profile;
-  }
-
-  for (const name of Object.keys(data.benchmarks)) {
-    for (const profile of KNOWN_PROFILES_CAMELCASE) {
-      if (data.benchmarks[name].hasOwnProperty(profile)) {
-        data.benchmarks[name][profile.toLowerCase()] = optInterpolated(
-          data.benchmarks[name][profile]
-        );
-        delete data.benchmarks[name][profile];
-      }
-    }
-  }
-}
-
-function normalizeData_(data: CompileGraphData) {
-  function optInterpolated(profile) {
-    for (const frontendThreads in profile) {
-      let threads = profile[frontendThreads];
-      for (const scenario in threads) {
-        threads[scenario].interpolated_indices = new Set(
-          threads[scenario].interpolated_indices
-        );
-      }
-      profile[frontendThreads] = threads;
-    }
-
-    return profile;
-  }
-
-  for (const name of data.benchmarks.keys()) {
-    for (const profileCamelCased of KNOWN_PROFILES_CAMELCASE) {
-      if (data.benchmarks.get(name).has(profileCamelCased)) {
-        let scenarios: ScenarioSeries = data.benchmarks
-          .get(name)
-          .get(profileCamelCased);
-        data.benchmarks
-          .get(name)
-          // .get(profile.toLowerCase())
-          .set(
-            profileCamelCased.toLowerCase(),
-            optInterpolated(data.benchmarks.get(name).get(profileCamelCased))
-          );
-        delete data.benchmarks[name][profileCamelCased];
-      }
-    }
-  }
-}
-
 export type GraphRenderOpts = {
   // Width of the graph
   width: number;
@@ -463,8 +401,6 @@ export function renderPlots(
   const hooks = opts.hooks ?? {};
   const {width, height} = opts;
 
-  normalizeData(data);
-
   const benchNames = Object.keys(data.benchmarks).sort();
 
   for (const benchName of benchNames) {
@@ -473,7 +409,6 @@ export function renderPlots(
     let i = 0;
 
     for (let [profileName, scenario] of profiles.entries()) {
-      // let frontendThreadsCounts = profiles[profile];
       let yAxis = selector.stat;
       let yAxisUnit = null;
 
@@ -566,7 +501,7 @@ export function renderPlots(
         absoluteMode: selector.kind == "raw",
         hooks,
       });
-      const profileNameToRender = profileKeyToLowercase(profileName);
+      const profileNameToRender = profileKeyForGraphDisplay(profileName);
       if (renderTitle) {
         plotOpts["title"] = `${benchName}-${profileNameToRender}`;
       }
