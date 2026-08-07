@@ -247,7 +247,7 @@ async fn handle_rust_timer(
 
     let mut valid_build_cmds = vec![];
     let mut errors = String::new();
-    for cmd in parse_build_commands(&comment.body) {
+    if let Some(cmd) = parse_build_command(&comment.body) {
         match cmd {
             Ok(cmd) => valid_build_cmds.push(cmd),
             Err(error) => errors.push_str(&format!("Cannot parse build command: {error}\n")),
@@ -324,23 +324,17 @@ async fn handle_rust_timer(
 /// Parses the first occurrence of a `@rust-timer queue <shared-args>` command
 /// in the input string.
 fn parse_queue_command(body: &str) -> Option<Result<QueueCommand<'_>, String>> {
-    let args = get_command_lines(body, "queue").next()?;
-    let args = match parse_command_arguments(args) {
-        Ok(args) => args,
-        Err(error) => return Some(Err(error)),
-    };
-    let params = match parse_benchmark_parameters(args) {
-        Ok(params) => params,
-        Err(error) => return Some(Err(error)),
-    };
-
-    Some(Ok(QueueCommand { params }))
+    get_command_lines(body, "queue").next().map(|args| {
+        let args = parse_command_arguments(args)?;
+        let params = parse_benchmark_parameters(args)?;
+        Ok(QueueCommand { params })
+    })
 }
 
-/// Parses all occurrences of a `@rust-timer build <shared-args>` command in the input string.
-fn parse_build_commands(body: &str) -> impl Iterator<Item = Result<BuildCommand<'_>, String>> {
-    get_command_lines(body, "build").map(|line| {
-        let mut iter = line.splitn(2, ' ');
+/// Parses an occurrence of a `@rust-timer build <shared-args>` command in the input string.
+fn parse_build_command(body: &str) -> Option<Result<BuildCommand<'_>, String>> {
+    get_command_lines(body, "build").next().map(|args| {
+        let mut iter = args.splitn(2, ' ');
         let Some(sha) = iter.next().filter(|s| !s.is_empty() && !s.contains('=')) else {
             return Err("Missing SHA in build command".to_string());
         };
@@ -356,11 +350,10 @@ fn parse_build_commands(body: &str) -> impl Iterator<Item = Result<BuildCommand<
 fn parse_sha(sha: &str) -> Result<&str, String> {
     let sha = sha.trim_start_matches("https://github.com/rust-lang/rust/commit/");
     if !sha.chars().all(|c| c.is_ascii_alphanumeric()) {
-        return Err(format!("Sha `{sha}` is not alphanumeric"))
+        return Err(format!("Sha `{sha}` is not alphanumeric"));
     }
     Ok(sha)
 }
-
 
 fn get_command_lines<'a>(body: &'a str, command: &'a str) -> impl Iterator<Item = &'a str> {
     let prefix = "@rust-timer";
@@ -495,52 +488,52 @@ mod tests {
 
     #[test]
     fn build_command_missing() {
-        assert!(get_build_commands("").is_empty());
+        assert!(parse_build_command("").is_none());
     }
 
     #[test]
     fn build_unknown_command() {
-        assert!(get_build_commands("@rust-timer foo").is_empty());
+        assert!(parse_build_command("@rust-timer foo").is_none());
     }
 
     #[test]
     fn build_command_missing_sha() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build"),
-            @r###"[Err("Missing SHA in build command")]"###);
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build"),
+            @r#"Some(Err("Missing SHA in build command"))"#);
     }
 
     #[test]
     fn build_command() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952"),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952"),
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
     }
 
     #[test]
     fn build_command_invalid_sha() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952/5"),
-            @r#"[Err("Sha `5832462aa1d9373b24ace96ad2c50b7a18af9952/5` is not alphanumeric")]"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952/5"),
+            @r#"Some(Err("Sha `5832462aa1d9373b24ace96ad2c50b7a18af9952/5` is not alphanumeric"))"#);
     }
 
     #[test]
     fn build_command_multiple() {
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"
 @rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952
 @rust-timer build 23936af287657fa4148aeab40cc2a780810fae52
 "#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }), Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae52", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
     }
 
     #[test]
     fn build_command_unknown_arg() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build foo=bar"),
-            @r###"[Err("Missing SHA in build command")]"###);
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build foo=bar"),
+            @r#"Some(Err("Missing SHA in build command"))"#);
     }
 
     #[test]
     fn build_command_link() {
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"
 @rust-timer build https://github.com/rust-lang/rust/commit/323f521bc6d8f2b966ba7838a3f3ee364e760b7e"#),
-            @r#"[Ok(BuildCommand { sha: "323f521bc6d8f2b966ba7838a3f3ee364e760b7e", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
+            @r#"Some(Ok(BuildCommand { sha: "323f521bc6d8f2b966ba7838a3f3ee364e760b7e", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
     }
 
     #[test]
@@ -606,20 +599,16 @@ Otherwise LGTM."#),
             @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
     }
 
-    fn get_build_commands(body: &str) -> Vec<Result<BuildCommand<'_>, String>> {
-        parse_build_commands(body).collect()
-    }
-
     #[test]
     fn build_command_with_backends() {
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995G"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995G", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995A backends=Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995A", params: BenchmarkParameters { backends: Some("Llvm"), profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5B backends=Cranelift"#),
-            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5B", params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C backends=Cranelift,Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None } })]"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995G"#),
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995G", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995A backends=Llvm"#),
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995A", params: BenchmarkParameters { backends: Some("Llvm"), profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5B backends=Cranelift"#),
+            @r#"Some(Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5B", params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C backends=Cranelift,Llvm"#),
+            @r#"Some(Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None } }))"#);
     }
 
     #[test]
