@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{metric::Metric, QueuedCommit};
 
-use crate::github::{COMMENT_MARK_ROLLUP, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
+use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;
 use std::fmt::Write;
 
@@ -21,9 +21,6 @@ pub async fn post_comparison_comment(
     let client = super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     let pr = commit.pr;
 
-    // Was this perf. run triggered from a PR that was already merged and is a rollup?
-    let mut is_rollup = false;
-
     // Scan comments to hide outdated ones and gather context
     let graph_client = super::client::GraphQLClient::from_ctxt(ctxt);
     for comment in graph_client.get_comments(pr).await? {
@@ -36,24 +33,17 @@ pub async fn post_comparison_comment(
             log::debug!("Hiding comment {}", comment.id);
             graph_client.hide_comment(&comment.id, "OUTDATED").await?;
         }
-
-        if comment.viewer_did_author && comment.body.contains(COMMENT_MARK_ROLLUP) {
-            is_rollup = true;
-        }
     }
 
     let source = if is_master_commit {
         PerfRunSource::MasterCommit
-    } else if is_rollup {
-        PerfRunSource::TryBuildRollup
     } else {
         PerfRunSource::TryBuild
     };
 
-    let body = match summarize_run(ctxt, commit, source).await {
-        Ok(message) => message,
-        Err(error) => error,
-    };
+    let body = summarize_run(ctxt, commit, source)
+        .await
+        .unwrap_or_else(|error| error);
 
     client.post_comment(pr, body).await;
 
@@ -98,8 +88,6 @@ enum PerfRunSource {
     MasterCommit,
     // Manual try build on a PR
     TryBuild,
-    // Manual try build on a merged rollup PR
-    TryBuildRollup,
 }
 
 // Should the metric be shown by default in the summary?
@@ -172,7 +160,6 @@ async fn summarize_run(
 
     let next_steps = match source {
         PerfRunSource::TryBuild => try_run_body(is_regression, deserves_attention),
-        PerfRunSource::TryBuildRollup => "".to_string(),
         PerfRunSource::MasterCommit => master_run_body(is_regression),
     };
     writeln!(&mut message, "{next_steps}\n").unwrap();

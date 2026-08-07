@@ -4,7 +4,7 @@ use http::header;
 use http::header::USER_AGENT;
 use serde::de::DeserializeOwned;
 
-use crate::{api::github::Issue, load::SiteCtxt};
+use crate::load::SiteCtxt;
 
 const BOT_USER_AGENT: &str = "perf-rust-lang-org-server";
 
@@ -34,162 +34,6 @@ impl Client {
             .clone()
             .expect("needs github API token");
         Self::new(repository_url, token)
-    }
-
-    pub async fn create_ref(&self, ref_: &str, sha: &str) -> anyhow::Result<()> {
-        #[derive(serde::Serialize)]
-        struct CreateRefRequest<'a> {
-            // Must start with `refs/` and have at least two slashes.
-            // e.g. `refs/heads/master`.
-            #[serde(rename = "ref")]
-            ref_: &'a str,
-            sha: &'a str,
-        }
-        let url = format!("{}/git/refs", self.repository_url);
-        let req = self.inner.post(&url).json(&CreateRefRequest { ref_, sha });
-        let response = self.send(req).await.context("POST git/refs failed")?;
-        if response.status() != reqwest::StatusCode::CREATED {
-            anyhow::bail!("{:?} != 201 CREATED", response.status());
-        }
-
-        Ok(())
-    }
-
-    pub async fn create_pr(
-        &self,
-        title: &str,
-        head: &str,
-        base: &str,
-        description: &str,
-        draft: bool,
-    ) -> anyhow::Result<CreatePrResponse> {
-        #[derive(serde::Serialize)]
-        struct CreatePrRequest<'a> {
-            title: &'a str,
-            // username:branch if cross-repo
-            head: &'a str,
-            // branch to pull into (e.g, master)
-            base: &'a str,
-            #[serde(rename = "body")]
-            description: &'a str,
-            draft: bool,
-        }
-
-        let url = format!("{}/pulls", self.repository_url);
-        let req = self.inner.post(&url).json(&CreatePrRequest {
-            title,
-            head,
-            base,
-            description,
-            draft,
-        });
-        let response = self.send(req).await.context("POST pulls failed")?;
-        if response.status() != reqwest::StatusCode::CREATED {
-            anyhow::bail!("{:?} != 201 CREATED", response.status());
-        }
-
-        response.json().await.context("deserializing failed")
-    }
-
-    pub async fn update_branch(&self, branch: &str, sha: &str) -> anyhow::Result<()> {
-        #[derive(serde::Serialize)]
-        struct UpdateBranchRequest<'a> {
-            sha: &'a str,
-            force: bool,
-        }
-        let url = format!("{}/git/refs/heads/{}", self.repository_url, branch);
-        let req = self
-            .inner
-            .patch(&url)
-            .json(&UpdateBranchRequest { sha, force: true });
-
-        let response = self.send(req).await.context("PATCH git/refs failed")?;
-        if response.status() != reqwest::StatusCode::OK {
-            anyhow::bail!("{:?} != 200 OK", response.status());
-        }
-
-        Ok(())
-    }
-
-    /// Merge the given sha into the given branch with the given commit message
-    ///
-    /// Returns `None` if the sha cannot be merged due to a merge conflict.
-    pub async fn merge_branch(
-        &self,
-        branch: &str,
-        sha: &str,
-        commit_message: &str,
-    ) -> anyhow::Result<Option<String>> {
-        #[derive(serde::Serialize)]
-        struct MergeBranchRequest<'a> {
-            base: &'a str,
-            head: &'a str,
-            commit_message: &'a str,
-        }
-        let url = format!("{}/merges", self.repository_url);
-        let req = self.inner.post(&url).json(&MergeBranchRequest {
-            base: branch,
-            head: sha,
-            commit_message,
-        });
-        let response = self
-            .send(req)
-            .await
-            .context("POST /merges failed to send")?;
-
-        if response.status() == 409 {
-            // Return `None` on merge conflicts which are signaled by 409s
-            Ok(None)
-        } else if !response.status().is_success() {
-            Err(anyhow::format_err!(
-                "response has non-successful status: {:?} ",
-                response.status()
-            ))
-        } else {
-            Ok(Some(response.json::<MergeBranchResponse>().await?.sha))
-        }
-    }
-
-    pub async fn create_commit(
-        &self,
-        message: &str,
-        tree: &str,
-        parents: &[&str],
-    ) -> anyhow::Result<String> {
-        #[derive(serde::Serialize)]
-        struct CreateCommitRequest<'a> {
-            message: &'a str,
-            tree: &'a str,
-            parents: &'a [&'a str],
-        }
-        let url = format!("{}/git/commits", self.repository_url);
-        let req = self.inner.post(&url).json(&CreateCommitRequest {
-            message,
-            tree,
-            parents,
-        });
-
-        let response = self.send(req).await.context("POST git/commits failed")?;
-        if response.status() != reqwest::StatusCode::CREATED {
-            anyhow::bail!("{:?} != 201 CREATED", response.status());
-        }
-
-        Ok(response
-            .json::<CreateCommitResponse>()
-            .await
-            .context("deserializing failed")?
-            .sha)
-    }
-
-    pub async fn get_issue(&self, number: u64) -> anyhow::Result<Issue> {
-        let url = format!("{}/issues/{}", self.repository_url, number);
-        let req = self.inner.get(&url);
-        let response = self.send(req).await.context("cannot get issue")?;
-        if !response.status().is_success() {
-            anyhow::bail!("{:?} != 200 OK", response.status());
-        }
-
-        Ok(response.json().await?)
     }
 
     pub async fn get_commit(&self, sha: &str) -> anyhow::Result<Commit> {
@@ -425,16 +269,6 @@ pub struct CreatePrResponse {
     pub number: u32,
     pub html_url: String,
     pub comments_url: String,
-}
-
-#[derive(serde::Deserialize)]
-struct MergeBranchResponse {
-    sha: String,
-}
-
-#[derive(serde::Deserialize)]
-struct CreateCommitResponse {
-    sha: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

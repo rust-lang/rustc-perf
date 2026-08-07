@@ -1,7 +1,6 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
-    COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
+    client, enqueue_shas, parse_homu_comment, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
 use crate::load::SiteCtxt;
 
@@ -30,34 +29,7 @@ pub async fn handle_github_webhook(
             }
             handle_issue(ctxt, issue, comment).await
         }
-        github::Request::Push(p) => handle_push(ctxt, p).await,
     }
-}
-
-async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<github::Response> {
-    let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
-    if push.r#ref != format!("refs/heads/{}", push.repository.default_branch) {
-        return Ok(github::Response);
-    }
-    let rollup_pr_number = match rollup_pr_number(&gh_client, &push.head_commit.message).await? {
-        Some(pr) => pr,
-        None => return Ok(github::Response),
-    };
-
-    let previous_master = push.before;
-    let commits = push.commits;
-
-    // GitHub webhooks have a timeout of 10 seconds, so we process this
-    // in the background.
-    tokio::spawn(async move {
-        let rollup_merges = commits
-            .iter()
-            .filter(|c| c.message.starts_with("Rollup merge of #"));
-        let result =
-            unroll_rollup(gh_client, rollup_merges, &previous_master, rollup_pr_number).await;
-        log::info!("Processing of rollup merge finished: {:#?}", result);
-    });
-    Ok(github::Response)
 }
 
 async fn handle_issue(
