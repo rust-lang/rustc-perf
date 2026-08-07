@@ -56,6 +56,7 @@ pub(super) const RIPGREP_14_1_1_NLL: &str = "ripgrep-14.1.1-nll";
 pub(super) const RIPGREP_14_1_1_TINY: &str = "ripgrep-14.1.1-tiny";
 pub(super) const SERDE_1_0_219: &str = "serde-1.0.219";
 pub(super) const SERDE_1_0_219_NEW_SOLVER: &str = "serde-1.0.219-new-solver";
+pub(super) const SERDE_1_0_219_NLL: &str = "serde-1.0.219-nll";
 pub(super) const SERDE_1_0_219_THREADS4: &str = "serde-1.0.219-threads4";
 pub(super) const SERDE_DERIVE_1_0_219: &str = "serde_derive-1.0.219";
 pub(super) const STM32F4_0_15_1: &str = "stm32f4-0.15.1";

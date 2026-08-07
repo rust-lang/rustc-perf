@@ -106,6 +106,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
             compile(RIPGREP_14_1_1_TINY),
             compile(SERDE_1_0_219),
             compile(SERDE_1_0_219_NEW_SOLVER),
+            compile(SERDE_1_0_219_NLL),
             compile(SERDE_1_0_219_THREADS4),
             compile(SERDE_DERIVE_1_0_219),
             compile(STM32F4_0_15_1),
@@ -151,6 +152,7 @@ pub fn get_benchmark_sets_for_target(target: Target) -> Vec<BenchmarkSet> {
                 compile(DIESEL_2_2_10),
                 compile(EXTERNS),
                 compile(EZA_0_21_2),
+                compile(SERDE_1_0_219_NLL),
             ];
             let set_1 = vec![
                 compile(HELLOWORLD),
