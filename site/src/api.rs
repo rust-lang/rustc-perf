@@ -619,33 +619,6 @@ pub mod github {
             issue: Issue,
             comment: Comment,
         },
-        Push(Push),
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Push {
-        pub r#ref: String,
-        pub head_commit: HeadCommit,
-        pub before: String,
-        pub commits: Vec<Commit>,
-        pub repository: Repository,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Repository {
-        pub default_branch: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Commit {
-        #[serde(rename = "id")]
-        pub sha: String,
-        pub message: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct HeadCommit {
-        pub message: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
