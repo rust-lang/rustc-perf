@@ -1,0 +1,12 @@
+diff --git a/crates/core/search.rs b/crates/core/search.rs
+index 67273425..4794ab49 100644
+--- a/crates/core/search.rs
++++ b/crates/core/search.rs
+@@ -340,6 +340,7 @@ impl<W: WriteColor> SearchWorker<W> {
+     fn search_path(&mut self, path: &Path) -> io::Result<SearchResult> {
+         use self::PatternMatcher::*;
+ 
++        println!("testing");
+         let (searcher, printer) = (&mut self.searcher, &mut self.printer);
+         match self.matcher {
+             RustRegex(ref m) => search_path(m, searcher, printer, path),

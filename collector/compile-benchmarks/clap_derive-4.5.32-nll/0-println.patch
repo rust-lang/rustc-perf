@@ -1,0 +1,12 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 760c5b52..1281bb19 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -36,6 +36,7 @@ mod utils;
+ /// Generates the `ValueEnum` impl.
+ #[proc_macro_derive(ValueEnum, attributes(clap, value))]
+ pub fn value_enum(input: TokenStream) -> TokenStream {
++    println!("testing!");
+     let input: DeriveInput = parse_macro_input!(input);
+     derives::derive_value_enum(&input)
+         .unwrap_or_else(|err| {

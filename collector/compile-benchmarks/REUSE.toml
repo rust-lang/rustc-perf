@@ -53,6 +53,11 @@ SPDX-FileCopyrightText = "clap contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
+path = "clap_derive-4.5.32-nll/**"
+SPDX-FileCopyrightText = "clap contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "coercions/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
@@ -241,6 +246,11 @@ SPDX-FileCopyrightText = "ripgrep contributors"
 SPDX-License-Identifier = "MIT OR Unlicense"
 
 [[annotations]]
+path = "ripgrep-14.1.1-nll/**"
+SPDX-FileCopyrightText = "ripgrep contributors"
+SPDX-License-Identifier = "MIT OR Unlicense"
+
+[[annotations]]
 path = "ripgrep-14.1.1-tiny/**"
 SPDX-FileCopyrightText = "ripgrep contributors"
 SPDX-License-Identifier = "MIT OR Unlicense"
@@ -252,6 +262,11 @@ SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
 path = "serde-1.0.219-new-solver/**"
+SPDX-FileCopyrightText = "serde contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = "serde-1.0.219-nll/**"
 SPDX-FileCopyrightText = "serde contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
