@@ -52,6 +52,7 @@ pub(super) const PROJECTION_CACHING: &str = "projection-caching";
 pub(super) const REGEX_AUTOMATA_0_4_8: &str = "regex-automata-0.4.8";
 pub(super) const REGRESSION_31157: &str = "regression-31157";
 pub(super) const RIPGREP_14_1_1: &str = "ripgrep-14.1.1";
+pub(super) const RIPGREP_14_1_1_NLL: &str = "ripgrep-14.1.1-nll";
 pub(super) const RIPGREP_14_1_1_TINY: &str = "ripgrep-14.1.1-tiny";
 pub(super) const SERDE_1_0_219: &str = "serde-1.0.219";
 pub(super) const SERDE_1_0_219_NEW_SOLVER: &str = "serde-1.0.219-new-solver";

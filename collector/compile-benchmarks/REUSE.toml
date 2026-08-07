@@ -246,6 +246,11 @@ SPDX-FileCopyrightText = "ripgrep contributors"
 SPDX-License-Identifier = "MIT OR Unlicense"
 
 [[annotations]]
+path = "ripgrep-14.1.1-nll/**"
+SPDX-FileCopyrightText = "ripgrep contributors"
+SPDX-License-Identifier = "MIT OR Unlicense"
+
+[[annotations]]
 path = "ripgrep-14.1.1-tiny/**"
 SPDX-FileCopyrightText = "ripgrep contributors"
 SPDX-License-Identifier = "MIT OR Unlicense"
