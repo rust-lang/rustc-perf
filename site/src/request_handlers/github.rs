@@ -4,6 +4,7 @@ use crate::github::{
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
 use crate::load::SiteCtxt;
+use std::iter;
 
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
@@ -132,7 +133,7 @@ async fn record_try_benchmark_request_without_artifacts(
     }
 }
 
-async fn validate_build_commands<'a>(build_cmds: &[BuildCommand<'a>]) -> Result<(), String> {
+async fn validate_build_command<'a>(cmd: &BuildCommand<'a>) -> Result<(), String> {
     const BASE_URL: &str = "https://ci-artifacts.rust-lang.org/rustc-builds";
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(3000))
@@ -140,37 +141,34 @@ async fn validate_build_commands<'a>(build_cmds: &[BuildCommand<'a>]) -> Result<
         .map_err(|e| format!("Failed to build request client {e}"))?;
     let mut futures = FuturesUnordered::new();
 
-    // Many commands within one build command
-    for cmd in build_cmds {
-        let sha = cmd.sha;
-        // Though presently very unlikely, there could be `N` targets
-        let targets = cmd
-            .params
-            .targets
-            .map(|targets| {
-                targets
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|t| !t.is_empty())
-                    .map(|t| t.to_string())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| {
-                Target::default_targets()
-                    .into_iter()
-                    .map(|t| t.to_string())
-                    .collect()
-            });
+    let sha = cmd.sha;
+    // Though presently very unlikely, there could be `N` targets
+    let targets = cmd
+        .params
+        .targets
+        .map(|targets| {
+            targets
+                .split(',')
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| {
+            Target::default_targets()
+                .into_iter()
+                .map(|t| t.to_string())
+                .collect()
+        });
 
-        for target in targets {
-            let url = format!("{BASE_URL}/{sha}/rustc-nightly-{target}.tar.xz");
-            let client = client.clone();
+    for target in targets {
+        let url = format!("{BASE_URL}/{sha}/rustc-nightly-{target}.tar.xz");
+        let client = client.clone();
 
-            futures.push(async move {
-                let status = client.head(&url).send().await.map(|r| r.status());
-                (sha, url, status)
-            });
-        }
+        futures.push(async move {
+            let status = client.head(&url).send().await.map(|r| r.status());
+            (sha, url, status)
+        });
     }
 
     let mut errors = String::new();
@@ -245,77 +243,66 @@ async fn handle_rust_timer(
         return Ok(github::Response);
     }
 
-    let mut valid_build_cmds = vec![];
-    let mut errors = String::new();
-    if let Some(cmd) = parse_build_command(&comment.body) {
+    let build_cmd = if let Some(cmd) = parse_build_command(&comment.body) {
         match cmd {
-            Ok(cmd) => valid_build_cmds.push(cmd),
-            Err(error) => errors.push_str(&format!("Cannot parse build command: {error}\n")),
+            Ok(cmd) => cmd,
+            Err(error) => {
+                main_client
+                    .post_comment(issue.number, format!("Cannot parse build command: {error}"))
+                    .await;
+                return Ok(github::Response);
+            }
         }
-    }
-
-    // parser errors
-    if valid_build_cmds.is_empty() && errors.is_empty() {
-        errors.push_str("Command cannot be empty\n");
-    }
+    } else {
+        main_client
+            .post_comment(issue.number, "Could not find valid rust-timer subcommand")
+            .await;
+        return Ok(github::Response);
+    };
 
     // requested artifacts do not exist errors
-    if let Err(error) = validate_build_commands(&valid_build_cmds).await {
-        errors.push_str(&error);
-    }
-
-    if !errors.is_empty() {
-        main_client.post_comment(issue.number, errors).await;
+    if let Err(error) = validate_build_command(&build_cmd).await {
+        main_client.post_comment(issue.number, error).await;
         return Ok(github::Response);
     }
 
     {
         let conn = ctxt.conn().await;
-        for command in &valid_build_cmds {
-            record_try_benchmark_request_without_artifacts(
-                &*conn,
-                issue.number,
-                command.params.backends.unwrap_or(""),
-                command.params.profiles.unwrap_or(""),
-                command.params.targets.unwrap_or(""),
-            )
-            .await;
-        }
+        record_try_benchmark_request_without_artifacts(
+            &*conn,
+            issue.number,
+            build_cmd.params.backends.unwrap_or(""),
+            build_cmd.params.profiles.unwrap_or(""),
+            build_cmd.params.targets.unwrap_or(""),
+        )
+        .await;
     }
 
-    let enqueued = match enqueue_shas(
-        &ctxt,
-        main_client,
-        issue.number,
-        valid_build_cmds.iter().map(|c| c.sha),
-    )
-    .await
-    {
-        Ok(enqueued) => enqueued,
-        Err(error) => {
-            log::error!("Failed to enqueue SHAs on {}: {error:?}", issue.number);
-            main_client
-                .post_comment(
-                    issue.number,
-                    "Failed to enqueue some commit SHAs. Maybe they were already benchmarked?"
-                        .to_string(),
-                )
-                .await;
-            return Ok(github::Response);
-        }
-    };
-    if enqueued.len() < valid_build_cmds.len() {
-        use std::fmt::Write;
-
-        let mut msg =
-            "The following SHAs were not enqueued, as they were probably already benchmarked:\n"
-                .to_string();
-        for cmd in valid_build_cmds {
-            if !enqueued.contains(&cmd.sha) {
-                writeln!(msg, "- {}", cmd.sha).unwrap();
+    let enqueued =
+        match enqueue_shas(&ctxt, main_client, issue.number, iter::once(build_cmd.sha)).await {
+            Ok(enqueued) => enqueued,
+            Err(error) => {
+                log::error!("Failed to enqueue SHAs on {}: {error:?}", issue.number);
+                main_client
+                    .post_comment(
+                        issue.number,
+                        "Failed to enqueue some commit SHAs. Maybe they were already benchmarked?"
+                            .to_string(),
+                    )
+                    .await;
+                return Ok(github::Response);
             }
-        }
-        main_client.post_comment(issue.number, msg).await;
+        };
+    if enqueued.is_empty() {
+        main_client
+            .post_comment(
+                issue.number,
+                format!(
+                    "The commit was not enqueued, as it was probably already benchmarked: {}\n",
+                    build_cmd.sha
+                ),
+            )
+            .await;
     }
 
     Ok(github::Response)
