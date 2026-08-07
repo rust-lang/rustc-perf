@@ -20,6 +20,7 @@ pub(super) const BITMAPS_3_2_1: &str = "bitmaps-3.2.1";
 pub(super) const BITMAPS_3_2_1_NEW_SOLVER: &str = "bitmaps-3.2.1-new-solver";
 pub(super) const CARGO_0_87_1: &str = "cargo-0.87.1";
 pub(super) const CLAP_DERIVE_4_5_32: &str = "clap_derive-4.5.32";
+pub(super) const CLAP_DERIVE_4_5_32_NLL: &str = "clap_derive-4.5.32-nll";
 pub(super) const COERCIONS: &str = "coercions";
 pub(super) const CRANELIFT_CODEGEN_0_119_0: &str = "cranelift-codegen-0.119.0";
 pub(super) const CTFE_STRESS_5: &str = "ctfe-stress-5";
