@@ -345,13 +345,22 @@ fn parse_build_commands(body: &str) -> impl Iterator<Item = Result<BuildCommand<
             return Err("Missing SHA in build command".to_string());
         };
 
-        let sha = sha.trim_start_matches("https://github.com/rust-lang/rust/commit/");
+        let sha = parse_sha(sha)?;
         let args = iter.next().unwrap_or("");
         let args = parse_command_arguments(args)?;
         let params = parse_benchmark_parameters(args)?;
         Ok(BuildCommand { sha, params })
     })
 }
+
+fn parse_sha(sha: &str) -> Result<&str, String> {
+    let sha = sha.trim_start_matches("https://github.com/rust-lang/rust/commit/");
+    if !sha.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(format!("Sha `{sha}` is not alphanumeric"))
+    }
+    Ok(sha)
+}
+
 
 fn get_command_lines<'a>(body: &'a str, command: &'a str) -> impl Iterator<Item = &'a str> {
     let prefix = "@rust-timer";
@@ -504,6 +513,12 @@ mod tests {
     fn build_command() {
         insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952"),
             @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
+    }
+
+    #[test]
+    fn build_command_invalid_sha() {
+        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952/5"),
+            @r#"[Err("Sha `5832462aa1d9373b24ace96ad2c50b7a18af9952/5` is not alphanumeric")]"#);
     }
 
     #[test]
