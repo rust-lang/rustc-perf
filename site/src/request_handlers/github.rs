@@ -4,6 +4,7 @@ use crate::github::{
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
 use crate::load::SiteCtxt;
+use std::iter;
 
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
@@ -132,7 +133,7 @@ async fn record_try_benchmark_request_without_artifacts(
     }
 }
 
-async fn validate_build_commands<'a>(build_cmds: &[BuildCommand<'a>]) -> Result<(), String> {
+async fn validate_build_command<'a>(cmd: &BuildCommand<'a>) -> Result<(), String> {
     const BASE_URL: &str = "https://ci-artifacts.rust-lang.org/rustc-builds";
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(3000))
@@ -140,37 +141,34 @@ async fn validate_build_commands<'a>(build_cmds: &[BuildCommand<'a>]) -> Result<
         .map_err(|e| format!("Failed to build request client {e}"))?;
     let mut futures = FuturesUnordered::new();
 
-    // Many commands within one build command
-    for cmd in build_cmds {
-        let sha = cmd.sha;
-        // Though presently very unlikely, there could be `N` targets
-        let targets = cmd
-            .params
-            .targets
-            .map(|targets| {
-                targets
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|t| !t.is_empty())
-                    .map(|t| t.to_string())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| {
-                Target::default_targets()
-                    .into_iter()
-                    .map(|t| t.to_string())
-                    .collect()
-            });
+    let sha = cmd.sha;
+    // Though presently very unlikely, there could be `N` targets
+    let targets = cmd
+        .params
+        .targets
+        .map(|targets| {
+            targets
+                .split(',')
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| {
+            Target::default_targets()
+                .into_iter()
+                .map(|t| t.to_string())
+                .collect()
+        });
 
-        for target in targets {
-            let url = format!("{BASE_URL}/{sha}/rustc-nightly-{target}.tar.xz");
-            let client = client.clone();
+    for target in targets {
+        let url = format!("{BASE_URL}/{sha}/rustc-nightly-{target}.tar.xz");
+        let client = client.clone();
 
-            futures.push(async move {
-                let status = client.head(&url).send().await.map(|r| r.status());
-                (sha, url, status)
-            });
-        }
+        futures.push(async move {
+            let status = client.head(&url).send().await.map(|r| r.status());
+            (sha, url, status)
+        });
     }
 
     let mut errors = String::new();
@@ -245,77 +243,66 @@ async fn handle_rust_timer(
         return Ok(github::Response);
     }
 
-    let mut valid_build_cmds = vec![];
-    let mut errors = String::new();
-    for cmd in parse_build_commands(&comment.body) {
+    let build_cmd = if let Some(cmd) = parse_build_command(&comment.body) {
         match cmd {
-            Ok(cmd) => valid_build_cmds.push(cmd),
-            Err(error) => errors.push_str(&format!("Cannot parse build command: {error}\n")),
+            Ok(cmd) => cmd,
+            Err(error) => {
+                main_client
+                    .post_comment(issue.number, format!("Cannot parse build command: {error}"))
+                    .await;
+                return Ok(github::Response);
+            }
         }
-    }
-
-    // parser errors
-    if valid_build_cmds.is_empty() && errors.is_empty() {
-        errors.push_str("Command cannot be empty\n");
-    }
+    } else {
+        main_client
+            .post_comment(issue.number, "Could not find valid rust-timer subcommand")
+            .await;
+        return Ok(github::Response);
+    };
 
     // requested artifacts do not exist errors
-    if let Err(error) = validate_build_commands(&valid_build_cmds).await {
-        errors.push_str(&error);
-    }
-
-    if !errors.is_empty() {
-        main_client.post_comment(issue.number, errors).await;
+    if let Err(error) = validate_build_command(&build_cmd).await {
+        main_client.post_comment(issue.number, error).await;
         return Ok(github::Response);
     }
 
     {
         let conn = ctxt.conn().await;
-        for command in &valid_build_cmds {
-            record_try_benchmark_request_without_artifacts(
-                &*conn,
-                issue.number,
-                command.params.backends.unwrap_or(""),
-                command.params.profiles.unwrap_or(""),
-                command.params.targets.unwrap_or(""),
-            )
-            .await;
-        }
+        record_try_benchmark_request_without_artifacts(
+            &*conn,
+            issue.number,
+            build_cmd.params.backends.unwrap_or(""),
+            build_cmd.params.profiles.unwrap_or(""),
+            build_cmd.params.targets.unwrap_or(""),
+        )
+        .await;
     }
 
-    let enqueued = match enqueue_shas(
-        &ctxt,
-        main_client,
-        issue.number,
-        valid_build_cmds.iter().map(|c| c.sha),
-    )
-    .await
-    {
-        Ok(enqueued) => enqueued,
-        Err(error) => {
-            log::error!("Failed to enqueue SHAs on {}: {error:?}", issue.number);
-            main_client
-                .post_comment(
-                    issue.number,
-                    "Failed to enqueue some commit SHAs. Maybe they were already benchmarked?"
-                        .to_string(),
-                )
-                .await;
-            return Ok(github::Response);
-        }
-    };
-    if enqueued.len() < valid_build_cmds.len() {
-        use std::fmt::Write;
-
-        let mut msg =
-            "The following SHAs were not enqueued, as they were probably already benchmarked:\n"
-                .to_string();
-        for cmd in valid_build_cmds {
-            if !enqueued.contains(&cmd.sha) {
-                writeln!(msg, "- {}", cmd.sha).unwrap();
+    let enqueued =
+        match enqueue_shas(&ctxt, main_client, issue.number, iter::once(build_cmd.sha)).await {
+            Ok(enqueued) => enqueued,
+            Err(error) => {
+                log::error!("Failed to enqueue SHAs on {}: {error:?}", issue.number);
+                main_client
+                    .post_comment(
+                        issue.number,
+                        "Failed to enqueue some commit SHAs. Maybe they were already benchmarked?"
+                            .to_string(),
+                    )
+                    .await;
+                return Ok(github::Response);
             }
-        }
-        main_client.post_comment(issue.number, msg).await;
+        };
+    if enqueued.is_empty() {
+        main_client
+            .post_comment(
+                issue.number,
+                format!(
+                    "The commit was not enqueued, as it was probably already benchmarked: {}\n",
+                    build_cmd.sha
+                ),
+            )
+            .await;
     }
 
     Ok(github::Response)
@@ -324,33 +311,35 @@ async fn handle_rust_timer(
 /// Parses the first occurrence of a `@rust-timer queue <shared-args>` command
 /// in the input string.
 fn parse_queue_command(body: &str) -> Option<Result<QueueCommand<'_>, String>> {
-    let args = get_command_lines(body, "queue").next()?;
-    let args = match parse_command_arguments(args) {
-        Ok(args) => args,
-        Err(error) => return Some(Err(error)),
-    };
-    let params = match parse_benchmark_parameters(args) {
-        Ok(params) => params,
-        Err(error) => return Some(Err(error)),
-    };
-
-    Some(Ok(QueueCommand { params }))
+    get_command_lines(body, "queue").next().map(|args| {
+        let args = parse_command_arguments(args)?;
+        let params = parse_benchmark_parameters(args)?;
+        Ok(QueueCommand { params })
+    })
 }
 
-/// Parses all occurrences of a `@rust-timer build <shared-args>` command in the input string.
-fn parse_build_commands(body: &str) -> impl Iterator<Item = Result<BuildCommand<'_>, String>> {
-    get_command_lines(body, "build").map(|line| {
-        let mut iter = line.splitn(2, ' ');
+/// Parses an occurrence of a `@rust-timer build <shared-args>` command in the input string.
+fn parse_build_command(body: &str) -> Option<Result<BuildCommand<'_>, String>> {
+    get_command_lines(body, "build").next().map(|args| {
+        let mut iter = args.splitn(2, ' ');
         let Some(sha) = iter.next().filter(|s| !s.is_empty() && !s.contains('=')) else {
             return Err("Missing SHA in build command".to_string());
         };
 
-        let sha = sha.trim_start_matches("https://github.com/rust-lang/rust/commit/");
+        let sha = parse_sha(sha)?;
         let args = iter.next().unwrap_or("");
         let args = parse_command_arguments(args)?;
         let params = parse_benchmark_parameters(args)?;
         Ok(BuildCommand { sha, params })
     })
+}
+
+fn parse_sha(sha: &str) -> Result<&str, String> {
+    let sha = sha.trim_start_matches("https://github.com/rust-lang/rust/commit/");
+    if !sha.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(format!("Sha `{sha}` is not alphanumeric"));
+    }
+    Ok(sha)
 }
 
 fn get_command_lines<'a>(body: &'a str, command: &'a str) -> impl Iterator<Item = &'a str> {
@@ -486,46 +475,52 @@ mod tests {
 
     #[test]
     fn build_command_missing() {
-        assert!(get_build_commands("").is_empty());
+        assert!(parse_build_command("").is_none());
     }
 
     #[test]
     fn build_unknown_command() {
-        assert!(get_build_commands("@rust-timer foo").is_empty());
+        assert!(parse_build_command("@rust-timer foo").is_none());
     }
 
     #[test]
     fn build_command_missing_sha() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build"),
-            @r###"[Err("Missing SHA in build command")]"###);
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build"),
+            @r#"Some(Err("Missing SHA in build command"))"#);
     }
 
     #[test]
     fn build_command() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952"),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952"),
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
+    }
+
+    #[test]
+    fn build_command_invalid_sha() {
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952/5"),
+            @r#"Some(Err("Sha `5832462aa1d9373b24ace96ad2c50b7a18af9952/5` is not alphanumeric"))"#);
     }
 
     #[test]
     fn build_command_multiple() {
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"
 @rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952
 @rust-timer build 23936af287657fa4148aeab40cc2a780810fae52
 "#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }), Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae52", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af9952", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
     }
 
     #[test]
     fn build_command_unknown_arg() {
-        insta::assert_compact_debug_snapshot!(get_build_commands("@rust-timer build foo=bar"),
-            @r###"[Err("Missing SHA in build command")]"###);
+        insta::assert_compact_debug_snapshot!(parse_build_command("@rust-timer build foo=bar"),
+            @r#"Some(Err("Missing SHA in build command"))"#);
     }
 
     #[test]
     fn build_command_link() {
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"
 @rust-timer build https://github.com/rust-lang/rust/commit/323f521bc6d8f2b966ba7838a3f3ee364e760b7e"#),
-            @r#"[Ok(BuildCommand { sha: "323f521bc6d8f2b966ba7838a3f3ee364e760b7e", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
+            @r#"Some(Ok(BuildCommand { sha: "323f521bc6d8f2b966ba7838a3f3ee364e760b7e", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
     }
 
     #[test]
@@ -591,20 +586,16 @@ Otherwise LGTM."#),
             @"Some(Ok(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
     }
 
-    fn get_build_commands(body: &str) -> Vec<Result<BuildCommand<'_>, String>> {
-        parse_build_commands(body).collect()
-    }
-
     #[test]
     fn build_command_with_backends() {
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995G"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995G", params: BenchmarkParameters { backends: None, profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995A backends=Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995A", params: BenchmarkParameters { backends: Some("Llvm"), profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5B backends=Cranelift"#),
-            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5B", params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None } })]"#);
-        insta::assert_compact_debug_snapshot!(get_build_commands(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C backends=Cranelift,Llvm"#),
-            @r#"[Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None } })]"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995G"#),
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995G", params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af995A backends=Llvm"#),
+            @r#"Some(Ok(BuildCommand { sha: "5832462aa1d9373b24ace96ad2c50b7a18af995A", params: BenchmarkParameters { backends: Some("Llvm"), profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5B backends=Cranelift"#),
+            @r#"Some(Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5B", params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_build_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C backends=Cranelift,Llvm"#),
+            @r#"Some(Ok(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None } }))"#);
     }
 
     #[test]
