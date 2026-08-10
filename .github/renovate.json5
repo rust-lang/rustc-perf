@@ -15,7 +15,7 @@
     // Disable individual PRs for breaking changes
     {
       "matchCategories": ["rust", "js"],
-      "matchJsonata": ["isBreaking == true"],
+      "matchJsonata": ["isBreaking = true"],
       "enabled": false
     },
     {
