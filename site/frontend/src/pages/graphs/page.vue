@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
-import {
-  Benchmarks,
-  CompileGraphData,
-  GraphKind,
-  GraphsSelector,
-} from "../../graph/data";
+import {CompileGraphData, GraphKind, GraphsSelector} from "../../graph/data";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {
   createUrlWithAppendedParams,
@@ -46,11 +41,7 @@ function filterBenchmarks(
   data: CompileGraphData,
   filter: (key: string) => boolean
 ): CompileGraphData {
-  const benchmarks = new Benchmarks(
-    Object.fromEntries(
-      Object.entries(data.benchmarks.data).filter(([key, _]) => filter(key))
-    )
-  );
+  const benchmarks = data.benchmarks.filter(([key, _]) => filter(key));
   return {
     ...data,
     benchmarks,
@@ -81,9 +72,6 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // Then draw the plots.
   await nextTick();
 
-  // const countGraphs = Object.keys(graphData.benchmarks)
-  //   .map((benchmark) => Object.keys(graphData.benchmarks.get(benchmark)).length)
-  // .reduce((sum, item) => sum + item, 0);
   const countGraphs = graphData.benchmarks
     .map_entries((_key, value) => value.size)
     .reduce_entries((sum, _key, value) => sum + value, 0);

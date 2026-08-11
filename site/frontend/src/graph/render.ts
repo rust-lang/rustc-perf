@@ -401,11 +401,7 @@ export function renderPlots(
   const hooks = opts.hooks ?? {};
   const {width, height} = opts;
 
-  const benchNames = Object.keys(data.benchmarks).sort();
-
-  for (const benchName of benchNames) {
-    let profiles = data.benchmarks.get(benchName);
-
+  for (const [benchName, profiles] of data.benchmarks.entries()) {
     let i = 0;
 
     for (let [profileName, scenario] of profiles.entries()) {

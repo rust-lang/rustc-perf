@@ -67,10 +67,8 @@ async function loadCompareData(
       stat: selector.stat,
     };
     const result = await postMsgpack<CompareResponse>(COMPARE_DATA_URL, params);
-    if (result.compile_comparisons[0].frontendThreads == null) {
-      throw new EvalError(
-        `bad response:\n${JSON.stringify(result.compile_comparisons)}`
-      );
+    if (result.compile_comparisons[0]?.frontendThreads == null) {
+      throw new EvalError(`bad response:\n${JSON.stringify(result)}`);
     }
     return result;
   });

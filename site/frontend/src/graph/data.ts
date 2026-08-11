@@ -79,20 +79,20 @@ export class ProfileSeries extends MapWrapper<ProfileKey, ScenarioSeries> {
   }
 }
 
-export class Benchmarks extends MapWrapper<string, ProfileSeries> {
-  static fromJSON(json: Dict<Dict<Dict<Dict<Series>>>>): Benchmarks {
-    return new Benchmarks(mapFromJSON(json, ProfileSeries.fromJSON));
+/**
+ * benchmarks are of a fixed nested structure:
+ *   - benchmark -> profile -> scenario -> frontend_threads -> series
+ */
+export class CompileBenchmarks extends MapWrapper<string, ProfileSeries> {
+  static fromJSON(json: Dict<Dict<Dict<Dict<Series>>>>): CompileBenchmarks {
+    return new CompileBenchmarks(mapFromJSON(json, ProfileSeries.fromJSON));
   }
 }
 
 /** Graph data received from the server */
 export interface CompileGraphData {
   commits: Array<[number, string]>;
-  /**
-   * benchmarks are of a fixed nested structure:
-   *   - benchmark -> profile -> scenario -> frontend_threads -> series
-   */
-  benchmarks: Benchmarks;
+  benchmarks: CompileBenchmarks;
 }
 
 export interface RuntimeGraphData {

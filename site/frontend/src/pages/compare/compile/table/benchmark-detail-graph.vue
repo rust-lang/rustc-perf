@@ -6,7 +6,7 @@ import {
   CompileDetailGraphsSelector,
 } from "./detail-resolver";
 import {
-  Benchmarks,
+  CompileBenchmarks,
   CompileGraphData,
   FrontendThreadsSeries,
   GraphKind,
@@ -67,7 +67,7 @@ async function renderGraphs(detail: CompileDetailGraphs) {
   ): [CompileGraphData, GraphsSelector] {
     const data: CompileGraphData = {
       commits: detail.commits,
-      benchmarks: new Benchmarks({
+      benchmarks: new CompileBenchmarks({
         [selector.benchmark]: new ProfileSeries({
           [toProfileKey(selector.profile)]: new ScenarioSeries({
             [selector.frontendThreads]: new FrontendThreadsSeries({

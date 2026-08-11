@@ -1,4 +1,9 @@
-import {Benchmarks, CompileGraphData, GraphsSelector, Series} from "./data";
+import {
+  CompileBenchmarks,
+  CompileGraphData,
+  GraphsSelector,
+  Series,
+} from "./data";
 import {getJson} from "../utils/requests";
 import {GRAPH_DATA_URL} from "../urls";
 
@@ -34,6 +39,6 @@ export async function loadGraphs(
   const raw = await getJson<CompileGraphDataRaw>(GRAPH_DATA_URL, dict);
   return {
     commits: raw.commits,
-    benchmarks: Benchmarks.fromJSON(raw.benchmarks),
+    benchmarks: CompileBenchmarks.fromJSON(raw.benchmarks),
   };
 }

@@ -1,5 +1,5 @@
 export class MapWrapper<K extends string, V> {
-  readonly data: Map<K, V>;
+  private readonly data: Map<K, V>;
 
   constructor(data: Map<K, V>);
   constructor(data: Dict<V>);
@@ -8,8 +8,15 @@ export class MapWrapper<K extends string, V> {
       data instanceof Map ? data : new Map(Object.entries(data) as [K, V][]);
   }
 
-  get(key: K): V | undefined {
-    return this.data.get(key);
+  get(key: K): V {
+    const result: V | undefined = this.data.get(key);
+    if (result === undefined) {
+      console.debug(
+        `unknown key: '${key}'. Existing keys: ${JSON.stringify(this.keys())}`
+      );
+      throw new EvalError(`unknown key: '${key}'`);
+    }
+    return result;
   }
   set(key: K, value): this {
     this.data.set(key, value);
