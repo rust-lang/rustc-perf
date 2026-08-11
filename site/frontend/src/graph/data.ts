@@ -1,15 +1,17 @@
 import {capitalize} from "vue";
 import {mapFromJSON, MapWrapper} from "../utils/map-wrapper.ts";
 
-declare const brand: unique symbol;
-
 export type GraphKind = "raw" | "percentfromfirst" | "percentrelative";
+
+declare const brand: unique symbol;
+type Brand<T, Tag extends string> = T & {readonly [brand]: Tag};
 
 /**
  * specific key type for ProfileSeries as we have to deal with different
  * lowercased/capitalized representations depending on the use case
  */
-type ProfileKey = string & {readonly [brand]: "ProfileKey"};
+type ProfileName = Brand<string, "ProfileName">;
+
 const KNOWN_PROFILES_TO_BE_LOWERCASED = new Set([
   "Check",
   "Debug",
@@ -23,16 +25,21 @@ const KNOWN_PROFILES_TO_BE_LOWERCASED = new Set([
  * @param raw custom string
  * @returns representation is always capitalized
  */
-export function toProfileKey(raw: string): ProfileKey {
-  return capitalize(raw) as ProfileKey;
+export function toProfileKey(raw: string): ProfileName {
+  return capitalize(raw) as ProfileName;
 }
 
-export function profileKeyForGraphDisplay(profileKey: ProfileKey): string {
+export function profileKeyForGraphDisplay(profileKey: ProfileName): string {
   if (profileKey in KNOWN_PROFILES_TO_BE_LOWERCASED) {
     return profileKey.toLowerCase();
   }
   return profileKey;
 }
+
+// other keys just to be safe
+type ScenarioName = Brand<string, "ScenarioName">;
+type FrontendThreadsName = Brand<string, "FrontendThreadsName">;
+type CompileBenchmarkName = Brand<string, "CompileBenchmarkName">;
 
 // Parameters used to filter graph data
 export interface GraphsSelector {
@@ -40,10 +47,10 @@ export interface GraphsSelector {
   end: string;
   kind: GraphKind;
   stat: string;
-  benchmark: string | null;
-  scenario: string | null;
-  frontendThreads: string | null;
-  profile: string | null;
+  benchmark: CompileBenchmarkName | string | null;
+  scenario: ScenarioName | null;
+  frontendThreads: FrontendThreadsName | null;
+  profile: ProfileName | null;
   backend: string | null;
   target: string | null;
 }
@@ -53,29 +60,42 @@ export interface Series {
   interpolated_indices: Set<number>;
 }
 
-export class FrontendThreadsSeries extends MapWrapper<string, Series> {
+export class FrontendThreadsSeries extends MapWrapper<
+  FrontendThreadsName,
+  Series
+> {
   static fromJSON(json: Dict<Series>): FrontendThreadsSeries {
-    return new FrontendThreadsSeries(mapFromJSON(json, (s) => s));
-  }
-}
-
-export class ScenarioSeries extends MapWrapper<string, FrontendThreadsSeries> {
-  static fromJSON(json: Dict<Dict<Series>>): ScenarioSeries {
-    return new ScenarioSeries(
-      mapFromJSON(json, FrontendThreadsSeries.fromJSON)
+    return new FrontendThreadsSeries(
+      mapFromJSON(
+        json,
+        (k) => k as FrontendThreadsName,
+        (s) => s
+      )
     );
   }
 }
 
-export class ProfileSeries extends MapWrapper<ProfileKey, ScenarioSeries> {
+export class ScenarioSeries extends MapWrapper<
+  ScenarioName,
+  FrontendThreadsSeries
+> {
+  static fromJSON(json: Dict<Dict<Series>>): ScenarioSeries {
+    return new ScenarioSeries(
+      mapFromJSON(
+        json,
+        (k) => k as ScenarioName,
+        FrontendThreadsSeries.fromJSON
+      )
+    );
+  }
+}
+
+export class ProfileSeries extends MapWrapper<ProfileName, ScenarioSeries> {
   // here we have to convert to the proper ProfileKey representation
   static fromJSON(json: Dict<Dict<Dict<Series>>>): ProfileSeries {
-    let sourceMap = mapFromJSON(json, ScenarioSeries.fromJSON);
-    let resultMap: Map<ProfileKey, ScenarioSeries> = new Map();
-    for (const [k, v] of sourceMap.entries()) {
-      resultMap.set(toProfileKey(k), v);
-    }
-    return new ProfileSeries(resultMap);
+    return new ProfileSeries(
+      mapFromJSON(json, toProfileKey, ScenarioSeries.fromJSON)
+    );
   }
 }
 
@@ -83,9 +103,18 @@ export class ProfileSeries extends MapWrapper<ProfileKey, ScenarioSeries> {
  * benchmarks are of a fixed nested structure:
  *   - benchmark -> profile -> scenario -> frontend_threads -> series
  */
-export class CompileBenchmarks extends MapWrapper<string, ProfileSeries> {
+export class CompileBenchmarks extends MapWrapper<
+  CompileBenchmarkName,
+  ProfileSeries
+> {
   static fromJSON(json: Dict<Dict<Dict<Dict<Series>>>>): CompileBenchmarks {
-    return new CompileBenchmarks(mapFromJSON(json, ProfileSeries.fromJSON));
+    return new CompileBenchmarks(
+      mapFromJSON(
+        json,
+        (k) => k as CompileBenchmarkName,
+        ProfileSeries.fromJSON
+      )
+    );
   }
 }
 

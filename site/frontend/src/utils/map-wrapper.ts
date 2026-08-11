@@ -1,3 +1,5 @@
+import {hasKey, isObject} from "./getType.ts";
+
 export class MapWrapper<K extends string, V> {
   private readonly data: Map<K, V>;
 
@@ -12,7 +14,8 @@ export class MapWrapper<K extends string, V> {
     const result: V | undefined = this.data.get(key);
     if (result === undefined) {
       console.debug(
-        `unknown key: '${key}'. Existing keys: ${JSON.stringify(this.keys())}`
+        `unknown key: '${key}'. Existing keys:`,
+        Array.from(this.keys())
       );
       throw new EvalError(`unknown key: '${key}'`);
     }
@@ -69,8 +72,24 @@ export class MapWrapper<K extends string, V> {
     return new MapWrapper(result);
   }
 
-  toDict(): Dict<V> {
-    return Object.fromEntries(this.data.entries());
+  toJSON(): Record<K, V | string> {
+    let obj = Object.create(null) as Record<K, V | string>;
+    for (let [k, v] of this.data.entries()) {
+      if (v && isObject(v)) {
+        if (
+          hasKey(v, "toJSON") &&
+          typeof v.toJSON == "function" &&
+          v.toJSON.length == 0
+        ) {
+          obj[k] = v.toJSON();
+        } else {
+          obj[k] = v;
+        }
+      } else {
+        obj[k] = JSON.stringify(v);
+      }
+    }
+    return obj;
   }
 }
 
@@ -78,9 +97,15 @@ export class MapWrapper<K extends string, V> {
  * Helper function for creating Maps from json presentation when we know how to create children
  * from json presentation
  */
-export function mapFromJSON<S, T>(
-  json: Dict<S>,
-  valueFromJSON: (value: S) => T
-): Map<string, T> {
-  return new Map(Object.entries(json).map(([k, v]) => [k, valueFromJSON(v)]));
+export function mapFromJSON<K extends string, S, T>(
+  json: Record<K, S>,
+  keyConverter: (key: string) => K,
+  valueConverter: (value: S) => T
+): Map<K, T> {
+  return new Map(
+    Object.entries(json).map(([k, v]) => [
+      keyConverter(k),
+      valueConverter(v as S),
+    ])
+  );
 }

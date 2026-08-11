@@ -401,6 +401,11 @@ export function renderPlots(
   const hooks = opts.hooks ?? {};
   const {width, height} = opts;
 
+  console.debug(
+    `CompileBenchmarks passed to \`renderPlots\`:`,
+    data.benchmarks.toJSON()
+  );
+
   for (const [benchName, profiles] of data.benchmarks.entries()) {
     let i = 0;
 
@@ -459,7 +464,7 @@ export function renderPlots(
       let otherColorIdx = 0;
       let indices = null;
 
-      let scenarioNames = Array.from(profiles.keys());
+      let scenarioNames = Array.from(scenario.keys());
       scenarioNames.sort();
       for (let scenarioName of scenarioNames) {
         let frontendThreadsCounts = scenario.get(scenarioName);

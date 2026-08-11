@@ -77,6 +77,13 @@ async function renderGraphs(detail: CompileDetailGraphs) {
         }),
       }),
     };
+    console.debug(
+      `built CompileGraphData inside of \`buildGraph\`:\n${JSON.stringify(
+        data,
+        null,
+        2
+      )}`
+    );
     const graphSelector = {
       benchmark: selector.benchmark,
       profile: selector.profile,
