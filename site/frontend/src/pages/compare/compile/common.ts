@@ -2,6 +2,12 @@ import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
 import {benchmarkNameMatchesFilter, targetMatchesFilter} from "../shared";
 import {DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
+import {
+  CompileBenchmark,
+  FrontendThreads,
+  Scenario,
+  Profile,
+} from "../../../graph/data.ts";
 
 export type CompileBenchmarkFilter = {
   profile: {
@@ -82,7 +88,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
   selfCompareBackend: false,
 };
 
-export type Profile = "check" | "debug" | "opt" | "doc";
+export type ProfileEnumeration = "check" | "debug" | "opt" | "doc";
 export type CodegenBackend = "llvm" | "cranelift";
 export type Category = "primary" | "secondary";
 export type Target = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
@@ -105,10 +111,10 @@ export interface CompileBenchmarkMetadata {
 }
 
 export interface CompileBenchmarkComparison {
-  benchmark: string;
+  benchmark: CompileBenchmark;
   profile: Profile;
-  scenario: string;
-  frontendThreads: number;
+  scenario: Scenario;
+  frontendThreads: FrontendThreads;
   backend: CodegenBackend;
   target: Target;
   comparison: StatComparison;
@@ -117,8 +123,8 @@ export interface CompileBenchmarkComparison {
 export interface CompileTestCase {
   benchmark: string;
   profile: Profile;
-  scenario: string;
-  frontendThreads: string;
+  scenario: Scenario;
+  frontendThreads: FrontendThreads;
   backend: CodegenBackend;
   target: Target;
   category: Category;
@@ -129,7 +135,7 @@ export function computeCompileComparisonsWithNonRelevant(
   comparisons: CompileBenchmarkComparison[],
   benchmarkMap: CompileBenchmarkMap
 ): TestCaseComparison<CompileTestCase>[] {
-  function profileFilter(profile: Profile): boolean {
+  function profileFilter(profile: ProfileEnumeration): boolean {
     if (profile === "check") {
       return filter.profile.check;
     } else if (profile === "debug") {
@@ -212,7 +218,9 @@ export function computeCompileComparisonsWithNonRelevant(
 
   function shouldShowTestCase(comparison: TestCaseComparison<CompileTestCase>) {
     return (
-      profileFilter(comparison.testCase.profile) &&
+      profileFilter(
+        comparison.testCase.profile.toLowerCase() as ProfileEnumeration
+      ) &&
       scenarioFilter(comparison.testCase.scenario) &&
       frontendThreadsFilter(comparison.testCase.frontendThreads) &&
       backendFilter(comparison.testCase.backend) &&
@@ -231,7 +239,7 @@ export function computeCompileComparisonsWithNonRelevant(
           benchmark: c.benchmark,
           profile: c.profile,
           scenario: c.scenario,
-          frontendThreads: c.frontendThreads.toString(),
+          frontendThreads: c.frontendThreads,
           backend: c.backend,
           target: c.target,
           category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
@@ -276,11 +284,11 @@ export function transformDataForBackendComparison(
     {
       llvm: number | null;
       cranelift: number | null;
-      benchmark: string;
+      benchmark: CompileBenchmark;
       profile: Profile;
       target: Target;
-      scenario: string;
-      frontendThreads: number;
+      scenario: Scenario;
+      frontendThreads: FrontendThreads;
     }
   > = new Map();
   for (const comparison of comparisons) {

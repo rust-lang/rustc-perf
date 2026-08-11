@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
-import {CompileGraphData, GraphKind, GraphsSelector} from "../../graph/data";
+import {
+  CompileGraphData,
+  GraphKind,
+  GraphsSelector,
+  toFrontendThreads,
+  toProfile,
+  toScenario,
+} from "../../graph/data";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {
   createUrlWithAppendedParams,
@@ -29,9 +36,9 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     kind,
     stat,
     benchmark,
-    scenario,
-    frontendThreads,
-    profile,
+    scenario: toScenario(scenario),
+    frontendThreads: toFrontendThreads(frontendThreads),
+    profile: toProfile(profile),
     backend,
     target,
   };

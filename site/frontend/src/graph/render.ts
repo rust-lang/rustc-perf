@@ -2,7 +2,7 @@ import uPlot, {TypedArray} from "uplot";
 import {
   CompileGraphData,
   GraphsSelector,
-  profileKeyForGraphDisplay,
+  profileForGraphDisplay,
   RuntimeGraphData,
 } from "./data";
 
@@ -502,7 +502,7 @@ export function renderPlots(
         absoluteMode: selector.kind == "raw",
         hooks,
       });
-      const profileNameToRender = profileKeyForGraphDisplay(profileName);
+      const profileNameToRender = profileForGraphDisplay(profileName);
       if (renderTitle) {
         plotOpts["title"] = `${benchName}-${profileNameToRender}`;
       }

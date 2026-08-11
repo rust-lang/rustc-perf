@@ -6,14 +6,17 @@ import {
   CompileDetailGraphsSelector,
 } from "./detail-resolver";
 import {
-  CompileBenchmarks,
+  CompileBenchmarkSeries,
   CompileGraphData,
   FrontendThreadsSeries,
   GraphKind,
   GraphsSelector,
   ProfileSeries,
   ScenarioSeries,
-  toProfileKey,
+  toCompileBenchmark,
+  toFrontendThreads,
+  toProfile,
+  toScenario,
 } from "../../../../graph/data";
 import {CompileTestCase} from "../common";
 import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
@@ -43,7 +46,7 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
-    frontendThreads: props.testCase.frontendThreads.toString(),
+    frontendThreads: props.testCase.frontendThreads,
     backend: props.testCase.backend,
     stat: props.metric,
     start,
@@ -67,24 +70,23 @@ async function renderGraphs(detail: CompileDetailGraphs) {
   ): [CompileGraphData, GraphsSelector] {
     const data: CompileGraphData = {
       commits: detail.commits,
-      benchmarks: new CompileBenchmarks({
-        [selector.benchmark]: new ProfileSeries({
-          [toProfileKey(selector.profile)]: new ScenarioSeries({
-            [selector.frontendThreads]: new FrontendThreadsSeries({
-              [selector.scenario]: detail.graphs[index],
-            }),
+      benchmarks: new CompileBenchmarkSeries({
+        [toCompileBenchmark(selector.benchmark)]: new ProfileSeries({
+          [toProfile(selector.profile)]: new ScenarioSeries({
+            [toFrontendThreads(selector.frontendThreads)]:
+              new FrontendThreadsSeries({
+                [toScenario(selector.scenario)]: detail.graphs[index],
+              }),
           }),
         }),
       }),
     };
+
     console.debug(
-      `built CompileGraphData inside of \`buildGraph\`:\n${JSON.stringify(
-        data,
-        null,
-        2
-      )}`
+      "built CompileGraphData.benchmarks inside of \`buildGraph\`:",
+      data.benchmarks.toJSON()
     );
-    const graphSelector = {
+    const graphSelector: GraphsSelector = {
       benchmark: selector.benchmark,
       profile: selector.profile,
       scenario: selector.scenario,

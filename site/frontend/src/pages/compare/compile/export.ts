@@ -33,7 +33,7 @@ export function exportToMarkdown(
         comparison.testCase.benchmark,
         comparison.testCase.profile,
         comparison.testCase.scenario,
-        comparison.testCase.frontendThreads.toString(),
+        comparison.testCase.frontendThreads,
         `${comparison.percent.toFixed(2)}%`,
         `${comparison.significanceFactor.toFixed(2)}x`,
       ];

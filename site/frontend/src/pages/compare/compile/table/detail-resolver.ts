@@ -1,4 +1,10 @@
-import {GraphKind, Series} from "../../../../graph/data";
+import {
+  FrontendThreads,
+  GraphKind,
+  Scenario,
+  Series,
+  Profile,
+} from "../../../../graph/data";
 import {getJson} from "../../../../utils/requests";
 import {
   COMPARE_COMPILE_DETAIL_GRAPHS_DATA_URL,
@@ -11,9 +17,9 @@ export interface CompileDetailGraphsSelector {
   end: string;
   stat: string;
   benchmark: string;
-  scenario: string;
-  frontendThreads: string;
-  profile: string;
+  scenario: Scenario;
+  frontendThreads: FrontendThreads;
+  profile: Profile;
   backend: string;
   target: string;
   kinds: GraphKind[];

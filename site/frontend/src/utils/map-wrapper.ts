@@ -4,8 +4,8 @@ export class MapWrapper<K extends string, V> {
   private readonly data: Map<K, V>;
 
   constructor(data: Map<K, V>);
-  constructor(data: Dict<V>);
-  constructor(data: Map<K, V> | Dict<V>) {
+  constructor(data: Record<K, V>);
+  constructor(data: Map<K, V> | Record<K, V>) {
     this.data =
       data instanceof Map ? data : new Map(Object.entries(data) as [K, V][]);
   }

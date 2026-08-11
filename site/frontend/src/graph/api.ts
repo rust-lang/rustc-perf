@@ -1,5 +1,5 @@
 import {
-  CompileBenchmarks,
+  CompileBenchmarkSeries,
   CompileGraphData,
   GraphsSelector,
   Series,
@@ -39,6 +39,6 @@ export async function loadGraphs(
   const raw = await getJson<CompileGraphDataRaw>(GRAPH_DATA_URL, dict);
   return {
     commits: raw.commits,
-    benchmarks: CompileBenchmarks.fromJSON(raw.benchmarks),
+    benchmarks: CompileBenchmarkSeries.fromJSON(raw.benchmarks),
   };
 }
