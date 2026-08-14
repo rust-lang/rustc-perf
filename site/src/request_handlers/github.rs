@@ -1,11 +1,12 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
+    client, enqueue_sha, parse_homu_comment, rollup_pr_number, unroll_rollup,
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
 use crate::load::SiteCtxt;
-use std::iter;
+use std::fmt::Write;
 
+use crate::github::client::Client;
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
     CodegenBackend, Profile, Target,
@@ -76,13 +77,15 @@ async fn handle_issue(
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     if comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&comment.body).await {
-            enqueue_shas(
-                &ctxt,
-                &gh_client,
-                issue.number,
-                std::iter::once(sha.as_str()),
-            )
-            .await?;
+            match enqueue_sha(&ctxt, &gh_client, issue.number, &sha).await {
+                Ok(mut msg) => {
+                    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
+                    gh_client.post_comment(issue.number, msg).await;
+                }
+                Err(err) => {
+                    gh_client.post_comment(issue.number, err).await;
+                }
+            }
             return Ok(github::Response);
         }
     }
@@ -237,59 +240,112 @@ async fn handle_rust_timer(
             main_client.post_comment(issue.number, comment).await;
         }
         Ok(RustTimerCommand::Build(cmd)) => {
-            // requested artifacts do not exist errors
-            if let Err(error) = validate_build_command(&cmd).await {
-                main_client.post_comment(issue.number, error).await;
-                return Ok(github::Response);
-            }
-
-            {
-                let conn = ctxt.conn().await;
-                record_try_benchmark_request_without_artifacts(
-                    &*conn,
-                    issue.number,
-                    cmd.params.backends.unwrap_or(""),
-                    cmd.params.profiles.unwrap_or(""),
-                    cmd.params.targets.unwrap_or(""),
-                )
-                .await;
-            }
-
-            let enqueued = match enqueue_shas(&ctxt, main_client, issue.number, iter::once(cmd.sha))
-                .await
-            {
-                Ok(enqueued) => enqueued,
+            match enqueue_sha_build(&ctxt, main_client, issue.number, &cmd).await {
+                Ok(mut msg) => {
+                    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
+                    main_client.post_comment(issue.number, msg).await;
+                }
                 Err(error) => {
-                    log::error!("Failed to enqueue SHAs on {}: {error:?}", issue.number);
-                    main_client
-                        .post_comment(
-                            issue.number,
-                            "Failed to enqueue some commit SHAs. Maybe they were already benchmarked?"
-                                .to_string(),
-                        )
-                        .await;
-                    return Ok(github::Response);
+                    log::error!("Failed to enqueue SHA on {}: {error:?}", issue.number);
+                    main_client.post_comment(issue.number, error).await;
                 }
             };
-            if enqueued.is_empty() {
-                main_client
-                    .post_comment(
-                        issue.number,
-                        format!(
-                            "The commit was not enqueued, as it was probably already benchmarked: {}\n",
-                            cmd.sha
-                        ),
-                    )
-                    .await;
+        }
+        Ok(RustTimerCommand::Triage(cmd)) => {
+            let mut result = String::new();
+            for sha in cmd.shas {
+                // Get unrolled commit
+                let commit = match main_client.get_commit(sha).await {
+                    Ok(commit) => commit,
+                    Err(err) => {
+                        writeln!(&mut result, "### {sha}").unwrap();
+                        writeln!(&mut result, "Failed to get commit: {err}").unwrap();
+                        continue;
+                    }
+                };
+
+                // Find PR number from commit message
+                let pr_number = match find_pr_number_for_unrolled_build(&commit.commit.message) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        writeln!(&mut result, "### {sha}").unwrap();
+                        writeln!(&mut result, "{err}").unwrap();
+                        continue;
+                    }
+                };
+
+                // Write header
+                let pr_title = &commit
+                    .commit
+                    .message
+                    .lines()
+                    .nth(3)
+                    .unwrap_or("<FAILED TO GET PR TITLE>");
+                writeln!(&mut result, "### #{pr_number} {sha} {pr_title}",).unwrap();
+
+                // Enqueue the sha build and write result
+                let (Ok(msg) | Err(msg)) = enqueue_sha_build(
+                    &ctxt,
+                    main_client,
+                    pr_number,
+                    &BuildCommand {
+                        sha,
+                        params: Default::default(),
+                    },
+                )
+                .await;
+                writeln!(&mut result, "{msg}\n").unwrap();
             }
+            main_client.post_comment(issue.number, result).await;
         }
         Err(e) => {
             main_client.post_comment(issue.number, e).await;
-            return Ok(github::Response);
         }
     }
 
     Ok(github::Response)
+}
+
+fn find_pr_number_for_unrolled_build(commit_message: &str) -> Result<u32, String> {
+    // Find PR number for this unrolled build sha
+    const COMMIT_NAME_START: &str = "Unrolled build for #";
+    let first_line = commit_message.lines().next().unwrap_or("");
+    let Some(pr_number) = first_line.strip_prefix(COMMIT_NAME_START) else {
+        return Err(format!(
+            "Unexpected commit name `{first_line}`, did not find expected prefix. Is the commit an unrolled build?"
+        ));
+    };
+    let Ok(pr_number) = pr_number.parse::<u32>() else {
+        return Err(format!(
+            "Unexpected commit name, pr number `{pr_number}` was not parsable as u32. Is the commit an unrolled build?"
+        ));
+    };
+
+    Ok(pr_number)
+}
+
+async fn enqueue_sha_build(
+    ctxt: &Arc<SiteCtxt>,
+    main_client: &Client,
+    issue_number: u32,
+    cmd: &BuildCommand<'_>,
+) -> Result<String, String> {
+    // requested artifacts do not exist errors
+    validate_build_command(cmd).await?;
+
+    {
+        let conn = ctxt.conn().await;
+        record_try_benchmark_request_without_artifacts(
+            &*conn,
+            issue_number,
+            cmd.params.backends.unwrap_or(""),
+            cmd.params.profiles.unwrap_or(""),
+            cmd.params.targets.unwrap_or(""),
+        )
+        .await;
+    }
+
+    enqueue_sha(ctxt, main_client, issue_number, cmd.sha).await
 }
 
 fn parse_command(body: &str) -> Result<RustTimerCommand<'_>, String> {
@@ -311,6 +367,7 @@ fn parse_command(body: &str) -> Result<RustTimerCommand<'_>, String> {
     Ok(match cmd {
         "queue" => RustTimerCommand::Queue(parse_queue_command_args(args)?),
         "build" => RustTimerCommand::Build(parse_build_command_args(args)?),
+        "triage" => RustTimerCommand::Triage(parse_triage_command_args(args)?),
         _ => return Err(format!("Unknown rust-timer command: {cmd}")),
     })
 }
@@ -334,6 +391,21 @@ fn parse_build_command_args(args: &str) -> Result<BuildCommand<'_>, String> {
     let args = parse_command_arguments(args)?;
     let params = parse_benchmark_parameters(args)?;
     Ok(BuildCommand { sha, params })
+}
+
+/// Parses the arguments of `@rust-timer triage <sha>+`
+fn parse_triage_command_args(args: &str) -> Result<TriageCommand<'_>, String> {
+    let shas = args
+        .split_whitespace()
+        .map(parse_sha)
+        .collect::<Result<Vec<_>, _>>()?;
+    if shas.is_empty() {
+        return Err(
+            "The triage comment requires a space-separated list of SHAs as an argument."
+                .to_string(),
+        );
+    }
+    Ok(TriageCommand { shas })
 }
 
 fn parse_sha(sha: &str) -> Result<&str, String> {
@@ -428,8 +500,15 @@ fn parse_command_arguments(args: &str) -> Result<HashMap<&str, &str>, String> {
 
 #[derive(Debug)]
 enum RustTimerCommand<'a> {
+    /// This command is usually invoked as `@bors try @rust-timer queue`, which starts a bors "try build".
+    /// `@rust-timer` will wait for the try build to finish, and if it succeeds will then queue a perf run.
     Queue(QueueCommand<'a>),
+    /// `@rust-timer build $commit` will queue a perf run for the given `$commit`.
     Build(BuildCommand<'a>),
+    /// This command is meant to be executed on a rollup,
+    /// to help identify the culprit of performance regressions/improvements of that rollup.
+    /// It takes a space-separated list of `$commits` SHAs, and queues a perf run for each commit.
+    Triage(TriageCommand<'a>),
 }
 
 #[derive(Debug)]
@@ -444,6 +523,11 @@ struct BuildCommand<'a> {
 }
 
 #[derive(Debug)]
+struct TriageCommand<'a> {
+    shas: Vec<&'a str>,
+}
+
+#[derive(Debug, Default)]
 struct BenchmarkParameters<'a> {
     backends: Option<&'a str>,
     profiles: Option<&'a str>,
@@ -629,5 +713,41 @@ Otherwise LGTM."#),
             @"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue profiles="),
             @"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
+    }
+
+    #[test]
+    fn triage_command() {
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage"),
+            @r#"Err("The triage comment requires a space-separated list of SHAs as an argument.")"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage    "),
+            @r#"Err("The triage comment requires a space-separated list of SHAs as an argument.")"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd"] }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh ijkl"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh", "ijkl"] }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd targets=Foo"),
+            @r#"Err("Sha `targets=Foo` is not alphanumeric")"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd  efgh"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+    }
+
+    #[test]
+    fn pr_number_from_unrolled_build() {
+        const EXAMPLE: &str = "Unrolled build for #157428
+Rollup merge of #157428 - nia-e:allocator-refactor, r=clarfonthey
+
+allocator: refactor for stabilisation
+
+Adds my current proposal per the doc in #156882 and follow-up Zulip conversations (notably for [dyn-compat](https://rust-lang.zulipchat.com/#narrow/channel/197181-t-libs.2Fwg-allocators/topic/Allocator.20dyn-safety/near/599555822)) unstably.
+
+r? libs";
+        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build(EXAMPLE),
+            @"Ok(157428)");
+        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build("Not a correct title"),
+            @r#"Err("Unexpected commit name `Not a correct title`, did not find expected prefix. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build("Unrolled build for #123almost"),
+            @r#"Err("Unexpected commit name, pr number `123almost` was not parsable as u32. Is the commit an unrolled build?")"#);
     }
 }

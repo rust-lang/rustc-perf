@@ -50,5 +50,11 @@
     "try" run's commit for the <code>build</code> command)
     This command also supports the same options as <code>@rust-timer queue</code>.
   </p>
+  <p><code>@rust-timer triage $commits</code> is meant to be executed on a rollup,
+    to help identify the culprit of performance regressions/improvements of that rollup.
+    It takes a space-separated list of `$commits` SHAs, and queues a perf run for each commit.
+    The results are reported on the corresponding PRs, and in the future will also be reported in the rollup itself.
+    This command does not (yet) support options.
+  </p>
 </div>
 {% endblock %}
