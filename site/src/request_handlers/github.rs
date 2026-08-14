@@ -251,6 +251,9 @@ async fn handle_rust_timer(
                 }
             };
         }
+        Ok(RustTimerCommand::Triage(cmd)) => {
+            todo!()
+        }
         Err(e) => {
             main_client.post_comment(issue.number, e).await;
         }
@@ -302,6 +305,7 @@ fn parse_command(body: &str) -> Result<RustTimerCommand<'_>, String> {
     Ok(match cmd {
         "queue" => RustTimerCommand::Queue(parse_queue_command_args(args)?),
         "build" => RustTimerCommand::Build(parse_build_command_args(args)?),
+        "triage" => RustTimerCommand::Triage(parse_triage_command_args(args)?),
         _ => return Err(format!("Unknown rust-timer command: {cmd}")),
     })
 }
@@ -325,6 +329,18 @@ fn parse_build_command_args(args: &str) -> Result<BuildCommand<'_>, String> {
     let args = parse_command_arguments(args)?;
     let params = parse_benchmark_parameters(args)?;
     Ok(BuildCommand { sha, params })
+}
+
+/// Parses the arguments of `@rust-timer triage <sha>+`
+fn parse_triage_command_args(args: &str) -> Result<TriageCommand<'_>, String> {
+    let shas = args
+        .split_whitespace()
+        .map(parse_sha)
+        .collect::<Result<Vec<_>, _>>()?;
+    if shas.is_empty() {
+        return Err("The triage comment requires a list of SHAs as an argument.".to_string())
+    }
+    Ok(TriageCommand { shas })
 }
 
 fn parse_sha(sha: &str) -> Result<&str, String> {
@@ -421,6 +437,7 @@ fn parse_command_arguments(args: &str) -> Result<HashMap<&str, &str>, String> {
 enum RustTimerCommand<'a> {
     Queue(QueueCommand<'a>),
     Build(BuildCommand<'a>),
+    Triage(TriageCommand<'a>),
 }
 
 #[derive(Debug)]
@@ -432,6 +449,11 @@ struct QueueCommand<'a> {
 struct BuildCommand<'a> {
     sha: &'a str,
     params: BenchmarkParameters<'a>,
+}
+
+#[derive(Debug)]
+struct TriageCommand<'a> {
+    shas: Vec<&'a str>,
 }
 
 #[derive(Debug)]
@@ -620,5 +642,23 @@ Otherwise LGTM."#),
             @"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue profiles="),
             @"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None } }))");
+    }
+
+    #[test]
+    fn triage_command() {
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage"),
+            @r#"Err("The triage comment requires a list of SHAs as an argument.")"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage    "),
+            @r#"Err("The triage comment requires a list of SHAs as an argument.")"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd"] }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh ijkl"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh", "ijkl"] }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd targets=Foo"),
+            @r#"Err("Sha `targets=Foo` is not alphanumeric")"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd  efgh"),
+            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
     }
 }
