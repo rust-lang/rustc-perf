@@ -70,7 +70,9 @@ async fn handle_issue(
     comment: github::Comment,
 ) -> ServerResult<github::Response> {
     // Do not react to our own comments, to avoid funny loops :)
-    if comment.user.login == "rust-timer" {
+    // Also avoid reacting to the bors GitHub App
+    // https://api.github.com/users/rust-bors[bot]
+    if comment.user.login == "rust-timer" || comment.user.id == 122020455 {
         return Ok(github::Response);
     }
 
@@ -209,11 +211,6 @@ async fn handle_rust_timer(
     comment: github::Comment,
     issue: github::Issue,
 ) -> ServerResult<github::Response> {
-    // Avoid reacting to the bot's comments
-    if comment.user.login == "rust-timer" {
-        return Ok(github::Response);
-    }
-
     if comment.author_association != github::Association::Owner
         && !get_authorized_users().await?.contains(&comment.user.id)
     {
