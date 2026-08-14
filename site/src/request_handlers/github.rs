@@ -4,8 +4,8 @@ use crate::github::{
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
 use crate::load::SiteCtxt;
+use std::fmt::Write;
 
-use crate::api::github::Issue;
 use crate::github::client::Client;
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
@@ -252,7 +252,51 @@ async fn handle_rust_timer(
             };
         }
         Ok(RustTimerCommand::Triage(cmd)) => {
-            todo!()
+            let mut result = String::new();
+            for sha in cmd.shas {
+                // Get unrolled commit
+                let commit = match main_client.get_commit(sha).await {
+                    Ok(commit) => commit,
+                    Err(err) => {
+                        writeln!(&mut result, "### {sha}").unwrap();
+                        writeln!(&mut result, "Failed to get commit: {err}").unwrap();
+                        continue;
+                    }
+                };
+
+                // Find PR number from commit message
+                let pr_number = match find_pr_number_for_unrolled_build(&commit.commit.message) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        writeln!(&mut result, "### {sha}").unwrap();
+                        writeln!(&mut result, "{err}").unwrap();
+                        continue;
+                    }
+                };
+
+                // Write header
+                let pr_title = &commit
+                    .commit
+                    .message
+                    .lines()
+                    .nth(3)
+                    .unwrap_or("<FAILED TO GET PR TITLE>");
+                writeln!(&mut result, "### #{pr_number} {sha} {pr_title}",).unwrap();
+
+                // Enqueue the sha build and write result
+                let (Ok(msg) | Err(msg)) = enqueue_sha_build(
+                    &ctxt,
+                    main_client,
+                    pr_number,
+                    &BuildCommand {
+                        sha,
+                        params: Default::default(),
+                    },
+                )
+                .await;
+                writeln!(&mut result, "{msg}\n").unwrap();
+            }
+            main_client.post_comment(issue.number, result).await;
         }
         Err(e) => {
             main_client.post_comment(issue.number, e).await;
@@ -260,6 +304,24 @@ async fn handle_rust_timer(
     }
 
     Ok(github::Response)
+}
+
+fn find_pr_number_for_unrolled_build(commit_message: &str) -> Result<u32, String> {
+    // Find PR number for this unrolled build sha
+    const COMMIT_NAME_START: &str = "Unrolled build for #";
+    let first_line = commit_message.lines().next().unwrap();
+    let Some(pr_number) = first_line.strip_prefix(COMMIT_NAME_START) else {
+        return Err(format!(
+            "Unexpected commit name `{first_line}`, did not find expected prefix. Is the commit an unrolled build?"
+        ));
+    };
+    let Ok(pr_number) = pr_number.parse::<u32>() else {
+        return Err(format!(
+            "Unexpected commit name, pr number `{pr_number}` was not parsable as u32. Is the commit an unrolled build?"
+        ));
+    };
+
+    Ok(pr_number)
 }
 
 async fn enqueue_sha_build(
@@ -338,7 +400,7 @@ fn parse_triage_command_args(args: &str) -> Result<TriageCommand<'_>, String> {
         .map(parse_sha)
         .collect::<Result<Vec<_>, _>>()?;
     if shas.is_empty() {
-        return Err("The triage comment requires a list of SHAs as an argument.".to_string())
+        return Err("The triage comment requires a list of SHAs as an argument.".to_string());
     }
     Ok(TriageCommand { shas })
 }
@@ -456,7 +518,7 @@ struct TriageCommand<'a> {
     shas: Vec<&'a str>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct BenchmarkParameters<'a> {
     backends: Option<&'a str>,
     profiles: Option<&'a str>,
@@ -660,5 +722,23 @@ Otherwise LGTM."#),
             @r#"Err("Sha `targets=Foo` is not alphanumeric")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd  efgh"),
             @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+    }
+
+    #[test]
+    fn pr_number_from_unrolled_build() {
+        const EXAMPLE: &str = "Unrolled build for #157428
+Rollup merge of #157428 - nia-e:allocator-refactor, r=clarfonthey
+
+allocator: refactor for stabilisation
+
+Adds my current proposal per the doc in #156882 and follow-up Zulip conversations (notably for [dyn-compat](https://rust-lang.zulipchat.com/#narrow/channel/197181-t-libs.2Fwg-allocators/topic/Allocator.20dyn-safety/near/599555822)) unstably.
+
+r? libs";
+        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build(EXAMPLE),
+            @"Ok(157428)");
+        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build("Not a correct title"),
+            @r#"Err("Unexpected commit name `Not a correct title`, did not find expected prefix. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build("Unrolled build for #123almost"),
+            @r#"Err("Unexpected commit name, pr number `123almost` was not parsable as u32. Is the commit an unrolled build?")"#);
     }
 }
