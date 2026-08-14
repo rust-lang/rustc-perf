@@ -78,9 +78,12 @@ async fn handle_issue(
     if comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&comment.body).await {
             match enqueue_sha(&ctxt, &gh_client, issue.number, &sha).await {
-                Ok(mut msg) => {
+                Ok(Some(mut msg)) => {
                     msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
                     gh_client.post_comment(issue.number, msg).await;
+                }
+                Ok(None) => {
+                    // A try build without @rust-timer queue finished
                 }
                 Err(err) => {
                     gh_client.post_comment(issue.number, err).await;
@@ -345,7 +348,13 @@ async fn enqueue_sha_build(
         .await;
     }
 
-    enqueue_sha(ctxt, main_client, issue_number, cmd.sha).await
+    match enqueue_sha(ctxt, main_client, issue_number, cmd.sha).await {
+        Ok(Some(msg)) => Ok(msg),
+        Ok(None) => Err(
+            "Commit was not enqueued, since no previous benchmark request was found".to_string(),
+        ),
+        Err(err) => Err(err),
+    }
 }
 
 fn parse_command(body: &str) -> Result<RustTimerCommand<'_>, String> {

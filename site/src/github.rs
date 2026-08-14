@@ -227,12 +227,13 @@ pub async fn rollup_pr_number(
 }
 
 /// Enqueues the given SHA and returns a message that should be sent as a comment to the corresponding PR.
+/// If not benchmark reques was found to which the commit SHA could be attached, returns `Ok(None)`.
 pub async fn enqueue_sha(
     ctxt: &SiteCtxt,
     gh_client: &client::Client,
     pr_number: u32,
     commit_sha: &str,
-) -> Result<String, String> {
+) -> Result<Option<String>, String> {
     let mut commit = gh_client
         .get_commit(commit_sha)
         .await
@@ -259,9 +260,7 @@ pub async fn enqueue_sha(
             .await
             .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?;
     if !queued {
-        return Err(
-            "Commit was not enqueued, since no previous benchmark request was found".to_string(),
-        );
+        return Ok(None);
     }
 
     let (preceding_artifacts, expected_duration) = estimate_queue_info(conn.as_ref(), &try_commit)
@@ -280,12 +279,12 @@ It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
         expected_duration.as_secs_f64() / 3600.0
     );
 
-    Ok(format!(
+    Ok(Some(format!(
         "Queued {} with parent {}, future [comparison URL]({}).\n{queue_msg}",
         try_commit.sha,
         try_commit.parent_sha,
         try_commit.comparison_url(),
-    ))
+    )))
 }
 
 /// Counts how many artifacts are in the queue before the specified commit, and what is the expected
