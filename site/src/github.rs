@@ -226,7 +226,7 @@ pub async fn rollup_pr_number(
         .then_some(issue.number))
 }
 
-/// Enqueues the given SHAs and returns the SHAs that were actually enqueued.
+/// Enqueues the given SHA and returns a message that should be sent as a comment to the corresponding PR.
 pub async fn enqueue_sha(
     ctxt: &SiteCtxt,
     gh_client: &client::Client,
@@ -259,7 +259,9 @@ pub async fn enqueue_sha(
             .await
             .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?;
     if !queued {
-        return Err("Commit was not enqueued, since no benchmark request was found".to_string());
+        return Err(
+            "Commit was not enqueued, since no previous benchmark request was found".to_string(),
+        );
     }
 
     let (preceding_artifacts, expected_duration) = estimate_queue_info(conn.as_ref(), &try_commit)

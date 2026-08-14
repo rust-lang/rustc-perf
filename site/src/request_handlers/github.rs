@@ -309,7 +309,7 @@ async fn handle_rust_timer(
 fn find_pr_number_for_unrolled_build(commit_message: &str) -> Result<u32, String> {
     // Find PR number for this unrolled build sha
     const COMMIT_NAME_START: &str = "Unrolled build for #";
-    let first_line = commit_message.lines().next().unwrap();
+    let first_line = commit_message.lines().next().unwrap_or("");
     let Some(pr_number) = first_line.strip_prefix(COMMIT_NAME_START) else {
         return Err(format!(
             "Unexpected commit name `{first_line}`, did not find expected prefix. Is the commit an unrolled build?"
@@ -400,7 +400,10 @@ fn parse_triage_command_args(args: &str) -> Result<TriageCommand<'_>, String> {
         .map(parse_sha)
         .collect::<Result<Vec<_>, _>>()?;
     if shas.is_empty() {
-        return Err("The triage comment requires a list of SHAs as an argument.".to_string());
+        return Err(
+            "The triage comment requires a space-separated list of SHAs as an argument."
+                .to_string(),
+        );
     }
     Ok(TriageCommand { shas })
 }
@@ -497,8 +500,14 @@ fn parse_command_arguments(args: &str) -> Result<HashMap<&str, &str>, String> {
 
 #[derive(Debug)]
 enum RustTimerCommand<'a> {
+    /// This command is usually invoked as `@bors try @rust-timer queue`, which starts a bors "try build".
+    /// `@rust-timer` will wait for the try build to finish, and if it succeeds will then queue a perf run.
     Queue(QueueCommand<'a>),
+    /// `@rust-timer build $commit` will queue a perf run for the given `$commit`.
     Build(BuildCommand<'a>),
+    /// This command is meant to be executed on a rollup,
+    /// to help identify the culprit of performance regressions/improvements of that rollup.
+    /// It takes a space-separated list of `$commits` SHAs, and queues a perf run for each commit.
     Triage(TriageCommand<'a>),
 }
 
@@ -709,9 +718,9 @@ Otherwise LGTM."#),
     #[test]
     fn triage_command() {
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage"),
-            @r#"Err("The triage comment requires a list of SHAs as an argument.")"#);
+            @r#"Err("The triage comment requires a space-separated list of SHAs as an argument.")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage    "),
-            @r#"Err("The triage comment requires a list of SHAs as an argument.")"#);
+            @r#"Err("The triage comment requires a space-separated list of SHAs as an argument.")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd"),
             @r#"Ok(Triage(TriageCommand { shas: ["abcd"] }))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh"),
