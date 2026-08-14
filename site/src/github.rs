@@ -227,79 +227,63 @@ pub async fn rollup_pr_number(
 }
 
 /// Enqueues the given SHAs and returns the SHAs that were actually enqueued.
-pub async fn enqueue_shas<'a>(
+pub async fn enqueue_sha<'a>(
     ctxt: &SiteCtxt,
     gh_client: &client::Client,
     pr_number: u32,
-    commits: impl Iterator<Item = &'a str>,
-) -> Result<Vec<&'a str>, String> {
-    let mut enqueued = vec![];
-    let mut msg = String::new();
-    for commit in commits {
-        let mut commit_response = gh_client
-            .get_commit(commit)
-            .await
-            .map_err(|e| e.to_string())?;
-        if commit_response.parents.len() != 2 {
-            log::error!(
-                "Bors try commit {} unexpectedly has {} parents.",
-                commit_response.sha,
-                commit_response.parents.len()
-            );
-            continue;
-        }
-        let try_commit = TryCommit {
-            sha: commit_response.sha,
-            parent_sha: commit_response.parents.remove(0).sha,
-        };
-        let conn = ctxt.conn().await;
+    commit_sha: &'a str,
+) -> Result<String, String> {
+    let mut commit = gh_client
+        .get_commit(commit_sha)
+        .await
+        .map_err(|e| e.to_string())?;
+    if commit.parents.len() != 2 {
+        return Err(format!(
+            "Bors try commit {} unexpectedly has {} parents.",
+            commit.sha,
+            commit.parents.len()
+        ));
+    }
+    let try_commit = TryCommit {
+        sha: commit.sha,
+        parent_sha: commit.parents.remove(0).sha,
+    };
+    let conn = ctxt.conn().await;
 
-        let queued = conn.attach_shas_to_try_benchmark_request(
-                pr_number,
-                &try_commit.sha,
-                &try_commit.parent_sha,
-                commit_response.commit.committer.date,
+    let queued = conn.attach_shas_to_try_benchmark_request(
+            pr_number,
+            &try_commit.sha,
+            &try_commit.parent_sha,
+            commit.commit.committer.date,
             )
             .await
             .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?;
-        if queued {
-            enqueued.push(commit);
-            if !msg.is_empty() {
-                msg.push('\n');
-            }
+    if !queued {
+        return Err("Commit was not enqueued, since no benchmark request was found".to_string());
+    }
 
-            let (preceding_artifacts, expected_duration) =
-                estimate_queue_info(conn.as_ref(), &try_commit)
-                    .await
-                    .map_err(|e| format!("{e:?}"))?;
+    let (preceding_artifacts, expected_duration) = estimate_queue_info(conn.as_ref(), &try_commit)
+        .await
+        .map_err(|e| format!("{e:?}"))?;
 
-            let verb = if preceding_artifacts == 1 {
-                "is"
-            } else {
-                "are"
-            };
-            let suffix = if preceding_artifacts == 1 { "" } else { "s" };
-            let queue_msg = format!(
-                r#"There {verb} currently {preceding_artifacts} preceding artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
+    let verb = if preceding_artifacts == 1 {
+        "is"
+    } else {
+        "are"
+    };
+    let suffix = if preceding_artifacts == 1 { "" } else { "s" };
+    let queue_msg = format!(
+        r#"There {verb} currently {preceding_artifacts} preceding artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
 It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
-                expected_duration.as_secs_f64() / 3600.0
-            );
+        expected_duration.as_secs_f64() / 3600.0
+    );
 
-            msg.push_str(&format!(
-                "Queued {} with parent {}, future [comparison URL]({}).\n{queue_msg}",
-                try_commit.sha,
-                try_commit.parent_sha,
-                try_commit.comparison_url(),
-            ));
-        }
-    }
-
-    if !msg.is_empty() {
-        msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
-        gh_client.post_comment(pr_number, msg).await;
-    }
-
-    Ok(enqueued)
+    Ok(format!(
+        "Queued {} with parent {}, future [comparison URL]({}).\n{queue_msg}",
+        try_commit.sha,
+        try_commit.parent_sha,
+        try_commit.comparison_url(),
+    ))
 }
 
 /// Counts how many artifacts are in the queue before the specified commit, and what is the expected

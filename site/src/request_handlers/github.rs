@@ -1,10 +1,9 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
+    client, enqueue_sha, parse_homu_comment, rollup_pr_number, unroll_rollup,
     COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
 };
 use crate::load::SiteCtxt;
-use std::iter;
 
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
@@ -76,13 +75,15 @@ async fn handle_issue(
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     if comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&comment.body).await {
-            enqueue_shas(
-                &ctxt,
-                &gh_client,
-                issue.number,
-                std::iter::once(sha.as_str()),
-            )
-            .await?;
+            match enqueue_sha(&ctxt, &gh_client, issue.number, &sha).await {
+                Ok(mut msg) => {
+                    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
+                    gh_client.post_comment(issue.number, msg).await;
+                }
+                Err(err) => {
+                    gh_client.post_comment(issue.number, err).await;
+                }
+            }
             return Ok(github::Response);
         }
     }
@@ -255,33 +256,17 @@ async fn handle_rust_timer(
                 .await;
             }
 
-            let enqueued = match enqueue_shas(&ctxt, main_client, issue.number, iter::once(cmd.sha))
-                .await
-            {
-                Ok(enqueued) => enqueued,
+            match enqueue_sha(&ctxt, main_client, issue.number, &cmd.sha).await {
+                Ok(mut msg) => {
+                    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
+                    main_client.post_comment(issue.number, msg).await;
+                }
                 Err(error) => {
-                    log::error!("Failed to enqueue SHAs on {}: {error:?}", issue.number);
-                    main_client
-                        .post_comment(
-                            issue.number,
-                            "Failed to enqueue some commit SHAs. Maybe they were already benchmarked?"
-                                .to_string(),
-                        )
-                        .await;
+                    log::error!("Failed to enqueue SHA on {}: {error:?}", issue.number);
+                    main_client.post_comment(issue.number, error).await;
                     return Ok(github::Response);
                 }
             };
-            if enqueued.is_empty() {
-                main_client
-                    .post_comment(
-                        issue.number,
-                        format!(
-                            "The commit was not enqueued, as it was probably already benchmarked: {}\n",
-                            cmd.sha
-                        ),
-                    )
-                    .await;
-            }
         }
         Err(e) => {
             main_client.post_comment(issue.number, e).await;
