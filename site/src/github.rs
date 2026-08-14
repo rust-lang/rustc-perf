@@ -227,11 +227,11 @@ pub async fn rollup_pr_number(
 }
 
 /// Enqueues the given SHAs and returns the SHAs that were actually enqueued.
-pub async fn enqueue_sha<'a>(
+pub async fn enqueue_sha(
     ctxt: &SiteCtxt,
     gh_client: &client::Client,
     pr_number: u32,
-    commit_sha: &'a str,
+    commit_sha: &str,
 ) -> Result<String, String> {
     let mut commit = gh_client
         .get_commit(commit_sha)

@@ -5,6 +5,8 @@ use crate::github::{
 };
 use crate::load::SiteCtxt;
 
+use crate::api::github::Issue;
+use crate::github::client::Client;
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
     CodegenBackend, Profile, Target,
@@ -238,25 +240,7 @@ async fn handle_rust_timer(
             main_client.post_comment(issue.number, comment).await;
         }
         Ok(RustTimerCommand::Build(cmd)) => {
-            // requested artifacts do not exist errors
-            if let Err(error) = validate_build_command(&cmd).await {
-                main_client.post_comment(issue.number, error).await;
-                return Ok(github::Response);
-            }
-
-            {
-                let conn = ctxt.conn().await;
-                record_try_benchmark_request_without_artifacts(
-                    &*conn,
-                    issue.number,
-                    cmd.params.backends.unwrap_or(""),
-                    cmd.params.profiles.unwrap_or(""),
-                    cmd.params.targets.unwrap_or(""),
-                )
-                .await;
-            }
-
-            match enqueue_sha(&ctxt, main_client, issue.number, &cmd.sha).await {
+            match enqueue_sha_build(&ctxt, main_client, issue.number, &cmd).await {
                 Ok(mut msg) => {
                     msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
                     main_client.post_comment(issue.number, msg).await;
@@ -264,17 +248,39 @@ async fn handle_rust_timer(
                 Err(error) => {
                     log::error!("Failed to enqueue SHA on {}: {error:?}", issue.number);
                     main_client.post_comment(issue.number, error).await;
-                    return Ok(github::Response);
                 }
             };
         }
         Err(e) => {
             main_client.post_comment(issue.number, e).await;
-            return Ok(github::Response);
         }
     }
 
     Ok(github::Response)
+}
+
+async fn enqueue_sha_build(
+    ctxt: &Arc<SiteCtxt>,
+    main_client: &Client,
+    issue_number: u32,
+    cmd: &BuildCommand<'_>,
+) -> Result<String, String> {
+    // requested artifacts do not exist errors
+    validate_build_command(cmd).await?;
+
+    {
+        let conn = ctxt.conn().await;
+        record_try_benchmark_request_without_artifacts(
+            &*conn,
+            issue_number,
+            cmd.params.backends.unwrap_or(""),
+            cmd.params.profiles.unwrap_or(""),
+            cmd.params.targets.unwrap_or(""),
+        )
+        .await;
+    }
+
+    enqueue_sha(ctxt, main_client, issue_number, cmd.sha).await
 }
 
 fn parse_command(body: &str) -> Result<RustTimerCommand<'_>, String> {
