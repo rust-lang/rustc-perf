@@ -197,7 +197,12 @@ async function loadData() {
   // To maintain backwards compatibility of URLs, parse the profile from the
   // benchmark URL parameter
   // We turn <benchmark>-<profile> into two separate parameters for the backend
-  const parts = benchmark.split("-");
+  let parts: string[];
+  if (benchmark.endsWith("-doc-json")) {
+    parts = [benchmark.slice(0, -"-doc-json"), "doc-json"];
+  } else {
+    parts = benchmark.split("-");
+  }
   const profile = parts[parts.length - 1];
   const benchmarkSeparate = parts.slice(0, parts.length - 1).join("-");
 
