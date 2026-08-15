@@ -70,9 +70,7 @@ async fn handle_issue(
     comment: github::Comment,
 ) -> ServerResult<github::Response> {
     // Do not react to our own comments, to avoid funny loops :)
-    // Also avoid reacting to the bors GitHub App
-    // https://api.github.com/users/rust-bors[bot]
-    if comment.user.login == "rust-timer" || comment.user.id == 122020455 {
+    if comment.user.login == "rust-timer" {
         return Ok(github::Response);
     }
 
@@ -95,7 +93,9 @@ async fn handle_issue(
         }
     }
 
-    if comment.body.contains(RUST_TIMER_PREFIX) {
+    // Do not react to @rust-timer commands sent by the bors GitHub App
+    // https://api.github.com/users/rust-bors[bot]
+    if comment.body.contains(RUST_TIMER_PREFIX) && comment.user.id != 122020455 {
         return handle_rust_timer(ctxt, &gh_client, comment, issue).await;
     }
 
