@@ -1,5 +1,5 @@
 {
-    "cargo_rustc_opts": "--cap-lints=warn",
+    "cargo_rustc_opts": "--cap-lints=warn -Znext-solver=coherence",
     "cargo_opts": "--lib",
     "runs": 1,
     "touch_file": "src/cargo/lib.rs",

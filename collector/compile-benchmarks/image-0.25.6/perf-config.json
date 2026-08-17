@@ -1,4 +1,5 @@
 {
+  "cargo_rustc_opts": "-Znext-solver=coherence",
   "runs": 1,
   "artifact": "library",
   "category": "primary"

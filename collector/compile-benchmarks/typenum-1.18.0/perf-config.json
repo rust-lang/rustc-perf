@@ -1,4 +1,5 @@
 {
+  "cargo_rustc_opts": "-Znext-solver=coherence",
   "cargo_opts": "--features=i128,const-generics",
   "artifact": "library",
   "category": "primary"
