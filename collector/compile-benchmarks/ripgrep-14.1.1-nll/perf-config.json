@@ -2,5 +2,5 @@
   "touch_file": "crates/core/main.rs",
   "artifact": "binary",
   "category": "secondary",
-  "cargo_rustc_opts": "-Zpolonius=off"
+  "cargo_rustc_opts": "-Zpolonius=off -Znext-solver=coherence"
 }

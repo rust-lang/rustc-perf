@@ -1,5 +1,5 @@
 {
   "category": "secondary",
   "artifact": "library",
-  "cargo_rustc_opts": "-Zpolonius=off"
+  "cargo_rustc_opts": "-Zpolonius=off -Znext-solver=coherence"
 }
