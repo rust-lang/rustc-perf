@@ -34,6 +34,11 @@ export const importantCompileMetrics: MetricDescription[] = [
     metric: "size:linked_artifact",
     description: "Size of the generated binary artifact",
   },
+  {
+    label: "Metadata size",
+    metric: "size:crate_metadata",
+    description: "Size of the generated crate metadata",
+  },
 ];
 
 export const importantRuntimeMetrics: MetricDescription[] = [...sharedMetrics];
