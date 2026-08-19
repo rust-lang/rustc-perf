@@ -237,14 +237,15 @@ async fn handle_rust_timer(
                 };
 
                 // Find PR number from commit message
-                let pr_number = match find_pr_number_for_unrolled_build(&commit.commit.message) {
-                    Ok(r) => r,
-                    Err(err) => {
-                        writeln!(&mut result, "### {sha}").unwrap();
-                        writeln!(&mut result, "{err}").unwrap();
-                        continue;
-                    }
-                };
+                let unrolled_build_message =
+                    match parse_unrolled_build_message(&commit.commit.message) {
+                        Ok(r) => r,
+                        Err(err) => {
+                            writeln!(&mut result, "### {sha}").unwrap();
+                            writeln!(&mut result, "{err}").unwrap();
+                            continue;
+                        }
+                    };
 
                 // Write header
                 let pr_title = &commit
@@ -253,13 +254,18 @@ async fn handle_rust_timer(
                     .lines()
                     .nth(3)
                     .unwrap_or("<FAILED TO GET PR TITLE>");
-                writeln!(&mut result, "### #{pr_number} {sha} {pr_title}",).unwrap();
+                writeln!(
+                    &mut result,
+                    "### #{} {sha} {pr_title}",
+                    unrolled_build_message.member_pr_number
+                )
+                .unwrap();
 
                 // Enqueue the sha build and write result
                 let (Ok(msg) | Err(msg)) = enqueue_sha_build(
                     &ctxt,
                     main_client,
-                    pr_number,
+                    unrolled_build_message.member_pr_number,
                     &BuildCommand {
                         sha,
                         params: Default::default(),
@@ -278,22 +284,48 @@ async fn handle_rust_timer(
     Ok(github::Response)
 }
 
-fn find_pr_number_for_unrolled_build(commit_message: &str) -> Result<u32, String> {
-    // Find PR number for this unrolled build sha
-    const COMMIT_NAME_START: &str = "Unrolled build for #";
+#[derive(Debug)]
+struct UnrolledBuildMessage {
+    member_pr_number: u32,
+    #[expect(unused, reason = "Will be used in follow-up PR")]
+    rollup_pr_number: u32,
+}
+
+fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuildMessage, String> {
     let first_line = commit_message.lines().next().unwrap_or("");
-    let Some(pr_number) = first_line.strip_prefix(COMMIT_NAME_START) else {
+
+    // The first line of the commit message will look like
+    // `Unrolled build for #123 in rollup #123`
+    let words = first_line.split(" ").collect::<Vec<_>>();
+    let ["Unrolled", "build", "for", member_pr_number, "in", "rollup", rollup_pr_number] =
+        words[..]
+    else {
         return Err(format!(
-            "Unexpected commit name `{first_line}`, did not find expected prefix. Is the commit an unrolled build?"
-        ));
-    };
-    let Ok(pr_number) = pr_number.parse::<u32>() else {
-        return Err(format!(
-            "Unexpected commit name, pr number `{pr_number}` was not parsable as u32. Is the commit an unrolled build?"
+            "Unexpected commit name `{first_line}`, could not parse commit title. Is the commit an unrolled build?"
         ));
     };
 
-    Ok(pr_number)
+    let Some(member_pr_number) = member_pr_number
+        .strip_prefix("#")
+        .and_then(|num| num.parse::<u32>().ok())
+    else {
+        return Err(format!(
+            "Unexpected commit name `{first_line}`, could not parse member pr number. Is the commit an unrolled build?"
+        ));
+    };
+    let Some(rollup_pr_number) = rollup_pr_number
+        .strip_prefix("#")
+        .and_then(|num| num.parse::<u32>().ok())
+    else {
+        return Err(format!(
+            "Unexpected commit name `{first_line}`, could not parse rollup pr number. Is the commit an unrolled build?"
+        ));
+    };
+
+    Ok(UnrolledBuildMessage {
+        member_pr_number,
+        rollup_pr_number,
+    })
 }
 
 async fn enqueue_sha_build(
@@ -713,7 +745,7 @@ Otherwise LGTM."#),
 
     #[test]
     fn pr_number_from_unrolled_build() {
-        const EXAMPLE: &str = "Unrolled build for #157428
+        const EXAMPLE: &str = "Unrolled build for #157428 in rollup #1234
 Rollup merge of #157428 - nia-e:allocator-refactor, r=clarfonthey
 
 allocator: refactor for stabilisation
@@ -721,11 +753,15 @@ allocator: refactor for stabilisation
 Adds my current proposal per the doc in #156882 and follow-up Zulip conversations (notably for [dyn-compat](https://rust-lang.zulipchat.com/#narrow/channel/197181-t-libs.2Fwg-allocators/topic/Allocator.20dyn-safety/near/599555822)) unstably.
 
 r? libs";
-        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build(EXAMPLE),
-            @"Ok(157428)");
-        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build("Not a correct title"),
-            @r#"Err("Unexpected commit name `Not a correct title`, did not find expected prefix. Is the commit an unrolled build?")"#);
-        insta::assert_compact_debug_snapshot!(find_pr_number_for_unrolled_build("Unrolled build for #123almost"),
-            @r#"Err("Unexpected commit name, pr number `123almost` was not parsable as u32. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message(EXAMPLE),
+            @"Ok(UnrolledBuildMessage { member_pr_number: 157428, rollup_pr_number: 1234 })");
+        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Not a correct title"),
+            @r#"Err("Unexpected commit name `Not a correct title`, could not parse commit title. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123almost in rollup #1234"),
+            @r#"Err("Unexpected commit name `Unrolled build for #123almost in rollup #1234`, could not parse member pr number. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123 in rollup #1234almost"),
+            @r#"Err("Unexpected commit name `Unrolled build for #123 in rollup #1234almost`, could not parse rollup pr number. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123"),
+            @r#"Err("Unexpected commit name `Unrolled build for #123`, could not parse commit title. Is the commit an unrolled build?")"#);
     }
 }
