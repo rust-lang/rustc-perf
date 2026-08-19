@@ -199,7 +199,7 @@ async function loadData() {
   // We turn <benchmark>-<profile> into two separate parameters for the backend
   let parts: string[];
   if (benchmark.endsWith("-doc-json")) {
-    parts = [benchmark.slice(0, -"-doc-json"), "doc-json"];
+    parts = [benchmark.slice(0, -"-doc-json".length), "doc-json"];
   } else {
     parts = benchmark.split("-");
   }
