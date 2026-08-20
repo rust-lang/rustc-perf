@@ -295,7 +295,7 @@ fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuildMes
     let first_line = commit_message.lines().next().unwrap_or("");
 
     // The first line of the commit message will look like
-    // `Unrolled build for #123 in rollup #123`
+    // `Unrolled build for #123 in rollup 123`
     let words = first_line.split(" ").collect::<Vec<_>>();
     let ["Unrolled", "build", "for", member_pr_number, "in", "rollup", rollup_pr_number] =
         words[..]
@@ -313,10 +313,7 @@ fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuildMes
             "Unexpected commit name `{first_line}`, could not parse member pr number. Is the commit an unrolled build?"
         ));
     };
-    let Some(rollup_pr_number) = rollup_pr_number
-        .strip_prefix("#")
-        .and_then(|num| num.parse::<u32>().ok())
-    else {
+    let Ok(rollup_pr_number) = rollup_pr_number.parse::<u32>() else {
         return Err(format!(
             "Unexpected commit name `{first_line}`, could not parse rollup pr number. Is the commit an unrolled build?"
         ));
@@ -745,7 +742,7 @@ Otherwise LGTM."#),
 
     #[test]
     fn pr_number_from_unrolled_build() {
-        const EXAMPLE: &str = "Unrolled build for #157428 in rollup #1234
+        const EXAMPLE: &str = "Unrolled build for #157428 in rollup 1234
 Rollup merge of #157428 - nia-e:allocator-refactor, r=clarfonthey
 
 allocator: refactor for stabilisation
@@ -757,10 +754,10 @@ r? libs";
             @"Ok(UnrolledBuildMessage { member_pr_number: 157428, rollup_pr_number: 1234 })");
         insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Not a correct title"),
             @r#"Err("Unexpected commit name `Not a correct title`, could not parse commit title. Is the commit an unrolled build?")"#);
-        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123almost in rollup #1234"),
-            @r#"Err("Unexpected commit name `Unrolled build for #123almost in rollup #1234`, could not parse member pr number. Is the commit an unrolled build?")"#);
-        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123 in rollup #1234almost"),
-            @r#"Err("Unexpected commit name `Unrolled build for #123 in rollup #1234almost`, could not parse rollup pr number. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123almost in rollup 1234"),
+            @r#"Err("Unexpected commit name `Unrolled build for #123almost in rollup 1234`, could not parse member pr number. Is the commit an unrolled build?")"#);
+        insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123 in rollup 1234almost"),
+            @r#"Err("Unexpected commit name `Unrolled build for #123 in rollup 1234almost`, could not parse rollup pr number. Is the commit an unrolled build?")"#);
         insta::assert_compact_debug_snapshot!(parse_unrolled_build_message("Unrolled build for #123"),
             @r#"Err("Unexpected commit name `Unrolled build for #123`, could not parse commit title. Is the commit an unrolled build?")"#);
     }
