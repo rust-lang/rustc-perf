@@ -91,6 +91,7 @@ const GRAPHQL_API_BASE: &str = "https://api.github.com/graphql";
 /// A client for interacting with the GraphQL GitHub API.
 pub struct GraphQLClient {
     inner: reqwest::Client,
+    repo: &'static str,
 }
 
 impl GraphQLClient {
@@ -100,9 +101,12 @@ impl GraphQLClient {
             .config
             .keys
             .github_api_token
-            .clone()
+            .as_ref()
             .expect("needs github API token");
+        Self::from_token(token, "rust")
+    }
 
+    fn from_token(token: &str, repo: &'static str) -> Self {
         let mut headers = header::HeaderMap::new();
         headers.insert(USER_AGENT, header::HeaderValue::from_static(BOT_USER_AGENT));
         headers.insert(
@@ -114,7 +118,10 @@ impl GraphQLClient {
             .default_headers(headers)
             .build()
             .unwrap();
-        Self { inner: client }
+        Self {
+            inner: client,
+            repo,
+        }
     }
 
     pub async fn get_comments(&self, pull_request: u32) -> anyhow::Result<Vec<ResponseComment>> {
@@ -157,7 +164,6 @@ impl GraphQLClient {
         }
 
         let owner = "rust-lang";
-        let repo = "rust";
 
         let mut comments = Vec::new();
         let mut cursor = None;
@@ -167,7 +173,7 @@ impl GraphQLClient {
                     QUERY,
                     serde_json::json!({
                         "owner": owner,
-                        "repo": repo,
+                        "repo": self.repo,
                         "pr": pull_request,
                         "cursor": cursor,
                     }),
