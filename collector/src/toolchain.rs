@@ -555,7 +555,7 @@ pub fn get_local_toolchain(
             .context("failed to convert `rustup which rustc` output to utf8")?;
 
         let rustc = PathBuf::from(s.trim());
-        debug!("found rustc: {:?}", &rustc);
+        debug!("found rustc: {:?}", rustc);
 
         // When the id comes from a +toolchain, the suffix is *not* added.
         let id = if let Some(id) = toolchain_config.id {
@@ -595,7 +595,7 @@ pub fn get_local_toolchain(
                 .with_extension(rustc.extension().unwrap_or_default())
                 .canonicalize()
             {
-                debug!("found rustdoc: {:?}", &rustdoc);
+                debug!("found rustdoc: {:?}", rustdoc);
                 Some(rustdoc)
             } else {
                 anyhow::bail!(
@@ -621,7 +621,7 @@ pub fn get_local_toolchain(
             .with_extension(rustc.extension().unwrap_or_default())
             .canonicalize()
         {
-            debug!("found clippy: {:?}", &clippy);
+            debug!("found clippy: {:?}", clippy);
             Some(clippy)
         } else {
             anyhow::bail!(
@@ -654,7 +654,7 @@ pub fn get_local_toolchain(
             .context("failed to convert `rustup which cargo --toolchain=nightly` output to utf8")?;
 
         let cargo = PathBuf::from(s.trim());
-        debug!("found cargo: {:?}", &cargo);
+        debug!("found cargo: {:?}", cargo);
         cargo
     };
     let host_lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;

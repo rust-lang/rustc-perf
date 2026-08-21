@@ -727,7 +727,7 @@ fn select_benchmarks_fuzzy(
 Expected zero or more entries or substrings from list: {:?}."#,
                     option,
                     unused,
-                    &paths.iter().map(|(_, name)| name).collect::<Vec<_>>(),
+                    paths.iter().map(|(_, name)| name).collect::<Vec<_>>(),
                 );
             }
         }
