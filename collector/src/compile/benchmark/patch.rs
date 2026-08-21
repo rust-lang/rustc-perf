@@ -35,7 +35,7 @@ impl Patch {
                 panic!(
                     "{:?} should be in the format 000-name.patch, \
                      but did not start with a number: {:?}",
-                    &path, e
+                    path, e
                 );
             });
             let mut name = parts.fold(String::new(), |mut acc, part| {

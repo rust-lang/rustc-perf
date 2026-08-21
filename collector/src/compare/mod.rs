@@ -547,7 +547,7 @@ fn format_value(value: &Option<f64>) -> String {
 }
 
 fn display_range(&(min, max): &(Option<f64>, Option<f64>)) -> String {
-    format!("[{}, {}]", &format_value(&min), &format_value(&max))
+    format!("[{}, {}]", format_value(&min), format_value(&max))
 }
 
 impl From<&Vec<f64>> for Regression {
