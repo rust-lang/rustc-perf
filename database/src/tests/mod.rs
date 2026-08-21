@@ -70,7 +70,7 @@ impl TestContext {
             config.get_user().unwrap(),
             String::from_utf8(config.get_password().unwrap().to_vec()).unwrap(),
             host,
-            &config.get_ports()[0],
+            config.get_ports()[0],
             db_name
         );
         let pool = Pool::open(test_db_url.as_str());
