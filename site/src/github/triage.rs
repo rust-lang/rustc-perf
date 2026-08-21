@@ -3,8 +3,8 @@ use crate::request_handlers::parse_unrolled_build_message;
 use database::QueuedCommit;
 
 pub struct TriageBuild {
-    rollup_pr_number: u32,
-    triage_comment: ResponseComment,
+    pub rollup_pr_number: u32,
+    pub triage_comment: ResponseComment,
 }
 
 pub const TRIAGE_MARKER: &str = "<!-- rust-timer: triage -->";
@@ -27,9 +27,7 @@ pub async fn is_triage_run(
         .get_comments(unrolled_build.rollup_pr_number)
         .await?;
     let Some(triage_comment) = rollup_comments.into_iter().rev().find(|c| {
-        c.author.login == "rust-timer"
-            && c.body.contains(TRIAGE_MARKER)
-            && c.body.contains(&commit.sha)
+        c.viewer_did_author && c.body.contains(TRIAGE_MARKER) && c.body.contains(&commit.sha)
     }) else {
         // This was a try job on the unrolled build that did not originate from a triage command
         return Ok(None);

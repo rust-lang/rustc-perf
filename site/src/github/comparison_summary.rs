@@ -163,10 +163,10 @@ async fn summarize_run(
     )
     .unwrap();
 
-    let next_steps = match source {
+    let next_steps = match &source {
         PerfRunSource::TryBuild => try_run_body(is_regression, deserves_attention),
         PerfRunSource::MasterCommit => master_run_body(is_regression),
-        PerfRunSource::TriageBuild(_) => todo!(),
+        PerfRunSource::TriageBuild(triage_build) => triage_run_body(triage_build, is_regression),
     };
     writeln!(&mut message, "{next_steps}\n").unwrap();
 
@@ -370,5 +370,18 @@ Benchmarking means the PR may be perf-sensitive. \
 
 {rollup_never}
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
+    )
+}
+
+fn triage_run_body(build: &TriageBuild, is_regression: bool) -> String {
+    // The triage url deliberately not prefixed with "https://github.com/" as to not trigger the
+    // "mentioned this pull request" github entry on the rollup
+    format!(
+        "This PR was benchmarked as part of triage of its containing rollup: [triage URL](/rust-lang/rust/pull/{}#issuecomment-{}).\
+        \n\n\
+        {}",
+        build.rollup_pr_number,
+        build.triage_comment.id,
+        master_run_body(is_regression)
     )
 }
