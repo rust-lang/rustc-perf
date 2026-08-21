@@ -1,5 +1,6 @@
 pub mod client;
 pub mod comparison_summary;
+pub mod triage;
 
 use crate::job_queue::build_queue;
 use crate::load::{SiteCtxt, TryCommit};
