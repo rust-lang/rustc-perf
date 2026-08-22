@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{metric::Metric, QueuedCommit};
 
-use crate::github::triage::{is_triage_run, TriageBuild};
+use crate::github::triage::{is_triage_run, update_triage_body, TriageBuild};
 use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;
 use std::fmt::Write;
@@ -38,7 +38,27 @@ pub async fn post_comparison_comment(
 
     let source = if is_master_commit {
         PerfRunSource::MasterCommit
-    } else if let Some(triage_run) = is_triage_run(&commit, &mut client, &mut graph_client).await? {
+    } else if let Some(mut triage_run) =
+        is_triage_run(&commit, &mut client, &mut graph_client).await?
+    {
+        // Update the triage comment
+        let triage_summary = metrics_result(ctxt, &commit)
+            .await
+            .unwrap_or_else(|error| error);
+        match update_triage_body(&mut triage_run.triage_comment.body, pr, triage_summary) {
+            Ok(()) => {
+                // While in theory this is racy (the comment could have been edited since querying it),
+                // in practice this should never happen
+                graph_client
+                    .update_comment_content(
+                        &triage_run.triage_comment.id,
+                        &triage_run.triage_comment.body,
+                    )
+                    .await?;
+            }
+            Err(err) => log::error!("Failed to update triage body: {err:?}"),
+        }
+
         PerfRunSource::TriageBuild(triage_run)
     } else {
         PerfRunSource::TryBuild
@@ -47,7 +67,6 @@ pub async fn post_comparison_comment(
     let body = summarize_run(ctxt, commit, source)
         .await
         .unwrap_or_else(|error| error);
-
     client.post_comment(pr, body).await;
 
     Ok(())
@@ -180,47 +199,53 @@ async fn summarize_run(
     let bootstrap = summarize_bootstrap(&inst_comparison);
     let artifact_size = summarize_artifact_size(&inst_comparison);
 
+    write!(&mut message, "{}", metrics_result(ctxt, &commit).await?).unwrap();
+    write!(&mut message, "\n{bootstrap}").unwrap();
+    write!(&mut message, "\n{artifact_size}").unwrap();
+
+    Ok(message)
+}
+
+pub async fn metrics_result(ctxt: &SiteCtxt, commit: &QueuedCommit) -> Result<String, String> {
+    let benchmark_map = ctxt.get_benchmark_category_map().await;
+    let mut metrics_result = String::new();
     let metrics = vec![
         (
             "Instruction count",
             Metric::InstructionsUser,
             DefaultMetricVisibility::Shown,
-            inst_comparison,
+            calculate_metric_comparison(ctxt, commit, Metric::InstructionsUser).await?,
         ),
         (
             "Max RSS (memory usage)",
             Metric::MaxRSS,
             DefaultMetricVisibility::Hidden,
-            calculate_metric_comparison(ctxt, &commit, Metric::MaxRSS).await?,
+            calculate_metric_comparison(ctxt, commit, Metric::MaxRSS).await?,
         ),
         (
             "Cycles",
             Metric::CyclesUser,
             DefaultMetricVisibility::Hidden,
-            calculate_metric_comparison(ctxt, &commit, Metric::CyclesUser).await?,
+            calculate_metric_comparison(ctxt, commit, Metric::CyclesUser).await?,
         ),
         (
             "Binary size",
             Metric::LinkedArtifactSize,
             DefaultMetricVisibility::Hidden,
-            calculate_metric_comparison(ctxt, &commit, Metric::LinkedArtifactSize).await?,
+            calculate_metric_comparison(ctxt, commit, Metric::LinkedArtifactSize).await?,
         ),
     ];
 
     for (title, metric, visibility, comparison) in metrics {
-        message.push_str(&format!(
+        metrics_result.push_str(&format!(
             "\n### [{title}]({})\n",
-            make_comparison_url(&commit, metric)
+            make_comparison_url(commit, metric)
         ));
 
         let (primary, secondary) = comparison.summarize_compile_by_category(&benchmark_map);
-        write_metric_summary(primary, secondary, visibility, &mut message);
+        write_metric_summary(primary, secondary, visibility, &mut metrics_result);
     }
-
-    write!(&mut message, "\n{bootstrap}").unwrap();
-    write!(&mut message, "\n{artifact_size}").unwrap();
-
-    Ok(message)
+    Ok(metrics_result)
 }
 
 fn summarize_artifact_size(comparison: &ArtifactComparison) -> String {
