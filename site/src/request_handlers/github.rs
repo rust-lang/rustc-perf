@@ -6,6 +6,7 @@ use crate::load::SiteCtxt;
 use std::fmt::Write;
 
 use crate::github::client::Client;
+use crate::github::triage::TRIAGE_MARKER;
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
     CodegenBackend, Profile, Target,
@@ -274,6 +275,8 @@ async fn handle_rust_timer(
                 .await;
                 writeln!(&mut result, "{msg}\n").unwrap();
             }
+            // Add a marker to the comment which should help to find it again later
+            writeln!(&mut result, "{}", TRIAGE_MARKER).unwrap();
             main_client.post_comment(issue.number, result).await;
         }
         Err(e) => {
@@ -285,13 +288,12 @@ async fn handle_rust_timer(
 }
 
 #[derive(Debug)]
-struct UnrolledBuildMessage {
-    member_pr_number: u32,
-    #[expect(unused, reason = "Will be used in follow-up PR")]
-    rollup_pr_number: u32,
+pub struct UnrolledBuildMessage {
+    pub member_pr_number: u32,
+    pub rollup_pr_number: u32,
 }
 
-fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuildMessage, String> {
+pub fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuildMessage, String> {
     let first_line = commit_message.lines().next().unwrap_or("");
 
     // The first line of the commit message will look like

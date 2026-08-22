@@ -6,7 +6,7 @@ mod status_page;
 mod toolchain;
 
 pub use dashboard::handle_dashboard;
-pub use github::handle_github_webhook;
+pub use github::{handle_github_webhook, parse_unrolled_build_message};
 pub use graph::{
     handle_compile_detail_graphs, handle_compile_detail_sections, handle_graphs,
     handle_runtime_detail_graphs,

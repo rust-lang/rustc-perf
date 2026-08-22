@@ -6,6 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{metric::Metric, QueuedCommit};
 
+use crate::github::triage::{is_triage_run, TriageBuild};
 use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;
 use std::fmt::Write;
@@ -18,11 +19,11 @@ pub async fn post_comparison_comment(
     commit: QueuedCommit,
     is_master_commit: bool,
 ) -> anyhow::Result<()> {
-    let client = super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
+    let mut client = super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     let pr = commit.pr;
 
     // Scan comments to hide outdated ones and gather context
-    let graph_client = super::client::GraphQLClient::from_ctxt(ctxt);
+    let mut graph_client = super::client::GraphQLClient::from_ctxt(ctxt);
     for comment in graph_client.get_comments(pr).await? {
         // If this bot is the author of the comment, the comment is not yet minimized and it is
         // a temporary comment, minimize it.
@@ -37,6 +38,8 @@ pub async fn post_comparison_comment(
 
     let source = if is_master_commit {
         PerfRunSource::MasterCommit
+    } else if let Some(triage_run) = is_triage_run(&commit, &mut client, &mut graph_client).await? {
+        PerfRunSource::TriageBuild(triage_run)
     } else {
         PerfRunSource::TryBuild
     };
@@ -88,6 +91,8 @@ enum PerfRunSource {
     MasterCommit,
     // Manual try build on a PR
     TryBuild,
+    // A try build on a PR as part of a `@rust-timer triage` command
+    TriageBuild(TriageBuild),
 }
 
 // Should the metric be shown by default in the summary?
@@ -158,9 +163,10 @@ async fn summarize_run(
     )
     .unwrap();
 
-    let next_steps = match source {
+    let next_steps = match &source {
         PerfRunSource::TryBuild => try_run_body(is_regression, deserves_attention),
         PerfRunSource::MasterCommit => master_run_body(is_regression),
+        PerfRunSource::TriageBuild(triage_build) => triage_run_body(triage_build, is_regression),
     };
     writeln!(&mut message, "{next_steps}\n").unwrap();
 
@@ -364,5 +370,18 @@ Benchmarking means the PR may be perf-sensitive. \
 
 {rollup_never}
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
+    )
+}
+
+fn triage_run_body(build: &TriageBuild, is_regression: bool) -> String {
+    // The triage url deliberately not prefixed with "https://github.com/" as to not trigger the
+    // "mentioned this pull request" github entry on the rollup
+    format!(
+        "This PR was benchmarked as part of triage of its containing rollup: [triage URL](/rust-lang/rust/pull/{}#issuecomment-{}).\
+        \n\n\
+        {}",
+        build.rollup_pr_number,
+        build.triage_comment.id,
+        master_run_body(is_regression)
     )
 }
