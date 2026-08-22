@@ -212,7 +212,7 @@ impl GraphQLClient {
                 "body": new_body,
             }),
         )
-            .await?;
+        .await?;
         Ok(())
     }
 
