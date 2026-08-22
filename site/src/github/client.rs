@@ -189,6 +189,33 @@ impl GraphQLClient {
         Ok(comments)
     }
 
+    pub async fn update_comment_content(
+        &self,
+        comment_id: &str,
+        new_body: &str,
+    ) -> anyhow::Result<()> {
+        #[derive(serde::Deserialize)]
+        struct UpdateCommentData {}
+
+        const UPDATE_COMMENT: &str = "mutation($id: ID!, $body: String!) {
+            updateIssueComment(input: {id: $id, body: $body}) {
+                issueComment {
+                    id
+                }
+            }
+        }";
+
+        self.send::<UpdateCommentData, _>(
+            UPDATE_COMMENT,
+            serde_json::json!({
+                "id": comment_id,
+                "body": new_body,
+            }),
+        )
+            .await?;
+        Ok(())
+    }
+
     pub async fn hide_comment(&self, comment_id: &str, reason: &str) -> anyhow::Result<()> {
         #[derive(serde::Deserialize)]
         struct MinimizeData {}
