@@ -1,7 +1,7 @@
-import {Profile} from "../../common";
+import {ProfileEnumeration} from "../../common";
 
 // Normalize profile from a test case to a CLI value for collector.
-export function normalizeProfile(profile: Profile): string {
+export function normalizeProfile(profile: ProfileEnumeration): string {
   if (profile === "opt") {
     return "Opt";
   } else if (profile === "debug") {

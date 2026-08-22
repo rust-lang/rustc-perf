@@ -1,6 +1,16 @@
-import {CompileGraphData, GraphsSelector} from "./data";
+import {
+  CompileBenchmarkSeries,
+  CompileGraphData,
+  GraphsSelector,
+  Series,
+} from "./data";
 import {getJson} from "../utils/requests";
 import {GRAPH_DATA_URL} from "../urls";
+
+interface CompileGraphDataRaw {
+  commits: Array<[number, string]>;
+  benchmarks: Dict<Dict<Dict<Dict<Series>>>>;
+}
 
 export async function loadGraphs(
   selector: GraphsSelector
@@ -12,9 +22,23 @@ export async function loadGraphs(
     stat: selector.stat,
     benchmark: selector.benchmark,
     scenario: selector.scenario,
+    frontendThreads: selector.frontendThreads,
     profile: selector.profile,
     backend: selector.backend,
     target: selector.target,
   };
-  return await getJson<CompileGraphData>(GRAPH_DATA_URL, params);
+  const dict: Dict<string> = Object.entries(params).reduce(
+    (acc, [key, value]) => {
+      if (value !== null && value !== undefined) {
+        acc[key] = value;
+      }
+      return acc;
+    },
+    {} as Dict<string>
+  );
+  const raw = await getJson<CompileGraphDataRaw>(GRAPH_DATA_URL, dict);
+  return {
+    commits: raw.commits,
+    benchmarks: CompileBenchmarkSeries.fromJSON(raw.benchmarks),
+  };
 }

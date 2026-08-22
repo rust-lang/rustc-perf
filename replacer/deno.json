@@ -1,0 +1,13 @@
+{
+  "tasks": {
+    "dev": "deno run --watch --allow-net main.ts"
+  },
+  "imports": {
+    "@ast-grep/napi": "npm:@ast-grep/napi@^0.44.1",
+    "@std/assert": "jsr:@std/assert",
+    "@std/fs": "jsr:@std/fs@^1.0.24",
+    "@std/path": "jsr:@std/path@^1.1.6",
+    "cmd-ts": "npm:cmd-ts@^0.15.0",
+    "ts-pattern": "npm:ts-pattern@^5.9.0"
+  }
+}

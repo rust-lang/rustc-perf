@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {h, ref, Ref} from "vue";
+import {ref, Ref} from "vue";
 import {differenceInSeconds} from "date-fns";
 
 import {getJson} from "../../utils/requests";
@@ -192,13 +192,11 @@ function RequestProgress({
   } else if (request.status === "Queued") {
     return "";
   } else {
-    return (
-      <progress
-        title={`${completed} out of ${jobs.length} job(s) completed`}
+    return `<progress
+        title={'${completed} out of ${jobs.length} job(s) completed'}
         max={jobs.length}
         value={completed}
-      ></progress>
-    );
+      ></progress>`;
   }
 }
 

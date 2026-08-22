@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use collector::{Bound, SelfProfileId};
 
-use crate::api::detail_sections::CompilationSections;
-use crate::api::graphs::GraphKind;
+use crate::api::graphs::{Benchmarks, FrontendThreadsSeries, GraphKind, ScenarioSeries};
 use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
+use crate::api::{detail_sections::CompilationSections, graphs::ProfileSeries};
 use crate::load::SiteCtxt;
 use crate::self_profile::fetch_self_profile;
 
@@ -39,6 +39,7 @@ pub async fn handle_compile_detail_graphs(
                 .scenario(Selector::One(scenario))
                 .backend(Selector::One(request.backend.parse()?))
                 .target(Selector::One(request.target.parse()?))
+                .frontend_threads(Selector::One(request.frontend_threads.parse()?))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
@@ -89,6 +90,7 @@ pub async fn handle_compile_detail_sections(
     let profile: Profile = request.profile.parse()?;
     let backend: CodegenBackend = request.backend.parse()?;
     let target: Target = request.target.parse()?;
+    let frontend_threads: FrontendThreads = request.frontend_threads.parse()?;
 
     async fn calculate_sections(
         ctxt: &SiteCtxt,
@@ -98,8 +100,8 @@ pub async fn handle_compile_detail_sections(
         scenario: Scenario,
         backend: CodegenBackend,
         target: Target,
+        frontend_threads: FrontendThreads,
     ) -> Option<CompilationSections> {
-        const MOCK_FRONTEND_THREADS: FrontendThreads = FrontendThreads(1);
         let id = SelfProfileId::Simple {
             artifact_id: aid,
             benchmark: benchmark.into(),
@@ -107,7 +109,7 @@ pub async fn handle_compile_detail_sections(
             scenario,
             backend,
             target,
-            frontend_threads: MOCK_FRONTEND_THREADS,
+            frontend_threads,
         };
         fetch_self_profile(ctxt, id, None)
             .await
@@ -132,7 +134,8 @@ pub async fn handle_compile_detail_sections(
                 profile,
                 scenario,
                 backend,
-                target
+                target,
+                frontend_threads
             ),
             calculate_sections(
                 &ctxt,
@@ -141,7 +144,8 @@ pub async fn handle_compile_detail_sections(
                 profile,
                 scenario,
                 backend,
-                target
+                target,
+                frontend_threads
             )
         )
     } else {
@@ -210,6 +214,7 @@ pub async fn handle_graphs(
             profile: None,
             backend: None,
             target: None,
+            frontend_threads: None,
         };
 
     if is_default_query {
@@ -236,7 +241,7 @@ async fn create_graphs(
         request.start,
         request.end,
     ));
-    let mut benchmarks = HashMap::new();
+    let mut benchmarks = Benchmarks::default();
 
     fn create_selector<T: FromStr>(filter: &Option<String>) -> Option<Result<Selector<T>, T::Err>> {
         filter
@@ -255,7 +260,10 @@ async fn create_graphs(
         .unwrap_or(Ok(Selector::One(Target::X86_64UnknownLinuxGnu)))?;
     let backend_selector =
         create_selector(&request.backend).unwrap_or(Ok(Selector::One(CodegenBackend::Llvm)))?;
-
+    let frontend_threads_selector = request
+        .frontend_threads
+        .map(|v| Selector::One(v.parse::<FrontendThreads>().unwrap()))
+        .unwrap_or_else(|| Selector::Subset(FrontendThreads::default_threads_counts()));
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
             CompileBenchmarkQuery::default()
@@ -264,6 +272,7 @@ async fn create_graphs(
                 .scenario(scenario_selector)
                 .backend(backend_selector)
                 .target(target_selector)
+                .frontend_threads(frontend_threads_selector)
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
@@ -280,20 +289,29 @@ async fn create_graphs(
             .transpose()?;
         let summary_benchmark =
             create_summary(ctxt, &interpolated_responses, request.kind, request_profile)?;
-        benchmarks.insert("Summary".to_string(), summary_benchmark);
+        benchmarks
+            .0
+            .insert("Summary".to_string(), summary_benchmark);
     }
 
     for response in interpolated_responses {
         let benchmark = response.test_case.benchmark.to_string();
         let profile = response.test_case.profile;
         let scenario = response.test_case.scenario.to_string();
+        let frontend_threads = format!("threads_{}", response.test_case.frontend_threads.0);
         let graph_series = graph_series(response.series.into_iter(), request.kind);
 
         benchmarks
+            .0
             .entry(benchmark)
-            .or_insert_with(HashMap::new)
+            .or_insert_with(ProfileSeries::default)
+            .0
             .entry(profile)
-            .or_insert_with(HashMap::new)
+            .or_insert_with(ScenarioSeries::default)
+            .0
+            .entry(frontend_threads)
+            .or_insert_with(FrontendThreadsSeries::default)
+            .0
             .insert(scenario, graph_series);
     }
 
@@ -334,15 +352,16 @@ fn create_summary(
     >],
     graph_kind: GraphKind,
     profile: Option<Profile>,
-) -> ServerResult<HashMap<Profile, HashMap<String, graphs::Series>>> {
+) -> ServerResult<ProfileSeries> {
     let mut baselines = HashMap::new();
-    let mut summary_benchmark = HashMap::new();
+    let mut summary_benchmark = ProfileSeries::default();
     let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
-        profile.map_or_else(Profile::default_profiles, |p| vec![p])
+        profile.map_or_else(Profile::default_profiles, |p| vec![p]),
+        FrontendThreads::default_threads_counts()
     );
-    for (scenario, profile) in summary_query_cases {
-        let baseline = match baselines.entry((profile, scenario)) {
+    for (scenario, profile, frontend_threads) in summary_query_cases {
+        let baseline = match baselines.entry((profile, scenario, frontend_threads)) {
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
             std::collections::hash_map::Entry::Vacant(v) => {
                 let baseline_responses = interpolated_responses
@@ -350,7 +369,8 @@ fn create_summary(
                     .filter(|sr| {
                         let p = sr.test_case.profile;
                         let s = sr.test_case.scenario;
-                        p == profile && s == Scenario::Empty
+                        let threads = sr.test_case.frontend_threads;
+                        p == profile && s == Scenario::Empty && threads.single()
                     })
                     .map(|sr| sr.series.iter().cloned())
                     .collect();
@@ -367,7 +387,8 @@ fn create_summary(
             .filter(|sr| {
                 let p = sr.test_case.profile;
                 let s = sr.test_case.scenario;
-                p == profile && s == scenario
+                let threads = sr.test_case.frontend_threads;
+                p == profile && s == scenario && threads == frontend_threads
             })
             .map(|sr| sr.series.iter().cloned())
             .collect();
@@ -378,8 +399,13 @@ fn create_summary(
         let graph_series = graph_series(avg_vs_baseline, graph_kind);
 
         summary_benchmark
+            .0
             .entry(profile)
-            .or_insert_with(HashMap::new)
+            .or_insert_with(ScenarioSeries::default)
+            .0
+            .entry(format!("{}", frontend_threads.0))
+            .or_insert_with(FrontendThreadsSeries::default)
+            .0
             .insert(scenario.to_string(), graph_series);
     }
     Ok(summary_benchmark)

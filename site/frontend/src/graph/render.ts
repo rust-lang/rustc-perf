@@ -1,5 +1,10 @@
 import uPlot, {TypedArray} from "uplot";
-import {CompileGraphData, GraphsSelector, RuntimeGraphData} from "./data";
+import {
+  CompileGraphData,
+  GraphsSelector,
+  profileForGraphDisplay,
+  RuntimeGraphData,
+} from "./data";
 
 const commonCacheStateColors = {
   full: "#7cb5ec",
@@ -17,7 +22,6 @@ const otherCacheStateColors = [
   "#91e8e1",
 ];
 const interpolatedColor = "#fcb0f1";
-const profiles = ["Check", "Debug", "Opt", "Doc"];
 
 function tooltipPlugin({
   onclick,
@@ -374,29 +378,6 @@ function genPlotOpts({
   };
 }
 
-function normalizeData(data: CompileGraphData) {
-  function optInterpolated(profile) {
-    for (const scenario in profile) {
-      profile[scenario].interpolated_indices = new Set(
-        profile[scenario].interpolated_indices
-      );
-    }
-
-    return profile;
-  }
-
-  for (const name of Object.keys(data.benchmarks)) {
-    for (const profile of profiles) {
-      if (data.benchmarks[name].hasOwnProperty(profile)) {
-        data.benchmarks[name][profile.toLowerCase()] = optInterpolated(
-          data.benchmarks[name][profile]
-        );
-        delete data.benchmarks[name][profile];
-      }
-    }
-  }
-}
-
 export type GraphRenderOpts = {
   // Width of the graph
   width: number;
@@ -420,20 +401,15 @@ export function renderPlots(
   const hooks = opts.hooks ?? {};
   const {width, height} = opts;
 
-  normalizeData(data);
+  console.debug(
+    `CompileBenchmarks passed to \`renderPlots\`:`,
+    data.benchmarks.toJSON()
+  );
 
-  const benchNames = Object.keys(data.benchmarks).sort();
-
-  for (const benchName of benchNames) {
-    let profiles = data.benchmarks[benchName];
-
+  for (const [benchName, profiles] of data.benchmarks.entries()) {
     let i = 0;
 
-    for (let profile in profiles) {
-      let scenarios = profiles[profile];
-      let scenarioNames = Object.keys(scenarios);
-      scenarioNames.sort();
-
+    for (let [profileName, scenario] of profiles.entries()) {
       let yAxis = selector.stat;
       let yAxisUnit = null;
 
@@ -486,23 +462,32 @@ export function renderPlots(
       let plotData = [xVals];
 
       let otherColorIdx = 0;
+      let indices = null;
 
+      let scenarioNames = Array.from(scenario.keys());
+      scenarioNames.sort();
       for (let scenarioName of scenarioNames) {
-        let yVals = scenarios[scenarioName].points;
-        let color =
-          commonCacheStateColors[scenarioName] ||
-          otherCacheStateColors[otherColorIdx++];
+        let frontendThreadsCounts = scenario.get(scenarioName);
+        for (let [frontendThreads, series] of frontendThreadsCounts.entries()) {
+          let yVals = series.points;
+          if (indices === null) {
+            indices = series.interpolated_indices;
+          }
+          let color =
+            frontendThreads == "1"
+              ? commonCacheStateColors[scenarioName] ||
+                otherCacheStateColors[otherColorIdx++]
+              : otherCacheStateColors[otherColorIdx++];
 
-        plotData.push(yVals);
+          plotData.push(yVals);
 
-        seriesOpts.push({
-          label: scenarioName,
-          width: devicePixelRatio,
-          stroke: color,
-        });
+          seriesOpts.push({
+            label: scenarioName + "_threads_" + frontendThreads,
+            width: devicePixelRatio,
+            stroke: color,
+          });
+        }
       }
-
-      let indices = scenarios[Object.keys(scenarios)[0]].interpolated_indices;
 
       let plotOpts = genPlotOpts({
         width,
@@ -517,11 +502,12 @@ export function renderPlots(
         absoluteMode: selector.kind == "raw",
         hooks,
       });
+      const profileNameToRender = profileForGraphDisplay(profileName);
       if (renderTitle) {
-        plotOpts["title"] = `${benchName}-${profile}`;
+        plotOpts["title"] = `${benchName}-${profileNameToRender}`;
       }
 
-      new uPlot(plotOpts, plotData as any as TypedArray[], plotElement);
+      new uPlot(plotOpts, plotData as unknown as TypedArray[], plotElement);
 
       i++;
     }

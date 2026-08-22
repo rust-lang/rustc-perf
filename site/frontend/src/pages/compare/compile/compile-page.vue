@@ -91,6 +91,18 @@ function loadFilterFromUrl(
         defaultFilter.scenario.incrPatched
       ),
     },
+    frontendThreads: {
+      threads_1: getBoolOrDefault(
+        urlParams,
+        "threads_1",
+        defaultFilter.frontendThreads.threads_1
+      ),
+      threads_4: getBoolOrDefault(
+        urlParams,
+        "threads_4",
+        defaultFilter.frontendThreads.threads_4
+      ),
+    },
     backend: {
       llvm: getBoolOrDefault(
         urlParams,
@@ -223,6 +235,18 @@ function storeFilterToUrl(
     "incrPatched",
     filter.scenario.incrPatched,
     defaultFilter.scenario.incrPatched
+  );
+  storeOrResetBool(
+    urlParams,
+    "threads_1",
+    filter.frontendThreads.threads_1,
+    defaultFilter.frontendThreads.threads_1
+  );
+  storeOrResetBool(
+    urlParams,
+    "threads_4",
+    filter.frontendThreads.threads_4,
+    defaultFilter.frontendThreads.threads_4
   );
   storeOrResetBool(
     urlParams,

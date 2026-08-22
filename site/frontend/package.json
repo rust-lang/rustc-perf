@@ -30,6 +30,9 @@
     "uplot": "^1.6.24",
     "vue": "^3.2.47"
   },
+  "@parcel/resolver-default": {
+    "packageExports": true
+  },
   "targets": {
     "dashboard": {
       "source": "src/pages/dashboard.ts",

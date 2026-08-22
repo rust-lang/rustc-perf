@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import {computed, onMounted, capitalize, Ref, ref} from "vue";
+import {computed, onMounted, Ref, ref} from "vue";
 import {
   COMPILE_DETAIL_GRAPHS_RESOLVER,
   CompileDetailGraphs,
   CompileDetailGraphsSelector,
 } from "./detail-resolver";
 import {
+  CompileBenchmarkSeries,
   CompileGraphData,
+  FrontendThreadsSeries,
   GraphKind,
   GraphsSelector,
+  ProfileSeries,
+  ScenarioSeries,
+  toCompileBenchmark,
+  toFrontendThreads,
+  toProfile,
+  toScenario,
 } from "../../../../graph/data";
 import {CompileTestCase} from "../common";
 import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
@@ -38,6 +46,7 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
+    frontendThreads: props.testCase.frontendThreads,
     backend: props.testCase.backend,
     stat: props.metric,
     start,
@@ -61,20 +70,27 @@ async function renderGraphs(detail: CompileDetailGraphs) {
   ): [CompileGraphData, GraphsSelector] {
     const data: CompileGraphData = {
       commits: detail.commits,
-      benchmarks: {
-        [selector.benchmark]: {
-          // The server returns profiles capitalized, so we need to match that
-          // here, so that the graph code can find the expected profile.
-          [capitalize(selector.profile)]: {
-            [selector.scenario]: detail.graphs[index],
-          },
-        },
-      },
+      benchmarks: new CompileBenchmarkSeries({
+        [toCompileBenchmark(selector.benchmark)]: new ProfileSeries({
+          [toProfile(selector.profile)]: new ScenarioSeries({
+            [toFrontendThreads(selector.frontendThreads)]:
+              new FrontendThreadsSeries({
+                [toScenario(selector.scenario)]: detail.graphs[index],
+              }),
+          }),
+        }),
+      }),
     };
-    const graphSelector = {
+
+    console.debug(
+      "built CompileGraphData.benchmarks inside of \`buildGraph\`:",
+      data.benchmarks.toJSON()
+    );
+    const graphSelector: GraphsSelector = {
       benchmark: selector.benchmark,
       profile: selector.profile,
       scenario: selector.scenario,
+      frontendThreads: selector.frontendThreads,
       stat: selector.stat,
       start: selector.start,
       end: selector.end,
@@ -122,6 +138,9 @@ async function renderGraph(
   date: Date | null,
   chartRef: Ref<HTMLElement | null>
 ) {
+  if (chartRef.value === null) {
+    return;
+  }
   const opts: GraphRenderOpts = {
     width: Math.min(window.innerWidth - 40, 465),
     height: 300,
@@ -192,15 +211,15 @@ function getGraphRange(
   // If this is a try commit, we don't know its future, so always we just display
   // the last `DAY_RANGE` days.
   if (artifact.type === "try") {
-    const date = new Date(artifact.date);
+    let date = artifact.date ? new Date(artifact.date) : new Date();
     return {
       start: formatDate(getPastDate(date, DAY_RANGE)),
       end: artifact.commit,
       date: null,
     };
   } else {
-    let [start_date, end_date] = [baseArtifact, artifact].map(
-      (c) => new Date(c.date)
+    let [start_date, end_date] = [baseArtifact, artifact].map((c) =>
+      c.date ? new Date(c.date) : new Date()
     );
     // If this is a master commit, we attempt to display more than the full history for commit
     // ranges. If the commit range is not larger than the `dayRange`, the display will likely be
