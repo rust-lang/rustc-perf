@@ -180,12 +180,25 @@ async fn summarize_run(
     let bootstrap = summarize_bootstrap(&inst_comparison);
     let artifact_size = summarize_artifact_size(&inst_comparison);
 
+    write!(&mut message, "{}", metrics_result(ctxt, &commit).await?).unwrap();
+    write!(&mut message, "\n{bootstrap}").unwrap();
+    write!(&mut message, "\n{artifact_size}").unwrap();
+
+    Ok(message)
+}
+
+async fn metrics_result(
+    ctxt: &SiteCtxt,
+    commit: &QueuedCommit,
+) -> Result<String, String> {
+    let benchmark_map = ctxt.get_benchmark_category_map().await;
+    let mut metrics_result = String::new();
     let metrics = vec![
         (
             "Instruction count",
             Metric::InstructionsUser,
             DefaultMetricVisibility::Shown,
-            inst_comparison,
+            calculate_metric_comparison(ctxt, &commit, Metric::InstructionsUser).await?,
         ),
         (
             "Max RSS (memory usage)",
@@ -208,19 +221,15 @@ async fn summarize_run(
     ];
 
     for (title, metric, visibility, comparison) in metrics {
-        message.push_str(&format!(
+        metrics_result.push_str(&format!(
             "\n### [{title}]({})\n",
             make_comparison_url(&commit, metric)
         ));
 
         let (primary, secondary) = comparison.summarize_compile_by_category(&benchmark_map);
-        write_metric_summary(primary, secondary, visibility, &mut message);
+        write_metric_summary(primary, secondary, visibility, &mut metrics_result);
     }
-
-    write!(&mut message, "\n{bootstrap}").unwrap();
-    write!(&mut message, "\n{artifact_size}").unwrap();
-
-    Ok(message)
+    Ok(metrics_result)
 }
 
 fn summarize_artifact_size(comparison: &ArtifactComparison) -> String {
