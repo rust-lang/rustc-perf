@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 use std::fmt::Write;
 
 use crate::github::client::Client;
-use crate::github::triage::TRIAGE_MARKER;
+use crate::github::triage::{triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER};
 use database::{
     parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
     CodegenBackend, Profile, Target,
@@ -263,6 +263,12 @@ async fn handle_rust_timer(
                 .unwrap();
 
                 // Enqueue the sha build and write result
+                write!(
+                    &mut result,
+                    "{}",
+                    triage_body_start_marker(unrolled_build_message.member_pr_number)
+                )
+                .unwrap();
                 let (Ok(msg) | Err(msg)) = enqueue_sha_build(
                     &ctxt,
                     main_client,
@@ -274,6 +280,12 @@ async fn handle_rust_timer(
                 )
                 .await;
                 writeln!(&mut result, "{msg}\n").unwrap();
+                write!(
+                    &mut result,
+                    "{}",
+                    triage_body_end_marker(unrolled_build_message.member_pr_number)
+                )
+                .unwrap();
             }
             // Add a marker to the comment which should help to find it again later
             writeln!(&mut result, "{}", TRIAGE_MARKER).unwrap();
