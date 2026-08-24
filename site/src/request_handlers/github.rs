@@ -226,7 +226,12 @@ async fn handle_rust_timer(
         }
         Ok(RustTimerCommand::Triage(cmd)) => {
             let mut result = String::new();
-            for sha in cmd.shas {
+            for (i, sha) in cmd.shas.iter().enumerate() {
+                // Add separator between PRs
+                if i != 0 {
+                    writeln!(&mut result, "---").unwrap();
+                }
+
                 // Get unrolled commit
                 let commit = match main_client.get_commit(sha).await {
                     Ok(commit) => commit,
