@@ -131,6 +131,7 @@ impl GraphQLClient {
                         comments(first: 100, after: $cursor) {
                             nodes {
                                 id
+                                fullDatabaseId
                                 body
                                 isMinimized
                                 viewerDidAuthor
@@ -291,6 +292,7 @@ struct GraphPageInfo {
 #[serde(rename_all = "camelCase")]
 pub struct ResponseComment {
     pub id: String,
+    pub full_database_id: String,
     pub body: String,
     pub is_minimized: bool,
     // Is the account that fetches this comment also the original author of the comment?
