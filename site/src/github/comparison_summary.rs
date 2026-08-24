@@ -413,7 +413,7 @@ fn triage_run_body(build: &TriageBuild, is_regression: bool) -> String {
         \n\n\
         {}",
         build.rollup_pr_number,
-        build.triage_comment.id,
+        build.triage_comment.full_database_id,
         master_run_body(is_regression)
     )
 }
