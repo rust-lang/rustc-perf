@@ -134,11 +134,23 @@ async fn summarize_run(
 ) -> Result<String, String> {
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
-    let mut message = format!(
+    let mut message = String::new();
+    if let PerfRunSource::TriageBuild(build) = &source {
+        write!(
+            &mut message,
+            "> [!NOTE]\n> This PR was benchmarked as part of triage of its containing rollup: [triage URL](/rust-lang/rust/pull/{}#issuecomment-{}).\n\n",
+            build.rollup_pr_number,
+            build.triage_comment.full_database_id
+        ).unwrap();
+    }
+
+    write!(
+        &mut message,
         "Finished benchmarking commit ({sha}): [comparison URL]({comparison_url}).\n\n",
         sha = commit.sha,
         comparison_url = make_comparison_url(&commit, Metric::InstructionsUser)
-    );
+    )
+    .unwrap();
 
     let inst_comparison =
         calculate_metric_comparison(ctxt, &commit, Metric::InstructionsUser).await?;
@@ -191,8 +203,9 @@ async fn summarize_run(
 
     let next_steps = match &source {
         PerfRunSource::TryBuild => try_run_body(is_regression, deserves_attention),
-        PerfRunSource::MasterCommit => master_run_body(is_regression),
-        PerfRunSource::TriageBuild(triage_build) => triage_run_body(triage_build, is_regression),
+        PerfRunSource::MasterCommit | PerfRunSource::TriageBuild(..) => {
+            master_run_body(is_regression)
+        }
     };
     writeln!(&mut message, "{next_steps}\n").unwrap();
 
@@ -402,18 +415,5 @@ Benchmarking means the PR may be perf-sensitive. \
 
 {rollup_never}
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
-    )
-}
-
-fn triage_run_body(build: &TriageBuild, is_regression: bool) -> String {
-    // The triage url deliberately not prefixed with "https://github.com/" as to not trigger the
-    // "mentioned this pull request" github entry on the rollup
-    format!(
-        "This PR was benchmarked as part of triage of its containing rollup: [triage URL](/rust-lang/rust/pull/{}#issuecomment-{}).\
-        \n\n\
-        {}",
-        build.rollup_pr_number,
-        build.triage_comment.full_database_id,
-        master_run_body(is_regression)
     )
 }
