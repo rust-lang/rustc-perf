@@ -45,7 +45,11 @@ pub async fn post_comparison_comment(
         let triage_summary = metrics_result(ctxt, &commit)
             .await
             .unwrap_or_else(|error| error);
-        match update_triage_body(&mut triage_run.triage_comment.body, pr, triage_summary) {
+        match update_triage_body(
+            &mut triage_run.triage_comment.body,
+            pr,
+            format!("{}\n", triage_summary),
+        ) {
             Ok(()) => {
                 // While in theory this is racy (the comment could have been edited since querying it),
                 // in practice this should never happen
