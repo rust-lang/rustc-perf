@@ -49,12 +49,15 @@ pub async fn post_comparison_comment(
             Ok(()) => {
                 // While in theory this is racy (the comment could have been edited since querying it),
                 // in practice this should never happen
-                graph_client
+                if let Err(err) = graph_client
                     .update_comment_content(
                         &triage_run.triage_comment.id,
                         &triage_run.triage_comment.body,
                     )
-                    .await?;
+                    .await
+                {
+                    log::error!("Failed to update triage comment: {err:?}")
+                }
             }
             Err(err) => log::error!("Failed to update triage body: {err:?}"),
         }
