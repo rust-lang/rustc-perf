@@ -45,10 +45,7 @@ jobs:
           npm run build
 
       - name: Compile site
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-        with:
-          command: build
-          args: --release --bin site
+        run: cargo build --release --bin site
 
       - name: Prepare archive
         id: archive
