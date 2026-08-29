@@ -22,8 +22,9 @@ import {
   getBoolOrDefault,
   isSameStringArray,
   loadTargetsFromUrl,
-  storeOrResetBool,
+  storeOrResetValue,
   storeOrResetStringArray,
+  getStringOrDefault,
 } from "../shared";
 
 const props = defineProps<{
@@ -140,10 +141,10 @@ function loadFilterFromUrl(
         defaultCompileFilter.changes.improvements
       ),
     },
-    selfCompareBackend: getBoolOrDefault(
+    selfCompareParameter: getStringOrDefault(
       urlParams,
-      "selfCompareBackend",
-      defaultFilter.selfCompareBackend
+      "selfCompareParameter",
+      defaultFilter.selfCompareParameter
     ),
   };
 }
@@ -157,80 +158,80 @@ function storeFilterToUrl(
   defaultFilter: CompileBenchmarkFilter,
   urlParams: Dict<string>
 ) {
-  storeOrResetBool(urlParams, "name", filter.name || null, defaultFilter.name);
-  storeOrResetBool(
+  storeOrResetValue(urlParams, "name", filter.name, defaultFilter.name);
+  storeOrResetValue(
     urlParams,
     "nonRelevant",
     filter.nonRelevant,
     defaultFilter.nonRelevant
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "showRawData",
     filter.showRawData,
     defaultFilter.showRawData
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "check",
     filter.profile.check,
     defaultFilter.profile.check
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "debug",
     filter.profile.debug,
     defaultFilter.profile.debug
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "opt",
     filter.profile.opt,
     defaultFilter.profile.opt
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "doc",
     filter.profile.doc,
     defaultFilter.profile.doc
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "doc-json",
     filter.profile.docJson,
     defaultFilter.profile.docJson
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "full",
     filter.scenario.full,
     defaultFilter.scenario.full
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "incrFull",
     filter.scenario.incrFull,
     defaultFilter.scenario.incrFull
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "incrUnchanged",
     filter.scenario.incrUnchanged,
     defaultFilter.scenario.incrUnchanged
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "incrPatched",
     filter.scenario.incrPatched,
     defaultFilter.scenario.incrPatched
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "backend-llvm",
     filter.backend.llvm,
     defaultFilter.backend.llvm
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "backend-clif",
     filter.backend.cranelift,
@@ -242,47 +243,47 @@ function storeFilterToUrl(
     filter.target,
     defaultFilter.target
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "primary",
     filter.category.primary,
     defaultFilter.category.primary
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "secondary",
     filter.category.secondary,
     defaultFilter.category.secondary
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "binary",
     filter.artifact.binary,
     defaultFilter.artifact.binary
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "library",
     filter.artifact.library,
     defaultFilter.artifact.library
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "regressions",
     filter.changes.regressions,
     defaultFilter.changes.regressions
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "improvements",
     filter.changes.improvements,
     defaultFilter.changes.improvements
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
-    "selfCompareBackend",
-    filter.selfCompareBackend,
-    defaultFilter.selfCompareBackend
+    "selfCompareParameter",
+    filter.selfCompareParameter,
+    defaultFilter.selfCompareParameter
   );
 
   changeUrl(urlParams);
@@ -311,7 +312,9 @@ const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 // Should we use the backend as the source of before/after data?
 const selfCompareBackend = computed(() => {
-  return canCompareBackends.value && filter.value.selfCompareBackend;
+  return (
+    canCompareBackends.value && filter.value.selfCompareParameter === "backend"
+  );
 });
 const canCompareBackends = computed(() => {
   const hasMultipleBackends =

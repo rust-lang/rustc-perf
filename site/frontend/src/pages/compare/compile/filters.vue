@@ -38,6 +38,15 @@ function toggleTarget(target: Target) {
   }
 }
 
+function updateSelfCompareParameter(parameter: string, event: Event) {
+  const value = (event.target as HTMLInputElement).checked;
+  if (!value) {
+    filter.value.selfCompareParameter = null;
+  } else {
+    filter.value.selfCompareParameter = parameter;
+  }
+}
+
 let filter = ref(deepCopy(props.initialFilter));
 watch(
   filter,
@@ -368,10 +377,15 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           <div
             class="section"
             v-if="canCompareBackends"
-            :title="`Compare codegen backends for this commit`"
+            title="Compare codegen backends for this commit"
           >
             Compare codegen backends for this commit:
-            <input type="checkbox" v-model="filter.selfCompareBackend" />
+            <input
+              type="checkbox"
+              :checked="filter.selfCompareParameter === 'backend'"
+              @change="(value) => updateSelfCompareParameter('backend', value)"
+              v-model="filter.selfCompareParameter"
+            />
           </div>
           <button @click="reset" style="margin-right: 10px">
             Reset filters

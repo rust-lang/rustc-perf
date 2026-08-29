@@ -34,7 +34,7 @@ export type CompileBenchmarkFilter = {
     regressions: boolean;
     improvements: boolean;
   };
-  selfCompareBackend: boolean;
+  selfCompareParameter: string | null;
 } & BenchmarkFilter;
 
 export const defaultCompileFilter: CompileBenchmarkFilter = {
@@ -71,7 +71,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     regressions: true,
     improvements: true,
   },
-  selfCompareBackend: false,
+  selfCompareParameter: null,
 };
 
 export type Profile = "check" | "debug" | "opt" | "doc";

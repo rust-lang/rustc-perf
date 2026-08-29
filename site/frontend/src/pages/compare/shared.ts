@@ -81,6 +81,17 @@ export function getBoolOrDefault(
   return defaultValue;
 }
 
+export function getStringOrDefault(
+  params: Dict<string>,
+  name: string,
+  defaultValue: string | null
+): string | null {
+  if (params.hasOwnProperty(name)) {
+    return params[name];
+  }
+  return defaultValue;
+}
+
 export function getStringArrayOrDefault(
   params: Dict<string>,
   name: string,
@@ -114,9 +125,9 @@ export function targetMatchesFilter(
   return target_set.includes(target);
 }
 
-// Store the bool value into URL parameters, or reset it if it has the default
+// Store the bool or string value into URL parameters, or reset it if it has the default
 // value.
-export function storeOrResetBool<T extends boolean | string>(
+export function storeOrResetValue<T extends boolean | string | null>(
   urlParams: Dict<string>,
   name: string,
   value: T,
@@ -127,6 +138,11 @@ export function storeOrResetBool<T extends boolean | string>(
       delete urlParams[name];
     }
   } else {
+    if (value === null) {
+      throw new Error(
+        `Cannot store value null for property ${name} into the URL`
+      );
+    }
     urlParams[name] = value.toString();
   }
 }
