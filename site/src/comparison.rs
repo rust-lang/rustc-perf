@@ -13,14 +13,15 @@ use database::{
     selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
     Target,
 };
-use database::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
+use database::{ArtifactId, Benchmark, Lookup};
 use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::server::comparison::StatComparison;
 use collector::compile::benchmark::ArtifactType;
-use database::{CodegenBackend, CommitType, CompileBenchmark};
+use database::selector::{CompileTestCase, RuntimeTestCase};
+use database::{CommitType, CompileBenchmark};
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -149,11 +150,11 @@ pub async fn handle_compare(
         .compile_comparisons
         .into_iter()
         .map(|comparison| api::comparison::CompileBenchmarkComparison {
-            benchmark: comparison.benchmark.to_string(),
-            profile: comparison.profile.to_string(),
-            scenario: comparison.scenario.to_string(),
-            backend: comparison.backend.to_string(),
-            target: comparison.target.to_string(),
+            benchmark: comparison.test_case.benchmark.to_string(),
+            profile: comparison.test_case.profile.to_string(),
+            scenario: comparison.test_case.scenario.to_string(),
+            backend: comparison.test_case.backend.to_string(),
+            target: comparison.test_case.target.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();
@@ -162,8 +163,8 @@ pub async fn handle_compare(
         .runtime_comparisons
         .into_iter()
         .map(|comparison| api::comparison::RuntimeBenchmarkComparison {
-            benchmark: comparison.benchmark.to_string(),
-            target: comparison.target.to_string(),
+            benchmark: comparison.test_case.benchmark.to_string(),
+            target: comparison.test_case.target.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();
@@ -741,11 +742,7 @@ async fn compare_given_commits(
         metric,
         master_commits,
         |test_case, comparison| CompileTestResultComparison {
-            profile: test_case.profile,
-            scenario: test_case.scenario,
-            benchmark: test_case.benchmark,
-            backend: test_case.backend,
-            target: test_case.target,
+            test_case,
             comparison,
         },
     )
@@ -760,8 +757,7 @@ async fn compare_given_commits(
         metric,
         master_commits,
         |test_case, comparison| RuntimeTestResultComparison {
-            benchmark: test_case.benchmark,
-            target: test_case.target,
+            test_case,
             comparison,
         },
     )
@@ -1316,26 +1312,23 @@ impl From<TestResultComparison> for StatComparison {
 
 #[derive(Debug, Clone)]
 pub struct CompileTestResultComparison {
-    benchmark: Benchmark,
-    profile: Profile,
-    scenario: Scenario,
-    backend: CodegenBackend,
-    target: Target,
+    test_case: CompileTestCase,
     comparison: TestResultComparison,
 }
 
 impl CompileTestResultComparison {
     pub fn benchmark(&self) -> Benchmark {
-        self.benchmark
+        self.test_case.benchmark
     }
 }
 
 impl cmp::PartialEq for CompileTestResultComparison {
     fn eq(&self, other: &Self) -> bool {
-        self.benchmark == other.benchmark
-            && self.profile == other.profile
-            && self.scenario == other.scenario
-            && self.backend == other.backend
+        let CompileTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case == &other.test_case
     }
 }
 
@@ -1343,17 +1336,17 @@ impl cmp::Eq for CompileTestResultComparison {}
 
 impl std::hash::Hash for CompileTestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.benchmark.hash(state);
-        self.profile.hash(state);
-        self.scenario.hash(state);
-        self.backend.hash(state);
+        let CompileTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case.hash(state);
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct RuntimeTestResultComparison {
-    benchmark: Benchmark,
-    target: Target,
+    test_case: RuntimeTestCase,
     comparison: TestResultComparison,
 }
 
@@ -1367,7 +1360,11 @@ impl Deref for RuntimeTestResultComparison {
 
 impl cmp::PartialEq for RuntimeTestResultComparison {
     fn eq(&self, other: &Self) -> bool {
-        self.benchmark == other.benchmark
+        let RuntimeTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case == &other.test_case
     }
 }
 
@@ -1375,7 +1372,11 @@ impl cmp::Eq for RuntimeTestResultComparison {}
 
 impl std::hash::Hash for RuntimeTestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.benchmark.hash(state);
+        let RuntimeTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case.hash(state);
     }
 }
 
