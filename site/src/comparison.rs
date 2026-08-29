@@ -64,20 +64,27 @@ pub async fn handle_triage(
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let end = loop {
-        let comparison =
-            match compare_given_commits(before.clone(), next.clone(), metric, ctxt, master_commits)
-                .await
-                .map_err(|e| format!("error comparing commits: {e}"))?
-            {
-                Some(c) => c,
-                None => {
-                    log::info!(
-                        "No data found for end bound {:?}. Ending comparison...",
-                        next
-                    );
-                    break before;
-                }
-            };
+        // For triage, we will only show x64 for now
+        let comparison = match compare_given_commits(
+            before.clone(),
+            next.clone(),
+            metric,
+            Some(Target::X86_64UnknownLinuxGnu),
+            ctxt,
+            master_commits,
+        )
+        .await
+        .map_err(|e| format!("error comparing commits: {e}"))?
+        {
+            Some(c) => c,
+            None => {
+                log::info!(
+                    "No data found for end bound {:?}. Ending comparison...",
+                    next
+                );
+                break before;
+            }
+        };
         num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
@@ -107,20 +114,26 @@ pub async fn handle_triage(
     };
 
     // Summarize the entire triage from start commit to end commit
-    let summary =
-        match compare_given_commits(start.clone(), end.clone(), metric, ctxt, master_commits)
-            .await
-            .map_err(|e| format!("error comparing beginning and ending commits: {e}"))?
-        {
-            Some(summary_comparison) => {
-                let (primary, secondary) =
-                    summary_comparison.summarize_compile_by_category(&benchmark_map);
-                let mut result = String::from("**Summary**:\n\n");
-                write_summary_table(&primary, &secondary, true, &mut result);
-                result
-            }
-            None => String::from("**ERROR**: no data found for end bound"),
-        };
+    let summary = match compare_given_commits(
+        start.clone(),
+        end.clone(),
+        metric,
+        Some(Target::X86_64UnknownLinuxGnu),
+        ctxt,
+        master_commits,
+    )
+    .await
+    .map_err(|e| format!("error comparing beginning and ending commits: {e}"))?
+    {
+        Some(summary_comparison) => {
+            let (primary, secondary) =
+                summary_comparison.summarize_compile_by_category(&benchmark_map);
+            let mut result = String::from("**Summary**:\n\n");
+            write_summary_table(&primary, &secondary, true, &mut result);
+            result
+        }
+        None => String::from("**ERROR**: no data found for end bound"),
+    };
 
     let report = generate_report(&start, &end, summary, report, num_comparisons).await;
     Ok(api::triage::Response(report))
@@ -134,11 +147,17 @@ pub async fn handle_compare(
     let master_commits = &ctxt.get_master_commits().commits;
 
     let end = body.end;
-    let comparison =
-        compare_given_commits(body.start, end.clone(), body.stat, ctxt, master_commits)
-            .await
-            .map_err(|e| format!("error comparing commits: {e}"))?
-            .ok_or_else(|| format!("could not find end commit for bound {end:?}"))?;
+    let comparison = compare_given_commits(
+        body.start,
+        end.clone(),
+        body.stat,
+        None,
+        ctxt,
+        master_commits,
+    )
+    .await
+    .map_err(|e| format!("error comparing commits: {e}"))?
+    .ok_or_else(|| format!("could not find end commit for bound {end:?}"))?;
 
     let conn = ctxt.conn().await;
     let prev = comparison.prev(master_commits);
@@ -712,14 +731,26 @@ pub async fn compare(
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
     let master_commits = &ctxt.get_master_commits().commits;
 
-    compare_given_commits(start, end, metric, ctxt, master_commits).await
+    // For PR comments, we will only show x64 for now
+    compare_given_commits(
+        start,
+        end,
+        metric,
+        Some(Target::X86_64UnknownLinuxGnu),
+        ctxt,
+        master_commits,
+    )
+    .await
 }
 
 /// Compare two bounds on a given metric
+/// Optionally, you can select a target to query.
+/// If not specified, all targets will be selected.
 async fn compare_given_commits(
     start: Bound,
     end: Bound,
     metric: Metric,
+    target: Option<Target>,
     ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
@@ -733,10 +764,15 @@ async fn compare_given_commits(
     };
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
-    // get all crates, cache, and profile combinations for the given metric
+    let compile_query = match target {
+        Some(target) => CompileBenchmarkQuery::all_for_metric_and_target(metric, target),
+        None => CompileBenchmarkQuery::all_for_metric(metric),
+    };
+
+    // Get all crates, cache, and profile combinations for the given metric
     let compile_comparisons = get_comparison::<CompileTestResultComparison, _, _>(
         ctxt,
-        CompileBenchmarkQuery::all_for_metric(metric),
+        compile_query,
         a.clone(),
         aids.clone(),
         metric,
@@ -748,10 +784,15 @@ async fn compare_given_commits(
     )
     .await?;
 
-    // get all crates, cache, and profile combinations for the given metric
+    let runtime_query = match target {
+        Some(target) => RuntimeBenchmarkQuery::all_for_metric_and_target(metric, target),
+        None => RuntimeBenchmarkQuery::all_for_metric(metric),
+    };
+
+    // Get all crates, cache, and profile combinations for the given metric
     let runtime_comparisons = get_comparison::<RuntimeTestResultComparison, _, _>(
         ctxt,
-        RuntimeBenchmarkQuery::all_for_metric(metric),
+        runtime_query,
         a.clone(),
         aids,
         metric,
