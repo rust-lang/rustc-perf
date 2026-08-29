@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {h, ref, Ref} from "vue";
+import {computed, h, ref, Ref} from "vue";
 import {differenceInSeconds} from "date-fns";
 
 import {getJson} from "../../utils/requests";
@@ -23,6 +23,7 @@ import Collector from "./collector.vue";
 import CommitSha from "./commit-sha.vue";
 import DateFmtPicker from "./date-format-selection.vue";
 import {DATE_FMT_12HR, DATE_FMT_24HR} from "../../utils/date-formats";
+import {DEFAULT_COMPILE_TARGET_TRIPLE} from "../../api";
 
 const loading = ref(true);
 
@@ -217,6 +218,29 @@ function toggleDate() {
   preferredDateTimeFormat.value = nextDateFmt;
 }
 
+const sortedCollectors = computed(() => {
+  // We want to see x64 collectors first
+  const collectors = data?.value?.collectors ?? [];
+  collectors.sort((a, b) => {
+    if (a.isActive && !b.isActive) return -1;
+    if (!a.isActive && b.isActive) return 1;
+
+    if (
+      a.target == DEFAULT_COMPILE_TARGET_TRIPLE &&
+      b.target != DEFAULT_COMPILE_TARGET_TRIPLE
+    )
+      return -1;
+    if (
+      a.target != DEFAULT_COMPILE_TARGET_TRIPLE &&
+      b.target == DEFAULT_COMPILE_TARGET_TRIPLE
+    )
+      return 1;
+
+    return a.name.localeCompare(b.name);
+  });
+  return collectors;
+});
+
 loadStatusData(loading);
 </script>
 
@@ -312,7 +336,7 @@ loadStatusData(loading);
       <div class="collector-wrapper">
         <h1>Collectors</h1>
         <div class="collectors-grid">
-          <div v-for="collector in data.collectors" :key="collector.name">
+          <div v-for="collector in sortedCollectors" :key="collector.name">
             <Collector :collector="collector" />
           </div>
         </div>
