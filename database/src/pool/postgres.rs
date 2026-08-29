@@ -1439,6 +1439,16 @@ where
         &self,
         benchmark_request: &BenchmarkRequest,
     ) -> anyhow::Result<BenchmarkRequestInsertResult> {
+        let BenchmarkRequest {
+            commit_type,
+            commit_date,
+            created_at,
+            status,
+            backends,
+            profiles,
+            targets,
+        } = benchmark_request;
+
         let row_insert_count = self
             .conn()
             .execute(
@@ -1452,21 +1462,23 @@ where
                     created_at,
                     backends,
                     profiles,
+                    targets,
                     commit_date
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT DO NOTHING;
             "#,
                 &[
                     &benchmark_request.tag(),
                     &benchmark_request.parent_sha(),
                     &benchmark_request.pr().map(|it| it as i32),
-                    &benchmark_request.commit_type,
-                    &benchmark_request.status.as_str(),
-                    &benchmark_request.created_at,
-                    &benchmark_request.backends,
-                    &benchmark_request.profiles,
-                    &benchmark_request.commit_date,
+                    commit_type,
+                    &status.as_str(),
+                    created_at,
+                    backends,
+                    profiles,
+                    targets,
+                    commit_date,
                 ],
             )
             .await
