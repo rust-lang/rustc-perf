@@ -676,6 +676,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn benchmark_request_roundtrip() {
+        run_postgres_test(|ctx| async {
+            let db = ctx.db();
+
+            let req = BenchmarkRequest::create_try_without_artifacts(
+                42, "backends", "profiles", "targets",
+            );
+
+            db.insert_benchmark_request(&req).await.unwrap();
+            assert!(db
+                .attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
+                .await
+                .unwrap());
+
+            let loaded = db
+                .load_pending_benchmark_requests()
+                .await
+                .unwrap()
+                .requests
+                .into_iter()
+                .next()
+                .unwrap();
+            assert_eq!(req.profiles, loaded.profiles);
+            assert_eq!(req.backends, loaded.backends);
+            assert_eq!(req.targets, loaded.targets);
+
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
     async fn attach_shas_missing_try_request() {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
