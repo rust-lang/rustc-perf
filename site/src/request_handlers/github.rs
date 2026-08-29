@@ -484,7 +484,7 @@ fn parse_benchmark_parameters<'a>(
         parse_targets(targets).map_err(|e| {
             format!(
                 "Cannot parse targets: {e}. Valid values are: {}",
-                Target::primary_targets()
+                Target::available_targets()
                     .iter()
                     .map(|b| b.as_str())
                     .collect::<Vec<_>>()
@@ -728,7 +728,7 @@ Otherwise LGTM."#),
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue targets=x86_64-unknown-linux-gnu"),
             @r#"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: Some("x86_64-unknown-linux-gnu") } }))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue targets=x86_64-unknown-linux-gnu,67-unknown-none"),
-            @r#"Err("Cannot parse targets: Only primary targets can be specified. Valid values are: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu")"#);
+            @r#"Err("Cannot parse targets: Only the available targets `x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu` can be specified. Valid values are: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu")"#);
     }
 
     #[test]
