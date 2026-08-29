@@ -14,7 +14,7 @@ const props = defineProps<{
   defaultFilter: CompileBenchmarkFilter;
   // Initialize the filter with this value
   initialFilter: CompileBenchmarkFilter;
-  canCompareBackends: boolean;
+  selfCompareEnabled: boolean;
 }>();
 const emit = defineEmits<{
   (e: "change", filter: CompileBenchmarkFilter): void;
@@ -38,13 +38,9 @@ function toggleTarget(target: Target) {
   }
 }
 
-function updateSelfCompareParameter(parameter: string, event: Event) {
-  const value = (event.target as HTMLInputElement).checked;
-  if (!value) {
-    filter.value.selfCompareParameter = null;
-  } else {
-    filter.value.selfCompareParameter = parameter;
-  }
+function updateSelfCompareParameter(event: Event) {
+  let rawValue = (event.target as HTMLSelectElement).value;
+  filter.value.selfCompareParameter = rawValue === "" ? null : rawValue;
 }
 
 let filter = ref(deepCopy(props.initialFilter));
@@ -376,16 +372,28 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div
             class="section"
-            v-if="canCompareBackends"
-            title="Compare codegen backends for this commit"
+            v-if="selfCompareEnabled"
+            title="Compare different values of a single benchmark parameter for this commit"
           >
-            Compare codegen backends for this commit:
-            <input
-              type="checkbox"
-              :checked="filter.selfCompareParameter === 'backend'"
-              @change="(value) => updateSelfCompareParameter('backend', value)"
-              v-model="filter.selfCompareParameter"
-            />
+            Compare benchmark parameter for this commit:
+            <select @change="updateSelfCompareParameter">
+              <option
+                value=""
+                :selected="filter.selfCompareParameter === null"
+              ></option>
+              <option
+                value="backend"
+                :selected="filter.selfCompareParameter === 'backend'"
+              >
+                Codegen backend
+              </option>
+              <option
+                value="target"
+                :selected="filter.selfCompareParameter === 'target'"
+              >
+                Target
+              </option>
+            </select>
           </div>
           <button @click="reset" style="margin-right: 10px">
             Reset filters

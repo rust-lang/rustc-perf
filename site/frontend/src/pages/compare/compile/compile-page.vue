@@ -14,7 +14,8 @@ import {
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
   defaultCompileFilter,
-  transformDataForBackendComparison,
+  SelfCompareData,
+  transformDataForSelfComparison,
 } from "./common";
 import {BenchmarkInfo, DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
@@ -310,18 +311,31 @@ const urlParams = getUrlParams();
 const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
-// Should we use the backend as the source of before/after data?
-const selfCompareBackend = computed(() => {
-  return (
-    canCompareBackends.value && filter.value.selfCompareParameter === "backend"
-  );
-});
-const canCompareBackends = computed(() => {
-  const hasMultipleBackends =
-    new Set(props.data.compile_comparisons.map((c) => c.backend)).size > 1;
+const selfCompareCanBeEnabled = computed(() => {
   // Are we currently comparing the same commit in the before/after toolchains?
-  const comparesSameCommit = props.data.a.commit === props.data.b.commit;
-  return hasMultipleBackends && comparesSameCommit;
+  return props.data.a.commit === props.data.b.commit;
+});
+
+// Should we use a given benchmark parameter as the source of before/after data?
+const selfCompareData = computed((): SelfCompareData | null => {
+  if (!selfCompareCanBeEnabled.value) return null;
+
+  const selfCompare = filter.value.selfCompareParameter;
+  if (selfCompare === null) return null;
+
+  if (selfCompare === "backend") {
+    return {
+      parameter: "backend",
+      baseline: "llvm",
+    };
+  } else if (selfCompare === "target") {
+    return {
+      parameter: "target",
+      baseline: DEFAULT_COMPILE_TARGET_TRIPLE,
+    };
+  } else {
+    return null;
+  }
 });
 
 function exportData() {
@@ -331,9 +345,14 @@ function exportData() {
 const benchmarkMap = createCompileBenchmarkMap(props.data);
 
 const compileComparisons = computed(() => {
-  // If requested, artificially restructure the data to create a comparison between backends
-  if (selfCompareBackend.value) {
-    return transformDataForBackendComparison(props.data.compile_comparisons);
+  // If requested, artificially restructure the data to create a comparison
+  // between the selected benchmark parameter
+  const selfCompare = selfCompareData.value;
+  if (selfCompare !== null) {
+    return transformDataForSelfComparison(
+      props.data.compile_comparisons,
+      selfCompare
+    );
   } else {
     return props.data.compile_comparisons;
   }
@@ -362,15 +381,15 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :info="benchmarkInfo"
     :default-filter="defaultCompileFilter"
     :initial-filter="filter"
-    :can-compare-backends="canCompareBackends"
+    :self-compare-enabled="selfCompareCanBeEnabled"
     @change="updateFilter"
     @export="exportData"
   />
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
-  <div class="warning" v-if="selfCompareBackend">
-    Note: comparing results of the baseline LLVM backend to the Cranelift
-    backend.
+  <div class="warning" v-if="selfCompareData !== null">
+    Note: comparing results against the baseline {{ selfCompareData.baseline }}
+    {{ selfCompareData.parameter }}.
   </div>
   <Benchmarks
     :data="data"
@@ -379,7 +398,6 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :filter="filter"
     :stat="selector.stat"
     :benchmark-map="benchmarkMap"
-    :show-backend="!selfCompareBackend"
   ></Benchmarks>
 </template>
 <style lang="scss" scoped>
