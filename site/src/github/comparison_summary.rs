@@ -88,7 +88,7 @@ fn make_comparison_url(commit: &QueuedCommit, stat: Metric) -> String {
     )
 }
 
-async fn calculate_metric_comparison(
+pub(crate) async fn calculate_metric_comparison(
     ctxt: &SiteCtxt,
     commit: &QueuedCommit,
     metric: Metric,
@@ -103,10 +103,10 @@ async fn calculate_metric_comparison(
     {
         Ok(Some(c)) => Ok(c),
         Ok(None) => {
-            Err("Error occured while categorizing benchmark run (missing comparison).".to_string())
+            Err("Error occurred while categorizing benchmark run (missing comparison).".to_string())
         }
         Err(error) => Err(format!(
-            "Error occured while categorizing benchmark run:\n\n```{error}```"
+            "Error occurred while categorizing benchmark run:\n\n```{error}```"
         )),
     }
 }

@@ -1,6 +1,9 @@
 use crate::github::client::{Client, GraphQLClient, ResponseComment};
+use crate::github::comparison_summary::calculate_metric_comparison;
+use crate::load::SiteCtxt;
 use crate::request_handlers::parse_unrolled_build_message;
 use anyhow::bail;
+use database::metric::Metric;
 use database::QueuedCommit;
 
 pub struct TriageBuild {
@@ -62,6 +65,50 @@ pub fn update_triage_body(
 
     body.replace_range(body_start..body_end, &triage_summary);
     Ok(())
+}
+
+pub async fn changed_benchmarks_in_rollup(
+    ctxt: &SiteCtxt,
+    rollup: u32,
+) -> anyhow::Result<Vec<String>> {
+    let master_commits = ctxt.get_master_commits();
+    let Some(rollup) = master_commits
+        .commits
+        .iter()
+        .find(|commit| commit.pr.is_some_and(|pr| pr == rollup))
+        .cloned()
+    else {
+        bail!("The `@rust-timer triage` command can only be executed in rollups. If this is a rollup, it might be too old.")
+    };
+    drop(master_commits);
+
+    let comparison = calculate_metric_comparison(
+        ctxt,
+        &QueuedCommit {
+            sha: rollup.sha,
+            parent_sha: rollup.parent_sha,
+
+            // Fields that are not used by `calculate_metric_comparison`
+            pr: 0,
+            include: None,
+            exclude: None,
+            runs: None,
+            commit_date: None,
+            backends: None,
+        },
+        Metric::InstructionsUser,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let compile_benchmarks = comparison.compile_comparisons.iter().flat_map(|c| {
+        c.comparison
+            .is_relevant()
+            .then_some(c.test_case.benchmark.to_string())
+    });
+    let newly_failed_benchmarks = comparison.newly_failed_benchmarks.into_keys();
+    let changed_benchmarks = compile_benchmarks.chain(newly_failed_benchmarks);
+    Ok(changed_benchmarks.collect())
 }
 
 #[cfg(test)]
