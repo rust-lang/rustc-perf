@@ -1689,10 +1689,17 @@ async fn create_benchmark_configs(
         }
     }
 
+    let benchmark_filter_accepts = |benchmark: &str| {
+        job.benchmarks().is_empty() || job.benchmarks().iter().any(|b| b == benchmark)
+    };
+
     let benchmarks: Vec<Benchmark> = all_compile_benchmarks
         .iter()
         .filter(|b| {
             if !bench_compile_benchmarks.contains(&b.name) {
+                return false;
+            }
+            if !benchmark_filter_accepts(&b.name.0) {
                 return false;
             }
             // Run stable benchmarks for releases and non-stable benchmarks for everything
@@ -1702,6 +1709,10 @@ async fn create_benchmark_configs(
         })
         .cloned()
         .collect();
+
+    if !benchmark_filter_accepts("rustc") {
+        bench_rustc = false;
+    }
 
     let compile_config = if bench_rustc || !benchmarks.is_empty() {
         if toolchain.components.rustdoc.is_none()
@@ -1757,7 +1768,7 @@ async fn create_benchmark_configs(
         .await?;
         Some(RuntimeBenchmarkConfig {
             runtime_suite,
-            filter: RuntimeBenchmarkFilter::keep_all(),
+            filter: RuntimeBenchmarkFilter::new(vec![], job.benchmarks().to_vec()),
             iterations: DEFAULT_RUNTIME_ITERATIONS,
             target: job.target().into(),
         })
