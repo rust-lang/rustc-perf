@@ -615,7 +615,7 @@ mod tests {
     }
 
     fn create_try(pr: u32) -> BenchmarkRequest {
-        BenchmarkRequest::create_try_without_artifacts(pr, "", "", "")
+        BenchmarkRequest::create_try_without_artifacts(pr, "", "", "", "")
     }
 
     fn create_release(tag: &str) -> BenchmarkRequest {

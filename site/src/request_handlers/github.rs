@@ -86,7 +86,7 @@ async fn record_try_benchmark_request_without_artifacts(
     targets: &str,
 ) -> String {
     let try_request =
-        BenchmarkRequest::create_try_without_artifacts(pr, backends, profiles, targets);
+        BenchmarkRequest::create_try_without_artifacts(pr, backends, profiles, targets, "");
     log::info!("Inserting try benchmark request {try_request:?}");
 
     match conn.insert_benchmark_request(&try_request).await {

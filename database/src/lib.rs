@@ -1035,6 +1035,7 @@ impl BenchmarkRequest {
         backends: &str,
         profiles: &str,
         targets: &str,
+        benchmarks: &str,
     ) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Try {
@@ -1048,7 +1049,7 @@ impl BenchmarkRequest {
             backends: backends.to_string(),
             profiles: profiles.to_string(),
             targets: targets.to_string(),
-            benchmarks: String::new(),
+            benchmarks: benchmarks.to_string(),
         }
     }
 
