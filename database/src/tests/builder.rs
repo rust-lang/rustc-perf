@@ -48,6 +48,7 @@ impl RequestBuilder {
                     job.backend,
                     job.profile,
                     job.benchmark_set,
+                    &job.benchmarks,
                     job.kind,
                     false,
                 )
@@ -115,6 +116,7 @@ pub struct JobBuilder {
     backend: CodegenBackend,
     profile: Profile,
     benchmark_set: u32,
+    benchmarks: Vec<String>,
     conclusion: BenchmarkJobConclusion,
     kind: BenchmarkJobKind,
     is_optional: bool,
@@ -139,6 +141,7 @@ impl Default for JobBuilder {
             backend: CodegenBackend::Llvm,
             profile: Profile::Check,
             benchmark_set: 0,
+            benchmarks: Vec::new(),
             conclusion: BenchmarkJobConclusion::Success,
             kind: BenchmarkJobKind::Compiletime,
             is_optional: false,

@@ -3,12 +3,12 @@ use crate::pool::{
 };
 use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestInsertResult, BenchmarkRequestStatus, BenchmarkRequestType,
-    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, FrontendThreads, Index, PendingBenchmarkRequests,
-    Profile, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    parse_benchmarks, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
+    BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
+    BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, FrontendThreads, Index,
+    PendingBenchmarkRequests, Profile, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
     BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
     BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -451,6 +451,7 @@ static MIGRATIONS: &[&str] = &[
     "#,
     // Add benchmarks to benchmark_request
     r#"ALTER TABLE benchmark_request ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
+    r#"ALTER TABLE job_queue ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
 ];
 
 #[async_trait::async_trait]
@@ -839,6 +840,7 @@ fn parse_benchmark_job_from_row(row: &Row) -> anyhow::Result<BenchmarkJob> {
         deque_counter: row.get::<_, i32>(10) as u32,
         kind: BenchmarkJobKind::from_str(row.get::<_, &str>(12)).map_err(|e| anyhow::anyhow!(e))?,
         is_optional: row.get::<_, bool>(13),
+        benchmarks: parse_benchmarks(&row.get::<_, String>(14)).map_err(|e| anyhow::anyhow!(e))?,
     })
 }
 
@@ -1612,6 +1614,7 @@ where
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        benchmarks: &[String],
         kind: BenchmarkJobKind,
         is_optional: bool,
     ) -> JobEnqueueResult {
@@ -1632,9 +1635,10 @@ where
                 benchmark_set,
                 status,
                 kind,
-                is_optional
+                is_optional,
+                benchmarks
             )
-            SELECT $1, $2, $3, $4, $5, $6, $7, $8
+            SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
             WHERE EXISTS (SELECT 1 FROM benchmark_request WHERE benchmark_request.tag = $1)
             ON CONFLICT DO NOTHING
             RETURNING job_queue.id
@@ -1648,6 +1652,7 @@ where
                     &BENCHMARK_JOB_STATUS_QUEUED_STR,
                     &kind,
                     &is_optional,
+                    &benchmarks.join(","),
                 ],
             )
             .await;
@@ -1861,6 +1866,7 @@ where
                     updated.retry,
                     updated.kind,
                     updated.is_optional,
+                    updated.benchmarks,
                     br.commit_type,
                     br.commit_date
                 FROM updated
@@ -1897,9 +1903,11 @@ where
                     kind: BenchmarkJobKind::from_str(row.get::<_, &str>(7))
                         .map_err(|e| anyhow::anyhow!(e))?,
                     is_optional: row.get::<_, bool>(8),
+                    benchmarks: parse_benchmarks(&row.get::<_, String>(9))
+                        .map_err(|e| anyhow::anyhow!(e))?,
                 };
-                let commit_type = row.get::<_, &str>(9);
-                let commit_date = row.get::<_, Option<DateTime<Utc>>>(10);
+                let commit_type = row.get::<_, &str>(10);
+                let commit_date = row.get::<_, Option<DateTime<Utc>>>(11);
 
                 let commit_date = Date(commit_date.ok_or_else(|| {
                     anyhow::anyhow!("Dequeuing job for a benchmark request without commit date")

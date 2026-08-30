@@ -270,6 +270,7 @@ Columns:
   test (e.g. llvm, cranelift).
 * **benchmark_set** (`int NOT NULL`): ID of the predefined benchmark suite to
   execute.
+* **benchmarks** (`string NOT NULL`): Comma-separated list of benchmarks to execute. If empty, all benchmarks in `benchmark_set` will be executed.
 * **collector_name** (`text`): Name of the collector that claimed the job
   (populated once the job is started).
 * **created_at** (`timestamptz NOT NULL`): Datetime when the job was queued.

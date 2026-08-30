@@ -8,8 +8,8 @@ use std::fmt::Write;
 use crate::github::client::Client;
 use crate::github::triage::{triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER};
 use database::{
-    parse_backends, parse_profiles, parse_targets, BenchmarkRequest, BenchmarkRequestInsertResult,
-    CodegenBackend, Profile, Target,
+    parse_backends, parse_benchmarks, parse_profiles, parse_targets, BenchmarkRequest,
+    BenchmarkRequestInsertResult, CodegenBackend, Profile, Target,
 };
 use futures::stream::{FuturesUnordered, StreamExt};
 use hashbrown::HashMap;
@@ -495,6 +495,10 @@ fn parse_benchmark_parameters<'a>(
                     .join(", ")
             )
         })?;
+    }
+
+    if let Some(benchmarks) = &params.benchmarks {
+        parse_benchmarks(benchmarks).map_err(|e| format!("Cannot parse benchmarks: {e}"))?;
     }
 
     if !args.is_empty() {

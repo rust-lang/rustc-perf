@@ -260,6 +260,7 @@ pub async fn enqueue_benchmark_request(
     let backends = request.backends()?;
     let profiles = request.profiles()?;
     let targets = request.targets()?;
+    let benchmarks = request.benchmarks()?;
 
     #[derive(PartialEq, Debug)]
     enum EnqueueMode {
@@ -273,6 +274,7 @@ pub async fn enqueue_benchmark_request(
                              backend,
                              profile,
                              benchmark_set,
+                             benchmarks,
                              kind,
                              mode: EnqueueMode,
                              is_optional: bool| {
@@ -284,6 +286,7 @@ pub async fn enqueue_benchmark_request(
                 backend,
                 profile,
                 benchmark_set,
+                benchmarks,
                 kind,
                 is_optional,
             )
@@ -330,6 +333,7 @@ pub async fn enqueue_benchmark_request(
                         backend,
                         profile,
                         benchmark_set as u32,
+                        &benchmarks,
                         BenchmarkJobKind::Compiletime,
                         EnqueueMode::Commit,
                         is_optional,
@@ -349,6 +353,7 @@ pub async fn enqueue_benchmark_request(
                             backend,
                             profile,
                             benchmark_set as u32,
+                            &benchmarks,
                             BenchmarkJobKind::Compiletime,
                             EnqueueMode::Parent,
                             is_optional,
@@ -368,6 +373,7 @@ pub async fn enqueue_benchmark_request(
             CodegenBackend::Llvm,
             Profile::Opt,
             BENCHMARK_SET_RUNTIME_BENCHMARKS,
+            &benchmarks,
             BenchmarkJobKind::Runtime,
             EnqueueMode::Commit,
             is_optional,
@@ -386,6 +392,7 @@ pub async fn enqueue_benchmark_request(
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 BENCHMARK_SET_RUSTC,
+                &benchmarks,
                 BenchmarkJobKind::Rustc,
                 EnqueueMode::Commit,
                 false,
@@ -646,6 +653,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 benchmark_set,
+                &[],
                 BenchmarkJobKind::Compiletime,
                 false,
             )

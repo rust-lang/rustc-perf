@@ -1126,6 +1126,7 @@ impl Connection for SqliteConnection {
         _backend: CodegenBackend,
         _profile: Profile,
         _benchmark_set: u32,
+        _benchmarks: &[String],
         _kind: BenchmarkJobKind,
         _is_optional: bool,
     ) -> JobEnqueueResult {

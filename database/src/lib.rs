@@ -1155,6 +1155,12 @@ impl BenchmarkRequest {
         parse_targets(&self.targets).map_err(|e| anyhow::anyhow!("{e}"))
     }
 
+    /// Get the targets for the request
+    pub fn benchmarks(&self) -> anyhow::Result<Vec<String>> {
+        let benchmarks = parse_benchmarks(&self.benchmarks).map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(benchmarks)
+    }
+
     pub fn is_completed(&self) -> bool {
         matches!(self.status, BenchmarkRequestStatus::Completed { .. })
     }
@@ -1206,6 +1212,10 @@ pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
         ));
     }
     Ok(targets)
+}
+
+pub fn parse_benchmarks(benchmarks: &str) -> Result<Vec<String>, String> {
+    parse_comma_separated(benchmarks, "benchmark")
 }
 
 /// Cached information about benchmark requests in the DB
@@ -1298,6 +1308,7 @@ pub struct BenchmarkJob {
     profile: Profile,
     request_tag: String,
     benchmark_set: BenchmarkSet,
+    benchmarks: Vec<String>,
     created_at: DateTime<Utc>,
     status: BenchmarkJobStatus,
     deque_counter: u32,
@@ -1328,6 +1339,10 @@ impl BenchmarkJob {
 
     pub fn benchmark_set(&self) -> BenchmarkSet {
         self.benchmark_set
+    }
+
+    pub fn benchmarks(&self) -> &[String] {
+        &self.benchmarks
     }
 
     pub fn collector_name(&self) -> Option<&str> {

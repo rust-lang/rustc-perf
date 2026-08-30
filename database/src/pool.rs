@@ -200,6 +200,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        benchmarks: &[String],
         kind: BenchmarkJobKind,
         is_optional: bool,
     ) -> JobEnqueueResult;
@@ -749,6 +750,7 @@ mod tests {
                     CodegenBackend::Llvm,
                     Profile::Opt,
                     0u32,
+                    &[],
                     BenchmarkJobKind::Runtime,
                     false,
                 )
@@ -905,6 +907,7 @@ mod tests {
                 .unwrap();
 
             // Now we can insert the job
+            let example_benchmarks = vec!["benchmark1".into(), "benchmark2".into()];
             match db
                 .enqueue_benchmark_job(
                     benchmark_request.tag().unwrap(),
@@ -912,6 +915,7 @@ mod tests {
                     CodegenBackend::Llvm,
                     Profile::Opt,
                     1u32,
+                    &example_benchmarks,
                     BenchmarkJobKind::Runtime,
                     false,
                 )
@@ -945,6 +949,7 @@ mod tests {
                 benchmark_job.collector_name().unwrap(),
                 collector_config.name(),
             );
+            assert_eq!(benchmark_job.benchmarks(), example_benchmarks);
 
             assert_eq!(
                 artifact_id,
@@ -1013,6 +1018,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 benchmark_set.0,
+                &[],
                 BenchmarkJobKind::Runtime,
                 false,
             )
@@ -1268,6 +1274,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Check,
                 0,
+                &[],
                 BenchmarkJobKind::Compiletime,
                 false,
             )
@@ -1325,6 +1332,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 benchmark_set.0,
+                &[],
                 BenchmarkJobKind::Runtime,
                 false,
             )
@@ -1339,6 +1347,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Doc,
                 benchmark_set.0,
+                &[],
                 BenchmarkJobKind::Runtime,
                 true,
             )
