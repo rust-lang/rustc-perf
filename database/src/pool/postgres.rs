@@ -2201,45 +2201,30 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
                 panic!("Invalid BenchmarkRequestStatus data in the database for tag {tag:?}: {e:?}")
             });
 
-    match commit_type {
-        BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {
-            commit_type: BenchmarkRequestType::Try {
-                sha: tag,
-                parent_sha,
-                pr: pr.expect("Try commit in the DB without a PR"),
-            },
-            commit_date,
-            created_at,
-            status,
-            backends,
-            profiles,
-            targets,
+    let commit_type = match commit_type {
+        BENCHMARK_REQUEST_TRY_STR => BenchmarkRequestType::Try {
+            sha: tag,
+            parent_sha,
+            pr: pr.expect("Try commit in the DB without a PR"),
         },
-        BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
-            commit_type: BenchmarkRequestType::Master {
-                sha: tag.expect("Master commit in the DB without a SHA"),
-                parent_sha: parent_sha.expect("Master commit in the DB without a parent SHA"),
-                pr: pr.expect("Master commit in the DB without a PR"),
-            },
-            commit_date,
-            created_at,
-            status,
-            backends,
-            profiles,
-            targets,
+        BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequestType::Master {
+            sha: tag.expect("Master commit in the DB without a SHA"),
+            parent_sha: parent_sha.expect("Master commit in the DB without a parent SHA"),
+            pr: pr.expect("Master commit in the DB without a PR"),
         },
-        BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
-            commit_type: BenchmarkRequestType::Release {
-                tag: tag.expect("Release commit in the DB without a SHA"),
-            },
-            commit_date,
-            created_at,
-            status,
-            backends,
-            profiles,
-            targets,
+        BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequestType::Release {
+            tag: tag.expect("Release commit in the DB without a SHA"),
         },
         _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
+    };
+    BenchmarkRequest {
+        commit_type,
+        commit_date,
+        created_at,
+        status,
+        backends,
+        profiles,
+        targets,
     }
 }
 
