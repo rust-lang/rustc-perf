@@ -1,0 +1,145 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@std/assert@*": "1.0.19",
+    "jsr:@std/fs@^1.0.24": "1.0.24",
+    "jsr:@std/internal@^1.0.12": "1.0.14",
+    "jsr:@std/internal@^1.0.14": "1.0.14",
+    "jsr:@std/path@^1.1.5": "1.1.6",
+    "jsr:@std/path@^1.1.6": "1.1.6",
+    "npm:@ast-grep/napi@~0.44.1": "0.44.1",
+    "npm:cmd-ts@0.15": "0.15.0",
+    "npm:ts-pattern@^5.9.0": "5.9.0"
+  },
+  "jsr": {
+    "@std/assert@1.0.19": {
+      "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.12"
+      ]
+    },
+    "@std/fs@1.0.24": {
+      "integrity": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.14",
+        "jsr:@std/path@^1.1.5"
+      ]
+    },
+    "@std/internal@1.0.14": {
+      "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
+    },
+    "@std/path@1.1.6": {
+      "integrity": "c68485c2a4dfbb5ae3cc74fae4e8c4e5d874cf8a8ed12927917235c758b46cbe",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.14"
+      ]
+    }
+  },
+  "npm": {
+    "@ast-grep/napi-darwin-arm64@0.44.1": {
+      "integrity": "sha512-JPcb1PvOkwKgccGbBgtoc4e6qfx/luvAtlc6SEtNPhvSwV8qagLb9MCSDcCiuqrqICx3qHj2CXouGbs66lCFvA==",
+      "os": ["darwin"],
+      "cpu": ["arm64"]
+    },
+    "@ast-grep/napi-darwin-x64@0.44.1": {
+      "integrity": "sha512-TZj9CnCoe30mj2Nri/mMDORgkp1nkeCiw03CIRPOaUqNOvCNyMWLQhxwGJcG1KpY9MuTZsbLcQ3jju0fXZJjwQ==",
+      "os": ["darwin"],
+      "cpu": ["x64"]
+    },
+    "@ast-grep/napi-linux-arm64-gnu@0.44.1": {
+      "integrity": "sha512-tw/7ruKolNcy97tDf/24Arb8wo/Ho2FRHk98lrmYQZZr18fFaiYjRXTCJTizOsdo6wL/asht4Rpdo/eRPuDhVw==",
+      "os": ["linux"],
+      "cpu": ["arm64"]
+    },
+    "@ast-grep/napi-linux-arm64-musl@0.44.1": {
+      "integrity": "sha512-IJlY4GnuDqABa40xMvJp62nEQWYmk6wXtZc2sbPiQoemxAPG6X2m+eWwYpE9heAQOe6iNkXsILNH8YZHRTYayA==",
+      "os": ["linux"],
+      "cpu": ["arm64"]
+    },
+    "@ast-grep/napi-linux-x64-gnu@0.44.1": {
+      "integrity": "sha512-6YyLrXn0RcKCS/FpqAFVWWtbGNFYia5tNI6mX1PqVQPCMT5EojHDXpW2/eo6uV/BnGCsVpTocAWSpac6tACa6g==",
+      "os": ["linux"],
+      "cpu": ["x64"]
+    },
+    "@ast-grep/napi-linux-x64-musl@0.44.1": {
+      "integrity": "sha512-P8ze2Srap/4RsxbrzMy/NSvkRfLwNfvfoEbwBqS/q199t3wVkpS2gT13QkANrgU+RLUgAIawnFBpjbm5XinIuQ==",
+      "os": ["linux"],
+      "cpu": ["x64"]
+    },
+    "@ast-grep/napi-win32-arm64-msvc@0.44.1": {
+      "integrity": "sha512-ty5fItgu6aTDJg1fVkWwx0qboB5pFsyjRHSgi5uqXFzLbno1vOKog1pMzu3xcKcLqMiNI0axML+HdFOqSFQz0w==",
+      "os": ["win32"],
+      "cpu": ["arm64"]
+    },
+    "@ast-grep/napi-win32-ia32-msvc@0.44.1": {
+      "integrity": "sha512-1wTv2MrQLygnaZhlgH8aYpOkHW051CwWWowTr2AFGkn+2PMfsTTG4SEWcZArOIKlAGdWAvvlut66tLyzKhAFyw==",
+      "os": ["win32"],
+      "cpu": ["ia32"]
+    },
+    "@ast-grep/napi-win32-x64-msvc@0.44.1": {
+      "integrity": "sha512-U8CK5JaH8YUezTJnyk97I3C5Twh9gKDB/Q3KztQdOZGeoYqthnQzM4Ntvlz8aWaVSssn7OyGMr3O8ZoK0W8aJg==",
+      "os": ["win32"],
+      "cpu": ["x64"]
+    },
+    "@ast-grep/napi@0.44.1": {
+      "integrity": "sha512-dJAJVYRKmUjXn+4mXUgfRvMrWujB9mLzPSq/2e8J7n6Hn3dY4jpZNpChj6hMi7PlZ2J2c7coAVoDBaax06uvXw==",
+      "optionalDependencies": [
+        "@ast-grep/napi-darwin-arm64",
+        "@ast-grep/napi-darwin-x64",
+        "@ast-grep/napi-linux-arm64-gnu",
+        "@ast-grep/napi-linux-arm64-musl",
+        "@ast-grep/napi-linux-x64-gnu",
+        "@ast-grep/napi-linux-x64-musl",
+        "@ast-grep/napi-win32-arm64-msvc",
+        "@ast-grep/napi-win32-ia32-msvc",
+        "@ast-grep/napi-win32-x64-msvc"
+      ]
+    },
+    "ansi-regex@6.2.2": {
+      "integrity": "sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg=="
+    },
+    "chalk@5.6.2": {
+      "integrity": "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="
+    },
+    "cmd-ts@0.15.0": {
+      "integrity": "sha512-ASyAx+P6DNzNEZ6OYmvjjaLAQeI3L+4lm5rX2Jg8tondXdj06o9JTxi9mfC92KoVbrVFKhZ+j2TfBF8fcura6g==",
+      "dependencies": [
+        "chalk",
+        "debug",
+        "didyoumean",
+        "strip-ansi"
+      ]
+    },
+    "debug@4.4.3": {
+      "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+      "dependencies": [
+        "ms"
+      ]
+    },
+    "didyoumean@1.2.2": {
+      "integrity": "sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw=="
+    },
+    "ms@2.1.3": {
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
+    },
+    "strip-ansi@7.2.0": {
+      "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+      "dependencies": [
+        "ansi-regex"
+      ]
+    },
+    "ts-pattern@5.9.0": {
+      "integrity": "sha512-6s5V71mX8qBUmlgbrfL33xDUwO0fq48rxAu2LBE11WBeGdpCPOsXksQbZJHvHwhrd3QjUusd3mAOM5Gg0mFBLg=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@std/assert@*",
+      "jsr:@std/fs@^1.0.24",
+      "jsr:@std/path@^1.1.6",
+      "npm:@ast-grep/napi@~0.44.1",
+      "npm:cmd-ts@0.15",
+      "npm:ts-pattern@^5.9.0"
+    ]
+  }
+}

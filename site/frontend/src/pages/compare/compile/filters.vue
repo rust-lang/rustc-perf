@@ -208,6 +208,40 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           <div class="section section-list-wrapper">
             <div class="section-heading">
               <div style="width: 160px">
+                <span>Frontend Threads</span>
+                <Tooltip
+                  >The different parallel frontend options (-Zthreads=N).
+                </Tooltip>
+              </div>
+            </div>
+            <ul class="states-list">
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    id="build-threads_1"
+                    v-model="filter.frontendThreads.threads_1"
+                  />
+                  <span class="label">1</span>
+                </label>
+                <Tooltip>Single-threaded rustc frontend. </Tooltip>
+              </li>
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    id="build-threads_4"
+                    v-model="filter.frontendThreads.threads_4"
+                  />
+                  <span class="label">4</span>
+                </label>
+                <Tooltip>Parallel rustc frontend with 4 threads. </Tooltip>
+              </li>
+            </ul>
+          </div>
+          <div class="section section-list-wrapper">
+            <div class="section-heading">
+              <div style="width: 160px">
                 <span>Backends</span>
                 <Tooltip
                   >The different codegen backends used to generate executable

@@ -89,6 +89,20 @@ const totalAfter = computed(() =>
             </div>
           </div>
           <div class="aggregation-section">
+            <div class="header">FrontendThreads</div>
+            <div class="groups">
+              <div class="group" v-for="frontendThreads in ['1', '4']">
+                <div class="group-header">threads_{{ frontendThreads }}</div>
+                <SummaryTable
+                  :summary="
+                    calculateSummary('frontendThreads', frontendThreads)
+                  "
+                  :withLegend="false"
+                ></SummaryTable>
+              </div>
+            </div>
+          </div>
+          <div class="aggregation-section">
             <div class="header">Category</div>
             <div class="groups">
               <div class="group" v-for="category in ['primary', 'secondary']">
