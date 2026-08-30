@@ -449,6 +449,8 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE pstat_series DROP CONSTRAINT test_case;
     ALTER TABLE pstat_series ADD CONSTRAINT test_case UNIQUE(crate, profile, scenario, backend, target, frontend_threads, metric);
     "#,
+    // Add benchmarks to benchmark_request
+    r#"ALTER TABLE benchmark_request ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
 ];
 
 #[async_trait::async_trait]
@@ -800,7 +802,7 @@ impl PostgresConnection {
 
 // `tag` should be kept as the first column
 const BENCHMARK_REQUEST_COLUMNS: &str =
-    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets";
+    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets, benchmarks";
 
 /// Parse a benchmark job out of a row.
 /// Expects to be used with `SELECT * FROM job_queue`.
@@ -1447,6 +1449,7 @@ where
             backends,
             profiles,
             targets,
+            benchmarks,
         } = benchmark_request;
 
         let row_insert_count = self
@@ -1463,9 +1466,10 @@ where
                     backends,
                     profiles,
                     targets,
-                    commit_date
+                    commit_date,
+                    benchmarks
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT DO NOTHING;
             "#,
                 &[
@@ -1479,6 +1483,7 @@ where
                     profiles,
                     targets,
                     commit_date,
+                    benchmarks,
                 ],
             )
             .await
@@ -2025,8 +2030,8 @@ where
 
         for row in rows {
             let tag = row.get::<_, &str>(0);
-            let error_benchmark = row.get::<_, Option<String>>(12);
-            let error_content = row.get::<_, Option<String>>(13);
+            let error_benchmark = row.get::<_, Option<String>>(13);
+            let error_content = row.get::<_, Option<String>>(14);
 
             // We already saw this request, just add errors
             if let Some(errors) = errors.get_mut(tag) {
@@ -2192,6 +2197,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
     let commit_date = row.get::<_, Option<DateTime<Utc>>>(9 + row_offset);
     let duration_ms = row.get::<_, Option<i32>>(10 + row_offset);
     let targets = row.get::<_, String>(11 + row_offset);
+    let benchmarks = row.get::<_, String>(12 + row_offset);
 
     let pr = pr.map(|v| v as u32);
 
@@ -2225,6 +2231,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
         backends,
         profiles,
         targets,
+        benchmarks,
     }
 }
 

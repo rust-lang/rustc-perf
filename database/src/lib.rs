@@ -1009,6 +1009,7 @@ pub struct BenchmarkRequest {
     backends: String,
     profiles: String,
     targets: String,
+    benchmarks: String,
 }
 
 impl BenchmarkRequest {
@@ -1024,6 +1025,7 @@ impl BenchmarkRequest {
             backends: String::new(),
             profiles: String::new(),
             targets: String::new(),
+            benchmarks: String::new(),
         }
     }
 
@@ -1046,6 +1048,7 @@ impl BenchmarkRequest {
             backends: backends.to_string(),
             profiles: profiles.to_string(),
             targets: targets.to_string(),
+            benchmarks: String::new(),
         }
     }
 
@@ -1063,6 +1066,7 @@ impl BenchmarkRequest {
             backends: String::new(),
             profiles: String::new(),
             targets: String::new(),
+            benchmarks: String::new(),
         }
     }
 

@@ -680,9 +680,7 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
 
-            let req = BenchmarkRequest::create_try_without_artifacts(
-                42, "backends", "profiles", "targets",
-            );
+            let req = BenchmarkRequest::create_try_without_artifacts(42, "backends", "profiles", "targets");
 
             db.insert_benchmark_request(&req).await.unwrap();
             assert!(db
@@ -701,6 +699,7 @@ mod tests {
             assert_eq!(req.profiles, loaded.profiles);
             assert_eq!(req.backends, loaded.backends);
             assert_eq!(req.targets, loaded.targets);
+            assert_eq!(req.benchmarks, loaded.benchmarks);
 
             Ok(ctx)
         })

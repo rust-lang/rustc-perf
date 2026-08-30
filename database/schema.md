@@ -233,6 +233,7 @@ Columns:
 * **backends** (`text NOT NULL`): Comma-separated list of codegen backends to benchmark. If empty, the default set of codegen backends will be benchmarked.
 * **profiles** (`text NOT NULL`): Comma-separated list of profiles to benchmark. If empty, the default set of profiles will be benchmarked.
 * **targets** (`text NOT NULL`): Comma-separated list of targets to benchmark. If empty, the default set of targets will be benchmarked.
+* **benchmarks** (`text NOT NULL`): Comma-separated list of benchmarks to execute. If empty, all benchmarks will be executed.
 
 ### collector_config
 
