@@ -5,6 +5,7 @@ use crate::github::{
 use crate::load::SiteCtxt;
 use std::fmt::Write;
 
+use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::github::client::Client;
 use crate::github::triage::{triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER};
 use database::{
@@ -498,7 +499,15 @@ fn parse_benchmark_parameters<'a>(
     }
 
     if let Some(benchmarks) = &params.benchmarks {
-        parse_benchmarks(benchmarks).map_err(|e| format!("Cannot parse benchmarks: {e}"))?;
+        let benchmarks =
+            parse_benchmarks(benchmarks).map_err(|e| format!("Cannot parse benchmarks: {e}"))?;
+        // FIXME This should be validated in `parse_benchmarks` but we don't have access to `get_compile_benchmarks_metadata` there
+        let valid_benchmarks = get_compile_benchmarks_metadata();
+        for benchmark in &benchmarks {
+            if !valid_benchmarks.contains_key(benchmark) {
+                return Err(format!("Unknown compile-time benchmark: {benchmark}"));
+            }
+        }
     }
 
     if !args.is_empty() {
@@ -704,8 +713,10 @@ Otherwise LGTM."#),
             @r#"Ok(Build(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5B", params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None, benchmarks: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C backends=Cranelift,Llvm"#),
             @r#"Ok(Build(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None, benchmarks: None } }))"#);
-        insta::assert_compact_debug_snapshot!(parse_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C benchmarks=syn-1.0.89,clap-3.1.6"#),
-            @r#"Ok(Build(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: None, profiles: None, targets: None, benchmarks: Some("syn-1.0.89,clap-3.1.6") } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C benchmarks=syn-2.0.101,clap_derive-4.5.32"#),
+            @r#"Ok(Build(BuildCommand { sha: "23936af287657fa4148aeab40cc2a780810fae5C", params: BenchmarkParameters { backends: None, profiles: None, targets: None, benchmarks: Some("syn-2.0.101,clap_derive-4.5.32") } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command(r#"@rust-timer build 23936af287657fa4148aeab40cc2a780810fae5C benchmarks=syn-2.0.101,notreal,clap_derive-4.5.32"#),
+            @r#"Err("Unknown compile-time benchmark: notreal")"#);
     }
 
     #[test]
@@ -716,10 +727,12 @@ Otherwise LGTM."#),
             @r#"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: Some("Cranelift"), profiles: None, targets: None, benchmarks: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue backends=Cranelift,Llvm"),
             @r#"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: None, targets: None, benchmarks: None } }))"#);
-        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue benchmarks=syn-1.0.89,clap-3.1.6"),
-            @r#"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None, benchmarks: Some("syn-1.0.89,clap-3.1.6") } }))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue benchmarks=syn-2.0.101,clap_derive-4.5.32"),
+            @r#"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None, benchmarks: Some("syn-2.0.101,clap_derive-4.5.32") } }))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue"),
             @"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: None, targets: None, benchmarks: None } }))");
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue benchmarks=syn-2.0.101,notreal,clap_derive-4.5.32"),
+            @r#"Err("Unknown compile-time benchmark: notreal")"#);
     }
 
     #[test]
