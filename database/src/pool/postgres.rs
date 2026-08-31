@@ -3,12 +3,12 @@ use crate::pool::{
 };
 use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob, BenchmarkJobConclusion,
-    BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
-    BenchmarkRequestInsertResult, BenchmarkRequestStatus, BenchmarkRequestType,
-    BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId, CollectorConfig,
-    Commit, CommitType, CompileBenchmark, Date, FrontendThreads, Index, PendingBenchmarkRequests,
-    Profile, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    parse_benchmarks, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
+    BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest,
+    BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
+    BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId,
+    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, FrontendThreads, Index,
+    PendingBenchmarkRequests, Profile, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
     BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
     BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
@@ -449,6 +449,9 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE pstat_series DROP CONSTRAINT test_case;
     ALTER TABLE pstat_series ADD CONSTRAINT test_case UNIQUE(crate, profile, scenario, backend, target, frontend_threads, metric);
     "#,
+    // Add benchmarks to benchmark_request
+    r#"ALTER TABLE benchmark_request ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
+    r#"ALTER TABLE job_queue ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
 ];
 
 #[async_trait::async_trait]
@@ -800,7 +803,7 @@ impl PostgresConnection {
 
 // `tag` should be kept as the first column
 const BENCHMARK_REQUEST_COLUMNS: &str =
-    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets";
+    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets, benchmarks";
 
 /// Parse a benchmark job out of a row.
 /// Expects to be used with `SELECT * FROM job_queue`.
@@ -837,6 +840,7 @@ fn parse_benchmark_job_from_row(row: &Row) -> anyhow::Result<BenchmarkJob> {
         deque_counter: row.get::<_, i32>(10) as u32,
         kind: BenchmarkJobKind::from_str(row.get::<_, &str>(12)).map_err(|e| anyhow::anyhow!(e))?,
         is_optional: row.get::<_, bool>(13),
+        benchmarks: parse_benchmarks(&row.get::<_, String>(14)).map_err(|e| anyhow::anyhow!(e))?,
     })
 }
 
@@ -1447,6 +1451,7 @@ where
             backends,
             profiles,
             targets,
+            benchmarks,
         } = benchmark_request;
 
         let row_insert_count = self
@@ -1463,9 +1468,10 @@ where
                     backends,
                     profiles,
                     targets,
-                    commit_date
+                    commit_date,
+                    benchmarks
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT DO NOTHING;
             "#,
                 &[
@@ -1479,6 +1485,7 @@ where
                     profiles,
                     targets,
                     commit_date,
+                    benchmarks,
                 ],
             )
             .await
@@ -1607,6 +1614,7 @@ where
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        benchmarks: &[String],
         kind: BenchmarkJobKind,
         is_optional: bool,
     ) -> JobEnqueueResult {
@@ -1627,9 +1635,10 @@ where
                 benchmark_set,
                 status,
                 kind,
-                is_optional
+                is_optional,
+                benchmarks
             )
-            SELECT $1, $2, $3, $4, $5, $6, $7, $8
+            SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
             WHERE EXISTS (SELECT 1 FROM benchmark_request WHERE benchmark_request.tag = $1)
             ON CONFLICT DO NOTHING
             RETURNING job_queue.id
@@ -1643,6 +1652,7 @@ where
                     &BENCHMARK_JOB_STATUS_QUEUED_STR,
                     &kind,
                     &is_optional,
+                    &benchmarks.join(","),
                 ],
             )
             .await;
@@ -1856,6 +1866,7 @@ where
                     updated.retry,
                     updated.kind,
                     updated.is_optional,
+                    updated.benchmarks,
                     br.commit_type,
                     br.commit_date
                 FROM updated
@@ -1892,9 +1903,11 @@ where
                     kind: BenchmarkJobKind::from_str(row.get::<_, &str>(7))
                         .map_err(|e| anyhow::anyhow!(e))?,
                     is_optional: row.get::<_, bool>(8),
+                    benchmarks: parse_benchmarks(&row.get::<_, String>(9))
+                        .map_err(|e| anyhow::anyhow!(e))?,
                 };
-                let commit_type = row.get::<_, &str>(9);
-                let commit_date = row.get::<_, Option<DateTime<Utc>>>(10);
+                let commit_type = row.get::<_, &str>(10);
+                let commit_date = row.get::<_, Option<DateTime<Utc>>>(11);
 
                 let commit_date = Date(commit_date.ok_or_else(|| {
                     anyhow::anyhow!("Dequeuing job for a benchmark request without commit date")
@@ -2025,8 +2038,8 @@ where
 
         for row in rows {
             let tag = row.get::<_, &str>(0);
-            let error_benchmark = row.get::<_, Option<String>>(12);
-            let error_content = row.get::<_, Option<String>>(13);
+            let error_benchmark = row.get::<_, Option<String>>(13);
+            let error_content = row.get::<_, Option<String>>(14);
 
             // We already saw this request, just add errors
             if let Some(errors) = errors.get_mut(tag) {
@@ -2192,6 +2205,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
     let commit_date = row.get::<_, Option<DateTime<Utc>>>(9 + row_offset);
     let duration_ms = row.get::<_, Option<i32>>(10 + row_offset);
     let targets = row.get::<_, String>(11 + row_offset);
+    let benchmarks = row.get::<_, String>(12 + row_offset);
 
     let pr = pr.map(|v| v as u32);
 
@@ -2201,45 +2215,31 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
                 panic!("Invalid BenchmarkRequestStatus data in the database for tag {tag:?}: {e:?}")
             });
 
-    match commit_type {
-        BENCHMARK_REQUEST_TRY_STR => BenchmarkRequest {
-            commit_type: BenchmarkRequestType::Try {
-                sha: tag,
-                parent_sha,
-                pr: pr.expect("Try commit in the DB without a PR"),
-            },
-            commit_date,
-            created_at,
-            status,
-            backends,
-            profiles,
-            targets,
+    let commit_type = match commit_type {
+        BENCHMARK_REQUEST_TRY_STR => BenchmarkRequestType::Try {
+            sha: tag,
+            parent_sha,
+            pr: pr.expect("Try commit in the DB without a PR"),
         },
-        BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequest {
-            commit_type: BenchmarkRequestType::Master {
-                sha: tag.expect("Master commit in the DB without a SHA"),
-                parent_sha: parent_sha.expect("Master commit in the DB without a parent SHA"),
-                pr: pr.expect("Master commit in the DB without a PR"),
-            },
-            commit_date,
-            created_at,
-            status,
-            backends,
-            profiles,
-            targets,
+        BENCHMARK_REQUEST_MASTER_STR => BenchmarkRequestType::Master {
+            sha: tag.expect("Master commit in the DB without a SHA"),
+            parent_sha: parent_sha.expect("Master commit in the DB without a parent SHA"),
+            pr: pr.expect("Master commit in the DB without a PR"),
         },
-        BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequest {
-            commit_type: BenchmarkRequestType::Release {
-                tag: tag.expect("Release commit in the DB without a SHA"),
-            },
-            commit_date,
-            created_at,
-            status,
-            backends,
-            profiles,
-            targets,
+        BENCHMARK_REQUEST_RELEASE_STR => BenchmarkRequestType::Release {
+            tag: tag.expect("Release commit in the DB without a SHA"),
         },
         _ => panic!("Invalid `commit_type` for `BenchmarkRequest` {commit_type}",),
+    };
+    BenchmarkRequest {
+        commit_type,
+        commit_date,
+        created_at,
+        status,
+        backends,
+        profiles,
+        targets,
+        benchmarks,
     }
 }
 

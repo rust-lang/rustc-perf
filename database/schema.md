@@ -233,6 +233,7 @@ Columns:
 * **backends** (`text NOT NULL`): Comma-separated list of codegen backends to benchmark. If empty, the default set of codegen backends will be benchmarked.
 * **profiles** (`text NOT NULL`): Comma-separated list of profiles to benchmark. If empty, the default set of profiles will be benchmarked.
 * **targets** (`text NOT NULL`): Comma-separated list of targets to benchmark. If empty, the default set of targets will be benchmarked.
+* **benchmarks** (`text NOT NULL`): Comma-separated list of benchmarks to execute. If empty, all benchmarks will be executed.
 
 ### collector_config
 
@@ -269,6 +270,7 @@ Columns:
   test (e.g. llvm, cranelift).
 * **benchmark_set** (`int NOT NULL`): ID of the predefined benchmark suite to
   execute.
+* **benchmarks** (`string NOT NULL`): Comma-separated list of benchmarks that are a subset of the given `benchmark_set` to execute. If empty, all benchmarks in `benchmark_set` will be executed.
 * **collector_name** (`text`): Name of the collector that claimed the job
   (populated once the job is started).
 * **created_at** (`timestamptz NOT NULL`): Datetime when the job was queued.

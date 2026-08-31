@@ -200,6 +200,7 @@ pub trait Connection: Send + Sync {
         backend: CodegenBackend,
         profile: Profile,
         benchmark_set: u32,
+        benchmarks: &[String],
         kind: BenchmarkJobKind,
         is_optional: bool,
     ) -> JobEnqueueResult;
@@ -540,7 +541,7 @@ mod tests {
             // But this should fail, as we can't have two queued requests at once
             let result = db
                 .insert_benchmark_request(&BenchmarkRequest::create_try_without_artifacts(
-                    42, "", "", "",
+                    42, "", "", "", "",
                 ))
                 .await
                 .unwrap();
@@ -639,7 +640,7 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
 
-            let req = BenchmarkRequest::create_try_without_artifacts(42, "", "", "");
+            let req = BenchmarkRequest::create_try_without_artifacts(42, "", "", "", "");
 
             db.insert_benchmark_request(&req).await.unwrap();
             assert!(db
@@ -681,7 +682,11 @@ mod tests {
             let db = ctx.db();
 
             let req = BenchmarkRequest::create_try_without_artifacts(
-                42, "backends", "profiles", "targets",
+                42,
+                "backends",
+                "profiles",
+                "targets",
+                "benchmarks",
             );
 
             db.insert_benchmark_request(&req).await.unwrap();
@@ -701,6 +706,7 @@ mod tests {
             assert_eq!(req.profiles, loaded.profiles);
             assert_eq!(req.backends, loaded.backends);
             assert_eq!(req.targets, loaded.targets);
+            assert_eq!(req.benchmarks, loaded.benchmarks);
 
             Ok(ctx)
         })
@@ -744,6 +750,7 @@ mod tests {
                     CodegenBackend::Llvm,
                     Profile::Opt,
                     0u32,
+                    &[],
                     BenchmarkJobKind::Runtime,
                     false,
                 )
@@ -900,6 +907,7 @@ mod tests {
                 .unwrap();
 
             // Now we can insert the job
+            let example_benchmarks = vec!["benchmark1".into(), "benchmark2".into()];
             match db
                 .enqueue_benchmark_job(
                     benchmark_request.tag().unwrap(),
@@ -907,6 +915,7 @@ mod tests {
                     CodegenBackend::Llvm,
                     Profile::Opt,
                     1u32,
+                    &example_benchmarks,
                     BenchmarkJobKind::Runtime,
                     false,
                 )
@@ -940,6 +949,7 @@ mod tests {
                 benchmark_job.collector_name().unwrap(),
                 collector_config.name(),
             );
+            assert_eq!(benchmark_job.benchmarks(), example_benchmarks);
 
             assert_eq!(
                 artifact_id,
@@ -1008,6 +1018,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 benchmark_set.0,
+                &[],
                 BenchmarkJobKind::Runtime,
                 false,
             )
@@ -1263,6 +1274,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Check,
                 0,
+                &[],
                 BenchmarkJobKind::Compiletime,
                 false,
             )
@@ -1320,6 +1332,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Opt,
                 benchmark_set.0,
+                &[],
                 BenchmarkJobKind::Runtime,
                 false,
             )
@@ -1334,6 +1347,7 @@ mod tests {
                 CodegenBackend::Llvm,
                 Profile::Doc,
                 benchmark_set.0,
+                &[],
                 BenchmarkJobKind::Runtime,
                 true,
             )
