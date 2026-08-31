@@ -88,17 +88,26 @@ pub trait Connection: Send + Sync {
 
     /// Records the size of an artifact component (like `librustc_driver.so` or `libLLVM.so`) in
     /// bytes.
-    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64);
+    async fn record_artifact_size(
+        &self,
+        artifact: ArtifactIdNumber,
+        component: &str,
+        size: u64,
+        target: Target,
+    );
 
     /// Returns the sizes of individual components of a single artifact.
-    async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64>;
+    async fn get_artifact_size(
+        &self,
+        aid: ArtifactIdNumber,
+    ) -> HashMap<Target, HashMap<String, u64>>;
 
     /// Returns the sizes of individual components of multiple artifacts.
     /// The key of the hashmap is the name of the component.
     async fn get_artifacts_size(
         &self,
         aids: &[ArtifactIdNumber],
-    ) -> HashMap<String, Vec<Option<u64>>>;
+    ) -> HashMap<Target, HashMap<String, Vec<Option<u64>>>>;
 
     /// Returns vector of bootstrap build times for the given artifacts. The kth
     /// element is the minimum build time for the kth artifact in `aids`, across
@@ -466,17 +475,42 @@ mod tests {
             // exist before attaching something to it.
 
             // Artifact one inserts
-            db.record_artifact_size(artifact_one_id_number, "llvm.so", 32)
-                .await;
-            db.record_artifact_size(artifact_one_id_number, "llvm.a", 64)
-                .await;
+            db.record_artifact_size(
+                artifact_one_id_number,
+                "llvm.so",
+                32,
+                Target::X86_64UnknownLinuxGnu,
+            )
+            .await;
+            db.record_artifact_size(
+                artifact_one_id_number,
+                "llvm.a",
+                64,
+                Target::X86_64UnknownLinuxGnu,
+            )
+            .await;
 
             // Artifact two inserts
-            db.record_artifact_size(artifact_two_id_number, "another-llvm.a", 128)
-                .await;
+            db.record_artifact_size(
+                artifact_two_id_number,
+                "another-llvm.a",
+                128,
+                Target::X86_64UnknownLinuxGnu,
+            )
+            .await;
 
-            let result_one = db.get_artifact_size(artifact_one_id_number).await;
-            let result_two = db.get_artifact_size(artifact_two_id_number).await;
+            let result_one = db
+                .get_artifact_size(artifact_one_id_number)
+                .await
+                .get(&Target::X86_64UnknownLinuxGnu)
+                .unwrap()
+                .clone();
+            let result_two = db
+                .get_artifact_size(artifact_two_id_number)
+                .await
+                .get(&Target::X86_64UnknownLinuxGnu)
+                .unwrap()
+                .clone();
 
             // artifact one
             assert_eq!(Some(32u64), result_one.get("llvm.so").copied());

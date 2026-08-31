@@ -65,6 +65,7 @@ artifact.
 Columns:
 
 * **aid** (`integer`): Artifact id, references the id in the artifact table
+* **target** (`text`): Target tuple of the compiler artifact
 * **component** (`text`): Normalized name of the component (hashes are removed)
 * **size** (`integer`): Size of the component in bytes
 

@@ -442,6 +442,7 @@ struct ArtifactSize;
 #[derive(Serialize)]
 struct ArtifactSizeRow<'a> {
     aid: i32,
+    target: &'a str,
     component: &'a str,
     size: i32,
 }
@@ -452,11 +453,11 @@ impl Table for ArtifactSize {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "aid, component, size"
+        "aid, target, component, size"
     }
 
     fn postgres_attributes() -> &'static str {
-        "aid, component, size"
+        "aid, target, component, size"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -467,8 +468,9 @@ impl Table for ArtifactSize {
         writer
             .serialize(ArtifactSizeRow {
                 aid: row.get(0).unwrap(),
-                component: row.get_ref(1).unwrap().as_str().unwrap(),
-                size: row.get(2).unwrap(),
+                target: row.get_ref(1).unwrap().as_str().unwrap(),
+                component: row.get_ref(2).unwrap().as_str().unwrap(),
+                size: row.get(3).unwrap(),
             })
             .unwrap();
     }

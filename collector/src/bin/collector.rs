@@ -2406,21 +2406,33 @@ async fn record_toolchain_sizes(
         aid: ArtifactIdNumber,
         component: &str,
         path: Option<&Path>,
+        target: database::Target,
     ) {
         if let Some(path) = path {
             if let Ok(size) = fs::metadata(path).map(|m| m.len()) {
-                conn.record_artifact_size(aid, component, size).await;
+                conn.record_artifact_size(aid, component, size, target)
+                    .await;
             }
         }
     }
 
+    let target = Target::from_str(&toolchain.triple).expect("Invalid target");
+    let target: database::Target = target.into();
+
     let paths = &toolchain.components;
-    record(conn, aid, "rustc", Some(&paths.rustc)).await;
-    record(conn, aid, "rustdoc", paths.rustdoc.as_deref()).await;
-    record(conn, aid, "cargo", Some(&paths.cargo)).await;
-    record(conn, aid, "librustc_driver", paths.lib_rustc.as_deref()).await;
-    record(conn, aid, "libstd", paths.lib_std.as_deref()).await;
-    record(conn, aid, "libLLVM", paths.lib_llvm.as_deref()).await;
+    record(conn, aid, "rustc", Some(&paths.rustc), target).await;
+    record(conn, aid, "rustdoc", paths.rustdoc.as_deref(), target).await;
+    record(conn, aid, "cargo", Some(&paths.cargo), target).await;
+    record(
+        conn,
+        aid,
+        "librustc_driver",
+        paths.lib_rustc.as_deref(),
+        target,
+    )
+    .await;
+    record(conn, aid, "libstd", paths.lib_std.as_deref(), target).await;
+    record(conn, aid, "libLLVM", paths.lib_llvm.as_deref(), target).await;
 }
 
 fn add_perf_config(directory: &Path, category: Category, artifact: ArtifactType) {

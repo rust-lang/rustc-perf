@@ -452,6 +452,11 @@ static MIGRATIONS: &[&str] = &[
     // Add benchmarks to benchmark_request
     r#"ALTER TABLE benchmark_request ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
     r#"ALTER TABLE job_queue ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
+    r#"
+    ALTER TABLE artifact_size ADD COLUMN target TEXT NOT NULL DEFAULT 'x86_64-unknown-linux-gnu';
+    ALTER TABLE artifact_size DROP CONSTRAINT artifact_size_aid_component_key;
+    ALTER TABLE artifact_size ADD CONSTRAINT aid_target_component UNIQUE(aid, target, component);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -682,18 +687,18 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 record_artifact_size: conn.prepare("
-                    insert into artifact_size (aid, component, size)
-                    values ($1, $2, $3)
-                    on conflict (aid, component)
+                    insert into artifact_size (aid, component, size, target)
+                    values ($1, $2, $3, $4)
+                    on conflict (aid, component, target)
                     do update
                     set size = excluded.size
                 ").await.unwrap(),
                 get_artifact_size: conn.prepare("
-                    select component, size from artifact_size
+                    select component, target, size from artifact_size
                     where aid = $1
                 ").await.unwrap(),
                 get_artifacts_size: conn.prepare(r#"
-                    SELECT aid, component, size
+                    SELECT aid, component, target, size
                     FROM artifact_size
                     WHERE aid = ANY($1)
                 "#).await.unwrap(),
@@ -1176,27 +1181,46 @@ where
             .unwrap();
     }
 
-    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64) {
+    async fn record_artifact_size(
+        &self,
+        artifact: ArtifactIdNumber,
+        component: &str,
+        size: u64,
+        target: Target,
+    ) {
         let size: i32 = size.try_into().expect("Too large artifact");
         self.conn()
             .execute(
                 &self.statements().record_artifact_size,
-                &[&(artifact.0 as i32), &component, &size],
+                &[&(artifact.0 as i32), &component, &size, &target.as_str()],
             )
             .await
             .unwrap();
     }
 
-    async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64> {
+    async fn get_artifact_size(
+        &self,
+        aid: ArtifactIdNumber,
+    ) -> HashMap<Target, HashMap<String, u64>> {
         let rows = self
             .conn()
             .query(&self.statements().get_artifact_size, &[&(aid.0 as i32)])
             .await
             .unwrap();
 
-        rows.into_iter()
-            .map(|row| (row.get::<_, String>(0), row.get::<_, i32>(1) as u64))
-            .collect()
+        let mut targets: HashMap<Target, HashMap<String, u64>> = HashMap::new();
+        for (component, target, size) in rows.into_iter().map(|row| {
+            (
+                row.get::<_, String>(0),
+                row.get::<_, String>(1),
+                row.get::<_, i32>(2) as u64,
+            )
+        }) {
+            let target = Target::from_str(&target).expect("Invalid target");
+            let components = targets.entry(target).or_default();
+            components.insert(component, size);
+        }
+        targets
     }
 
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber {
@@ -2160,8 +2184,8 @@ where
     async fn get_artifacts_size(
         &self,
         aids: &[ArtifactIdNumber],
-    ) -> HashMap<String, Vec<Option<u64>>> {
-        let mut result = HashMap::new();
+    ) -> HashMap<Target, HashMap<String, Vec<Option<u64>>>> {
+        let mut targets: HashMap<Target, HashMap<String, Vec<Option<u64>>>> = HashMap::new();
         let aid_to_idx = aids
             .iter()
             .copied()
@@ -2180,15 +2204,18 @@ where
         for row in rows {
             let aid = ArtifactIdNumber(row.get::<_, i32>(0) as u32);
             let component = row.get::<_, String>(1);
-            let size = row.get::<_, i32>(2);
+            let target = row.get::<_, String>(2);
+            let target = Target::from_str(&target).expect("Invalid target");
+            let size = row.get::<_, i32>(3);
 
-            let v = result
+            let components = targets.entry(target).or_default();
+            let v = components
                 .entry(component)
                 .or_insert_with(|| vec![None; aids.len()]);
             v[aid_to_idx[&aid]] = Some(size as u64);
         }
 
-        result
+        targets
     }
 }
 
