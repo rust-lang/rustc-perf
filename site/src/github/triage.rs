@@ -84,18 +84,8 @@ pub async fn changed_benchmarks_in_rollup(
 
     let comparison = calculate_metric_comparison(
         ctxt,
-        &QueuedCommit {
-            sha: rollup.sha,
-            parent_sha: rollup.parent_sha,
-
-            // Fields that are not used by `calculate_metric_comparison`
-            pr: 0,
-            include: None,
-            exclude: None,
-            runs: None,
-            commit_date: None,
-            backends: None,
-        },
+        &rollup.parent_sha,
+        &rollup.sha,
         Metric::InstructionsUser,
     )
     .await

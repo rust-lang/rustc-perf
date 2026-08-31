@@ -241,7 +241,11 @@ async fn handle_rust_timer(
                     return Ok(github::Response);
                 }
             };
-            let plural = if benchmarks_to_run.len() == 1 { "" } else { "s" };
+            let plural = if benchmarks_to_run.len() == 1 {
+                ""
+            } else {
+                "s"
+            };
             writeln!(&mut result, "<details>
 <summary>Running triage with {} benchmark{plural}</summary>
 

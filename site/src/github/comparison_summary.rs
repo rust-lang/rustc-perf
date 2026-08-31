@@ -90,12 +90,13 @@ fn make_comparison_url(commit: &QueuedCommit, stat: Metric) -> String {
 
 pub(crate) async fn calculate_metric_comparison(
     ctxt: &SiteCtxt,
-    commit: &QueuedCommit,
+    parent_sha: &str,
+    head_sha: &str,
     metric: Metric,
 ) -> Result<ArtifactComparison, String> {
     match crate::comparison::compare(
-        collector::Bound::Commit(commit.parent_sha.clone()),
-        collector::Bound::Commit(commit.sha.clone()),
+        collector::Bound::Commit(parent_sha.to_string()),
+        collector::Bound::Commit(head_sha.to_string()),
         metric,
         ctxt,
     )
@@ -152,8 +153,13 @@ async fn summarize_run(
     )
     .unwrap();
 
-    let inst_comparison =
-        calculate_metric_comparison(ctxt, &commit, Metric::InstructionsUser).await?;
+    let inst_comparison = calculate_metric_comparison(
+        ctxt,
+        &commit.parent_sha,
+        &commit.sha,
+        Metric::InstructionsUser,
+    )
+    .await?;
 
     let has_broken_benchmarks = !inst_comparison.newly_failed_benchmarks.is_empty();
     let errors = if has_broken_benchmarks {
@@ -234,25 +240,39 @@ pub async fn metrics_result(ctxt: &SiteCtxt, commit: &QueuedCommit) -> Result<St
             "Instruction count",
             Metric::InstructionsUser,
             DefaultMetricVisibility::Shown,
-            calculate_metric_comparison(ctxt, commit, Metric::InstructionsUser).await?,
+            calculate_metric_comparison(
+                ctxt,
+                &commit.parent_sha,
+                &commit.sha,
+                Metric::InstructionsUser,
+            )
+            .await?,
         ),
         (
             "Max RSS (memory usage)",
             Metric::MaxRSS,
             DefaultMetricVisibility::Hidden,
-            calculate_metric_comparison(ctxt, commit, Metric::MaxRSS).await?,
+            calculate_metric_comparison(ctxt, &commit.parent_sha, &commit.sha, Metric::MaxRSS)
+                .await?,
         ),
         (
             "Cycles",
             Metric::CyclesUser,
             DefaultMetricVisibility::Hidden,
-            calculate_metric_comparison(ctxt, commit, Metric::CyclesUser).await?,
+            calculate_metric_comparison(ctxt, &commit.parent_sha, &commit.sha, Metric::CyclesUser)
+                .await?,
         ),
         (
             "Binary size",
             Metric::LinkedArtifactSize,
             DefaultMetricVisibility::Hidden,
-            calculate_metric_comparison(ctxt, commit, Metric::LinkedArtifactSize).await?,
+            calculate_metric_comparison(
+                ctxt,
+                &commit.parent_sha,
+                &commit.sha,
+                Metric::LinkedArtifactSize,
+            )
+            .await?,
         ),
     ];
 
