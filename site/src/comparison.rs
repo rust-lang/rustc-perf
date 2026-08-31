@@ -944,7 +944,13 @@ impl ArtifactDescription {
             None
         };
 
-        let component_sizes = conn.get_artifact_size(aid).await.into_iter().collect();
+        let component_sizes = conn
+            .get_artifact_size(aid)
+            .await
+            .remove(&Target::X86_64UnknownLinuxGnu)
+            .into_iter()
+            .flatten()
+            .collect();
 
         Self {
             pr,

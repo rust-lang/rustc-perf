@@ -694,11 +694,11 @@ impl PostgresConnection {
                     set size = excluded.size
                 ").await.unwrap(),
                 get_artifact_size: conn.prepare("
-                    select component, size from artifact_size
+                    select component, target, size from artifact_size
                     where aid = $1
                 ").await.unwrap(),
                 get_artifacts_size: conn.prepare(r#"
-                    SELECT aid, component, size
+                    SELECT aid, component, target, size
                     FROM artifact_size
                     WHERE aid = ANY($1)
                 "#).await.unwrap(),
@@ -1198,16 +1198,29 @@ where
             .unwrap();
     }
 
-    async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64> {
+    async fn get_artifact_size(
+        &self,
+        aid: ArtifactIdNumber,
+    ) -> HashMap<Target, HashMap<String, u64>> {
         let rows = self
             .conn()
             .query(&self.statements().get_artifact_size, &[&(aid.0 as i32)])
             .await
             .unwrap();
 
-        rows.into_iter()
-            .map(|row| (row.get::<_, String>(0), row.get::<_, i32>(1) as u64))
-            .collect()
+        let mut targets: HashMap<Target, HashMap<String, u64>> = HashMap::new();
+        for (component, target, size) in rows.into_iter().map(|row| {
+            (
+                row.get::<_, String>(0),
+                row.get::<_, String>(1),
+                row.get::<_, i32>(2) as u64,
+            )
+        }) {
+            let target = Target::from_str(&target).expect("Invalid target");
+            let components = targets.entry(target).or_default();
+            components.insert(component, size);
+        }
+        targets
     }
 
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber {
@@ -2170,8 +2183,8 @@ where
     async fn get_artifacts_size(
         &self,
         aids: &[ArtifactIdNumber],
-    ) -> HashMap<String, Vec<Option<u64>>> {
-        let mut result = HashMap::new();
+    ) -> HashMap<Target, HashMap<String, Vec<Option<u64>>>> {
+        let mut targets: HashMap<Target, HashMap<String, Vec<Option<u64>>>> = HashMap::new();
         let aid_to_idx = aids
             .iter()
             .copied()
@@ -2190,15 +2203,18 @@ where
         for row in rows {
             let aid = ArtifactIdNumber(row.get::<_, i32>(0) as u32);
             let component = row.get::<_, String>(1);
-            let size = row.get::<_, i32>(2);
+            let target = row.get::<_, String>(2);
+            let target = Target::from_str(&target).expect("Invalid target");
+            let size = row.get::<_, i32>(3);
 
-            let v = result
+            let components = targets.entry(target).or_default();
+            let v = components
                 .entry(component)
                 .or_insert_with(|| vec![None; aids.len()]);
             v[aid_to_idx[&aid]] = Some(size as u64);
         }
 
-        result
+        targets
     }
 }
 

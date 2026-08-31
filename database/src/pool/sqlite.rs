@@ -876,49 +876,67 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64> {
-        self.raw_ref()
-            .prepare("select component, size from artifact_size where aid = ?")
+    async fn get_artifact_size(
+        &self,
+        aid: ArtifactIdNumber,
+    ) -> HashMap<Target, HashMap<String, u64>> {
+        let mut targets: HashMap<Target, HashMap<String, u64>> = HashMap::new();
+        for (component, target, size) in self
+            .raw_ref()
+            .prepare("select component, target, size from artifact_size where aid = ?")
             .unwrap()
             .query_map(params![&aid.0], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)? as u64,
+                ))
             })
             .unwrap()
             .map(|r| r.unwrap())
-            .collect()
+        {
+            let target = Target::from_str(&target).expect("Invalid target");
+            let components = targets.entry(target).or_default();
+            components.insert(component, size);
+        }
+        targets
     }
 
     async fn get_artifacts_size(
         &self,
         aids: &[ArtifactIdNumber],
-    ) -> HashMap<String, Vec<Option<u64>>> {
-        let mut results = HashMap::new();
+    ) -> HashMap<Target, HashMap<String, Vec<Option<u64>>>> {
+        let mut targets: HashMap<Target, HashMap<String, Vec<Option<u64>>>> = HashMap::new();
 
         for (idx, aid) in aids.iter().copied().enumerate() {
-            let rows: Vec<(String, i64)> = self
+            let rows: Vec<(String, Target, i64)> = self
                 .raw_ref()
                 .prepare(
                     r#"
-            SELECT component, MIN(size)
-            FROM artifact_size WHERE aid = ?
-            GROUP BY component"#,
+            SELECT component, target, MIN(size)
+            FROM artifact_size
+            WHERE aid = ?
+            GROUP BY component, target"#,
                 )
                 .unwrap()
                 .query_map(params![&aid.0], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                    let target =
+                        Target::from_str(&row.get::<_, String>(1)?).expect("Invalid target");
+                    Ok((row.get::<_, String>(0)?, target, row.get::<_, i64>(2)?))
                 })
                 .unwrap()
                 .map(|r| r.unwrap())
                 .collect();
-            for (component, size) in rows {
-                let v = results
+            for (component, target, size) in rows {
+                let components = targets.entry(target).or_default();
+                let v = components
                     .entry(component)
                     .or_insert_with(|| vec![None; aids.len()]);
                 v[idx] = Some(size as u64);
             }
         }
 
-        results
+        targets
     }
 
     async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {

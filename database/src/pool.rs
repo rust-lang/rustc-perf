@@ -97,14 +97,17 @@ pub trait Connection: Send + Sync {
     );
 
     /// Returns the sizes of individual components of a single artifact.
-    async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64>;
+    async fn get_artifact_size(
+        &self,
+        aid: ArtifactIdNumber,
+    ) -> HashMap<Target, HashMap<String, u64>>;
 
     /// Returns the sizes of individual components of multiple artifacts.
     /// The key of the hashmap is the name of the component.
     async fn get_artifacts_size(
         &self,
         aids: &[ArtifactIdNumber],
-    ) -> HashMap<String, Vec<Option<u64>>>;
+    ) -> HashMap<Target, HashMap<String, Vec<Option<u64>>>>;
 
     /// Returns vector of bootstrap build times for the given artifacts. The kth
     /// element is the minimum build time for the kth artifact in `aids`, across
@@ -496,8 +499,18 @@ mod tests {
             )
             .await;
 
-            let result_one = db.get_artifact_size(artifact_one_id_number).await;
-            let result_two = db.get_artifact_size(artifact_two_id_number).await;
+            let result_one = db
+                .get_artifact_size(artifact_one_id_number)
+                .await
+                .get(&Target::X86_64UnknownLinuxGnu)
+                .unwrap()
+                .clone();
+            let result_two = db
+                .get_artifact_size(artifact_two_id_number)
+                .await
+                .get(&Target::X86_64UnknownLinuxGnu)
+                .unwrap()
+                .clone();
 
             // artifact one
             assert_eq!(Some(32u64), result_one.get("llvm.so").copied());

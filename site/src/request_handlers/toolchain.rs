@@ -2,7 +2,7 @@ use futures::stream::{FuturesOrdered, StreamExt};
 
 use crate::api::{toolchain, ServerResult};
 use crate::load::SiteCtxt;
-use database::ArtifactId;
+use database::{ArtifactId, Target};
 
 use std::time::Duration;
 
@@ -59,7 +59,13 @@ pub async fn handle_toolchain(
         .map(|v| v.map(duration_as_nanos_u64))
         .collect();
 
-    let artifact_sizes = conn.get_artifacts_size(&ids).await;
+    let artifact_sizes = conn
+        .get_artifacts_size(&ids)
+        .await
+        .remove(&Target::X86_64UnknownLinuxGnu)
+        .into_iter()
+        .flatten()
+        .collect();
 
     Ok(toolchain::Response {
         commits: commits
