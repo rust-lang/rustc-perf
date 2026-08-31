@@ -452,6 +452,11 @@ static MIGRATIONS: &[&str] = &[
     // Add benchmarks to benchmark_request
     r#"ALTER TABLE benchmark_request ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
     r#"ALTER TABLE job_queue ADD COLUMN benchmarks TEXT NOT NULL DEFAULT ''"#,
+    r#"
+    ALTER TABLE artifact_size ADD COLUMN target TEXT NOT NULL DEFAULT 'x86_64-unknown-linux-gnu';
+    ALTER TABLE artifact_size DROP CONSTRAINT artifact_size_aid_component_key;
+    ALTER TABLE artifact_size ADD CONSTRAINT aid_target_component UNIQUE(aid, target, component);
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -682,9 +687,9 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 record_artifact_size: conn.prepare("
-                    insert into artifact_size (aid, component, size)
-                    values ($1, $2, $3)
-                    on conflict (aid, component)
+                    insert into artifact_size (aid, component, size, target)
+                    values ($1, $2, $3, $4)
+                    on conflict (aid, component, target)
                     do update
                     set size = excluded.size
                 ").await.unwrap(),
@@ -1176,12 +1181,18 @@ where
             .unwrap();
     }
 
-    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64) {
+    async fn record_artifact_size(
+        &self,
+        artifact: ArtifactIdNumber,
+        component: &str,
+        size: u64,
+        target: Target,
+    ) {
         let size: i32 = size.try_into().expect("Too large artifact");
         self.conn()
             .execute(
                 &self.statements().record_artifact_size,
-                &[&(artifact.0 as i32), &component, &size],
+                &[&(artifact.0 as i32), &component, &size, &target.as_str()],
             )
             .await
             .unwrap();

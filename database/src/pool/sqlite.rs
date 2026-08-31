@@ -468,6 +468,20 @@ static MIGRATIONS: &[Migration] = &[
         ALTER TABLE pstat_series_with_frontend_threads RENAME TO pstat_series;
     "#,
     ),
+    Migration::without_foreign_key_constraints(
+        r#"
+        create table artifact_size_new(
+            aid INTEGER REFERENCES artifact(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            component TEXT NOT NULL,
+            target TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            UNIQUE(aid, target, component)
+        );
+        insert into artifact_size_new select aid, component, 'x86_64-unknown-linux-gnu', size from artifact_size;
+        drop table artifact_size;
+        alter table artifact_size_new rename to artifact_size;
+    "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -846,12 +860,18 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
-    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64) {
+    async fn record_artifact_size(
+        &self,
+        artifact: ArtifactIdNumber,
+        component: &str,
+        size: u64,
+        target: Target,
+    ) {
         self.raw_ref()
             .execute(
-                "insert or replace into artifact_size (aid, component, size)\
-                values (?, ?, ?)",
-                params![&artifact.0, &component, &(size as i64)],
+                "insert or replace into artifact_size (aid, component, size, target)\
+                values (?, ?, ?, ?)",
+                params![&artifact.0, &component, &(size as i64), &target.as_str()],
             )
             .unwrap();
     }

@@ -88,7 +88,13 @@ pub trait Connection: Send + Sync {
 
     /// Records the size of an artifact component (like `librustc_driver.so` or `libLLVM.so`) in
     /// bytes.
-    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64);
+    async fn record_artifact_size(
+        &self,
+        artifact: ArtifactIdNumber,
+        component: &str,
+        size: u64,
+        target: Target,
+    );
 
     /// Returns the sizes of individual components of a single artifact.
     async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64>;
@@ -466,14 +472,29 @@ mod tests {
             // exist before attaching something to it.
 
             // Artifact one inserts
-            db.record_artifact_size(artifact_one_id_number, "llvm.so", 32)
-                .await;
-            db.record_artifact_size(artifact_one_id_number, "llvm.a", 64)
-                .await;
+            db.record_artifact_size(
+                artifact_one_id_number,
+                "llvm.so",
+                32,
+                Target::X86_64UnknownLinuxGnu,
+            )
+            .await;
+            db.record_artifact_size(
+                artifact_one_id_number,
+                "llvm.a",
+                64,
+                Target::X86_64UnknownLinuxGnu,
+            )
+            .await;
 
             // Artifact two inserts
-            db.record_artifact_size(artifact_two_id_number, "another-llvm.a", 128)
-                .await;
+            db.record_artifact_size(
+                artifact_two_id_number,
+                "another-llvm.a",
+                128,
+                Target::X86_64UnknownLinuxGnu,
+            )
+            .await;
 
             let result_one = db.get_artifact_size(artifact_one_id_number).await;
             let result_two = db.get_artifact_size(artifact_two_id_number).await;
