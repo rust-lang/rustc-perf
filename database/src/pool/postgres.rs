@@ -1977,6 +1977,7 @@ where
                             WHERE
                                 job_queue.request_tag = benchmark_request.parent_sha
                                 AND job_queue.status NOT IN ($3, $4)
+                                AND job_queue.is_optional = FALSE
                        )
                 )
                 RETURNING
