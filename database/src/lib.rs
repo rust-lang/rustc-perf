@@ -421,8 +421,8 @@ impl Target {
         }
     }
 
-    /// Targets that we primarily support in the website.
-    pub fn primary_targets() -> Vec<Self> {
+    /// Targets that we currently support.
+    pub fn available_targets() -> Vec<Self> {
         vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
     }
 
@@ -1188,10 +1188,17 @@ pub fn parse_profiles(profiles: &str) -> Result<Vec<Profile>, String> {
 }
 
 pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
-    let primary = Target::primary_targets();
+    let available = Target::available_targets();
     let targets = parse_comma_separated(targets, "target")?;
-    if !targets.iter().all(|t| primary.contains(t)) {
-        return Err("Only primary targets can be specified".to_string());
+    if !targets.iter().all(|t| available.contains(t)) {
+        return Err(format!(
+            "Only the available targets `{}` can be specified",
+            available
+                .iter()
+                .map(|t| t.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     Ok(targets)
 }

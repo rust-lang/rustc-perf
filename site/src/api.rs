@@ -291,7 +291,7 @@ pub mod comparison {
         pub dev_profile: Option<ProfileMetadata>,
     }
 
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Serialize)]
     pub struct Response {
         /// The names for the previous artifact before `a`, if any.
         pub prev: Option<String>,
@@ -330,7 +330,7 @@ pub mod comparison {
         pub component_sizes: HashMap<String, u64>,
     }
 
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Serialize)]
     pub struct StatComparison {
         pub is_relevant: bool,
         pub significance_threshold: f64,
@@ -339,7 +339,7 @@ pub mod comparison {
     }
 
     /// A serializable wrapper for a comparison between two compile-time test results.
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Serialize)]
     pub struct CompileBenchmarkComparison {
         pub benchmark: String,
         pub profile: String,
@@ -350,7 +350,7 @@ pub mod comparison {
     }
 
     /// A serializable wrapper for a comparison between two runtime test results.
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Serialize)]
     pub struct RuntimeBenchmarkComparison {
         pub benchmark: String,
         pub target: String,

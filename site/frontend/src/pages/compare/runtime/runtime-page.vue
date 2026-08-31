@@ -15,7 +15,7 @@ import ComparisonsTable from "./comparisons-table.vue";
 import {
   getBoolOrDefault,
   loadTargetsFromUrl,
-  storeOrResetBool,
+  storeOrResetValue,
   storeOrResetStringArray,
 } from "../shared";
 import {changeUrl, getUrlParams} from "../../../utils/navigation";
@@ -56,7 +56,7 @@ function storeFilterToUrl(
   defaultFilter: RuntimeBenchmarkFilter,
   urlParams: Dict<string>
 ) {
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "runtimeName",
     filter.name || null,
@@ -68,13 +68,13 @@ function storeFilterToUrl(
     filter.target,
     defaultFilter.target
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "nonRelevant",
     filter.nonRelevant,
     defaultFilter.nonRelevant
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "showRawData",
     filter.showRawData,

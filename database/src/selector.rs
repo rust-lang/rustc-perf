@@ -244,6 +244,18 @@ impl CompileBenchmarkQuery {
             metric: Selector::One(metric.as_str().into()),
         }
     }
+
+    pub fn all_for_metric_and_target(metric: Metric, target: Target) -> Self {
+        Self {
+            benchmark: Selector::All,
+            profile: Selector::All,
+            scenario: Selector::All,
+            backend: Selector::All,
+            target: Selector::One(target),
+            frontend_threads: Selector::All,
+            metric: Selector::One(metric.as_str().into()),
+        }
+    }
 }
 
 impl Default for CompileBenchmarkQuery {
@@ -384,6 +396,14 @@ impl RuntimeBenchmarkQuery {
         Self {
             benchmark: Selector::All,
             target: Selector::All,
+            metric: Selector::One(metric.as_str().into()),
+        }
+    }
+
+    pub fn all_for_metric_and_target(metric: Metric, target: Target) -> Self {
+        Self {
+            benchmark: Selector::All,
+            target: Selector::One(target),
             metric: Selector::One(metric.as_str().into()),
         }
     }

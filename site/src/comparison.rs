@@ -13,14 +13,15 @@ use database::{
     selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
     Target,
 };
-use database::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
+use database::{ArtifactId, Benchmark, Lookup};
 use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::server::comparison::StatComparison;
 use collector::compile::benchmark::ArtifactType;
-use database::{CodegenBackend, CommitType, CompileBenchmark};
+use database::selector::{CompileTestCase, RuntimeTestCase};
+use database::{CommitType, CompileBenchmark};
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -63,20 +64,27 @@ pub async fn handle_triage(
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let end = loop {
-        let comparison =
-            match compare_given_commits(before.clone(), next.clone(), metric, ctxt, master_commits)
-                .await
-                .map_err(|e| format!("error comparing commits: {e}"))?
-            {
-                Some(c) => c,
-                None => {
-                    log::info!(
-                        "No data found for end bound {:?}. Ending comparison...",
-                        next
-                    );
-                    break before;
-                }
-            };
+        // For triage, we will only show x64 for now
+        let comparison = match compare_given_commits(
+            before.clone(),
+            next.clone(),
+            metric,
+            Some(Target::X86_64UnknownLinuxGnu),
+            ctxt,
+            master_commits,
+        )
+        .await
+        .map_err(|e| format!("error comparing commits: {e}"))?
+        {
+            Some(c) => c,
+            None => {
+                log::info!(
+                    "No data found for end bound {:?}. Ending comparison...",
+                    next
+                );
+                break before;
+            }
+        };
         num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
@@ -106,20 +114,26 @@ pub async fn handle_triage(
     };
 
     // Summarize the entire triage from start commit to end commit
-    let summary =
-        match compare_given_commits(start.clone(), end.clone(), metric, ctxt, master_commits)
-            .await
-            .map_err(|e| format!("error comparing beginning and ending commits: {e}"))?
-        {
-            Some(summary_comparison) => {
-                let (primary, secondary) =
-                    summary_comparison.summarize_compile_by_category(&benchmark_map);
-                let mut result = String::from("**Summary**:\n\n");
-                write_summary_table(&primary, &secondary, true, &mut result);
-                result
-            }
-            None => String::from("**ERROR**: no data found for end bound"),
-        };
+    let summary = match compare_given_commits(
+        start.clone(),
+        end.clone(),
+        metric,
+        Some(Target::X86_64UnknownLinuxGnu),
+        ctxt,
+        master_commits,
+    )
+    .await
+    .map_err(|e| format!("error comparing beginning and ending commits: {e}"))?
+    {
+        Some(summary_comparison) => {
+            let (primary, secondary) =
+                summary_comparison.summarize_compile_by_category(&benchmark_map);
+            let mut result = String::from("**Summary**:\n\n");
+            write_summary_table(&primary, &secondary, true, &mut result);
+            result
+        }
+        None => String::from("**ERROR**: no data found for end bound"),
+    };
 
     let report = generate_report(&start, &end, summary, report, num_comparisons).await;
     Ok(api::triage::Response(report))
@@ -133,11 +147,17 @@ pub async fn handle_compare(
     let master_commits = &ctxt.get_master_commits().commits;
 
     let end = body.end;
-    let comparison =
-        compare_given_commits(body.start, end.clone(), body.stat, ctxt, master_commits)
-            .await
-            .map_err(|e| format!("error comparing commits: {e}"))?
-            .ok_or_else(|| format!("could not find end commit for bound {end:?}"))?;
+    let comparison = compare_given_commits(
+        body.start,
+        end.clone(),
+        body.stat,
+        None,
+        ctxt,
+        master_commits,
+    )
+    .await
+    .map_err(|e| format!("error comparing commits: {e}"))?
+    .ok_or_else(|| format!("could not find end commit for bound {end:?}"))?;
 
     let conn = ctxt.conn().await;
     let prev = comparison.prev(master_commits);
@@ -149,11 +169,11 @@ pub async fn handle_compare(
         .compile_comparisons
         .into_iter()
         .map(|comparison| api::comparison::CompileBenchmarkComparison {
-            benchmark: comparison.benchmark.to_string(),
-            profile: comparison.profile.to_string(),
-            scenario: comparison.scenario.to_string(),
-            backend: comparison.backend.to_string(),
-            target: comparison.target.to_string(),
+            benchmark: comparison.test_case.benchmark.to_string(),
+            profile: comparison.test_case.profile.to_string(),
+            scenario: comparison.test_case.scenario.to_string(),
+            backend: comparison.test_case.backend.to_string(),
+            target: comparison.test_case.target.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();
@@ -162,8 +182,8 @@ pub async fn handle_compare(
         .runtime_comparisons
         .into_iter()
         .map(|comparison| api::comparison::RuntimeBenchmarkComparison {
-            benchmark: comparison.benchmark.to_string(),
-            target: comparison.target.to_string(),
+            benchmark: comparison.test_case.benchmark.to_string(),
+            target: comparison.test_case.target.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();
@@ -711,14 +731,26 @@ pub async fn compare(
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
     let master_commits = &ctxt.get_master_commits().commits;
 
-    compare_given_commits(start, end, metric, ctxt, master_commits).await
+    // For PR comments, we will only show x64 for now
+    compare_given_commits(
+        start,
+        end,
+        metric,
+        Some(Target::X86_64UnknownLinuxGnu),
+        ctxt,
+        master_commits,
+    )
+    .await
 }
 
 /// Compare two bounds on a given metric
+/// Optionally, you can select a target to query.
+/// If not specified, all targets will be selected.
 async fn compare_given_commits(
     start: Bound,
     end: Bound,
     metric: Metric,
+    target: Option<Target>,
     ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
@@ -732,36 +764,41 @@ async fn compare_given_commits(
     };
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
-    // get all crates, cache, and profile combinations for the given metric
+    let compile_query = match target {
+        Some(target) => CompileBenchmarkQuery::all_for_metric_and_target(metric, target),
+        None => CompileBenchmarkQuery::all_for_metric(metric),
+    };
+
+    // Get all crates, cache, and profile combinations for the given metric
     let compile_comparisons = get_comparison::<CompileTestResultComparison, _, _>(
         ctxt,
-        CompileBenchmarkQuery::all_for_metric(metric),
+        compile_query,
         a.clone(),
         aids.clone(),
         metric,
         master_commits,
         |test_case, comparison| CompileTestResultComparison {
-            profile: test_case.profile,
-            scenario: test_case.scenario,
-            benchmark: test_case.benchmark,
-            backend: test_case.backend,
-            target: test_case.target,
+            test_case,
             comparison,
         },
     )
     .await?;
 
-    // get all crates, cache, and profile combinations for the given metric
+    let runtime_query = match target {
+        Some(target) => RuntimeBenchmarkQuery::all_for_metric_and_target(metric, target),
+        None => RuntimeBenchmarkQuery::all_for_metric(metric),
+    };
+
+    // Get all crates, cache, and profile combinations for the given metric
     let runtime_comparisons = get_comparison::<RuntimeTestResultComparison, _, _>(
         ctxt,
-        RuntimeBenchmarkQuery::all_for_metric(metric),
+        runtime_query,
         a.clone(),
         aids,
         metric,
         master_commits,
         |test_case, comparison| RuntimeTestResultComparison {
-            benchmark: test_case.benchmark,
-            target: test_case.target,
+            test_case,
             comparison,
         },
     )
@@ -1316,26 +1353,23 @@ impl From<TestResultComparison> for StatComparison {
 
 #[derive(Debug, Clone)]
 pub struct CompileTestResultComparison {
-    benchmark: Benchmark,
-    profile: Profile,
-    scenario: Scenario,
-    backend: CodegenBackend,
-    target: Target,
+    test_case: CompileTestCase,
     comparison: TestResultComparison,
 }
 
 impl CompileTestResultComparison {
     pub fn benchmark(&self) -> Benchmark {
-        self.benchmark
+        self.test_case.benchmark
     }
 }
 
 impl cmp::PartialEq for CompileTestResultComparison {
     fn eq(&self, other: &Self) -> bool {
-        self.benchmark == other.benchmark
-            && self.profile == other.profile
-            && self.scenario == other.scenario
-            && self.backend == other.backend
+        let CompileTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case == &other.test_case
     }
 }
 
@@ -1343,17 +1377,17 @@ impl cmp::Eq for CompileTestResultComparison {}
 
 impl std::hash::Hash for CompileTestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.benchmark.hash(state);
-        self.profile.hash(state);
-        self.scenario.hash(state);
-        self.backend.hash(state);
+        let CompileTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case.hash(state);
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct RuntimeTestResultComparison {
-    benchmark: Benchmark,
-    target: Target,
+    test_case: RuntimeTestCase,
     comparison: TestResultComparison,
 }
 
@@ -1367,7 +1401,11 @@ impl Deref for RuntimeTestResultComparison {
 
 impl cmp::PartialEq for RuntimeTestResultComparison {
     fn eq(&self, other: &Self) -> bool {
-        self.benchmark == other.benchmark
+        let RuntimeTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case == &other.test_case
     }
 }
 
@@ -1375,7 +1413,11 @@ impl cmp::Eq for RuntimeTestResultComparison {}
 
 impl std::hash::Hash for RuntimeTestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.benchmark.hash(state);
+        let RuntimeTestResultComparison {
+            test_case,
+            comparison: _,
+        } = self;
+        test_case.hash(state);
     }
 }
 

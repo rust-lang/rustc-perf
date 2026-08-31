@@ -14,7 +14,8 @@ import {
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
   defaultCompileFilter,
-  transformDataForBackendComparison,
+  SelfCompareData,
+  transformDataForSelfComparison,
 } from "./common";
 import {BenchmarkInfo, DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
@@ -22,8 +23,9 @@ import {
   getBoolOrDefault,
   isSameStringArray,
   loadTargetsFromUrl,
-  storeOrResetBool,
+  storeOrResetValue,
   storeOrResetStringArray,
+  getStringOrDefault,
 } from "../shared";
 
 const props = defineProps<{
@@ -140,10 +142,10 @@ function loadFilterFromUrl(
         defaultCompileFilter.changes.improvements
       ),
     },
-    selfCompareBackend: getBoolOrDefault(
+    selfCompareParameter: getStringOrDefault(
       urlParams,
-      "selfCompareBackend",
-      defaultFilter.selfCompareBackend
+      "selfCompareParameter",
+      defaultFilter.selfCompareParameter
     ),
   };
 }
@@ -157,80 +159,80 @@ function storeFilterToUrl(
   defaultFilter: CompileBenchmarkFilter,
   urlParams: Dict<string>
 ) {
-  storeOrResetBool(urlParams, "name", filter.name || null, defaultFilter.name);
-  storeOrResetBool(
+  storeOrResetValue(urlParams, "name", filter.name, defaultFilter.name);
+  storeOrResetValue(
     urlParams,
     "nonRelevant",
     filter.nonRelevant,
     defaultFilter.nonRelevant
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "showRawData",
     filter.showRawData,
     defaultFilter.showRawData
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "check",
     filter.profile.check,
     defaultFilter.profile.check
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "debug",
     filter.profile.debug,
     defaultFilter.profile.debug
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "opt",
     filter.profile.opt,
     defaultFilter.profile.opt
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "doc",
     filter.profile.doc,
     defaultFilter.profile.doc
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "doc-json",
     filter.profile.docJson,
     defaultFilter.profile.docJson
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "full",
     filter.scenario.full,
     defaultFilter.scenario.full
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "incrFull",
     filter.scenario.incrFull,
     defaultFilter.scenario.incrFull
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "incrUnchanged",
     filter.scenario.incrUnchanged,
     defaultFilter.scenario.incrUnchanged
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "incrPatched",
     filter.scenario.incrPatched,
     defaultFilter.scenario.incrPatched
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "backend-llvm",
     filter.backend.llvm,
     defaultFilter.backend.llvm
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "backend-clif",
     filter.backend.cranelift,
@@ -242,47 +244,47 @@ function storeFilterToUrl(
     filter.target,
     defaultFilter.target
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "primary",
     filter.category.primary,
     defaultFilter.category.primary
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "secondary",
     filter.category.secondary,
     defaultFilter.category.secondary
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "binary",
     filter.artifact.binary,
     defaultFilter.artifact.binary
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "library",
     filter.artifact.library,
     defaultFilter.artifact.library
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "regressions",
     filter.changes.regressions,
     defaultFilter.changes.regressions
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
     "improvements",
     filter.changes.improvements,
     defaultFilter.changes.improvements
   );
-  storeOrResetBool(
+  storeOrResetValue(
     urlParams,
-    "selfCompareBackend",
-    filter.selfCompareBackend,
-    defaultFilter.selfCompareBackend
+    "selfCompareParameter",
+    filter.selfCompareParameter,
+    defaultFilter.selfCompareParameter
   );
 
   changeUrl(urlParams);
@@ -309,16 +311,31 @@ const urlParams = getUrlParams();
 const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
-// Should we use the backend as the source of before/after data?
-const selfCompareBackend = computed(() => {
-  return canCompareBackends.value && filter.value.selfCompareBackend;
-});
-const canCompareBackends = computed(() => {
-  const hasMultipleBackends =
-    new Set(props.data.compile_comparisons.map((c) => c.backend)).size > 1;
+const selfCompareCanBeEnabled = computed(() => {
   // Are we currently comparing the same commit in the before/after toolchains?
-  const comparesSameCommit = props.data.a.commit === props.data.b.commit;
-  return hasMultipleBackends && comparesSameCommit;
+  return props.data.a.commit === props.data.b.commit;
+});
+
+// Should we use a given benchmark parameter as the source of before/after data?
+const selfCompareData = computed((): SelfCompareData | null => {
+  if (!selfCompareCanBeEnabled.value) return null;
+
+  const selfCompare = filter.value.selfCompareParameter;
+  if (selfCompare === null) return null;
+
+  if (selfCompare === "backend") {
+    return {
+      parameter: "backend",
+      baseline: "llvm",
+    };
+  } else if (selfCompare === "target") {
+    return {
+      parameter: "target",
+      baseline: DEFAULT_COMPILE_TARGET_TRIPLE,
+    };
+  } else {
+    return null;
+  }
 });
 
 function exportData() {
@@ -328,9 +345,14 @@ function exportData() {
 const benchmarkMap = createCompileBenchmarkMap(props.data);
 
 const compileComparisons = computed(() => {
-  // If requested, artificially restructure the data to create a comparison between backends
-  if (selfCompareBackend.value) {
-    return transformDataForBackendComparison(props.data.compile_comparisons);
+  // If requested, artificially restructure the data to create a comparison
+  // between the selected benchmark parameter
+  const selfCompare = selfCompareData.value;
+  if (selfCompare !== null) {
+    return transformDataForSelfComparison(
+      props.data.compile_comparisons,
+      selfCompare
+    );
   } else {
     return props.data.compile_comparisons;
   }
@@ -359,15 +381,15 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :info="benchmarkInfo"
     :default-filter="defaultCompileFilter"
     :initial-filter="filter"
-    :can-compare-backends="canCompareBackends"
+    :self-compare-enabled="selfCompareCanBeEnabled"
     @change="updateFilter"
     @export="exportData"
   />
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
-  <div class="warning" v-if="selfCompareBackend">
-    Note: comparing results of the baseline LLVM backend to the Cranelift
-    backend.
+  <div class="warning" v-if="selfCompareData !== null">
+    Note: comparing results against the baseline {{ selfCompareData.baseline }}
+    {{ selfCompareData.parameter }}.
   </div>
   <Benchmarks
     :data="data"
@@ -376,7 +398,6 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :filter="filter"
     :stat="selector.stat"
     :benchmark-map="benchmarkMap"
-    :show-backend="!selfCompareBackend"
   ></Benchmarks>
 </template>
 <style lang="scss" scoped>

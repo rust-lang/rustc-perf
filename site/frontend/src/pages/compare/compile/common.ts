@@ -34,7 +34,7 @@ export type CompileBenchmarkFilter = {
     regressions: boolean;
     improvements: boolean;
   };
-  selfCompareBackend: boolean;
+  selfCompareParameter: string | null;
 } & BenchmarkFilter;
 
 export const defaultCompileFilter: CompileBenchmarkFilter = {
@@ -71,7 +71,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     regressions: true,
     improvements: true,
   },
-  selfCompareBackend: false,
+  selfCompareParameter: null,
 };
 
 export type Profile = "check" | "debug" | "opt" | "doc";
@@ -80,6 +80,13 @@ export type Category = "primary" | "secondary";
 export type Target = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
 
 export type CompileBenchmarkMap = Dict<CompileBenchmarkMetadata>;
+
+export type SelfCompareData = {
+  // Which benchmark parameter are we comparing?
+  parameter: "backend" | "target";
+  // Which value of the parameter is the baseline?
+  baseline: string;
+};
 
 export interface CargoProfileMetadata {
   debug: string | null;
@@ -162,7 +169,7 @@ export function computeCompileComparisonsWithNonRelevant(
   }
 
   function artifactFilter(metadata: CompileBenchmarkMetadata | null): boolean {
-    if (metadata?.binary === null) return true;
+    if (metadata === null || metadata?.binary === null) return true;
 
     const isBinary = metadata.binary;
     const isLibrary = !isBinary;
@@ -231,7 +238,7 @@ export function computeCompileComparisonsWithNonRelevant(
 export function createCompileBenchmarkMap(
   data: CompareResponse
 ): CompileBenchmarkMap {
-  const benchmarks = {};
+  const benchmarks: CompileBenchmarkMap = {};
   for (const benchmark of data.compile_benchmark_metadata) {
     benchmarks[benchmark.name] = {...benchmark};
   }
@@ -242,57 +249,66 @@ export function testCaseKey(testCase: CompileTestCase): string {
   return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.category}`;
 }
 
-// Transform compile comparisons to compare LLVM vs Cranelift, instead of
-// before/after. Assumes that the data comes from the same commit.
-export function transformDataForBackendComparison(
-  comparisons: CompileBenchmarkComparison[]
+// Transform compile comparisons to compare treat the given benchmark
+// parameter's baseline value as the previous commit data.
+// Assumes that the data comes from the same commit.
+export function transformDataForSelfComparison(
+  comparisons: CompileBenchmarkComparison[],
+  selfCompare: SelfCompareData
 ): CompileBenchmarkComparison[] {
-  const benchmarkMap: Map<
-    string,
-    {
-      llvm: number | null;
-      cranelift: number | null;
-      benchmark: string;
-      profile: Profile;
-      target: Target;
-      scenario: string;
-    }
-  > = new Map();
+  function computeKey(comparison: CompileBenchmarkComparison): string {
+    // Create a key out of the comparison entry
+    const object: any = {...comparison};
+    // Remove metric comparison
+    delete object["comparison"];
+    // Remove the self-compare parameter
+    delete object[selfCompare.parameter];
+
+    const keys = Object.keys(object);
+    keys.sort();
+    return keys.map((k) => `${object[k]}`).join(";");
+  }
+
+  const baselineValues: Map<string, CompileBenchmarkComparison> = new Map();
+  // Record baselines
   for (const comparison of comparisons) {
-    const key = `${comparison.benchmark};${comparison.profile};${comparison.scenario};${comparison.target}`;
-    if (!benchmarkMap.has(key)) {
-      benchmarkMap.set(key, {
-        llvm: null,
-        cranelift: null,
-        benchmark: comparison.benchmark,
-        profile: comparison.profile,
-        scenario: comparison.scenario,
-        target: comparison.target,
-      });
-    }
-    const record = benchmarkMap.get(key);
-    if (comparison.backend === "llvm") {
-      record.llvm = comparison.comparison.statistics[0];
-    } else if (comparison.backend === "cranelift") {
-      record.cranelift = comparison.comparison.statistics[0];
+    const key = computeKey(comparison);
+    if (comparison[selfCompare.parameter] === selfCompare.baseline) {
+      baselineValues.set(key, comparison);
     }
   }
 
-  return Array.from(benchmarkMap, ([_, entry]) => {
-    const comparison: CompileBenchmarkComparison = {
-      benchmark: entry.benchmark,
-      profile: entry.profile,
-      scenario: entry.scenario,
-      // Treat LLVM as the baseline
-      backend: "llvm",
-      target: entry.target,
+  // Construct new entries
+  const result = [];
+  for (const comparison of comparisons) {
+    // Ignore comparison if it is the baseline
+    if (comparison[selfCompare.parameter] === selfCompare.baseline) {
+      continue;
+    }
+    // Find corresponding baseline for this comparison
+    const key = computeKey(comparison);
+    const baseline = baselineValues.get(key);
+    // No baseline found
+    if (baseline === undefined) {
+      console.warn(
+        `No baseline found for parameter ${selfCompare.parameter} and key ${key}.`
+      );
+      continue;
+    }
+    // Replace baseline entry
+    const updated: CompileBenchmarkComparison = {
+      ...comparison,
       comparison: {
-        statistics: [entry.llvm, entry.cranelift],
-        is_relevant: true,
-        significance_factor: 1.0,
-        significance_threshold: 1.0,
+        ...comparison.comparison,
+        statistics: [
+          // Baseline value
+          baseline.comparison.statistics[0],
+          // Current value
+          comparison.comparison.statistics[1],
+        ],
       },
     };
-    return comparison;
-  });
+    result.push(updated);
+  }
+  return result;
 }
