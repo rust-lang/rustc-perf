@@ -1481,3 +1481,35 @@ impl FromStr for BenchmarkJobKind {
         })
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::parse_comma_separated;
+
+    #[test]
+    fn test_comma_separated() {
+        assert!(parse_comma_separated::<String>("", "").unwrap().is_empty());
+        assert_eq!(
+            parse_comma_separated::<String>("a", "").unwrap().as_slice(),
+            ["a".to_string()]
+        );
+        assert_eq!(
+            parse_comma_separated::<String>("a,b", "")
+                .unwrap()
+                .as_slice(),
+            ["a".to_string(), "b".to_string()]
+        );
+        assert_eq!(
+            parse_comma_separated::<String>("a,b,c", "")
+                .unwrap()
+                .as_slice(),
+            ["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+        assert_eq!(
+            parse_comma_separated::<String>("a, b ,c", "")
+                .unwrap()
+                .as_slice(),
+            ["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+    }
+}
