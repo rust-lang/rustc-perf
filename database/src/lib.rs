@@ -1155,7 +1155,7 @@ impl BenchmarkRequest {
         parse_targets(&self.targets).map_err(|e| anyhow::anyhow!("{e}"))
     }
 
-    /// Get the targets for the request
+    /// Get the benchmarks for the request
     pub fn benchmarks(&self) -> anyhow::Result<Vec<String>> {
         let benchmarks = parse_benchmarks(&self.benchmarks).map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(benchmarks)
