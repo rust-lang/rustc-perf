@@ -1186,6 +1186,8 @@ where
 {
     raw_string
         .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
         .map(|s| T::from_str(s).map_err(|_| format!("Invalid {name}: {s}")))
         .collect()
 }
