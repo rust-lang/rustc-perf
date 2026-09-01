@@ -28,7 +28,6 @@ use std::error::Error;
 use std::fmt::Write;
 use std::hash::Hash;
 use std::iter;
-use std::ops::Deref;
 use std::sync::Arc;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
@@ -1062,7 +1061,7 @@ impl ArtifactComparison {
         ) = self
             .compile_comparisons
             .into_iter()
-            .partition(|s| category_map.get(&s.benchmark()) == Some(&Category::Primary));
+            .partition(|s| category_map.get(&s.test_case.benchmark) == Some(&Category::Primary));
         (
             ArtifactComparisonSummary::summarize(
                 primary
@@ -1256,7 +1255,7 @@ impl TestResultComparison {
     }
 
     /// Whether the comparison yielded a statistically significant result
-    pub fn is_significant(&self) -> bool {
+    fn is_significant(&self) -> bool {
         self.relative_change().abs() >= self.significance_threshold()
     }
 
@@ -1285,7 +1284,7 @@ impl TestResultComparison {
     /// Whether the comparison is relevant or not.
     ///
     /// Relevance is a function of significance and magnitude.
-    fn is_relevant(&self) -> bool {
+    pub fn is_relevant(&self) -> bool {
         self.is_significant() && self.magnitude().is_small_or_above()
     }
 
@@ -1359,14 +1358,8 @@ impl From<TestResultComparison> for StatComparison {
 
 #[derive(Debug, Clone)]
 pub struct CompileTestResultComparison {
-    test_case: CompileTestCase,
-    comparison: TestResultComparison,
-}
-
-impl CompileTestResultComparison {
-    pub fn benchmark(&self) -> Benchmark {
-        self.test_case.benchmark
-    }
+    pub test_case: CompileTestCase,
+    pub comparison: TestResultComparison,
 }
 
 impl cmp::PartialEq for CompileTestResultComparison {
@@ -1393,16 +1386,8 @@ impl std::hash::Hash for CompileTestResultComparison {
 
 #[derive(Debug, Clone)]
 pub struct RuntimeTestResultComparison {
-    test_case: RuntimeTestCase,
-    comparison: TestResultComparison,
-}
-
-impl Deref for RuntimeTestResultComparison {
-    type Target = TestResultComparison;
-
-    fn deref(&self) -> &Self::Target {
-        &self.comparison
-    }
+    pub test_case: RuntimeTestCase,
+    pub comparison: TestResultComparison,
 }
 
 impl cmp::PartialEq for RuntimeTestResultComparison {

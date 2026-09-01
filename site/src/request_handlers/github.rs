@@ -7,7 +7,9 @@ use std::fmt::Write;
 
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::github::client::Client;
-use crate::github::triage::{triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER};
+use crate::github::triage::{
+    changed_benchmarks_in_rollup, triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER,
+};
 use database::{
     parse_backends, parse_benchmarks, parse_profiles, parse_targets, BenchmarkRequest,
     BenchmarkRequestInsertResult, CodegenBackend, Profile, Target,
@@ -229,6 +231,31 @@ async fn handle_rust_timer(
         }
         Ok(RustTimerCommand::Triage(cmd)) => {
             let mut result = String::new();
+
+            let benchmarks_to_run = match changed_benchmarks_in_rollup(&ctxt, issue.number).await {
+                Ok(benches) => benches,
+                Err(err) => {
+                    main_client
+                        .post_comment(issue.number, format!("{err}"))
+                        .await;
+                    return Ok(github::Response);
+                }
+            };
+            let plural = if benchmarks_to_run.len() == 1 {
+                ""
+            } else {
+                "s"
+            };
+            writeln!(&mut result, "<details>
+<summary>Running triage with {} benchmark{plural}</summary>
+
+Triage only executes the benchmarks on rollup members, that were changed significantly on the rollup.
+For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
+            for benchmark in &benchmarks_to_run {
+                writeln!(&mut result, "* {benchmark}").unwrap();
+            }
+            writeln!(&mut result, "</details>\n").unwrap();
+
             for (i, sha) in cmd.shas.iter().enumerate() {
                 // Add separator between PRs
                 if i != 0 {
@@ -283,7 +310,10 @@ async fn handle_rust_timer(
                     unrolled_build_message.member_pr_number,
                     &BuildCommand {
                         sha,
-                        params: Default::default(),
+                        params: BenchmarkParameters {
+                            benchmarks: Some(&benchmarks_to_run.join(",")),
+                            ..Default::default()
+                        },
                     },
                 )
                 .await;
