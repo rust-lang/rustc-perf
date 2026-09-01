@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the source code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -36,7 +36,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Deploy to production
-        uses: rust-lang/simpleinfra/github-actions/upload-docker-image@e42c5d1374329b9fccf4f6f9b26ee54ea3f928f8 # master
+        uses: rust-lang/simpleinfra/github-actions/upload-docker-image@8a84f3f40d2cf82dbea7dd67d027ded23a008521 # master
         with:
           image: rustc-perf
           repository: rust-rustc-perf
