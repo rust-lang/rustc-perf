@@ -98,8 +98,14 @@ pub async fn changed_benchmarks_in_rollup(
     });
     // Include newly failed benchmarks so we can triage which PRs broke them
     let newly_failed_benchmarks = comparison.newly_failed_benchmarks.into_keys();
-    let changed_benchmarks = compile_benchmarks.chain(newly_failed_benchmarks);
-    Ok(changed_benchmarks.collect())
+
+    let mut changed_benchmarks = compile_benchmarks
+        .chain(newly_failed_benchmarks)
+        .collect::<Vec<_>>();
+    changed_benchmarks.sort();
+    changed_benchmarks.dedup();
+
+    Ok(changed_benchmarks)
 }
 
 #[cfg(test)]
