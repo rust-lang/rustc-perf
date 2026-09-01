@@ -225,6 +225,12 @@ async fn handle_rust_timer(
             main_client.post_comment(issue.number, comment).await;
         }
         Ok(RustTimerCommand::Build(cmd)) => {
+            // Check if requested artifacts exist
+            if let Err(error) = validate_build_command(&cmd).await {
+                main_client.post_comment(issue.number, error).await;
+                return;
+            }
+
             match enqueue_sha_build(&ctxt, main_client, issue.number, &cmd).await {
                 Ok(mut msg) => {
                     msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
@@ -388,9 +394,6 @@ async fn enqueue_sha_build(
     issue_number: u32,
     cmd: &BuildCommand<'_>,
 ) -> Result<String, String> {
-    // requested artifacts do not exist errors
-    validate_build_command(cmd).await?;
-
     {
         let conn = ctxt.conn().await;
         record_try_benchmark_request_without_artifacts(
