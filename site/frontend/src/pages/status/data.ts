@@ -30,11 +30,6 @@ export type BenchmarkJob = {
   dequeCounter: number;
 };
 
-export type PastRequestDuration = {
-  requestTag: String;
-  jobDurationS: number;
-};
-
 export type CollectorConfig = {
   name: string;
   target: string;
@@ -44,7 +39,7 @@ export type CollectorConfig = {
   dateAdded: string;
   commitSha: string;
   jobs: BenchmarkJob[];
-  pastRequestDurations: PastRequestDuration[];
+  averageDurationS: number | null;
 };
 
 export type StatusResponse = {

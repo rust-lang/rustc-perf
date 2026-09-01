@@ -148,15 +148,11 @@ function jobDuration(job: BenchmarkJob): string {
 }
 
 function averageCollectorDuration(collector: CollectorConfig): string {
-  if (collector.pastRequestDurations.length === 0) {
+  if (collector.averageDurationS) {
+    return formatSecondsAsDuration(collector.averageDurationS);
+  } else {
     return "Unknown";
   }
-  const durationSum = collector.pastRequestDurations.reduce(
-    (acc, req) => acc + req.jobDurationS,
-    0
-  );
-  const averageDuration = durationSum / collector.pastRequestDurations.length;
-  return formatSecondsAsDuration(averageDuration);
 }
 </script>
 
