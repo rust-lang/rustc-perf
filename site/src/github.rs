@@ -108,10 +108,10 @@ async fn estimate_queue_info(
 
     // Guess the expected full run duration of a waiting commit
     let last_duration = conn
-        .get_last_n_completed_benchmark_requests(1)
+        .get_last_n_completed_benchmark_requests(10)
         .await?
         .into_iter()
-        .next()
+        .find(|request| request.request.is_master())
         .map(|collection| match collection.request.status() {
             BenchmarkRequestStatus::WaitingForArtifacts
             | BenchmarkRequestStatus::ArtifactsReady
@@ -124,9 +124,9 @@ async fn estimate_queue_info(
         })
         .unwrap_or(Duration::ZERO);
 
-    // Guess that the duration will take about an hour if we don't have data or it's
+    // Guess that the duration will take approximately 40 minutes if we don't have data or it's
     // suspiciously fast.
-    let last_duration = last_duration.max(Duration::from_secs(3600));
+    let last_duration = last_duration.max(Duration::from_secs(2400));
 
     let mut expected_duration = last_duration * (preceding_waiting + 1) as u32;
     let mut preceding = preceding_waiting;
