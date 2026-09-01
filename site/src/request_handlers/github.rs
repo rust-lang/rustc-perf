@@ -254,7 +254,7 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
             for benchmark in &benchmarks_to_run {
                 writeln!(&mut result, "* {benchmark}").unwrap();
             }
-            writeln!(&mut result, "</details>").unwrap();
+            writeln!(&mut result, "</details>\n").unwrap();
 
             for (i, sha) in cmd.shas.iter().enumerate() {
                 // Add separator between PRs

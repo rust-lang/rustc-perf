@@ -78,7 +78,7 @@ pub async fn changed_benchmarks_in_rollup(
         .find(|commit| commit.pr.is_some_and(|pr| pr == rollup))
         .cloned()
     else {
-        bail!("The `@rust-timer triage` command can only be executed in rollups. If this is a rollup, it might be too old.")
+        bail!("The `@rust-timer triage` command can only be executed in merged rollups. If this is a merged rollup, it might be too old.")
     };
     drop(master_commits);
 
@@ -96,6 +96,7 @@ pub async fn changed_benchmarks_in_rollup(
             .is_relevant()
             .then_some(c.test_case.benchmark.to_string())
     });
+    // Include newly failed benchmarks so we can triage which PRs broke them
     let newly_failed_benchmarks = comparison.newly_failed_benchmarks.into_keys();
     let changed_benchmarks = compile_benchmarks.chain(newly_failed_benchmarks);
     Ok(changed_benchmarks.collect())
