@@ -18,20 +18,16 @@ pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-la
 /// They are removed once a perf. run comparison summary is posted on a PR.
 pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 
+use crate::github::client::Commit;
 use database::{BenchmarkJobStatus, BenchmarkRequestStatus, Connection};
 
 /// Enqueues the given SHA and returns a message that should be sent as a comment to the corresponding PR.
 /// If not benchmark reques was found to which the commit SHA could be attached, returns `Ok(None)`.
 pub async fn enqueue_sha(
     ctxt: &SiteCtxt,
-    gh_client: &client::Client,
+    mut commit: Commit,
     pr_number: u32,
-    commit_sha: &str,
 ) -> Result<Option<String>, String> {
-    let mut commit = gh_client
-        .get_commit(commit_sha)
-        .await
-        .map_err(|e| e.to_string())?;
     if commit.parents.len() != 2 {
         return Err(format!(
             "Bors try commit {} unexpectedly has {} parents.",
