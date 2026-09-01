@@ -1755,7 +1755,9 @@ async fn create_benchmark_configs(
         None
     };
 
-    let runtime_config = if bench_runtime {
+    // We currently don't allow selecting a benchmark filter for runtime benchmarks
+    // If there is any filter set, just ignore runtime benchmarks altogether
+    let runtime_config = if bench_runtime && job.benchmarks().is_empty() {
         let runtime_suite = load_runtime_benchmarks(
             conn,
             &runtime_benchmark_dir(),
@@ -1768,7 +1770,7 @@ async fn create_benchmark_configs(
         .await?;
         Some(RuntimeBenchmarkConfig {
             runtime_suite,
-            filter: RuntimeBenchmarkFilter::new(vec![], job.benchmarks().to_vec()),
+            filter: RuntimeBenchmarkFilter::keep_all(),
             iterations: DEFAULT_RUNTIME_ITERATIONS,
             target: job.target().into(),
         })
