@@ -33,21 +33,23 @@ pub async fn handle_github_webhook(
             if action != "created" {
                 return Ok(github::Response);
             }
-            handle_issue(ctxt, issue, comment).await
+
+            // Spawn a task to get around the 10s timeout of github webhooks
+            tokio::spawn(async {
+                handle_issue(ctxt, issue, comment).await;
+            });
+
+            Ok(github::Response)
         }
     }
 }
 
 const RUST_TIMER_PREFIX: &str = "@rust-timer";
 
-async fn handle_issue(
-    ctxt: Arc<SiteCtxt>,
-    issue: github::Issue,
-    comment: github::Comment,
-) -> ServerResult<github::Response> {
+async fn handle_issue(ctxt: Arc<SiteCtxt>, issue: github::Issue, comment: github::Comment) {
     // Do not react to our own comments, to avoid funny loops :)
     if comment.user.login == "rust-timer" {
-        return Ok(github::Response);
+        return;
     }
 
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
@@ -65,17 +67,15 @@ async fn handle_issue(
                     gh_client.post_comment(issue.number, err).await;
                 }
             }
-            return Ok(github::Response);
+            return;
         }
     }
 
     // Do not react to @rust-timer commands sent by the bors GitHub App
     // https://api.github.com/users/rust-bors[bot]
     if comment.body.contains(RUST_TIMER_PREFIX) && comment.user.id != 122020455 {
-        return handle_rust_timer(ctxt, &gh_client, comment, issue).await;
+        handle_rust_timer(ctxt, &gh_client, comment, issue).await;
     }
-
-    Ok(github::Response)
 }
 
 /// The try request does not have a `sha` or a `parent_sha` but we need to keep a record
@@ -187,9 +187,16 @@ async fn handle_rust_timer(
     main_client: &client::Client,
     comment: github::Comment,
     issue: github::Issue,
-) -> ServerResult<github::Response> {
+) {
+    let authorized_users = match get_authorized_users().await {
+        Ok(authorized_users) => authorized_users,
+        Err(err) => {
+            main_client.post_comment(issue.number, err).await;
+            return;
+        }
+    };
     if comment.author_association != github::Association::Owner
-        && !get_authorized_users().await?.contains(&comment.user.id)
+        && !authorized_users.contains(&comment.user.id)
     {
         main_client
             .post_comment(
@@ -200,7 +207,7 @@ async fn handle_rust_timer(
                 ),
             )
             .await;
-        return Ok(github::Response);
+        return;
     }
 
     match parse_command(&comment.body) {
@@ -238,7 +245,7 @@ async fn handle_rust_timer(
                     main_client
                         .post_comment(issue.number, format!("{err}"))
                         .await;
-                    return Ok(github::Response);
+                    return;
                 }
             };
             let plural = if benchmarks_to_run.len() == 1 {
@@ -333,8 +340,6 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
             main_client.post_comment(issue.number, e).await;
         }
     }
-
-    Ok(github::Response)
 }
 
 #[derive(Debug)]
