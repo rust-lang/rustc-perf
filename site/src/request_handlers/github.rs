@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 use std::fmt::Write;
 
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::github::client::Client;
+use crate::github::client::Commit;
 use crate::github::triage::{
     changed_benchmarks_in_rollup, triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER,
 };
@@ -55,7 +55,20 @@ async fn handle_issue(ctxt: Arc<SiteCtxt>, issue: github::Issue, comment: github
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     if comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&comment.body).await {
-            match enqueue_sha(&ctxt, &gh_client, issue.number, &sha).await {
+            let commit = match gh_client.get_commit(&sha).await {
+                Ok(commit) => commit,
+                Err(error) => {
+                    gh_client
+                        .post_comment(
+                            issue.number,
+                            format!("Cannot fetch commit `{sha}` info: {error:?}"),
+                        )
+                        .await;
+                    return;
+                }
+            };
+
+            match enqueue_sha(&ctxt, commit, issue.number).await {
                 Ok(Some(mut msg)) => {
                     msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
                     gh_client.post_comment(issue.number, msg).await;
@@ -225,7 +238,26 @@ async fn handle_rust_timer(
             main_client.post_comment(issue.number, comment).await;
         }
         Ok(RustTimerCommand::Build(cmd)) => {
-            match enqueue_sha_build(&ctxt, main_client, issue.number, &cmd).await {
+            // Check if requested artifacts exist
+            if let Err(error) = validate_build_command(&cmd).await {
+                main_client.post_comment(issue.number, error).await;
+                return;
+            }
+
+            let commit = match main_client.get_commit(cmd.sha).await {
+                Ok(commit) => commit,
+                Err(error) => {
+                    main_client
+                        .post_comment(
+                            issue.number,
+                            format!("Cannot fetch commit `{}` info: {error:?}", cmd.sha),
+                        )
+                        .await;
+                    return;
+                }
+            };
+
+            match enqueue_sha_build(&ctxt, commit, issue.number, &cmd).await {
                 Ok(mut msg) => {
                     msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
                     main_client.post_comment(issue.number, msg).await;
@@ -313,7 +345,7 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
                 .unwrap();
                 let (Ok(msg) | Err(msg)) = enqueue_sha_build(
                     &ctxt,
-                    main_client,
+                    commit,
                     unrolled_build_message.member_pr_number,
                     &BuildCommand {
                         sha,
@@ -384,13 +416,10 @@ pub fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuil
 
 async fn enqueue_sha_build(
     ctxt: &Arc<SiteCtxt>,
-    main_client: &Client,
+    commit: Commit,
     issue_number: u32,
     cmd: &BuildCommand<'_>,
 ) -> Result<String, String> {
-    // requested artifacts do not exist errors
-    validate_build_command(cmd).await?;
-
     {
         let conn = ctxt.conn().await;
         record_try_benchmark_request_without_artifacts(
@@ -404,7 +433,7 @@ async fn enqueue_sha_build(
         .await;
     }
 
-    match enqueue_sha(ctxt, main_client, issue_number, cmd.sha).await {
+    match enqueue_sha(ctxt, commit, issue_number).await {
         Ok(Some(msg)) => Ok(msg),
         Ok(None) => Err(
             "Commit was not enqueued, since no previous benchmark request was found".to_string(),

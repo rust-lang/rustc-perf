@@ -3,7 +3,7 @@ pub mod comparison_summary;
 pub mod triage;
 
 use crate::job_queue::build_queue;
-use crate::load::{SiteCtxt, TryCommit};
+use crate::load::SiteCtxt;
 use chrono::Utc;
 use serde::Deserialize;
 use std::time::Duration;
@@ -18,20 +18,16 @@ pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-la
 /// They are removed once a perf. run comparison summary is posted on a PR.
 pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 
+use crate::github::client::Commit;
 use database::{BenchmarkJobStatus, BenchmarkRequestStatus, Connection};
 
 /// Enqueues the given SHA and returns a message that should be sent as a comment to the corresponding PR.
-/// If not benchmark reques was found to which the commit SHA could be attached, returns `Ok(None)`.
+/// If no benchmark request was found to which the commit SHA could be attached, returns `Ok(None)`.
 pub async fn enqueue_sha(
     ctxt: &SiteCtxt,
-    gh_client: &client::Client,
+    mut commit: Commit,
     pr_number: u32,
-    commit_sha: &str,
 ) -> Result<Option<String>, String> {
-    let mut commit = gh_client
-        .get_commit(commit_sha)
-        .await
-        .map_err(|e| e.to_string())?;
     if commit.parents.len() != 2 {
         return Err(format!(
             "Bors try commit {} unexpectedly has {} parents.",
@@ -39,25 +35,23 @@ pub async fn enqueue_sha(
             commit.parents.len()
         ));
     }
-    let try_commit = TryCommit {
-        sha: commit.sha,
-        parent_sha: commit.parents.remove(0).sha,
-    };
+    let sha = commit.sha;
+    let parent_sha = commit.parents.remove(0).sha;
     let conn = ctxt.conn().await;
 
     let queued = conn.attach_shas_to_try_benchmark_request(
             pr_number,
-            &try_commit.sha,
-            &try_commit.parent_sha,
+            &sha,
+            &parent_sha,
             commit.commit.committer.date,
             )
             .await
-            .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {}: {error:?}", try_commit.sha))?;
+            .map_err(|error| format!("Cannot attach SHAs to try benchmark request on PR {pr_number} and SHA {sha}: {error:?}"))?;
     if !queued {
         return Ok(None);
     }
 
-    let (preceding_artifacts, expected_duration) = estimate_queue_info(conn.as_ref(), &try_commit)
+    let (preceding_artifacts, expected_duration) = estimate_queue_info(conn.as_ref(), &sha)
         .await
         .map_err(|e| format!("{e:?}"))?;
 
@@ -74,18 +68,20 @@ It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
     );
 
     Ok(Some(format!(
-        "Queued {} with parent {}, future [comparison URL]({}).\n{queue_msg}",
-        try_commit.sha,
-        try_commit.parent_sha,
-        try_commit.comparison_url(),
+        "Queued {sha} with parent {parent_sha}, future [comparison URL]({}).\n{queue_msg}",
+        comparison_url(&sha, &parent_sha),
     )))
+}
+
+fn comparison_url(commit: &str, parent: &str) -> String {
+    format!("https://perf.rust-lang.org/compare.html?start={parent}&end={commit}")
 }
 
 /// Counts how many artifacts are in the queue before the specified commit, and what is the expected
 /// duration until the specified commit will be finished.
 async fn estimate_queue_info(
     conn: &dyn Connection,
-    commit: &TryCommit,
+    commit_sha: &str,
 ) -> anyhow::Result<(u64, Duration)> {
     let queue = build_queue(conn).await?;
 
@@ -103,7 +99,7 @@ async fn estimate_queue_info(
     // How many commits are waiting (i.e. not running) in the queue before the specified commit?
     let preceding_waiting = queue_waiting
         .iter()
-        .position(|c| c.tag() == Some(commit.sha()))
+        .position(|c| c.tag() == Some(commit_sha))
         .unwrap_or(queue_waiting.len().saturating_sub(1)) as u64;
 
     // Guess the expected full run duration of a waiting commit
@@ -141,7 +137,7 @@ async fn estimate_queue_info(
         let Some(tag) = req.tag() else {
             continue;
         };
-        if tag == commit.sha {
+        if tag == commit_sha {
             continue;
         }
         let Some(jobs) = jobs.get(tag) else {

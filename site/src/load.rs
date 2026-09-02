@@ -15,25 +15,6 @@ use collector::{Bound, MasterCommit, SelfProfileStorage};
 pub use database::{ArtifactId, Benchmark, Commit};
 use database::{Pool, Target};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TryCommit {
-    pub sha: String,
-    pub parent_sha: String,
-}
-
-impl TryCommit {
-    pub fn sha(&self) -> &str {
-        self.sha.as_str()
-    }
-
-    pub fn comparison_url(&self) -> String {
-        format!(
-            "https://perf.rust-lang.org/compare.html?start={}&end={}",
-            self.parent_sha, self.sha
-        )
-    }
-}
-
 /// Keys for accessing various services
 ///
 /// At the moment only used for accessing GitHub
