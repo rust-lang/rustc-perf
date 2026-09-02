@@ -429,7 +429,7 @@ impl Target {
     /// Targets that will be benchmarked by default in benchmark requests when no explicit target
     /// is specified.
     pub fn default_targets() -> Vec<Self> {
-        vec![Self::X86_64UnknownLinuxGnu]
+        vec![Self::X86_64UnknownLinuxGnu, Self::AArch64UnknownLinuxGnu]
     }
 
     // 2026/01/12 (Jamesbarford) - presently rustc-perf only support `x86_64`'s
