@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 use std::fmt::Write;
 
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::github::client::Commit;
+use crate::github::client::{Client, Commit};
 use crate::github::triage::{
     changed_benchmarks_in_rollup, triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER,
 };
@@ -295,6 +295,8 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
             }
             writeln!(&mut result, "</details>\n").unwrap();
 
+            let mut commits = download_commits(main_client, &cmd.shas).await;
+
             for (i, sha) in cmd.shas.iter().enumerate() {
                 // Add separator between PRs
                 if i != 0 {
@@ -302,7 +304,7 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
                 }
 
                 // Get unrolled commit
-                let commit = match main_client.get_commit(sha).await {
+                let commit = match commits.remove(sha).expect("commit not found in map") {
                     Ok(commit) => commit,
                     Err(err) => {
                         writeln!(&mut result, "### {sha}").unwrap();
@@ -372,6 +374,27 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
             main_client.post_comment(issue.number, e).await;
         }
     }
+}
+
+async fn download_commits<'a>(
+    client: &Client,
+    shas: &[&'a str],
+) -> HashMap<&'a str, anyhow::Result<Commit>> {
+    let mut results = HashMap::with_capacity(shas.len());
+
+    // Download up to five commits concurrently
+    let mut stream = futures::stream::iter(
+        shas.iter()
+            .map(|sha: &&str| async move { (*sha, client.get_commit(sha).await) })
+            // The collect is only here because the code doesn't compile without it
+            .collect::<Vec<_>>(),
+    )
+    .buffer_unordered(5);
+    while let Some((sha, result)) = stream.next().await {
+        results.insert(sha, result);
+    }
+
+    results
 }
 
 #[derive(Debug)]
