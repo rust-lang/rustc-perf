@@ -261,7 +261,7 @@ async fn create_graphs(
     let backend_selector =
         create_selector(&request.backend).unwrap_or(Ok(Selector::One(CodegenBackend::Llvm)))?;
     let frontend_threads_selector = create_selector(&request.frontend_threads)
-        .unwrap_or(Ok(Selector::One(FrontendThreads(1))))?;
+        .unwrap_or(Ok(Selector::One(FrontendThreads::default_value())))?;
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
             CompileBenchmarkQuery::default()
