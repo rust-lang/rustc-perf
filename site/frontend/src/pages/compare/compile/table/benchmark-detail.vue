@@ -37,6 +37,7 @@ function createSectionsSelector(): CompileDetailSectionsSelector {
     scenario: props.testCase.scenario,
     backend: props.testCase.backend,
     target: props.testCase.target,
+    frontendThreads: props.testCase.frontend_threads,
     start: props.baseArtifact.commit,
     end: props.artifact.commit,
   };

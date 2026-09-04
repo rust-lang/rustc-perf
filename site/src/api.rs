@@ -121,6 +121,7 @@ pub mod graphs {
         pub profile: Option<String>,
         pub backend: Option<String>,
         pub target: Option<String>,
+        pub frontend_threads: Option<String>,
     }
 
     #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -166,6 +167,7 @@ pub mod detail_graphs {
         pub profile: String,
         pub backend: String,
         pub target: String,
+        pub frontend_threads: String,
         #[serde(deserialize_with = "vec_from_comma_separated")]
         pub kinds: Vec<GraphKind>,
     }
@@ -190,6 +192,7 @@ pub mod detail_sections {
         pub profile: String,
         pub backend: String,
         pub target: String,
+        pub frontend_threads: String,
     }
 
     #[derive(Default, Debug, Clone, Serialize)]

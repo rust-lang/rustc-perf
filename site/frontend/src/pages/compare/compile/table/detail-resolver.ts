@@ -6,17 +6,21 @@ import {
 } from "../../../../urls";
 import {CachedDataLoader} from "./utils";
 
-export interface CompileDetailGraphsSelector {
-  start: string;
-  end: string;
-  stat: string;
+interface CompileParameters {
   benchmark: string;
   scenario: string;
   profile: string;
   backend: string;
   target: string;
-  kinds: GraphKind[];
+  frontendThreads: string;
 }
+
+export type CompileDetailGraphsSelector = CompileParameters & {
+  start: string;
+  end: string;
+  stat: string;
+  kinds: GraphKind[];
+};
 
 // Compile benchmark detail received from the server
 export interface CompileDetailGraphs {
@@ -27,15 +31,10 @@ export interface CompileDetailGraphs {
   sections_after: CompilationSections | null;
 }
 
-export interface CompileDetailSectionsSelector {
+export type CompileDetailSectionsSelector = CompileParameters & {
   start: string;
   end: string;
-  benchmark: string;
-  scenario: string;
-  profile: string;
-  backend: string;
-  target: string;
-}
+};
 
 export interface CompileDetailSections {
   before: CompilationSections | null;
@@ -66,7 +65,7 @@ export const COMPILE_DETAIL_GRAPHS_RESOLVER: CachedDataLoader<
   CompileDetailGraphs
 > = new CachedDataLoader(
   (key: CompileDetailGraphsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.start};${key.end};${key.stat};${key.kinds};${key.target}`,
+    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.target};${key.frontendThreads};${key.start};${key.end};${key.stat};${key.kinds}`,
   loadGraphsDetail
 );
 
@@ -82,6 +81,7 @@ async function loadGraphsDetail(
     profile: selector.profile,
     backend: selector.backend,
     target: selector.target,
+    frontend_threads: selector.frontendThreads,
     kinds: selector.kinds.join(","),
   };
   return await getJson<CompileDetailGraphs>(
@@ -96,7 +96,7 @@ export const COMPILE_DETAIL_SECTIONS_RESOLVER: CachedDataLoader<
   CompileDetailSections
 > = new CachedDataLoader(
   (key: CompileDetailSectionsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.target};${key.start};${key.end}`,
+    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.target};${key.frontendThreads};${key.start};${key.end}`,
   loadSectionsDetail
 );
 
@@ -111,6 +111,7 @@ async function loadSectionsDetail(
     profile: selector.profile,
     backend: selector.backend,
     target: selector.target,
+    frontend_threads: selector.frontendThreads,
   };
   return await getJson<CompileDetailSections>(
     COMPARE_COMPILE_DETAIL_SECTIONS_DATA_URL,

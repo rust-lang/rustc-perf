@@ -11,6 +11,7 @@ export interface GraphsSelector {
   profile: string | null;
   backend: string | null;
   target: string | null;
+  frontend_threads: string | null;
 }
 
 export interface Series {

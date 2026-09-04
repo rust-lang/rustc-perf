@@ -39,10 +39,11 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
     backend: props.testCase.backend,
+    target: props.testCase.target,
+    frontendThreads: props.testCase.frontend_threads,
     stat: props.metric,
     start,
     end,
-    target: props.testCase.target,
     kinds: ["percentrelative", "percentfromfirst"] as GraphKind[],
   };
 }
@@ -79,6 +80,7 @@ async function renderGraphs(detail: CompileDetailGraphs) {
       start: selector.start,
       end: selector.end,
       target: selector.target,
+      frontend_threads: selector.frontendThreads,
       backend: selector.backend,
       kind,
     };
