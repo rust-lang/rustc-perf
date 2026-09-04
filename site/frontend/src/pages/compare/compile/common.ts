@@ -103,22 +103,25 @@ export interface CompileBenchmarkMetadata {
   dev_profile: CargoProfileMetadata;
 }
 
-export interface CompileBenchmarkComparison {
+export interface CompileBenchmarkParameters {
   benchmark: string;
   profile: Profile;
   scenario: string;
   backend: CodegenBackend;
   target: Target;
-  comparison: StatComparison;
 }
 
-export interface CompileTestCase {
-  benchmark: string;
-  profile: Profile;
-  scenario: string;
-  backend: CodegenBackend;
-  target: Target;
+export type CompileBenchmarkComparison = CompileBenchmarkParameters & {
+  comparison: StatComparison;
+};
+
+export type CompileTestCase = CompileBenchmarkParameters & {
   category: Category;
+};
+
+// Add new attritbtues to this function when modifying the CompileTestCase!
+export function testCaseKey(testCase: CompileTestCase): string {
+  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.target};${testCase.category}`;
 }
 
 export function computeCompileComparisonsWithNonRelevant(
@@ -243,10 +246,6 @@ export function createCompileBenchmarkMap(
     benchmarks[benchmark.name] = {...benchmark};
   }
   return benchmarks;
-}
-
-export function testCaseKey(testCase: CompileTestCase): string {
-  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.category}`;
 }
 
 // Transform compile comparisons to compare treat the given benchmark
