@@ -109,6 +109,9 @@ export interface CompileBenchmarkParameters {
   scenario: string;
   backend: CodegenBackend;
   target: Target;
+  // We treat the frontend thread count as a categorical variable, which is why
+  // it is represented as a string, and not a number.
+  frontend_threads: string;
 }
 
 export type CompileBenchmarkComparison = CompileBenchmarkParameters & {
@@ -121,7 +124,7 @@ export type CompileTestCase = CompileBenchmarkParameters & {
 
 // Add new attritbtues to this function when modifying the CompileTestCase!
 export function testCaseKey(testCase: CompileTestCase): string {
-  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.target};${testCase.category}`;
+  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.target};${testCase.frontend_threads};${testCase.category}`;
 }
 
 export function computeCompileComparisonsWithNonRelevant(
@@ -214,12 +217,13 @@ export function computeCompileComparisonsWithNonRelevant(
   let filteredComparisons = comparisons
     .map(
       (c: CompileBenchmarkComparison): TestCaseComparison<CompileTestCase> => {
-        let testCase = {
+        let testCase: CompileTestCase = {
           benchmark: c.benchmark,
           profile: c.profile,
           scenario: c.scenario,
           backend: c.backend,
           target: c.target,
+          frontend_threads: c.frontend_threads,
           category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
         };
         return calculateComparison(c.comparison, testCase);
