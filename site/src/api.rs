@@ -346,6 +346,7 @@ pub mod comparison {
         pub scenario: String,
         pub backend: String,
         pub target: String,
+        pub frontend_threads: String,
         pub comparison: StatComparison,
     }
 
