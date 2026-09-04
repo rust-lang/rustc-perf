@@ -1,7 +1,10 @@
 import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
 import {benchmarkNameMatchesFilter, targetMatchesFilter} from "../shared";
-import {DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
+import {
+  DEFAULT_COMPILE_TARGET_TRIPLE,
+  DEFAULT_FRONTEND_THREAD_COUNT,
+} from "../../../api";
 
 export type CompileBenchmarkFilter = {
   profile: {
@@ -22,6 +25,7 @@ export type CompileBenchmarkFilter = {
     cranelift: boolean;
   };
   target: Target[];
+  frontendThreads: string[];
   category: {
     primary: boolean;
     secondary: boolean;
@@ -59,6 +63,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     cranelift: true,
   },
   target: [DEFAULT_COMPILE_TARGET_TRIPLE],
+  frontendThreads: [DEFAULT_FRONTEND_THREAD_COUNT],
   category: {
     primary: true,
     secondary: true,
@@ -122,7 +127,7 @@ export type CompileTestCase = CompileBenchmarkParameters & {
   category: Category;
 };
 
-// Add new attritbtues to this function when modifying the CompileTestCase!
+// Add new attributes to this function when modifying the CompileTestCase!
 export function testCaseKey(testCase: CompileTestCase): string {
   return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.target};${testCase.frontend_threads};${testCase.category}`;
 }
@@ -174,6 +179,13 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
+  function frontendThreadsFilter(
+    frontendThreads: string,
+    frontendThreadsSet: string[]
+  ) {
+    return frontendThreadsSet.includes(frontendThreads);
+  }
+
   function artifactFilter(metadata: CompileBenchmarkMetadata | null): boolean {
     if (metadata === null || metadata?.binary === null) return true;
 
@@ -207,6 +219,10 @@ export function computeCompileComparisonsWithNonRelevant(
       scenarioFilter(comparison.testCase.scenario) &&
       backendFilter(comparison.testCase.backend) &&
       targetMatchesFilter(comparison.testCase.target, filter.target) &&
+      frontendThreadsFilter(
+        comparison.testCase.frontend_threads,
+        filter.frontendThreads
+      ) &&
       categoryFilter(comparison.testCase.category) &&
       artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
       changeFilter(comparison) &&
