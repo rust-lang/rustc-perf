@@ -92,6 +92,7 @@ pub async fn handle_compile_detail_sections(
     let target: Target = request.target.parse()?;
     let frontend_threads: FrontendThreads = request.frontend_threads.parse()?;
 
+    #[allow(clippy::too_many_arguments)]
     async fn calculate_sections(
         ctxt: &SiteCtxt,
         aid: ArtifactId,

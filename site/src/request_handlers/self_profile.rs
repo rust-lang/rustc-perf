@@ -187,6 +187,7 @@ pub async fn handle_self_profile_processed_download(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn get_self_profile_id(
     ctxt: &SiteCtxt,
     benchmark: &str,
