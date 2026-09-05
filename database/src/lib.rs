@@ -25,6 +25,10 @@ intern!(pub struct TargetName);
 pub struct FrontendThreads(pub u32);
 
 impl FrontendThreads {
+    pub fn default_value() -> Self {
+        Self(1)
+    }
+
     // Default thread counts for the parallel frontend
     pub fn default_threads_counts() -> Vec<FrontendThreads> {
         vec![FrontendThreads(1)]
@@ -41,6 +45,12 @@ impl std::str::FromStr for FrontendThreads {
             .parse()
             .map_err(|e: std::num::ParseIntError| e.to_string())?;
         Ok(Self(v))
+    }
+}
+
+impl Display for FrontendThreads {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -361,6 +371,7 @@ impl Scenario {
 
 use anyhow::anyhow;
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 // We sort println before all other patches.

@@ -1,7 +1,10 @@
 import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
 import {benchmarkNameMatchesFilter, targetMatchesFilter} from "../shared";
-import {DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
+import {
+  DEFAULT_COMPILE_TARGET_TRIPLE,
+  DEFAULT_FRONTEND_THREAD_COUNT,
+} from "../../../api";
 
 export type CompileBenchmarkFilter = {
   profile: {
@@ -22,6 +25,7 @@ export type CompileBenchmarkFilter = {
     cranelift: boolean;
   };
   target: Target[];
+  frontendThreads: string[];
   category: {
     primary: boolean;
     secondary: boolean;
@@ -59,6 +63,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     cranelift: true,
   },
   target: [DEFAULT_COMPILE_TARGET_TRIPLE],
+  frontendThreads: [DEFAULT_FRONTEND_THREAD_COUNT],
   category: {
     primary: true,
     secondary: true,
@@ -103,22 +108,28 @@ export interface CompileBenchmarkMetadata {
   dev_profile: CargoProfileMetadata;
 }
 
-export interface CompileBenchmarkComparison {
+export interface CompileBenchmarkParameters {
   benchmark: string;
   profile: Profile;
   scenario: string;
   backend: CodegenBackend;
   target: Target;
-  comparison: StatComparison;
+  // We treat the frontend thread count as a categorical variable, which is why
+  // it is represented as a string, and not a number.
+  frontend_threads: string;
 }
 
-export interface CompileTestCase {
-  benchmark: string;
-  profile: Profile;
-  scenario: string;
-  backend: CodegenBackend;
-  target: Target;
+export type CompileBenchmarkComparison = CompileBenchmarkParameters & {
+  comparison: StatComparison;
+};
+
+export type CompileTestCase = CompileBenchmarkParameters & {
   category: Category;
+};
+
+// Add new attributes to this function when modifying the CompileTestCase!
+export function testCaseKey(testCase: CompileTestCase): string {
+  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.target};${testCase.frontend_threads};${testCase.category}`;
 }
 
 export function computeCompileComparisonsWithNonRelevant(
@@ -168,6 +179,13 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
+  function frontendThreadsFilter(
+    frontendThreads: string,
+    frontendThreadsSet: string[]
+  ) {
+    return frontendThreadsSet.includes(frontendThreads);
+  }
+
   function artifactFilter(metadata: CompileBenchmarkMetadata | null): boolean {
     if (metadata === null || metadata?.binary === null) return true;
 
@@ -201,6 +219,10 @@ export function computeCompileComparisonsWithNonRelevant(
       scenarioFilter(comparison.testCase.scenario) &&
       backendFilter(comparison.testCase.backend) &&
       targetMatchesFilter(comparison.testCase.target, filter.target) &&
+      frontendThreadsFilter(
+        comparison.testCase.frontend_threads,
+        filter.frontendThreads
+      ) &&
       categoryFilter(comparison.testCase.category) &&
       artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
       changeFilter(comparison) &&
@@ -211,12 +233,13 @@ export function computeCompileComparisonsWithNonRelevant(
   let filteredComparisons = comparisons
     .map(
       (c: CompileBenchmarkComparison): TestCaseComparison<CompileTestCase> => {
-        let testCase = {
+        let testCase: CompileTestCase = {
           benchmark: c.benchmark,
           profile: c.profile,
           scenario: c.scenario,
           backend: c.backend,
           target: c.target,
+          frontend_threads: c.frontend_threads,
           category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
         };
         return calculateComparison(c.comparison, testCase);
@@ -243,10 +266,6 @@ export function createCompileBenchmarkMap(
     benchmarks[benchmark.name] = {...benchmark};
   }
   return benchmarks;
-}
-
-export function testCaseKey(testCase: CompileTestCase): string {
-  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.category}`;
 }
 
 // Transform compile comparisons to compare treat the given benchmark

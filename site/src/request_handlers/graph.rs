@@ -39,6 +39,7 @@ pub async fn handle_compile_detail_graphs(
                 .scenario(Selector::One(scenario))
                 .backend(Selector::One(request.backend.parse()?))
                 .target(Selector::One(request.target.parse()?))
+                .frontend_threads(Selector::One(request.frontend_threads.parse()?))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
@@ -89,7 +90,9 @@ pub async fn handle_compile_detail_sections(
     let profile: Profile = request.profile.parse()?;
     let backend: CodegenBackend = request.backend.parse()?;
     let target: Target = request.target.parse()?;
+    let frontend_threads: FrontendThreads = request.frontend_threads.parse()?;
 
+    #[allow(clippy::too_many_arguments)]
     async fn calculate_sections(
         ctxt: &SiteCtxt,
         aid: ArtifactId,
@@ -98,8 +101,8 @@ pub async fn handle_compile_detail_sections(
         scenario: Scenario,
         backend: CodegenBackend,
         target: Target,
+        frontend_threads: FrontendThreads,
     ) -> Option<CompilationSections> {
-        const MOCK_FRONTEND_THREADS: FrontendThreads = FrontendThreads(1);
         let id = SelfProfileId::Simple {
             artifact_id: aid,
             benchmark: benchmark.into(),
@@ -107,7 +110,7 @@ pub async fn handle_compile_detail_sections(
             scenario,
             backend,
             target,
-            frontend_threads: MOCK_FRONTEND_THREADS,
+            frontend_threads,
         };
         fetch_self_profile(ctxt, id, None)
             .await
@@ -132,7 +135,8 @@ pub async fn handle_compile_detail_sections(
                 profile,
                 scenario,
                 backend,
-                target
+                target,
+                frontend_threads
             ),
             calculate_sections(
                 &ctxt,
@@ -141,7 +145,8 @@ pub async fn handle_compile_detail_sections(
                 profile,
                 scenario,
                 backend,
-                target
+                target,
+                frontend_threads
             )
         )
     } else {
@@ -210,6 +215,7 @@ pub async fn handle_graphs(
             profile: None,
             backend: None,
             target: None,
+            frontend_threads: None,
         };
 
     if is_default_query {
@@ -255,7 +261,8 @@ async fn create_graphs(
         .unwrap_or(Ok(Selector::One(Target::X86_64UnknownLinuxGnu)))?;
     let backend_selector =
         create_selector(&request.backend).unwrap_or(Ok(Selector::One(CodegenBackend::Llvm)))?;
-
+    let frontend_threads_selector = create_selector(&request.frontend_threads)
+        .unwrap_or(Ok(Selector::One(FrontendThreads::default_value())))?;
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
             CompileBenchmarkQuery::default()
@@ -264,6 +271,7 @@ async fn create_graphs(
                 .scenario(scenario_selector)
                 .backend(backend_selector)
                 .target(target_selector)
+                .frontend_threads(frontend_threads_selector)
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )

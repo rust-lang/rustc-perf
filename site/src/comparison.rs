@@ -173,6 +173,7 @@ pub async fn handle_compare(
             scenario: comparison.test_case.scenario.to_string(),
             backend: comparison.test_case.backend.to_string(),
             target: comparison.test_case.target.to_string(),
+            frontend_threads: comparison.test_case.frontend_threads.0.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();
