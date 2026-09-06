@@ -42,7 +42,7 @@ pub async fn post_comparison_comment(
         is_triage_run(&commit, &mut client, &mut graph_client).await?
     {
         // Update the triage comment
-        let triage_summary = metrics_result(ctxt, &commit)
+        let triage_summary = metrics_result(ctxt, &commit, true)
             .await
             .unwrap_or_else(|error| error);
         match update_triage_body(
@@ -225,14 +225,23 @@ async fn summarize_run(
     let bootstrap = summarize_bootstrap(&inst_comparison);
     let artifact_size = summarize_artifact_size(&inst_comparison);
 
-    write!(&mut message, "{}", metrics_result(ctxt, &commit).await?).unwrap();
+    write!(
+        &mut message,
+        "{}",
+        metrics_result(ctxt, &commit, false).await?
+    )
+    .unwrap();
     write!(&mut message, "\n{bootstrap}").unwrap();
     write!(&mut message, "\n{artifact_size}").unwrap();
 
     Ok(message)
 }
 
-pub async fn metrics_result(ctxt: &SiteCtxt, commit: &QueuedCommit) -> Result<String, String> {
+pub async fn metrics_result(
+    ctxt: &SiteCtxt,
+    commit: &QueuedCommit,
+    collapse_if_irrelevant: bool,
+) -> Result<String, String> {
     let benchmark_map = ctxt.get_benchmark_category_map().await;
     let mut metrics_result = String::new();
     let metrics = vec![
@@ -276,15 +285,32 @@ pub async fn metrics_result(ctxt: &SiteCtxt, commit: &QueuedCommit) -> Result<St
         ),
     ];
 
+    let instructions_irrelevant = metrics[0]
+        .3
+        .compile_comparisons
+        .iter()
+        .all(|c| !c.comparison.is_relevant());
+    let collapse = collapse_if_irrelevant && instructions_irrelevant;
+    if collapse {
+        write!(metrics_result, "<details>\n<summary>This perf run didn't have relevant results for the `instruction count` metric.</summary>\n\n").unwrap();
+    }
+
     for (title, metric, visibility, comparison) in metrics {
-        metrics_result.push_str(&format!(
+        write!(
+            metrics_result,
             "\n### [{title}]({})\n",
             make_comparison_url(commit, metric)
-        ));
+        )
+        .unwrap();
 
         let (primary, secondary) = comparison.summarize_compile_by_category(&benchmark_map);
         write_metric_summary(primary, secondary, visibility, &mut metrics_result);
     }
+
+    if collapse {
+        writeln!(metrics_result, "</details>").unwrap();
+    }
+
     Ok(metrics_result)
 }
 
