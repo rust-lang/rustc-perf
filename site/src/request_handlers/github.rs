@@ -308,7 +308,7 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
                     Ok(commit) => commit,
                     Err(err) => {
                         writeln!(&mut result, "### {sha}").unwrap();
-                        writeln!(&mut result, "Failed to get commit: {err}").unwrap();
+                        writeln!(&mut result, "Failed to get commit: {err}\n").unwrap();
                         continue;
                     }
                 };
@@ -319,7 +319,7 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
                         Ok(r) => r,
                         Err(err) => {
                             writeln!(&mut result, "### {sha}").unwrap();
-                            writeln!(&mut result, "{err}").unwrap();
+                            writeln!(&mut result, "{err}\n").unwrap();
                             continue;
                         }
                     };
