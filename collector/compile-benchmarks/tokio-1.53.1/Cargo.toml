@@ -993,3 +993,5 @@ check-cfg = [
     "cfg(tokio_unstable)",
     'cfg(target_os, values("cygwin"))',
 ]
+
+[workspace]
