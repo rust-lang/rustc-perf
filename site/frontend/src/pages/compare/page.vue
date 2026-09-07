@@ -20,7 +20,7 @@ import CompileBenchmarksPage from "./compile/compile-page.vue";
 import {
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
-  defaultCompileFilter as defaultCompileFilter,
+  createDefaultCompileFilter,
 } from "./compile/common";
 import RuntimeBenchmarksPage from "./runtime/runtime-page.vue";
 import {
@@ -70,6 +70,7 @@ async function loadCompareData(
   });
   data.value = response;
 
+  const defaultCompileFilter = createDefaultCompileFilter(response);
   compileSummary.value = computeSummary(
     filterNonRelevant(
       defaultCompileFilter,

@@ -13,15 +13,19 @@ import {
   CompileBenchmarkFilter,
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
-  defaultCompileFilter,
+  createDefaultCompileFilter,
   SelfCompareData,
+  SelfCompareParameter,
   transformDataForSelfComparison,
 } from "./common";
-import {BenchmarkInfo, DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
+import {
+  BenchmarkInfo,
+  DEFAULT_COMPILE_TARGET_TRIPLE,
+  DEFAULT_FRONTEND_THREAD_COUNT,
+} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
 import {
   getBoolOrDefault,
-  isSameStringArray,
   loadTargetsFromUrl,
   storeOrResetValue,
   storeOrResetStringArray,
@@ -40,19 +44,6 @@ function loadFilterFromUrl(
   defaultFilter: CompileBenchmarkFilter
 ): CompileBenchmarkFilter {
   let target = loadTargetsFromUrl(urlParams, defaultFilter.target);
-  // If we don't have data for the default target, try to use a present target
-  // as the default target filter. This is to provide compatibility for
-  // deployment that might have a different default target.
-  if (
-    isSameStringArray(target, defaultFilter.target) &&
-    props.data.compile_comparisons.find(
-      (testCase) => testCase.target === DEFAULT_COMPILE_TARGET_TRIPLE
-    ) === undefined &&
-    props.data.compile_comparisons.length > 0
-  ) {
-    target = [props.data.compile_comparisons[0].target];
-  }
-
   const frontendThreads = getStringArrayOrDefault(
     urlParams,
     "frontendThreads",
@@ -147,14 +138,14 @@ function loadFilterFromUrl(
       improvements: getBoolOrDefault(
         urlParams,
         "improvements",
-        defaultCompileFilter.changes.improvements
+        defaultFilter.changes.improvements
       ),
     },
     selfCompareParameter: getStringOrDefault(
       urlParams,
       "selfCompareParameter",
       defaultFilter.selfCompareParameter
-    ),
+    ) as SelfCompareParameter | null,
   };
 }
 
@@ -305,7 +296,7 @@ function storeFilterToUrl(
 }
 
 function updateFilter(newFilter: CompileBenchmarkFilter) {
-  storeFilterToUrl(newFilter, defaultCompileFilter, getUrlParams());
+  storeFilterToUrl(newFilter, defaultCompileFilter.value, getUrlParams());
   filter.value = newFilter;
   refreshQuickLinks();
 }
@@ -322,8 +313,11 @@ function refreshQuickLinks() {
 
 const urlParams = getUrlParams();
 
+const defaultCompileFilter = computed(() =>
+  createDefaultCompileFilter(props.data)
+);
 const quickLinksKey = ref(0);
-const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
+const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter.value));
 
 const selfCompareCanBeEnabled = computed(() => {
   // Are we currently comparing the same commit in the before/after toolchains?
@@ -339,16 +333,21 @@ const selfCompareData = computed((): SelfCompareData | null => {
 
   if (selfCompare === "backend") {
     return {
-      parameter: "backend",
+      parameter: selfCompare,
       baseline: "llvm",
     };
   } else if (selfCompare === "target") {
     return {
-      parameter: "target",
+      parameter: selfCompare,
       baseline: DEFAULT_COMPILE_TARGET_TRIPLE,
     };
+  } else if (selfCompare === "frontend_threads") {
+    return {
+      parameter: selfCompare,
+      baseline: DEFAULT_FRONTEND_THREAD_COUNT,
+    };
   } else {
-    return null;
+    throw Error(`Unknown self-compare parameter ${selfCompare}`);
   }
 });
 
@@ -391,20 +390,22 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :selected-metric="selector.stat"
     :metrics="benchmarkInfo.compile_metrics"
   />
+  <!-- We have to pass the unfiltered data here -->
   <Filters
     :info="benchmarkInfo"
     :default-filter="defaultCompileFilter"
     :initial-filter="filter"
     :self-compare-enabled="selfCompareCanBeEnabled"
-    :all-comparisons="allComparisons"
+    :data="data"
     @change="updateFilter"
     @export="exportData"
   />
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
   <div class="warning" v-if="selfCompareData !== null">
-    Note: comparing results against the baseline {{ selfCompareData.baseline }}
-    {{ selfCompareData.parameter }}.
+    Note: comparing results against the baseline
+    <b>{{ selfCompareData.parameter }}={{ selfCompareData.baseline }}</b
+    >.
   </div>
   <Benchmarks
     :data="data"
@@ -418,6 +419,5 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 <style lang="scss" scoped>
 .warning {
   color: red;
-  font-weight: bold;
 }
 </style>

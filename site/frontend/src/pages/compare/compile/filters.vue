@@ -5,13 +5,18 @@ import {computed, ref, toRaw, watch} from "vue";
 import {deepCopy} from "../../../utils/copy";
 import {PREF_FILTERS_OPENED} from "../prefs";
 import {createPersistedRef} from "../../../storage";
-import {CompileBenchmarkFilter, CompileTestCase, Target} from "./common";
-import {BenchmarkInfo, DEFAULT_FRONTEND_THREAD_COUNT} from "../../../api";
-import {TestCaseComparison} from "../data";
+import {
+  availableFrontendThreadsValues,
+  CompileBenchmarkFilter,
+  SelfCompareParameter,
+  Target,
+} from "./common";
+import {BenchmarkInfo} from "../../../api";
+import {CompareResponse} from "../types";
 
 const props = defineProps<{
   info: BenchmarkInfo;
-  allComparisons: TestCaseComparison<CompileTestCase>[];
+  data: CompareResponse;
   // When reset, set filter to this value
   defaultFilter: CompileBenchmarkFilter;
   // Initialize the filter with this value
@@ -56,22 +61,13 @@ function toggleFrontendThreadCount(count: string) {
 
 function updateSelfCompareParameter(event: Event) {
   let rawValue = (event.target as HTMLSelectElement).value;
-  filter.value.selfCompareParameter = rawValue === "" ? null : rawValue;
+  filter.value.selfCompareParameter =
+    rawValue === "" ? null : (rawValue as SelfCompareParameter);
 }
 
-const availableFrontendThreadsValues = computed((): string[] => {
-  if (props.allComparisons.length === 0) {
-    return [DEFAULT_FRONTEND_THREAD_COUNT];
-  }
-  const uniqueFrontendThreads = [
-    ...new Set(props.allComparisons.map((c) => c.testCase.frontend_threads)),
-  ];
-  // Compare the string values as numbers
-  uniqueFrontendThreads.sort((a, b) =>
-    a.localeCompare(b, undefined, {numeric: true})
-  );
-  return uniqueFrontendThreads;
-});
+const frontendThreads = computed((): string[] =>
+  availableFrontendThreadsValues(props.data)
+);
 
 let filter = ref(deepCopy(props.initialFilter));
 watch(
@@ -280,7 +276,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
               </div>
             </div>
             <ul class="states-list">
-              <li v-for="count in availableFrontendThreadsValues" :id="count">
+              <li v-for="count in frontendThreads" :id="count">
                 <label>
                   <input
                     type="checkbox"
@@ -436,6 +432,12 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                 :selected="filter.selfCompareParameter === 'target'"
               >
                 Target
+              </option>
+              <option
+                value="frontend_threads"
+                :selected="filter.selfCompareParameter === 'frontend_threads'"
+              >
+                Frontend threads
               </option>
             </select>
           </div>
