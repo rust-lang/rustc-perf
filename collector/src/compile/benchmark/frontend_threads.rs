@@ -14,13 +14,6 @@ impl FrontendThreads {
     pub fn get(&self) -> u32 {
         self.0.get()
     }
-    // Default thread counts for the parallel frontend
-    pub fn default_threads_counts() -> Vec<FrontendThreads> {
-        database::FrontendThreads::default_threads_counts()
-            .iter()
-            .map(|v| (*v).into())
-            .collect()
-    }
 }
 
 impl From<u32> for FrontendThreads {
@@ -37,6 +30,6 @@ impl From<database::FrontendThreads> for FrontendThreads {
 
 impl From<FrontendThreads> for database::FrontendThreads {
     fn from(value: FrontendThreads) -> Self {
-        database::FrontendThreads(value.get())
+        database::FrontendThreads(value.0.get())
     }
 }

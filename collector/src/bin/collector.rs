@@ -36,7 +36,7 @@ use collector::benchmark_set::{get_benchmark_set, BenchmarkSetId, BenchmarkSetMe
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
-use collector::compile::benchmark::parallel_frontend::FrontendThreads;
+use collector::compile::benchmark::frontend_threads::FrontendThreads;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::target::Target;

@@ -1,6 +1,6 @@
 use crate::compile::benchmark::category::Category;
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
-use crate::compile::benchmark::parallel_frontend::FrontendThreads;
+use crate::compile::benchmark::frontend_threads::FrontendThreads;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
@@ -20,7 +20,7 @@ use tempfile::TempDir;
 
 pub mod category;
 pub mod codegen_backend;
-pub mod parallel_frontend;
+pub mod frontend_threads;
 pub(crate) mod patch;
 pub mod profile;
 pub mod scenario;

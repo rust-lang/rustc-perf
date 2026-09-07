@@ -1,7 +1,7 @@
 //! Execute benchmarks.
 
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
-use crate::compile::benchmark::parallel_frontend::FrontendThreads;
+use crate::compile::benchmark::frontend_threads::FrontendThreads;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
