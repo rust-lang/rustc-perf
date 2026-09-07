@@ -60,6 +60,7 @@ const unit = computed(() => {
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
+          <th>Threads</th>
           <th>Backend</th>
           <th>Target</th>
           <th>% Change</th>
@@ -100,6 +101,9 @@ const unit = computed(() => {
                 {{ comparison.testCase.profile }}
               </td>
               <td>{{ comparison.testCase.scenario }}</td>
+              <td title="Number of frontend threads used for compilation">
+                {{ comparison.testCase.frontend_threads }}
+              </td>
               <td>{{ comparison.testCase.backend }}</td>
               <td :title="comparison.testCase.target">
                 {{ formatTarget(comparison.testCase.target) }}

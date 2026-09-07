@@ -21,6 +21,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
   const scenario = urlParams["scenario"] ?? null;
   const profile = urlParams["profile"] ?? null;
   const target = urlParams["target"] ?? null;
+  const frontend_threads = urlParams["frontendThreads"] ?? null;
   const backend = urlParams["backend"] ?? null;
   return {
     start,
@@ -32,6 +33,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     profile,
     backend,
     target,
+    frontend_threads,
   };
 }
 

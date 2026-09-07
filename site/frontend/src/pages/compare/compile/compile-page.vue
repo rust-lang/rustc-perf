@@ -26,6 +26,7 @@ import {
   storeOrResetValue,
   storeOrResetStringArray,
   getStringOrDefault,
+  getStringArrayOrDefault,
 } from "../shared";
 
 const props = defineProps<{
@@ -51,6 +52,12 @@ function loadFilterFromUrl(
   ) {
     target = [props.data.compile_comparisons[0].target];
   }
+
+  const frontendThreads = getStringArrayOrDefault(
+    urlParams,
+    "frontendThreads",
+    defaultFilter.frontendThreads
+  );
 
   return {
     name: urlParams["name"] ?? defaultFilter.name,
@@ -106,6 +113,7 @@ function loadFilterFromUrl(
       ),
     },
     target,
+    frontendThreads,
     category: {
       primary: getBoolOrDefault(
         urlParams,
@@ -243,6 +251,12 @@ function storeFilterToUrl(
     "target",
     filter.target,
     defaultFilter.target
+  );
+  storeOrResetStringArray(
+    urlParams,
+    "frontendThreads",
+    filter.frontendThreads,
+    defaultFilter.frontendThreads
   );
   storeOrResetValue(
     urlParams,
@@ -382,6 +396,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :default-filter="defaultCompileFilter"
     :initial-filter="filter"
     :self-compare-enabled="selfCompareCanBeEnabled"
+    :all-comparisons="allComparisons"
     @change="updateFilter"
     @export="exportData"
   />

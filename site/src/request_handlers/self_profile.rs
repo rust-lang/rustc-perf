@@ -61,6 +61,7 @@ pub async fn handle_self_profile_processed_download(
             &body.scenario,
             &body.backend,
             &body.target,
+            &body.frontend_threads,
         )
         .await
         {
@@ -102,6 +103,7 @@ pub async fn handle_self_profile_processed_download(
             &body.scenario,
             &body.backend,
             &body.target,
+            &body.frontend_threads,
         )
         .await
         {
@@ -185,6 +187,7 @@ pub async fn handle_self_profile_processed_download(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn get_self_profile_id(
     ctxt: &SiteCtxt,
     benchmark: &str,
@@ -193,6 +196,7 @@ async fn get_self_profile_id(
     scenario: &str,
     backend: &str,
     target: &str,
+    frontend_threads: &str,
 ) -> anyhow::Result<SelfProfileId> {
     let profile = profile
         .parse::<Profile>()
@@ -206,6 +210,9 @@ async fn get_self_profile_id(
     let target = target
         .parse::<Target>()
         .map_err(|e| anyhow::anyhow!("invalid target: {e:?}"))?;
+    let frontend_threads = frontend_threads
+        .parse::<FrontendThreads>()
+        .map_err(|e| anyhow::anyhow!("invalid frontend thread count: {e:?}"))?;
     let benchmark: BenchmarkName = benchmark.into();
 
     let conn = ctxt.conn().await;
@@ -225,7 +232,6 @@ async fn get_self_profile_id(
             &scenario.to_id(),
         )
         .await;
-    const MOCK_FRONTEND_THREADS: FrontendThreads = FrontendThreads(1);
 
     let id = match aids_and_cids.first().copied() {
         // We have a record in the DB, assume that it is the legacy ID
@@ -244,7 +250,7 @@ async fn get_self_profile_id(
             scenario,
             backend,
             target,
-            frontend_threads: MOCK_FRONTEND_THREADS,
+            frontend_threads,
         },
     };
 
@@ -372,6 +378,7 @@ pub async fn handle_self_profile_raw_download(
         &body.scenario,
         &body.backend,
         &body.target,
+        &body.frontend_threads,
     )
     .await
     {
@@ -444,6 +451,11 @@ pub async fn handle_self_profile(
     } else {
         Target::X86_64UnknownLinuxGnu
     };
+    let frontend_threads = if let Some(frontend_threads) = body.frontend_threads {
+        frontend_threads.parse()?
+    } else {
+        FrontendThreads::default_value()
+    };
 
     let query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::One(benchmark.to_string()))
@@ -451,6 +463,7 @@ pub async fn handle_self_profile(
         .scenario(selector::Selector::One(scenario))
         .backend(selector::Selector::One(backend))
         .target(selector::Selector::One(target))
+        .frontend_threads(selector::Selector::One(frontend_threads))
         .metric(selector::Selector::One(Metric::CpuClock));
 
     // Helper for finding an `ArtifactId` based on a commit sha
@@ -489,6 +502,7 @@ pub async fn handle_self_profile(
             &scenario.to_string(),
             backend.as_str(),
             target.as_str(),
+            &frontend_threads.to_string(),
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -507,6 +521,7 @@ pub async fn handle_self_profile(
                 &scenario.to_string(),
                 backend.as_str(),
                 target.as_str(),
+                &frontend_threads.to_string(),
             )
             .await
             .map_err(|e| e.to_string())?;

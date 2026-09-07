@@ -12,6 +12,7 @@ export interface BenchmarkInfo {
 }
 
 export const DEFAULT_COMPILE_TARGET_TRIPLE: Target = "x86_64-unknown-linux-gnu";
+export const DEFAULT_FRONTEND_THREAD_COUNT: string = "1";
 
 function compareDefaultCompileTarget(a: string, b: string) {
   return (

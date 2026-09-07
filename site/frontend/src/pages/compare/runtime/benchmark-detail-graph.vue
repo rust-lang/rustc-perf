@@ -67,6 +67,7 @@ async function renderGraphs(detail: RuntimeDetailGraphs) {
       profile: null,
       scenario: null,
       target: selector.target,
+      frontend_threads: null,
       backend: null,
       kind,
     };

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import Toggle from "../toggle.vue";
 import Tooltip from "../tooltip.vue";
-import {ref, toRaw, watch} from "vue";
+import {computed, ref, toRaw, watch} from "vue";
 import {deepCopy} from "../../../utils/copy";
 import {PREF_FILTERS_OPENED} from "../prefs";
 import {createPersistedRef} from "../../../storage";
-import {CompileBenchmarkFilter, Target} from "./common";
-import {BenchmarkInfo} from "../../../api";
+import {CompileBenchmarkFilter, CompileTestCase, Target} from "./common";
+import {BenchmarkInfo, DEFAULT_FRONTEND_THREAD_COUNT} from "../../../api";
+import {TestCaseComparison} from "../data";
 
 const props = defineProps<{
   info: BenchmarkInfo;
+  allComparisons: TestCaseComparison<CompileTestCase>[];
   // When reset, set filter to this value
   defaultFilter: CompileBenchmarkFilter;
   // Initialize the filter with this value
@@ -38,10 +40,38 @@ function toggleTarget(target: Target) {
   }
 }
 
+function hasFrontendThreadCount(count: string): boolean {
+  return filter.value.frontendThreads.includes(count);
+}
+
+function toggleFrontendThreadCount(count: string) {
+  if (hasFrontendThreadCount(count)) {
+    filter.value.frontendThreads = filter.value.frontendThreads.filter(
+      (c) => c !== count
+    );
+  } else {
+    filter.value.frontendThreads = [...filter.value.frontendThreads, count];
+  }
+}
+
 function updateSelfCompareParameter(event: Event) {
   let rawValue = (event.target as HTMLSelectElement).value;
   filter.value.selfCompareParameter = rawValue === "" ? null : rawValue;
 }
+
+const availableFrontendThreadsValues = computed((): string[] => {
+  if (props.allComparisons.length === 0) {
+    return [DEFAULT_FRONTEND_THREAD_COUNT];
+  }
+  const uniqueFrontendThreads = [
+    ...new Set(props.allComparisons.map((c) => c.testCase.frontend_threads)),
+  ];
+  // Compare the string values as numbers
+  uniqueFrontendThreads.sort((a, b) =>
+    a.localeCompare(b, undefined, {numeric: true})
+  );
+  return uniqueFrontendThreads;
+});
 
 let filter = ref(deepCopy(props.initialFilter));
 watch(
@@ -67,7 +97,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px">
+              <div>
                 <span>Profiles</span>
                 <Tooltip
                   >The different compilation profiles (check, debug, opt, doc).
@@ -142,7 +172,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px">
+              <div>
                 <span>Scenarios</span>
                 <Tooltip
                   >The different scenarios based on their incremental
@@ -212,7 +242,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px">
+              <div>
                 <span>Backends</span>
                 <Tooltip
                   >The different codegen backends used to generate executable
@@ -242,7 +272,29 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px">
+              <div>
+                <span>Frontend threads</span>
+                <Tooltip
+                  >The different frontend thread counts used for compilation.
+                </Tooltip>
+              </div>
+            </div>
+            <ul class="states-list">
+              <li v-for="count in availableFrontendThreadsValues" :id="count">
+                <label>
+                  <input
+                    type="checkbox"
+                    :checked="hasFrontendThreadCount(count)"
+                    @change="toggleFrontendThreadCount(count)"
+                  />
+                  <span class="label">{{ count }}</span>
+                </label>
+              </li>
+            </ul>
+          </div>
+          <div class="section section-list-wrapper">
+            <div class="section-heading">
+              <div>
                 <span>Targets</span>
                 <Tooltip>The host target of the benchmarked compiler. </Tooltip>
               </div>
@@ -262,7 +314,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px">
+              <div>
                 <span>Categories</span>
                 <Tooltip
                   >Select benchmarks based on their category (primary or
@@ -289,7 +341,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px">
+              <div>
                 <span>Artifacts</span>
                 <Tooltip>
                   Select benchmarks based on the artifact that they produce
@@ -314,7 +366,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px">
+              <div>
                 <span>Changes</span>
                 <Tooltip>
                   Select only improvements, only regressions, or both.
@@ -353,22 +405,14 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                 how relevance is calculated.
               </Tooltip>
             </div>
-            <input
-              type="checkbox"
-              v-model="filter.nonRelevant"
-              style="margin-left: 20px"
-            />
+            <input type="checkbox" v-model="filter.nonRelevant" />
           </div>
           <div class="section">
             <div class="section-heading">
               <span>Display raw data</span>
               <Tooltip>Whether to display or not raw data columns.</Tooltip>
             </div>
-            <input
-              type="checkbox"
-              v-model="filter.showRawData"
-              style="margin-left: 20px"
-            />
+            <input type="checkbox" v-model="filter.showRawData" />
           </div>
           <div
             class="section"
@@ -413,6 +457,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
 <style scoped lang="scss">
 .section-heading {
   font-size: 16px;
+  width: 200px;
 }
 
 #filter {

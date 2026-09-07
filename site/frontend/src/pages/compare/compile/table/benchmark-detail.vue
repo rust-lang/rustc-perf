@@ -37,6 +37,7 @@ function createSectionsSelector(): CompileDetailSectionsSelector {
     scenario: props.testCase.scenario,
     backend: props.testCase.backend,
     target: props.testCase.target,
+    frontendThreads: props.testCase.frontend_threads,
     start: props.baseArtifact.commit,
     end: props.artifact.commit,
   };
@@ -54,8 +55,9 @@ function detailedQueryLink(
   commit: ArtifactDescription,
   baseCommit?: ArtifactDescription
 ): string {
-  const {benchmark, profile, scenario, backend, target} = props.testCase;
-  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&backend=${backend}&target=${target}`;
+  const {benchmark, profile, scenario, backend, target, frontend_threads} =
+    props.testCase;
+  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}&backend=${backend}&target=${target}&frontend_threads=${frontend_threads}`;
   if (baseCommit !== undefined) {
     link += `&base_commit=${baseCommit.commit}`;
   }
@@ -70,8 +72,9 @@ function graphLink(
   // Move to `30 days ago` to display history of the test case
   const start = formatDate(getPastDate(new Date(commit.date), 30));
   const end = commit.commit;
-  const {benchmark, profile, scenario, target, backend} = testCase;
-  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&target=${target}&backend=${backend}&stat=${metric}`;
+  const {benchmark, profile, scenario, target, backend, frontend_threads} =
+    testCase;
+  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&target=${target}&backend=${backend}&frontend_threads=${frontend_threads}&stat=${metric}`;
 }
 
 const metadata = computed(
