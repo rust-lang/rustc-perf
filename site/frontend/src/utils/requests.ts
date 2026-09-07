@@ -20,7 +20,7 @@ export function jsonResponseHasError<T>(
 
 export async function getJson<T>(
   path: string,
-  params: Dict<string> = {}
+  params: Dict<string | null> = {}
 ): Promise<T> {
   let url = path;
 
