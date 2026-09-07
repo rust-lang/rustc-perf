@@ -147,7 +147,7 @@ function loadFilterFromUrl(
       improvements: getBoolOrDefault(
         urlParams,
         "improvements",
-        defaultCompileFilter.changes.improvements
+        defaultFilter.changes.improvements
       ),
     },
     selfCompareParameter: getStringOrDefault(
