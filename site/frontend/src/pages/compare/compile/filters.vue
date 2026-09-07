@@ -8,6 +8,7 @@ import {createPersistedRef} from "../../../storage";
 import {
   availableFrontendThreadsValues,
   CompileBenchmarkFilter,
+  SelfCompareParameter,
   Target,
 } from "./common";
 import {BenchmarkInfo} from "../../../api";
@@ -60,7 +61,8 @@ function toggleFrontendThreadCount(count: string) {
 
 function updateSelfCompareParameter(event: Event) {
   let rawValue = (event.target as HTMLSelectElement).value;
-  filter.value.selfCompareParameter = rawValue === "" ? null : rawValue;
+  filter.value.selfCompareParameter =
+    rawValue === "" ? null : (rawValue as SelfCompareParameter);
 }
 
 const frontendThreads = computed((): string[] =>
@@ -430,6 +432,12 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                 :selected="filter.selfCompareParameter === 'target'"
               >
                 Target
+              </option>
+              <option
+                value="frontend_threads"
+                :selected="filter.selfCompareParameter === 'frontend_threads'"
+              >
+                Frontend threads
               </option>
             </select>
           </div>

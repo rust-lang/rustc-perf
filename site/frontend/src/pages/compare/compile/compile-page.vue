@@ -15,9 +15,14 @@ import {
   createCompileBenchmarkMap,
   createDefaultCompileFilter,
   SelfCompareData,
+  SelfCompareParameter,
   transformDataForSelfComparison,
 } from "./common";
-import {BenchmarkInfo, DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
+import {
+  BenchmarkInfo,
+  DEFAULT_COMPILE_TARGET_TRIPLE,
+  DEFAULT_FRONTEND_THREAD_COUNT,
+} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
 import {
   getBoolOrDefault,
@@ -140,7 +145,7 @@ function loadFilterFromUrl(
       urlParams,
       "selfCompareParameter",
       defaultFilter.selfCompareParameter
-    ),
+    ) as SelfCompareParameter | null,
   };
 }
 
@@ -328,16 +333,21 @@ const selfCompareData = computed((): SelfCompareData | null => {
 
   if (selfCompare === "backend") {
     return {
-      parameter: "backend",
+      parameter: selfCompare,
       baseline: "llvm",
     };
   } else if (selfCompare === "target") {
     return {
-      parameter: "target",
+      parameter: selfCompare,
       baseline: DEFAULT_COMPILE_TARGET_TRIPLE,
     };
+  } else if (selfCompare === "frontend_threads") {
+    return {
+      parameter: selfCompare,
+      baseline: DEFAULT_FRONTEND_THREAD_COUNT,
+    };
   } else {
-    return null;
+    throw Error(`Unknown self-compare parameter ${selfCompare}`);
   }
 });
 
@@ -393,8 +403,9 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
   <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="comparisons" />
   <div class="warning" v-if="selfCompareData !== null">
-    Note: comparing results against the baseline {{ selfCompareData.baseline }}
-    {{ selfCompareData.parameter }}.
+    Note: comparing results against the baseline
+    <b>{{ selfCompareData.parameter }}={{ selfCompareData.baseline }}</b
+    >.
   </div>
   <Benchmarks
     :data="data"
@@ -408,6 +419,5 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 <style lang="scss" scoped>
 .warning {
   color: red;
-  font-weight: bold;
 }
 </style>

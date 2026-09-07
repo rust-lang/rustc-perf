@@ -39,7 +39,7 @@ export type CompileBenchmarkFilter = {
     regressions: boolean;
     improvements: boolean;
   };
-  selfCompareParameter: string | null;
+  selfCompareParameter: SelfCompareParameter | null;
 } & BenchmarkFilter;
 
 export function createDefaultCompileFilter(
@@ -101,9 +101,15 @@ export type Target = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
 
 export type CompileBenchmarkMap = Dict<CompileBenchmarkMetadata>;
 
+type AssertCompileParameterKey<U extends keyof CompileBenchmarkParameters> = U;
+
+export type SelfCompareParameter = AssertCompileParameterKey<
+  "backend" | "target" | "frontend_threads"
+>;
+
 export type SelfCompareData = {
   // Which benchmark parameter are we comparing?
-  parameter: "backend" | "target";
+  parameter: SelfCompareParameter;
   // Which value of the parameter is the baseline?
   baseline: string;
 };
