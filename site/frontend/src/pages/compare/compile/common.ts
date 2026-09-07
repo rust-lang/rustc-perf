@@ -41,43 +41,47 @@ export type CompileBenchmarkFilter = {
   selfCompareParameter: string | null;
 } & BenchmarkFilter;
 
-export const defaultCompileFilter: CompileBenchmarkFilter = {
-  name: null,
-  nonRelevant: false,
-  showRawData: false,
-  profile: {
-    check: true,
-    debug: true,
-    opt: true,
-    doc: true,
-    docJson: true,
-  },
-  scenario: {
-    full: true,
-    incrFull: true,
-    incrUnchanged: true,
-    incrPatched: true,
-  },
-  backend: {
-    llvm: true,
-    cranelift: true,
-  },
-  target: [DEFAULT_COMPILE_TARGET_TRIPLE],
-  frontendThreads: [DEFAULT_FRONTEND_THREAD_COUNT],
-  category: {
-    primary: true,
-    secondary: true,
-  },
-  artifact: {
-    binary: true,
-    library: true,
-  },
-  changes: {
-    regressions: true,
-    improvements: true,
-  },
-  selfCompareParameter: null,
-};
+export function createDefaultCompileFilter(
+  data: CompareResponse
+): CompileBenchmarkFilter {
+  return {
+    name: null,
+    nonRelevant: false,
+    showRawData: false,
+    profile: {
+      check: true,
+      debug: true,
+      opt: true,
+      doc: true,
+      docJson: true,
+    },
+    scenario: {
+      full: true,
+      incrFull: true,
+      incrUnchanged: true,
+      incrPatched: true,
+    },
+    backend: {
+      llvm: true,
+      cranelift: true,
+    },
+    target: [DEFAULT_COMPILE_TARGET_TRIPLE],
+    frontendThreads: availableFrontendThreadsValues(data),
+    category: {
+      primary: true,
+      secondary: true,
+    },
+    artifact: {
+      binary: true,
+      library: true,
+    },
+    changes: {
+      regressions: true,
+      improvements: true,
+    },
+    selfCompareParameter: null,
+  };
+}
 
 export type Profile = "check" | "debug" | "opt" | "doc";
 export type CodegenBackend = "llvm" | "cranelift";
@@ -341,16 +345,18 @@ export function transformDataForSelfComparison(
 }
 
 // Return unique frontend threads values that were returned from the backend.
-export function availableFrontendThreadsValues(data: CompareResponse): string[] {
-    if (data.compile_comparisons.length === 0) {
-      return [DEFAULT_FRONTEND_THREAD_COUNT];
-    }
-    const uniqueFrontendThreads = [
-      ...new Set(data.compile_comparisons.map((c) => c.frontend_threads)),
-    ];
-    // Compare the string values as numbers
-    uniqueFrontendThreads.sort((a, b) =>
-      a.localeCompare(b, undefined, {numeric: true})
-    );
-    return uniqueFrontendThreads;
+export function availableFrontendThreadsValues(
+  data: CompareResponse
+): string[] {
+  if (data.compile_comparisons.length === 0) {
+    return [DEFAULT_FRONTEND_THREAD_COUNT];
+  }
+  const uniqueFrontendThreads = [
+    ...new Set(data.compile_comparisons.map((c) => c.frontend_threads)),
+  ];
+  // Compare the string values as numbers
+  uniqueFrontendThreads.sort((a, b) =>
+    a.localeCompare(b, undefined, {numeric: true})
+  );
+  return uniqueFrontendThreads;
 }

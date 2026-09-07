@@ -13,7 +13,7 @@ import {
   CompileBenchmarkFilter,
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
-  defaultCompileFilter,
+  createDefaultCompileFilter,
   SelfCompareData,
   transformDataForSelfComparison,
 } from "./common";
@@ -305,7 +305,7 @@ function storeFilterToUrl(
 }
 
 function updateFilter(newFilter: CompileBenchmarkFilter) {
-  storeFilterToUrl(newFilter, defaultCompileFilter, getUrlParams());
+  storeFilterToUrl(newFilter, defaultCompileFilter.value, getUrlParams());
   filter.value = newFilter;
   refreshQuickLinks();
 }
@@ -322,8 +322,11 @@ function refreshQuickLinks() {
 
 const urlParams = getUrlParams();
 
+const defaultCompileFilter = computed(() =>
+  createDefaultCompileFilter(props.data)
+);
 const quickLinksKey = ref(0);
-const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
+const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter.value));
 
 const selfCompareCanBeEnabled = computed(() => {
   // Are we currently comparing the same commit in the before/after toolchains?
