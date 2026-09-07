@@ -4,7 +4,7 @@ use database::{metric::Metric, ArtifactId, Commit, Connection, Index};
 use ratatui::prelude::Stylize;
 use ratatui::widgets::{Cell, List, ListState, Paragraph, Row, Table, TableState};
 use ratatui::{
-    crossterm::event::{self, Event, KeyCode},
+    crossterm::event::{self, Event, KeyCode, KeyModifiers},
     prelude::*,
     widgets::Block,
 };
@@ -111,6 +111,7 @@ pub async fn compare_artifacts(
         if let Event::Key(key_event) = event::read()? {
             match key_event.code {
                 KeyCode::Char('q') | KeyCode::Esc => break,
+                KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => break,
                 key => {
                     if let Some(action) = screen.handle_key(key).await? {
                         match action {
