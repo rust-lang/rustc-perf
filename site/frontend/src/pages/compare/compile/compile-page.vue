@@ -391,12 +391,13 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :selected-metric="selector.stat"
     :metrics="benchmarkInfo.compile_metrics"
   />
+  <!-- We have to pass the unfiltered data here -->
   <Filters
     :info="benchmarkInfo"
     :default-filter="defaultCompileFilter"
     :initial-filter="filter"
     :self-compare-enabled="selfCompareCanBeEnabled"
-    :all-comparisons="allComparisons"
+    :data="data"
     @change="updateFilter"
     @export="exportData"
   />

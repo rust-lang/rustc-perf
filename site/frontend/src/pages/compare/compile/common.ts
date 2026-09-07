@@ -339,3 +339,18 @@ export function transformDataForSelfComparison(
   }
   return result;
 }
+
+// Return unique frontend threads values that were returned from the backend.
+export function availableFrontendThreadsValues(data: CompareResponse): string[] {
+    if (data.compile_comparisons.length === 0) {
+      return [DEFAULT_FRONTEND_THREAD_COUNT];
+    }
+    const uniqueFrontendThreads = [
+      ...new Set(data.compile_comparisons.map((c) => c.frontend_threads)),
+    ];
+    // Compare the string values as numbers
+    uniqueFrontendThreads.sort((a, b) =>
+      a.localeCompare(b, undefined, {numeric: true})
+    );
+    return uniqueFrontendThreads;
+}
