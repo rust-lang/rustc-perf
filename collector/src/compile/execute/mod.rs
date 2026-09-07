@@ -418,14 +418,11 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
 
-            // FIXME: this is a hotfix for the -threads4 benchmark(s), until we finish support for
-            // parallel frontend benchmarks fully.
-            if !self.rustc_args.iter().any(|arg| arg.contains("-Zthreads")) {
-                cmd.env(
-                    "RUSTC_THREAD_COUNT",
-                    self.frontend_threads.get().to_string(),
-                );
-            }
+            assert!(!self.rustc_args.iter().any(|arg| arg.contains("-Zthreads")), "rustc_args should not contain -Zthreads, set frontend_threads in perf-config.json instead");
+            cmd.env(
+                "RUSTC_THREAD_COUNT",
+                self.frontend_threads.get().to_string(),
+            );
             match self.profile {
                 Profile::Check => {
                     cmd.arg("--profile").arg("check");
