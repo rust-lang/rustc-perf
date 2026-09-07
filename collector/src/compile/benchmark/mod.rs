@@ -287,13 +287,19 @@ impl Benchmark {
             return Ok(());
         }
 
+        // These two "leaf" benchmark parameters are nested together,
+        // because different values of scenarios and frontend threads can share the same target dir.
+        struct ScenarioWithThreads {
+            scenario: Scenario,
+            frontend_threads: FrontendThreads,
+        }
+
         struct BenchmarkDir {
             dir: TempDir,
-            scenarios: Vec<Scenario>,
             profile: Profile,
             backend: CodegenBackend,
             target: Target,
-            frontend_threads: FrontendThreads,
+            scenarios: Vec<ScenarioWithThreads>,
         }
 
         // Materialize the test cases that we want to benchmark
@@ -303,14 +309,16 @@ impl Benchmark {
         for backend in backends {
             for profile in &profiles {
                 for target in targets {
-                    for frontend_threads in frontend_threads_counts {
+                    let mut remaining_params: Vec<ScenarioWithThreads> = vec![];
+
+                    for &frontend_threads in frontend_threads_counts {
                         // Do we have any scenarios left to compute?
                         let remaining_scenarios = scenarios
                             .iter()
                             .filter(|scenario| {
                                 self.should_run_scenario(
                                     scenario,
-                                    frontend_threads,
+                                    &frontend_threads,
                                     profile,
                                     backend,
                                     target,
@@ -322,17 +330,26 @@ impl Benchmark {
                         if remaining_scenarios.is_empty() {
                             continue;
                         }
-
-                        let temp_dir = self.make_temp_dir(&self.path)?;
-                        benchmark_dirs.push(BenchmarkDir {
-                            dir: temp_dir,
-                            scenarios: remaining_scenarios,
-                            profile: *profile,
-                            backend: *backend,
-                            target: *target,
-                            frontend_threads: *frontend_threads,
-                        });
+                        remaining_params.extend(remaining_scenarios.into_iter().map(|scenario| {
+                            ScenarioWithThreads {
+                                scenario,
+                                frontend_threads,
+                            }
+                        }));
                     }
+
+                    if remaining_params.is_empty() {
+                        continue;
+                    }
+
+                    let temp_dir = self.make_temp_dir(&self.path)?;
+                    benchmark_dirs.push(BenchmarkDir {
+                        dir: temp_dir,
+                        profile: *profile,
+                        backend: *backend,
+                        target: *target,
+                        scenarios: remaining_params,
+                    });
                 }
             }
         }
@@ -392,7 +409,9 @@ impl Benchmark {
                             benchmark_dir.profile,
                             benchmark_dir.backend,
                             benchmark_dir.target,
-                            benchmark_dir.frontend_threads,
+                            // FIXME: use the default number of threads instead of hardcoding it to
+                            // one.
+                            FrontendThreads::new(1),
                         )
                         .jobserver(server)
                         .run_rustc(false)
@@ -432,49 +451,58 @@ impl Benchmark {
             let profile = benchmark_dir.profile;
             let target = benchmark_dir.target;
             let scenarios = &benchmark_dir.scenarios;
-            let frontend_threads = benchmark_dir.frontend_threads;
-            eprintln!(
-                "Running {}: {:?} + {:?} + {:?} + {:?} + {:?}",
-                self.name, profile, scenarios, backend, target, frontend_threads,
-            );
 
-            // We want at least two runs for all benchmarks (since we run
-            // self-profile separately).
-            processor.start_first_collection();
-            for i in 0..std::cmp::max(iterations, 2) {
-                if i == 1 {
-                    let different = processor.finished_first_collection();
-                    if iterations == 1 && !different {
-                        // Don't run twice if this processor doesn't need it and
-                        // we've only been asked to run once.
-                        break;
+            {
+                let mut frontend_threads = scenarios
+                    .iter()
+                    .map(|s| s.frontend_threads)
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                frontend_threads.sort_unstable();
+                let mut scenarios = scenarios
+                    .iter()
+                    .map(|s| s.scenario)
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                scenarios.sort_unstable();
+                eprintln!(
+                    "Running {}: {profile:?} + {scenarios:?} + {backend:?} + {target:?} + {frontend_threads:?}",
+                    self.name,
+                );
+            }
+
+            // Group scenarios by frontend thread counts
+            let mut scenario_map: HashMap<FrontendThreads, Vec<Scenario>> = HashMap::new();
+            for params in scenarios {
+                scenario_map
+                    .entry(params.frontend_threads)
+                    .or_default()
+                    .push(params.scenario);
+            }
+
+            for (frontend_threads, scenarios) in scenario_map {
+                // We want at least two runs for all benchmarks (since we run
+                // self-profile separately).
+                processor.start_first_collection();
+                for i in 0..std::cmp::max(iterations, 2) {
+                    if i == 1 {
+                        let different = processor.finished_first_collection();
+                        if iterations == 1 && !different {
+                            // Don't run twice if this processor doesn't need it and
+                            // we've only been asked to run once.
+                            break;
+                        }
                     }
-                }
-                log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
-                // Don't delete the directory on error.
-                let timing_dir = ManuallyDrop::new(self.make_temp_dir(benchmark_dir.dir.path())?);
-                let cwd = timing_dir.path();
+                    log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
+                    // Don't delete the directory on error.
+                    let timing_dir =
+                        ManuallyDrop::new(self.make_temp_dir(benchmark_dir.dir.path())?);
+                    let cwd = timing_dir.path();
 
-                // A full non-incremental build.
-                if scenarios.contains(&Scenario::Full) {
-                    self.mk_cargo_process(
-                        toolchain,
-                        cwd,
-                        profile,
-                        backend,
-                        target,
-                        frontend_threads,
-                    )
-                    .processor(processor, Scenario::Full, "Full", None)
-                    .run_rustc(true)
-                    .await?;
-                }
-
-                // Rustdoc does not support incremental compilation
-                if !profile.is_doc() {
-                    // An incremental build from scratch (slowest incremental case).
-                    // This is required for any subsequent incremental builds.
-                    if scenarios.iter().any(|s| s.is_incr()) {
+                    // A full non-incremental build.
+                    if scenarios.contains(&Scenario::Full) {
                         self.mk_cargo_process(
                             toolchain,
                             cwd,
@@ -483,36 +511,16 @@ impl Benchmark {
                             target,
                             frontend_threads,
                         )
-                        .incremental(true)
-                        .processor(processor, Scenario::IncrFull, "IncrFull", None)
+                        .processor(processor, Scenario::Full, "Full", None)
                         .run_rustc(true)
                         .await?;
                     }
 
-                    // An incremental build with no changes (fastest incremental case).
-                    if scenarios.contains(&Scenario::IncrUnchanged) {
-                        self.mk_cargo_process(
-                            toolchain,
-                            cwd,
-                            profile,
-                            backend,
-                            target,
-                            frontend_threads,
-                        )
-                        .incremental(true)
-                        .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
-                        .run_rustc(true)
-                        .await?;
-                    }
-
-                    if scenarios.contains(&Scenario::IncrPatched) {
-                        for (i, patch) in self.patches.iter().enumerate() {
-                            log::debug!("applying patch {}", patch.name);
-                            patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
-
-                            // An incremental build with some changes (realistic
-                            // incremental case).
-                            let scenario_str = format!("IncrPatched{i}");
+                    // Rustdoc does not support incremental compilation
+                    if !profile.is_doc() {
+                        // An incremental build from scratch (slowest incremental case).
+                        // This is required for any subsequent incremental builds.
+                        if scenarios.iter().any(|s| s.is_incr()) {
                             self.mk_cargo_process(
                                 toolchain,
                                 cwd,
@@ -522,13 +530,57 @@ impl Benchmark {
                                 frontend_threads,
                             )
                             .incremental(true)
-                            .processor(processor, Scenario::IncrPatched, &scenario_str, Some(patch))
+                            .processor(processor, Scenario::IncrFull, "IncrFull", None)
                             .run_rustc(true)
                             .await?;
                         }
+
+                        // An incremental build with no changes (fastest incremental case).
+                        if scenarios.contains(&Scenario::IncrUnchanged) {
+                            self.mk_cargo_process(
+                                toolchain,
+                                cwd,
+                                profile,
+                                backend,
+                                target,
+                                frontend_threads,
+                            )
+                            .incremental(true)
+                            .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
+                            .run_rustc(true)
+                            .await?;
+                        }
+
+                        if scenarios.contains(&Scenario::IncrPatched) {
+                            for (i, patch) in self.patches.iter().enumerate() {
+                                log::debug!("applying patch {}", patch.name);
+                                patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
+
+                                // An incremental build with some changes (realistic
+                                // incremental case).
+                                let scenario_str = format!("IncrPatched{i}");
+                                self.mk_cargo_process(
+                                    toolchain,
+                                    cwd,
+                                    profile,
+                                    backend,
+                                    target,
+                                    frontend_threads,
+                                )
+                                .incremental(true)
+                                .processor(
+                                    processor,
+                                    Scenario::IncrPatched,
+                                    &scenario_str,
+                                    Some(patch),
+                                )
+                                .run_rustc(true)
+                                .await?;
+                            }
+                        }
                     }
+                    timing_dirs.push(timing_dir);
                 }
-                timing_dirs.push(timing_dir);
             }
         }
         log::trace!(
