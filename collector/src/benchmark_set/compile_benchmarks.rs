@@ -63,6 +63,7 @@ pub(super) const STM32F4_0_15_1: &str = "stm32f4-0.15.1";
 pub(super) const SYN_2_0_101: &str = "syn-2.0.101";
 pub(super) const SYN_2_0_101_NEW_SOLVER: &str = "syn-2.0.101-new-solver";
 pub(super) const TOKEN_STREAM_STRESS: &str = "token-stream-stress";
+pub(super) const TOKIO_1_53_1: &str = "tokio-1.53.1";
 pub(super) const TT_MUNCHER: &str = "tt-muncher";
 pub(super) const TUPLE_STRESS: &str = "tuple-stress";
 pub(super) const TYPENUM_1_18_0: &str = "typenum-1.18.0";

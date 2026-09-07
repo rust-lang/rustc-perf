@@ -306,6 +306,11 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
+path = "tokio-1.53.1/**"
+SPDX-FileCopyrightText = "Tokio Contributors <team@tokio.rs>"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
 path = "tokio-webpush-simple/**"
 SPDX-FileCopyrightText = [
     "tokio-webpush-simple contributors",

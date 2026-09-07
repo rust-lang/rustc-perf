@@ -1,0 +1,12 @@
+diff --git a/src/io/blocking.rs b/src/io/blocking.rs
+index 0fce78993..c4b82abe5 100644
+--- a/src/io/blocking.rs
++++ b/src/io/blocking.rs
+@@ -70,6 +70,7 @@ where
+                         return Poll::Ready(Ok(()));
+                     }
+ 
++                    println!("Buf pos: {}", buf.pos);
+                     let mut inner = self.inner.take().unwrap();
+ 
+                     let max_buf_size = cmp::min(dst.remaining(), DEFAULT_MAX_BUF_SIZE);
