@@ -15,12 +15,12 @@ interface CompileParameters {
   frontendThreads: string;
 }
 
-export type CompileDetailGraphsSelector = CompileParameters & {
+export interface CompileDetailGraphsSelector extends CompileParameters {
   start: string;
   end: string;
   stat: string;
   kinds: GraphKind[];
-};
+}
 
 // Compile benchmark detail received from the server
 export interface CompileDetailGraphs {
@@ -31,10 +31,10 @@ export interface CompileDetailGraphs {
   sections_after: CompilationSections | null;
 }
 
-export type CompileDetailSectionsSelector = CompileParameters & {
+export interface CompileDetailSectionsSelector extends CompileParameters {
   start: string;
   end: string;
-};
+}
 
 export interface CompileDetailSections {
   before: CompilationSections | null;
@@ -65,7 +65,18 @@ export const COMPILE_DETAIL_GRAPHS_RESOLVER: CachedDataLoader<
   CompileDetailGraphs
 > = new CachedDataLoader(
   (key: CompileDetailGraphsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.target};${key.frontendThreads};${key.start};${key.end};${key.stat};${key.kinds}`,
+    [
+      key.benchmark,
+      key.profile,
+      key.scenario,
+      key.backend,
+      key.target,
+      key.frontendThreads,
+      key.start,
+      key.end,
+      key.stat,
+      key.kinds.join(","),
+    ].join(";"),
   loadGraphsDetail
 );
 
@@ -96,7 +107,16 @@ export const COMPILE_DETAIL_SECTIONS_RESOLVER: CachedDataLoader<
   CompileDetailSections
 > = new CachedDataLoader(
   (key: CompileDetailSectionsSelector) =>
-    `${key.benchmark};${key.profile};${key.scenario};${key.backend};${key.target};${key.frontendThreads};${key.start};${key.end}`,
+    [
+      key.benchmark,
+      key.profile,
+      key.scenario,
+      key.backend,
+      key.target,
+      key.frontendThreads,
+      key.start,
+      key.end,
+    ].join(";"),
   loadSectionsDetail
 );
 

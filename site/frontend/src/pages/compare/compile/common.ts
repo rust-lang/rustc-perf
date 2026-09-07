@@ -119,17 +119,25 @@ export interface CompileBenchmarkParameters {
   frontend_threads: string;
 }
 
-export type CompileBenchmarkComparison = CompileBenchmarkParameters & {
+export interface CompileBenchmarkComparison extends CompileBenchmarkParameters {
   comparison: StatComparison;
-};
+}
 
-export type CompileTestCase = CompileBenchmarkParameters & {
+export interface CompileTestCase extends CompileBenchmarkParameters {
   category: Category;
-};
+}
 
 // Add new attributes to this function when modifying the CompileTestCase!
 export function testCaseKey(testCase: CompileTestCase): string {
-  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.backend};${testCase.target};${testCase.frontend_threads};${testCase.category}`;
+  return [
+    testCase.benchmark,
+    testCase.profile,
+    testCase.scenario,
+    testCase.backend,
+    testCase.target,
+    testCase.frontend_threads,
+    testCase.category,
+  ].join(";");
 }
 
 export function computeCompileComparisonsWithNonRelevant(
