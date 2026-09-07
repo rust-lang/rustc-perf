@@ -1,6 +1,6 @@
 use std::num::NonZeroU32;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub struct FrontendThreads(NonZeroU32);
 
 impl FrontendThreads {

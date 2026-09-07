@@ -108,6 +108,25 @@ struct BenchmarkDirs<'a> {
     runtime: &'a Path,
 }
 
+enum FrontendThreadsConfig {
+    /// Use the frontend threads values set by the benchmark itself
+    FromBenchmark,
+    /// Use the following frontend thread values
+    Specific(Vec<FrontendThreads>),
+}
+
+impl FrontendThreadsConfig {
+    fn expand(&self, benchmark: &Benchmark) -> Vec<FrontendThreads> {
+        match self {
+            FrontendThreadsConfig::FromBenchmark => match benchmark.config().frontend_threads() {
+                Some(values) => values.to_vec(),
+                None => vec![FrontendThreads::new(1)],
+            },
+            FrontendThreadsConfig::Specific(values) => values.clone(),
+        }
+    }
+}
+
 struct CompileBenchmarkConfig {
     benchmarks: Vec<Benchmark>,
     profiles: Vec<Profile>,
@@ -117,7 +136,7 @@ struct CompileBenchmarkConfig {
     self_profile_storage: Option<Box<dyn SelfProfileStorage>>,
     bench_rustc: bool,
     targets: Vec<Target>,
-    frontend_threads_counts: Vec<FrontendThreads>,
+    frontend_threads_config: FrontendThreadsConfig,
 }
 
 struct RuntimeBenchmarkConfig {
@@ -168,14 +187,15 @@ fn generate_diffs(
     benchmarks: &[Benchmark],
     profiles: &[Profile],
     scenarios: &[Scenario],
-    frontend_threads_counts: &[FrontendThreads],
+    frontend_threads_config: &FrontendThreadsConfig,
     errors: &mut BenchmarkErrors,
     profiler: &Profiler,
 ) -> Vec<PathBuf> {
     let mut annotated_diffs = Vec::new();
     for benchmark in benchmarks {
         for &profile in profiles {
-            for &frontend_threads in frontend_threads_counts {
+            let frontend_threads = frontend_threads_config.expand(benchmark);
+            for frontend_threads in frontend_threads {
                 for scenario in scenarios.iter().flat_map(|scenario| {
                     if profile.is_doc() && scenario.is_incr() {
                         return vec![];
@@ -233,7 +253,7 @@ fn profile_compile(
     backends: &[CodegenBackend],
     errors: &mut BenchmarkErrors,
     targets: &[Target],
-    frontend_threads_counts: &[FrontendThreads],
+    frontend_threads_config: &FrontendThreadsConfig,
 ) {
     eprintln!("Profiling {} with {:?}", toolchain.id, profiler);
     if let Profiler::SelfProfile = profiler {
@@ -244,6 +264,8 @@ fn profile_compile(
         .par_iter()
         .enumerate()
         .map(|(i, benchmark)| {
+            let frontend_thread_counts = frontend_threads_config.expand(benchmark);
+
             let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
             eprintln!("Executing benchmark {benchmark_id}");
             let mut processor = ProfileProcessor::new(profiler, out_dir, &toolchain.id);
@@ -255,7 +277,7 @@ fn profile_compile(
                 toolchain,
                 Some(1),
                 targets,
-                frontend_threads_counts,
+                &frontend_thread_counts,
                 // We always want to profile everything
                 &hashbrown::HashSet::new(),
             ));
@@ -426,9 +448,9 @@ struct CompileTimeOptions {
 }
 
 impl CompileTimeOptions {
-    fn validate_and_normalize_frontend_threads(&self) -> Vec<FrontendThreads> {
+    fn get_frontend_threads(&self) -> FrontendThreadsConfig {
         if self.frontend_threads_counts.is_empty() {
-            return FrontendThreads::default_threads_counts();
+            return FrontendThreadsConfig::FromBenchmark;
         }
 
         let mut threads = self
@@ -438,7 +460,7 @@ impl CompileTimeOptions {
             .collect::<Vec<_>>();
         threads.sort();
         threads.dedup();
-        threads
+        FrontendThreadsConfig::Specific(threads)
     }
 }
 
@@ -1021,7 +1043,7 @@ fn main_result() -> anyhow::Result<i32> {
             purge,
         } => {
             log_db(&db);
-            let frontend_threads_counts = opts.validate_and_normalize_frontend_threads();
+            let frontend_threads_config = opts.get_frontend_threads();
             let profiles = opts.profiles.0;
             let scenarios = opts.scenarios.0;
             let backends = opts.codegen_backends.0;
@@ -1074,7 +1096,7 @@ fn main_result() -> anyhow::Result<i32> {
                 },
                 bench_rustc: bench_rustc.bench_rustc,
                 targets: vec![Target::host()],
-                frontend_threads_counts,
+                frontend_threads_config,
             };
 
             rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
@@ -1115,7 +1137,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let profiles = &opts.profiles.0;
             let scenarios = &opts.scenarios.0;
-            let frontend_threads_counts = opts.validate_and_normalize_frontend_threads();
+            let frontend_threads_config = opts.get_frontend_threads();
             let backends = &opts.codegen_backends.0;
 
             let mut benchmarks = get_compile_benchmarks(&compile_benchmark_dir, (&local).into())?;
@@ -1155,7 +1177,7 @@ fn main_result() -> anyhow::Result<i32> {
                         backends,
                         &mut errors,
                         &[Target::host()],
-                        &frontend_threads_counts,
+                        &frontend_threads_config,
                     );
                     Ok(id)
                 };
@@ -1174,7 +1196,7 @@ fn main_result() -> anyhow::Result<i32> {
                     &benchmarks,
                     profiles,
                     scenarios,
-                    &frontend_threads_counts,
+                    &frontend_threads_config,
                     &mut errors,
                     &profiler,
                 );
@@ -1749,7 +1771,7 @@ async fn create_benchmark_configs(
             },
             bench_rustc,
             targets: vec![job.target().into()],
-            frontend_threads_counts: FrontendThreads::default_threads_counts(),
+            frontend_threads_config: FrontendThreadsConfig::FromBenchmark,
         })
     } else {
         None
@@ -2207,10 +2229,10 @@ async fn bench_published_artifact(
     } else {
         Scenario::all_non_incr()
     };
-    let frontend_threads_counts = if collector::version_supports_parallel_frontend(&toolchain.id) {
-        FrontendThreads::default_threads_counts()
+    let frontend_threads_config = if collector::version_supports_parallel_frontend(&toolchain.id) {
+        FrontendThreadsConfig::FromBenchmark
     } else {
-        vec![FrontendThreads::new(1)]
+        FrontendThreadsConfig::Specific(vec![FrontendThreads::new(1)])
     };
 
     // Exclude benchmarks that don't work with a stable compiler.
@@ -2245,7 +2267,7 @@ async fn bench_published_artifact(
             self_profile_storage: None,
             bench_rustc: false,
             targets: vec![Target::host()],
-            frontend_threads_counts,
+            frontend_threads_config,
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
@@ -2329,6 +2351,8 @@ async fn bench_compile(
 
     // Normal benchmarks.
     for (nth_benchmark, benchmark) in config.benchmarks.iter().enumerate() {
+        let frontend_threads = config.frontend_threads_config.expand(benchmark);
+
         measure_and_record(
             collector,
             shared,
@@ -2352,7 +2376,7 @@ async fn bench_compile(
                     &shared.toolchain,
                     config.iterations,
                     &config.targets,
-                    &config.frontend_threads_counts,
+                    &frontend_threads,
                     &collector.measured_compile_test_cases,
                 ))
                 .await

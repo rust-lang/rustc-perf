@@ -85,6 +85,10 @@ pub struct BenchmarkConfig {
     /// Which package from a workspace should be compiled
     #[serde(default)]
     package: Option<String>,
+
+    /// Override the default frontend thread counts with which this benchmark should be benchmarked.
+    #[serde(default)]
+    frontend_threads: Option<Vec<FrontendThreads>>,
 }
 
 impl BenchmarkConfig {
@@ -98,6 +102,10 @@ impl BenchmarkConfig {
 
     pub fn iterations(&self) -> usize {
         self.runs
+    }
+
+    pub fn frontend_threads(&self) -> Option<&[FrontendThreads]> {
+        self.frontend_threads.as_deref()
     }
 }
 
@@ -602,6 +610,10 @@ impl Benchmark {
                 !already_computed.contains(&test_case)
             }),
         }
+    }
+
+    pub fn config(&self) -> &BenchmarkConfig {
+        &self.config
     }
 }
 
