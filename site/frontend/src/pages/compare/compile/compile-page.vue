@@ -21,7 +21,6 @@ import {BenchmarkInfo, DEFAULT_COMPILE_TARGET_TRIPLE} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
 import {
   getBoolOrDefault,
-  isSameStringArray,
   loadTargetsFromUrl,
   storeOrResetValue,
   storeOrResetStringArray,
@@ -40,19 +39,6 @@ function loadFilterFromUrl(
   defaultFilter: CompileBenchmarkFilter
 ): CompileBenchmarkFilter {
   let target = loadTargetsFromUrl(urlParams, defaultFilter.target);
-  // If we don't have data for the default target, try to use a present target
-  // as the default target filter. This is to provide compatibility for
-  // deployment that might have a different default target.
-  if (
-    isSameStringArray(target, defaultFilter.target) &&
-    props.data.compile_comparisons.find(
-      (testCase) => testCase.target === DEFAULT_COMPILE_TARGET_TRIPLE
-    ) === undefined &&
-    props.data.compile_comparisons.length > 0
-  ) {
-    target = [props.data.compile_comparisons[0].target];
-  }
-
   const frontendThreads = getStringArrayOrDefault(
     urlParams,
     "frontendThreads",

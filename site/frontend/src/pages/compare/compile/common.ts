@@ -4,6 +4,7 @@ import {benchmarkNameMatchesFilter, targetMatchesFilter} from "../shared";
 import {
   DEFAULT_COMPILE_TARGET_TRIPLE,
   DEFAULT_FRONTEND_THREAD_COUNT,
+  sortTargets,
 } from "../../../api";
 
 export type CompileBenchmarkFilter = {
@@ -44,6 +45,16 @@ export type CompileBenchmarkFilter = {
 export function createDefaultCompileFilter(
   data: CompareResponse
 ): CompileBenchmarkFilter {
+  let targets = availableTargets(data);
+
+  // If we don't have data for the default target, try to use a present target
+  // as the default target filter. This is to provide compatibility for
+  // deployment that might have a different default target.
+  // If we have the default target, default to it only
+  if (targets.includes(DEFAULT_COMPILE_TARGET_TRIPLE)) {
+    targets = [DEFAULT_COMPILE_TARGET_TRIPLE];
+  }
+
   return {
     name: null,
     nonRelevant: false,
@@ -65,7 +76,7 @@ export function createDefaultCompileFilter(
       llvm: true,
       cranelift: true,
     },
-    target: [DEFAULT_COMPILE_TARGET_TRIPLE],
+    target: targets,
     frontendThreads: availableFrontendThreadsValues(data),
     category: {
       primary: true,
@@ -359,4 +370,15 @@ export function availableFrontendThreadsValues(
     a.localeCompare(b, undefined, {numeric: true})
   );
   return uniqueFrontendThreads;
+}
+
+// Return unique target values that were returned from the backend.
+export function availableTargets(data: CompareResponse): Target[] {
+  if (data.compile_comparisons.length === 0) {
+    return [DEFAULT_COMPILE_TARGET_TRIPLE];
+  }
+  const uniqueTargets = [
+    ...new Set(data.compile_comparisons.map((c) => c.target)),
+  ];
+  return sortTargets(uniqueTargets);
 }

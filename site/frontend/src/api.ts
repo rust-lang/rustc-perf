@@ -14,20 +14,24 @@ export interface BenchmarkInfo {
 export const DEFAULT_COMPILE_TARGET_TRIPLE: Target = "x86_64-unknown-linux-gnu";
 export const DEFAULT_FRONTEND_THREAD_COUNT: string = "1";
 
-function compareDefaultCompileTarget(a: string, b: string) {
-  return (
-    a === DEFAULT_COMPILE_TARGET_TRIPLE && b !== DEFAULT_COMPILE_TARGET_TRIPLE
-  );
-}
+export function sortTargets(targets: Target[]): Target[] {
+  function compareDefaultCompileTarget(a: string, b: string) {
+    return (
+      a === DEFAULT_COMPILE_TARGET_TRIPLE && b !== DEFAULT_COMPILE_TARGET_TRIPLE
+    );
+  }
 
-export async function loadBenchmarkInfo(): Promise<BenchmarkInfo> {
-  const benchmarkInfo = await getJson<BenchmarkInfo>(INFO_URL);
-  benchmarkInfo.compile_targets.sort((a, b) => {
+  return targets.sort((a, b) => {
     // Ensure the default target always appears first, then do an alphabetical
     // sort
     if (compareDefaultCompileTarget(a, b)) return -1;
     if (compareDefaultCompileTarget(b, a)) return 1;
     return a.localeCompare(b);
   });
+}
+
+export async function loadBenchmarkInfo(): Promise<BenchmarkInfo> {
+  const benchmarkInfo = await getJson<BenchmarkInfo>(INFO_URL);
+  benchmarkInfo.compile_targets = sortTargets(benchmarkInfo.compile_targets);
   return benchmarkInfo;
 }
