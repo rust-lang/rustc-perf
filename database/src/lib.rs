@@ -28,14 +28,6 @@ impl FrontendThreads {
     pub fn default_value() -> Self {
         Self(1)
     }
-
-    // Default thread counts for the parallel frontend
-    pub fn default_threads_counts() -> Vec<FrontendThreads> {
-        vec![FrontendThreads(1)]
-    }
-    pub fn single(self) -> bool {
-        self.0 == 1
-    }
 }
 
 impl std::str::FromStr for FrontendThreads {
