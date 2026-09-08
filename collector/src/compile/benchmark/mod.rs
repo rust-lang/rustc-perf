@@ -289,7 +289,7 @@ impl Benchmark {
 
         // These two "leaf" benchmark parameters are nested together,
         // because different values of scenarios and frontend threads can share the same target dir.
-        struct ScenarioWithThreads {
+        struct LeafParameters {
             scenario: Scenario,
             frontend_threads: FrontendThreads,
         }
@@ -299,7 +299,7 @@ impl Benchmark {
             profile: Profile,
             backend: CodegenBackend,
             target: Target,
-            scenarios: Vec<ScenarioWithThreads>,
+            leaf_parameters: Vec<LeafParameters>,
         }
 
         // Materialize the test cases that we want to benchmark
@@ -309,29 +309,22 @@ impl Benchmark {
         for backend in backends {
             for profile in &profiles {
                 for target in targets {
-                    let mut remaining_params: Vec<ScenarioWithThreads> = vec![];
+                    let mut remaining_params: Vec<LeafParameters> = vec![];
 
                     for &frontend_threads in frontend_threads_counts {
                         // Do we have any scenarios left to compute?
-                        let remaining_scenarios = scenarios
-                            .iter()
-                            .filter(|scenario| {
-                                self.should_run_scenario(
-                                    scenario,
-                                    &frontend_threads,
-                                    profile,
-                                    backend,
-                                    target,
-                                    already_computed,
-                                )
-                            })
-                            .copied()
-                            .collect::<Vec<Scenario>>();
-                        if remaining_scenarios.is_empty() {
-                            continue;
-                        }
-                        remaining_params.extend(remaining_scenarios.into_iter().map(|scenario| {
-                            ScenarioWithThreads {
+                        let remaining_scenarios = scenarios.iter().filter(|scenario| {
+                            self.should_run_scenario(
+                                scenario,
+                                &frontend_threads,
+                                profile,
+                                backend,
+                                target,
+                                already_computed,
+                            )
+                        });
+                        remaining_params.extend(remaining_scenarios.map(|&scenario| {
+                            LeafParameters {
                                 scenario,
                                 frontend_threads,
                             }
@@ -348,7 +341,7 @@ impl Benchmark {
                         profile: *profile,
                         backend: *backend,
                         target: *target,
-                        scenarios: remaining_params,
+                        leaf_parameters: remaining_params,
                     });
                 }
             }
@@ -450,23 +443,18 @@ impl Benchmark {
             let backend = benchmark_dir.backend;
             let profile = benchmark_dir.profile;
             let target = benchmark_dir.target;
-            let scenarios = &benchmark_dir.scenarios;
+            let scenarios = &benchmark_dir.leaf_parameters;
 
             {
                 let mut frontend_threads = scenarios
                     .iter()
                     .map(|s| s.frontend_threads)
-                    .collect::<HashSet<_>>()
-                    .into_iter()
                     .collect::<Vec<_>>();
                 frontend_threads.sort_unstable();
-                let mut scenarios = scenarios
-                    .iter()
-                    .map(|s| s.scenario)
-                    .collect::<HashSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>();
+                frontend_threads.dedup();
+                let mut scenarios = scenarios.iter().map(|s| s.scenario).collect::<Vec<_>>();
                 scenarios.sort_unstable();
+                scenarios.dedup();
                 eprintln!(
                     "Running {}: {profile:?} + {scenarios:?} + {backend:?} + {target:?} + {frontend_threads:?}",
                     self.name,
@@ -496,6 +484,9 @@ impl Benchmark {
                         }
                     }
                     log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
+
+                    // Copy the prepared target directory into a temporary directory, so that we
+                    // have a fresh copy for each iteration.
                     // Don't delete the directory on error.
                     let timing_dir =
                         ManuallyDrop::new(self.make_temp_dir(benchmark_dir.dir.path())?);
