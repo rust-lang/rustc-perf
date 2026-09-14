@@ -5,7 +5,7 @@
 
 import {CompileTestCase} from "../../common";
 import {computed} from "vue";
-import {normalizeProfile} from "./utils";
+import {normalizeProfile, normalizeScenario} from "./utils";
 import {cargo_collector_command} from "../../../../../utils/cargo";
 
 const props = defineProps<{
@@ -21,19 +21,6 @@ const firstCommit = computed(() => {
     return props.commit;
   }
 });
-
-function normalizeScenario(scenario: string): string {
-  if (scenario === "full") {
-    return "Full";
-  } else if (scenario === "incr-full") {
-    return "IncrFull";
-  } else if (scenario === "incr-unchanged") {
-    return "IncrUnchanged";
-  } else if (scenario.startsWith("incr-patched")) {
-    return "IncrPatched";
-  }
-  return "<invalid scenario>";
-}
 </script>
 
 <template>
