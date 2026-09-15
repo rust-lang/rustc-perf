@@ -522,7 +522,10 @@ fn parse_triage_command_args(args: &str) -> Result<TriageCommand<'_>, String> {
                 .to_string(),
         );
     }
-    Ok(TriageCommand { shas })
+    if let ["all"] = shas[..] {
+        return Ok(TriageCommand::All);
+    }
+    Ok(TriageCommand::ShaList(shas))
 }
 
 fn parse_sha(sha: &str) -> Result<&str, String> {
@@ -653,8 +656,9 @@ struct BuildCommand<'a> {
 }
 
 #[derive(Debug)]
-struct TriageCommand<'a> {
-    shas: Vec<&'a str>,
+enum TriageCommand<'a> {
+    ShaList(Vec<&'a str>),
+    All,
 }
 
 #[derive(Debug, Default)]
@@ -863,15 +867,17 @@ Otherwise LGTM."#),
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage    "),
             @r#"Err("The triage comment requires a space-separated list of SHAs as an argument.")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd"])))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd", "efgh"])))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh ijkl"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh", "ijkl"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd", "efgh", "ijkl"])))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd targets=Foo"),
             @r#"Err("Sha `targets=Foo` is not alphanumeric")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd  efgh"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd", "efgh"])))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage all"),
+            @r#"Ok(Triage(All))"#);
     }
 
     #[test]
