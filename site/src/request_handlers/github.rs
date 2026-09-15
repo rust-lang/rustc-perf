@@ -5,10 +5,12 @@ use crate::github::{
 use crate::load::SiteCtxt;
 use std::fmt::Write;
 
+use crate::api::github::Issue;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::github::client::{Client, Commit};
+use crate::github::client::{Client, Commit, GraphQLClient};
 use crate::github::triage::{
-    changed_benchmarks_in_rollup, triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER,
+    changed_benchmarks_in_rollup, find_and_parse_unrolled_build_comment, triage_body_end_marker,
+    triage_body_start_marker, TRIAGE_MARKER,
 };
 use database::{
     parse_backends, parse_benchmarks, parse_profiles, parse_targets, BenchmarkRequest,
@@ -269,10 +271,31 @@ async fn handle_rust_timer(
             };
         }
         Ok(RustTimerCommand::Triage(cmd)) => {
-            let mut result = String::new();
+            handle_triage_command(&ctxt, main_client, &issue, cmd).await;
+        }
+        Err(e) => {
+            main_client.post_comment(issue.number, e).await;
+        }
+    }
+}
 
-            let benchmarks_to_run = match changed_benchmarks_in_rollup(&ctxt, issue.number).await {
-                Ok(benches) => benches,
+async fn handle_triage_command(
+    ctxt: &Arc<SiteCtxt>,
+    main_client: &Client,
+    issue: &Issue,
+    cmd: TriageCommand<'_>,
+) {
+    let mut result = String::new();
+    let comments;
+
+    let shas = match cmd {
+        TriageCommand::ShaList(shas) => shas,
+        TriageCommand::All => {
+            comments = match GraphQLClient::from_ctxt(ctxt)
+                .get_comments(issue.number)
+                .await
+            {
+                Ok(cs) => cs,
                 Err(err) => {
                     main_client
                         .post_comment(issue.number, format!("{err}"))
@@ -280,100 +303,125 @@ async fn handle_rust_timer(
                     return;
                 }
             };
-            let plural = if benchmarks_to_run.len() == 1 {
-                ""
-            } else {
-                "s"
-            };
-            writeln!(&mut result, "<details>
+            match find_and_parse_unrolled_build_comment(
+                comments
+                    .iter()
+                    // Comment is likely to be one of the last ones, and in case somehow multiple comments
+                    // match it's better to take the last one
+                    .rev()
+                    .map(|c| c.body.as_str()),
+            ) {
+                Ok(shas) => shas,
+                Err(err) => {
+                    main_client
+                        .post_comment(
+                            issue.number,
+                            format!("Cannot find bors comment with unrolled perf builds: {err}"),
+                        )
+                        .await;
+                    return;
+                }
+            }
+        }
+    };
+
+    let benchmarks_to_run = match changed_benchmarks_in_rollup(ctxt, issue.number).await {
+        Ok(benches) => benches,
+        Err(err) => {
+            main_client
+                .post_comment(issue.number, format!("{err}"))
+                .await;
+            return;
+        }
+    };
+    let plural = if benchmarks_to_run.len() == 1 {
+        ""
+    } else {
+        "s"
+    };
+    writeln!(&mut result, "<details>
 <summary>Running triage with {} benchmark{plural}</summary>
 
 Triage only executes the benchmarks on rollup members, that were changed significantly on the rollup.
 For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
-            for benchmark in &benchmarks_to_run {
-                writeln!(&mut result, "* {benchmark}").unwrap();
-            }
-            writeln!(&mut result, "</details>\n").unwrap();
-
-            let mut commits = download_commits(main_client, &cmd.shas).await;
-
-            for (i, sha) in cmd.shas.iter().enumerate() {
-                // Add separator between PRs
-                if i != 0 {
-                    writeln!(&mut result, "---").unwrap();
-                }
-
-                // Get unrolled commit
-                let commit = match commits.remove(sha).expect("commit not found in map") {
-                    Ok(commit) => commit,
-                    Err(err) => {
-                        writeln!(&mut result, "### {sha}").unwrap();
-                        writeln!(&mut result, "Failed to get commit: {err}\n").unwrap();
-                        continue;
-                    }
-                };
-
-                // Find PR number from commit message
-                let unrolled_build_message =
-                    match parse_unrolled_build_message(&commit.commit.message) {
-                        Ok(r) => r,
-                        Err(err) => {
-                            writeln!(&mut result, "### {sha}").unwrap();
-                            writeln!(&mut result, "{err}\n").unwrap();
-                            continue;
-                        }
-                    };
-
-                // Write header
-                let pr_title = &commit
-                    .commit
-                    .message
-                    .lines()
-                    .nth(3)
-                    .unwrap_or("<FAILED TO GET PR TITLE>");
-                writeln!(
-                    &mut result,
-                    "### #{} {sha} {pr_title}",
-                    unrolled_build_message.member_pr_number
-                )
-                .unwrap();
-
-                // Enqueue the sha build and write result
-                write!(
-                    &mut result,
-                    "{}",
-                    triage_body_start_marker(unrolled_build_message.member_pr_number)
-                )
-                .unwrap();
-                let (Ok(msg) | Err(msg)) = enqueue_sha_build(
-                    &ctxt,
-                    commit,
-                    unrolled_build_message.member_pr_number,
-                    &BuildCommand {
-                        sha,
-                        params: BenchmarkParameters {
-                            benchmarks: Some(&benchmarks_to_run.join(",")),
-                            ..Default::default()
-                        },
-                    },
-                )
-                .await;
-                writeln!(&mut result, "{msg}\n").unwrap();
-                write!(
-                    &mut result,
-                    "{}",
-                    triage_body_end_marker(unrolled_build_message.member_pr_number)
-                )
-                .unwrap();
-            }
-            // Add a marker to the comment which should help to find it again later
-            writeln!(&mut result, "{}", TRIAGE_MARKER).unwrap();
-            main_client.post_comment(issue.number, result).await;
-        }
-        Err(e) => {
-            main_client.post_comment(issue.number, e).await;
-        }
+    for benchmark in &benchmarks_to_run {
+        writeln!(&mut result, "* {benchmark}").unwrap();
     }
+    writeln!(&mut result, "</details>\n").unwrap();
+
+    let mut commits = download_commits(main_client, &shas).await;
+
+    for (i, sha) in shas.iter().enumerate() {
+        // Add separator between PRs
+        if i != 0 {
+            writeln!(&mut result, "---").unwrap();
+        }
+
+        // Get unrolled commit
+        let commit = match commits.remove(sha).expect("commit not found in map") {
+            Ok(commit) => commit,
+            Err(err) => {
+                writeln!(&mut result, "### {sha}").unwrap();
+                writeln!(&mut result, "Failed to get commit: {err}\n").unwrap();
+                continue;
+            }
+        };
+
+        // Find PR number from commit message
+        let unrolled_build_message = match parse_unrolled_build_message(&commit.commit.message) {
+            Ok(r) => r,
+            Err(err) => {
+                writeln!(&mut result, "### {sha}").unwrap();
+                writeln!(&mut result, "{err}\n").unwrap();
+                continue;
+            }
+        };
+
+        // Write header
+        let pr_title = &commit
+            .commit
+            .message
+            .lines()
+            .nth(3)
+            .unwrap_or("<FAILED TO GET PR TITLE>");
+        writeln!(
+            &mut result,
+            "### #{} {sha} {pr_title}",
+            unrolled_build_message.member_pr_number
+        )
+        .unwrap();
+
+        // Enqueue the sha build and write result
+        write!(
+            &mut result,
+            "{}",
+            triage_body_start_marker(unrolled_build_message.member_pr_number)
+        )
+        .unwrap();
+        let (Ok(msg) | Err(msg)) = enqueue_sha_build(
+            ctxt,
+            commit,
+            unrolled_build_message.member_pr_number,
+            &BuildCommand {
+                sha,
+                params: BenchmarkParameters {
+                    benchmarks: Some(&benchmarks_to_run.join(",")),
+                    ..Default::default()
+                },
+            },
+        )
+        .await;
+        writeln!(&mut result, "{msg}\n").unwrap();
+        write!(
+            &mut result,
+            "{}",
+            triage_body_end_marker(unrolled_build_message.member_pr_number)
+        )
+        .unwrap();
+    }
+    // Add a marker to the comment which should help to find it again later
+    writeln!(&mut result, "{}", TRIAGE_MARKER).unwrap();
+    main_client.post_comment(issue.number, result).await;
 }
 
 async fn download_commits<'a>(
@@ -522,7 +570,10 @@ fn parse_triage_command_args(args: &str) -> Result<TriageCommand<'_>, String> {
                 .to_string(),
         );
     }
-    Ok(TriageCommand { shas })
+    if let ["all"] = shas[..] {
+        return Ok(TriageCommand::All);
+    }
+    Ok(TriageCommand::ShaList(shas))
 }
 
 fn parse_sha(sha: &str) -> Result<&str, String> {
@@ -653,8 +704,9 @@ struct BuildCommand<'a> {
 }
 
 #[derive(Debug)]
-struct TriageCommand<'a> {
-    shas: Vec<&'a str>,
+enum TriageCommand<'a> {
+    ShaList(Vec<&'a str>),
+    All,
 }
 
 #[derive(Debug, Default)]
@@ -863,15 +915,17 @@ Otherwise LGTM."#),
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage    "),
             @r#"Err("The triage comment requires a space-separated list of SHAs as an argument.")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd"])))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd", "efgh"])))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd efgh ijkl"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh", "ijkl"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd", "efgh", "ijkl"])))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd targets=Foo"),
             @r#"Err("Sha `targets=Foo` is not alphanumeric")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage abcd  efgh"),
-            @r#"Ok(Triage(TriageCommand { shas: ["abcd", "efgh"] }))"#);
+            @r#"Ok(Triage(ShaList(["abcd", "efgh"])))"#);
+        insta::assert_compact_debug_snapshot!(parse_command("@rust-timer triage all"),
+            @r#"Ok(Triage(All))"#);
     }
 
     #[test]
