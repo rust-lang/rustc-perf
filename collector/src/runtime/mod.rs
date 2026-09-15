@@ -250,7 +250,7 @@ fn execute_runtime_benchmark_binary(
     binary: &Path,
     filter: &RuntimeBenchmarkFilter,
     iterations: u32,
-) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>> + use<>> {
+) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>>> {
     let mut command = prepare_command(binary);
     command.arg("run");
     command.arg("--iterations");
