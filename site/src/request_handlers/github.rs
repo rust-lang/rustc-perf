@@ -6,9 +6,10 @@ use crate::load::SiteCtxt;
 use std::fmt::Write;
 
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::github::client::{Client, Commit};
+use crate::github::client::{Client, Commit, GraphQLClient};
 use crate::github::triage::{
-    changed_benchmarks_in_rollup, triage_body_end_marker, triage_body_start_marker, TRIAGE_MARKER,
+    changed_benchmarks_in_rollup, find_and_parse_unrolled_build_comment, triage_body_end_marker,
+    triage_body_start_marker, TRIAGE_MARKER,
 };
 use database::{
     parse_backends, parse_benchmarks, parse_profiles, parse_targets, BenchmarkRequest,
@@ -270,6 +271,41 @@ async fn handle_rust_timer(
         }
         Ok(RustTimerCommand::Triage(cmd)) => {
             let mut result = String::new();
+            let comments;
+
+            let shas = match cmd {
+                TriageCommand::ShaList(shas) => shas,
+                TriageCommand::All => {
+                    comments = match GraphQLClient::from_ctxt(&ctxt)
+                        .get_comments(issue.number)
+                        .await
+                    {
+                        Ok(cs) => cs,
+                        Err(err) => {
+                            main_client
+                                .post_comment(issue.number, format!("{err}"))
+                                .await;
+                            return;
+                        }
+                    };
+                    match find_and_parse_unrolled_build_comment(
+                        comments
+                            .iter()
+                            // Comment is likely to be one of the last ones, and in case somehow multiple comments
+                            // match it's better to take the last one
+                            .rev()
+                            .map(|c| c.body.as_str()),
+                    ) {
+                        Ok(shas) => shas,
+                        Err(err) => {
+                            main_client
+                                .post_comment(issue.number, format!("{err}"))
+                                .await;
+                            return;
+                        }
+                    }
+                }
+            };
 
             let benchmarks_to_run = match changed_benchmarks_in_rollup(&ctxt, issue.number).await {
                 Ok(benches) => benches,
@@ -295,9 +331,9 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
             }
             writeln!(&mut result, "</details>\n").unwrap();
 
-            let mut commits = download_commits(main_client, &cmd.shas).await;
+            let mut commits = download_commits(main_client, &shas).await;
 
-            for (i, sha) in cmd.shas.iter().enumerate() {
+            for (i, sha) in shas.iter().enumerate() {
                 // Add separator between PRs
                 if i != 0 {
                     writeln!(&mut result, "---").unwrap();
