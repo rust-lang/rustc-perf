@@ -153,7 +153,7 @@ pub fn intern<T: InternString>(value: &str) -> T {
             return o;
         }
 
-        let (ref mut set, ref mut arena) = &mut *guard;
+        let (set, arena) = &mut *guard;
         assert_eq!(set.len(), INTERNED.0.load().len());
 
         let allocated = unsafe {

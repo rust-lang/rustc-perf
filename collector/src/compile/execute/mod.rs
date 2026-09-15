@@ -746,7 +746,7 @@ fn process_stat_output(
 
         // github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
         macro_rules! get {
-            ($e: expr) => {
+            ($e: expr_2021) => {
                 match $e {
                     Some(s) => s,
                     None => {

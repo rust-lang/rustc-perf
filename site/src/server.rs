@@ -35,7 +35,7 @@ pub type Request = http::Request<Incoming>;
 pub type Response = http::Response<Bytes>;
 
 macro_rules! check_http_method {
-    ($lhs: expr, $rhs: expr) => {
+    ($lhs: expr_2021, $rhs: expr_2021) => {
         if $lhs != $rhs {
             return Ok(http::Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
@@ -225,7 +225,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     }
 
     macro_rules! check {
-        ($e:expr) => {
+        ($e:expr_2021) => {
             match $e {
                 Ok(v) => v,
                 Err(e) => return Ok(e),

@@ -122,30 +122,30 @@ where
 }
 
 pub fn version_supports_doc(version_str: &str) -> bool {
-    if let Ok(version) = version_str.parse::<semver::Version>() {
+    match version_str.parse::<semver::Version>() { Ok(version) => {
         version >= semver::Version::new(1, 46, 0)
-    } else {
+    } _ => {
         assert!(version_str.starts_with("beta") || version_str.starts_with("master"));
         true
-    }
+    }}
 }
 
 pub fn version_supports_incremental(version_str: &str) -> bool {
-    if let Ok(version) = version_str.parse::<semver::Version>() {
+    match version_str.parse::<semver::Version>() { Ok(version) => {
         version >= semver::Version::new(1, 24, 0)
-    } else {
+    } _ => {
         assert!(version_str.starts_with("beta") || version_str.starts_with("master"));
         true
-    }
+    }}
 }
 
 pub fn version_supports_parallel_frontend(version_str: &str) -> bool {
-    if let Ok(version) = version_str.parse::<semver::Version>() {
+    match version_str.parse::<semver::Version>() { Ok(version) => {
         version >= semver::Version::new(1, 33, 0)
-    } else {
+    } _ => {
         assert!(version_str.starts_with("beta") || version_str.starts_with("master"));
         true
-    }
+    }}
 }
 
 /// Rounds serialized and deserialized floats to 2 decimal places.
