@@ -251,10 +251,10 @@ impl Processor for BenchProcessor<'_> {
                 // Buffer up to 10 self-profile stores at a time.
                 let mut futures = JoinSet::new();
                 for profile in self.self_profiles.drain(..) {
-                    if futures.len() == 10 {
-                        if let Err(error) = futures.join_next().await.unwrap().unwrap() {
-                            log::error!("Failed to store self-profile result: {error:?}");
-                        }
+                    if futures.len() == 10
+                        && let Err(error) = futures.join_next().await.unwrap().unwrap()
+                    {
+                        log::error!("Failed to store self-profile result: {error:?}");
                     }
 
                     let id = SelfProfileId::Simple {

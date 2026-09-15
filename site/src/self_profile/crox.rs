@@ -144,10 +144,10 @@ pub fn generate(data: ProfilingData, opt: Opt) -> anyhow::Result<Vec<u8>> {
         .filter(|e| e.timestamp().is_some_and(|t| !t.is_instant()))
     {
         let duration = event.duration().unwrap();
-        if let Some(minimum_duration) = opt.minimum_duration {
-            if duration.as_micros() < minimum_duration {
-                continue;
-            }
+        if let Some(minimum_duration) = opt.minimum_duration
+            && duration.as_micros() < minimum_duration
+        {
+            continue;
         }
         let full_event = data.to_full_event(&event);
         let crox_event = Event {

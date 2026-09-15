@@ -1286,10 +1286,10 @@ where
             )
             .await
             .unwrap()
+            && Some(r.get::<_, bool>(0)) == supports_stable
+            && r.get::<_, &str>(1) == category
         {
-            if Some(r.get::<_, bool>(0)) == supports_stable && r.get::<_, &str>(1) == category {
-                return;
-            }
+            return;
         }
         if let Some(stable) = supports_stable {
             self.conn()
@@ -1617,10 +1617,10 @@ where
         for row in rows {
             let parent_done = row.get::<_, Option<bool>>(0);
             let request = row_to_benchmark_request(&row, Some(1));
-            if let Some(true) = parent_done {
-                if let Some(parent) = request.parent_sha() {
-                    completed_parent_tags.insert(parent.to_string());
-                }
+            if let Some(true) = parent_done
+                && let Some(parent) = request.parent_sha()
+            {
+                completed_parent_tags.insert(parent.to_string());
             }
             requests.push(request);
         }

@@ -55,35 +55,35 @@ async fn handle_issue(ctxt: Arc<SiteCtxt>, issue: github::Issue, comment: github
     }
 
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
-    if comment.body.contains(" homu: ") {
-        if let Some(sha) = parse_homu_comment(&comment.body).await {
-            let commit = match gh_client.get_commit(&sha).await {
-                Ok(commit) => commit,
-                Err(error) => {
-                    gh_client
-                        .post_comment(
-                            issue.number,
-                            format!("Cannot fetch commit `{sha}` info: {error:?}"),
-                        )
-                        .await;
-                    return;
-                }
-            };
-
-            match enqueue_sha(&ctxt, commit, issue.number).await {
-                Ok(Some(mut msg)) => {
-                    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
-                    gh_client.post_comment(issue.number, msg).await;
-                }
-                Ok(None) => {
-                    // A try build without @rust-timer queue finished
-                }
-                Err(err) => {
-                    gh_client.post_comment(issue.number, err).await;
-                }
+    if comment.body.contains(" homu: ")
+        && let Some(sha) = parse_homu_comment(&comment.body).await
+    {
+        let commit = match gh_client.get_commit(&sha).await {
+            Ok(commit) => commit,
+            Err(error) => {
+                gh_client
+                    .post_comment(
+                        issue.number,
+                        format!("Cannot fetch commit `{sha}` info: {error:?}"),
+                    )
+                    .await;
+                return;
             }
-            return;
+        };
+
+        match enqueue_sha(&ctxt, commit, issue.number).await {
+            Ok(Some(mut msg)) => {
+                msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
+                gh_client.post_comment(issue.number, msg).await;
+            }
+            Ok(None) => {
+                // A try build without @rust-timer queue finished
+            }
+            Err(err) => {
+                gh_client.post_comment(issue.number, err).await;
+            }
         }
+        return;
     }
 
     // Do not react to @rust-timer commands sent by the bors GitHub App

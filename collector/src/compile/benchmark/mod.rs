@@ -138,10 +138,10 @@ impl Benchmark {
         for entry in std::fs::read_dir(&path)? {
             let entry = entry?;
             let path = entry.path();
-            if let Some(ext) = path.extension() {
-                if ext == "patch" {
-                    patches.push(path.clone());
-                }
+            if let Some(ext) = path.extension()
+                && ext == "patch"
+            {
+                patches.push(path.clone());
             }
         }
 

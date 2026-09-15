@@ -62,11 +62,11 @@ pub fn touch_all(path: &Path) -> anyhow::Result<()> {
             return false;
         }
 
-        if let Some(extn) = path.extension() {
-            if extn.to_str() == Some("rs") {
-                // Don't touch build scripts, which confuses the wrapped rustc.
-                return path.file_name() != Some(OsStr::new("build.rs"));
-            }
+        if let Some(extn) = path.extension()
+            && extn.to_str() == Some("rs")
+        {
+            // Don't touch build scripts, which confuses the wrapped rustc.
+            return path.file_name() != Some(OsStr::new("build.rs"));
         }
 
         false

@@ -2437,11 +2437,11 @@ async fn record_toolchain_sizes(
         path: Option<&Path>,
         target: database::Target,
     ) {
-        if let Some(path) = path {
-            if let Ok(size) = fs::metadata(path).map(|m| m.len()) {
-                conn.record_artifact_size(aid, component, size, target)
-                    .await;
-            }
+        if let Some(path) = path
+            && let Ok(size) = fs::metadata(path).map(|m| m.len())
+        {
+            conn.record_artifact_size(aid, component, size, target)
+                .await;
         }
     }
 

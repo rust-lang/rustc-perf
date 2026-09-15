@@ -374,14 +374,14 @@ where
             let mut slots = self.connections.lock().unwrap_or_else(|e| e.into_inner());
             slots.pop()
         };
-        if let Some(mut c) = conn {
-            if self.manager.is_valid(&mut c).await {
-                return ManagedConnection {
-                    conn: Some(c),
-                    permit,
-                    connections: self.connections.clone(),
-                };
-            }
+        if let Some(mut c) = conn
+            && self.manager.is_valid(&mut c).await
+        {
+            return ManagedConnection {
+                conn: Some(c),
+                permit,
+                connections: self.connections.clone(),
+            };
         }
 
         let conn = self.manager.open().await;

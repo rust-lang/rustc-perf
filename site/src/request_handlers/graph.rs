@@ -218,10 +218,8 @@ pub async fn handle_graphs(
             frontend_threads: None,
         };
 
-    if is_default_query {
-        if let Some(resp) = &**ctxt.landing_page.load() {
-            return Ok(resp.clone());
-        }
+    if is_default_query && let Some(resp) = &**ctxt.landing_page.load() {
+        return Ok(resp.clone());
     }
 
     let resp = Arc::new(create_graphs(request, &ctxt).await?);

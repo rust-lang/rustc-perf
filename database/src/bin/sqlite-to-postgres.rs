@@ -718,21 +718,21 @@ async fn copy<T: Table>(
     // while the table is locked, and sequences themselves can't be locked. This
     // program is designed to run on a fresh Postgres database anyway, so it's
     // not too big of a concern.
-    if count > 0 {
-        if let Some(generated_id_attr) = T::postgres_generated_id_attribute() {
-            postgres
-                .execute(
-                    &format!(
-                        "select setval(
+    if count > 0
+        && let Some(generated_id_attr) = T::postgres_generated_id_attribute()
+    {
+        postgres
+            .execute(
+                &format!(
+                    "select setval(
                             pg_get_serial_sequence($1, $2),
                             coalesce(max({generated_id_attr}) + 1, 1), false)
                         from {table}"
-                    ) as &str,
-                    &[&table, &generated_id_attr],
-                )
-                .await
-                .unwrap();
-        }
+                ) as &str,
+                &[&table, &generated_id_attr],
+            )
+            .await
+            .unwrap();
     }
 
     let elapsed = start.elapsed();

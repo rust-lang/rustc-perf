@@ -476,10 +476,10 @@ async fn handle_fs_path(req: &Request, path: &str, use_compression: bool) -> Opt
         .header(CACHE_CONTROL, "max-age=60, stale-while-revalidate=86400"); // tell client to use cached response for one day, but revalidate in background if older than one minute
 
     let if_none_match = req.headers().typed_get::<IfNoneMatch>();
-    if let Some(if_none_match) = if_none_match {
-        if !if_none_match.precondition_passes(&etag) {
-            return Some(not_modified(response)); // tell client that the resource was not modified and to use cached response
-        }
+    if let Some(if_none_match) = if_none_match
+        && !if_none_match.precondition_passes(&etag)
+    {
+        return Some(not_modified(response)); // tell client that the resource was not modified and to use cached response
     }
 
     async fn resolve_template(path: &str) -> Vec<u8> {
