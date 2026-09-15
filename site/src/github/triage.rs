@@ -108,9 +108,29 @@ pub async fn changed_benchmarks_in_rollup(
     Ok(changed_benchmarks)
 }
 
+pub fn find_and_parse_unrolled_build_comment<'a>(
+    mut comments: impl Iterator<Item = &'a str>,
+) -> anyhow::Result<Vec<&'a str>> {
+    const MACHINE_READABLE_SHAS_START: &str = "<!-- machine-readable-shas: ";
+    const MACHINE_READABLE_SHAS_END: &str = " -->";
+    let Some(unrolled_builds) = comments.find_map(|c| {
+        let start = c.find(MACHINE_READABLE_SHAS_START)? + MACHINE_READABLE_SHAS_START.len();
+        let len = c[start..].find(MACHINE_READABLE_SHAS_END)?;
+        Some(&c[start..start + len])
+    }) else {
+        bail!("Could not find unrolled builds comment by bors. Did unrolled builds finish yet?")
+    };
+
+    match serde_json::from_str(unrolled_builds) {
+        Ok(r) => Ok(r),
+        Err(e) => bail!("Failed to parse machine readable shas: {e}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::github::triage::update_triage_body;
+    use super::*;
+    use insta::assert_compact_debug_snapshot;
 
     const BEFORE_BODY: &str = "### #157428 364c9dea926885d60daef4bf1a15fa03efa35a84 allocator: refactor for stabilisation
 <!-- rust-timer:triage-body-start-pr-157428 -->
@@ -134,6 +154,18 @@ It will probably take at least ~3.0 hours until the benchmark run finishes.
 <!-- rust-timer:triage-body-end-pr-160288 -->
 
 <!-- rust-timer: triage -->";
+    const UNROLLED_PERF_BUILDS: &str = r###":pushpin: Perf builds for each rolled up PR:
+
+| PR# | Message | Perf Build Sha |
+|----|----|:-----:|
+|#162409|Fix gap in const stability checks around intrinsics|`537ff44bf1c0eed7b368e0cba6f3211a04aa8b05`<br>([link](https://github.com/rust-lang/rust/commit/537ff44bf1c0eed7b368e0cba6f3211a04aa8b05))|
+|#162763|Remove `Box::into_unique`|`55e90fc35ea7347299c28d418f4d5b90ee5240b4`<br>([link](https://github.com/rust-lang/rust/commit/55e90fc35ea7347299c28d418f4d5b90ee5240b4))|
+|#162766|stop unleaking `&mut`s in std and the compiler|`913889fbb28463a5ba4227406c2425d5eede5449`<br>([link](https://github.com/rust-lang/rust/commit/913889fbb28463a5ba4227406c2425d5eede5449))|
+
+*parent commit*: [a8a1e6fd9d](https://github.com/rust-lang/rust/commit/a8a1e6fd9df2e094d6f09c0d57991508680acc1c)
+
+In the case of a perf regression, run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`
+<!-- machine-readable-shas: ["537ff44bf1c0eed7b368e0cba6f3211a04aa8b05","55e90fc35ea7347299c28d418f4d5b90ee5240b4","913889fbb28463a5ba4227406c2425d5eede5449"] -->"###;
 
     #[test]
     fn test_update_first() {
@@ -249,5 +281,20 @@ NEW BODY3
             "NEW BODY1\nNEW BODY2\nNEW BODY3\n".to_string()
         )
         .is_err());
+    }
+
+    #[test]
+    fn test_parse_shas() {
+        assert_compact_debug_snapshot!(
+            find_and_parse_unrolled_build_comment([
+                // Comments that should be skipped...
+                "Not the right one...",
+                "",
+                BEFORE_BODY,
+                // The right one
+                UNROLLED_PERF_BUILDS,
+            ].into_iter()).unwrap(),
+            @r#"["537ff44bf1c0eed7b368e0cba6f3211a04aa8b05", "55e90fc35ea7347299c28d418f4d5b90ee5240b4", "913889fbb28463a5ba4227406c2425d5eede5449"]"#
+        );
     }
 }
