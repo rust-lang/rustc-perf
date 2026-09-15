@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 use anyhow::Context;
 use chrono::Utc;
 use collector::benchmark_set::{
-    get_benchmark_sets_for_target, BENCHMARK_SET_RUNTIME_BENCHMARKS, BENCHMARK_SET_RUSTC,
+    BENCHMARK_SET_RUNTIME_BENCHMARKS, BENCHMARK_SET_RUSTC, get_benchmark_sets_for_target,
 };
 use database::pool::{JobEnqueueResult, Transaction};
 use database::{
@@ -676,10 +676,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(db
-            .maybe_mark_benchmark_request_as_completed(request_tag)
-            .await
-            .unwrap());
+        assert!(
+            db.maybe_mark_benchmark_request_as_completed(request_tag)
+                .await
+                .unwrap()
+        );
     }
 
     async fn mark_as_completed(
@@ -829,10 +830,11 @@ mod tests {
             ctx.insert_try_request(112049).await;
 
             let db = ctx.db();
-            assert!(db
-                .attach_shas_to_try_benchmark_request(112049, "60ce", "1f88", Utc::now())
-                .await
-                .unwrap());
+            assert!(
+                db.attach_shas_to_try_benchmark_request(112049, "60ce", "1f88", Utc::now())
+                    .await
+                    .unwrap()
+            );
             ctx.insert_master_request("2038", "1f88", 148350).await;
 
             let queue = build_queue(db).await?;

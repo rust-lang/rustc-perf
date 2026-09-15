@@ -1,6 +1,6 @@
-use crate::api::{github, ServerResult};
+use crate::api::{ServerResult, github};
 use crate::github::{
-    client, enqueue_sha, parse_homu_comment, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
+    COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL, client, enqueue_sha, parse_homu_comment,
 };
 use crate::load::SiteCtxt;
 use std::fmt::Write;
@@ -9,12 +9,12 @@ use crate::api::github::Issue;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::github::client::{Client, Commit, GraphQLClient};
 use crate::github::triage::{
-    changed_benchmarks_in_rollup, find_and_parse_unrolled_build_comment, triage_body_end_marker,
-    triage_body_start_marker, TRIAGE_MARKER,
+    TRIAGE_MARKER, changed_benchmarks_in_rollup, find_and_parse_unrolled_build_comment,
+    triage_body_end_marker, triage_body_start_marker,
 };
 use database::{
-    parse_backends, parse_benchmarks, parse_profiles, parse_targets, BenchmarkRequest,
-    BenchmarkRequestInsertResult, CodegenBackend, Profile, Target,
+    BenchmarkRequest, BenchmarkRequestInsertResult, CodegenBackend, Profile, Target,
+    parse_backends, parse_benchmarks, parse_profiles, parse_targets,
 };
 use futures::stream::{FuturesUnordered, StreamExt};
 use hashbrown::HashMap;
@@ -457,8 +457,15 @@ pub fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuil
     // The first line of the commit message will look like
     // `Unrolled build for #123 in rollup 123`
     let words = first_line.split(" ").collect::<Vec<_>>();
-    let ["Unrolled", "build", "for", member_pr_number, "in", "rollup", rollup_pr_number] =
-        words[..]
+    let [
+        "Unrolled",
+        "build",
+        "for",
+        member_pr_number,
+        "in",
+        "rollup",
+        rollup_pr_number,
+    ] = words[..]
     else {
         return Err(format!(
             "Unexpected commit name `{first_line}`, could not parse commit title. Is the commit an unrolled build?"

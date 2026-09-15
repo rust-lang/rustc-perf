@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use serde::{de::IntoDeserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::IntoDeserializer};
 
 /// This enum contains all "known" metrics coming from rustc or profiling tools that we know
 /// (and care) about.

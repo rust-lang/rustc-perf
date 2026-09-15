@@ -3,8 +3,8 @@ use crate::github::comparison_summary::calculate_metric_comparison;
 use crate::load::SiteCtxt;
 use crate::request_handlers::parse_unrolled_build_message;
 use anyhow::bail;
-use database::metric::Metric;
 use database::QueuedCommit;
+use database::metric::Metric;
 
 pub struct TriageBuild {
     pub rollup_pr_number: u32,
@@ -78,7 +78,9 @@ pub async fn changed_benchmarks_in_rollup(
         .find(|commit| commit.pr.is_some_and(|pr| pr == rollup))
         .cloned()
     else {
-        bail!("The `@rust-timer triage` command can only be executed in merged rollups. If this is a merged rollup, it might be too old.")
+        bail!(
+            "The `@rust-timer triage` command can only be executed in merged rollups. If this is a merged rollup, it might be too old."
+        )
     };
     drop(master_commits);
 
@@ -275,12 +277,14 @@ NEW BODY3
     #[test]
     fn test_update_not_in_there() {
         let mut body = BEFORE_BODY.to_string();
-        assert!(update_triage_body(
-            &mut body,
-            1234,
-            "NEW BODY1\nNEW BODY2\nNEW BODY3\n".to_string()
-        )
-        .is_err());
+        assert!(
+            update_triage_body(
+                &mut body,
+                1234,
+                "NEW BODY1\nNEW BODY2\nNEW BODY3\n".to_string()
+            )
+            .is_err()
+        );
     }
 
     #[test]

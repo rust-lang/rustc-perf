@@ -8,7 +8,7 @@ use crate::compile::benchmark::target::Target;
 use crate::compile::execute::{CargoProcess, Processor};
 use crate::toolchain::Toolchain;
 use crate::utils::wait_for_future;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use database::selector::CompileTestCase;
 use log::debug;
 use std::collections::{HashMap, HashSet};
@@ -814,7 +814,7 @@ fn substring_matches(
 
 #[cfg(test)]
 mod tests {
-    use crate::compile::benchmark::{get_compile_benchmarks, CompileBenchmarkFilter};
+    use crate::compile::benchmark::{CompileBenchmarkFilter, get_compile_benchmarks};
     use std::path::Path;
 
     #[test]

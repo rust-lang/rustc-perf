@@ -4,8 +4,8 @@ pub mod builder;
 
 use chrono::Utc;
 use std::future::Future;
-use tokio_postgres::config::Host;
 use tokio_postgres::Config;
+use tokio_postgres::config::Host;
 
 use crate::pool::postgres::make_client;
 use crate::tests::builder::CollectorBuilder;

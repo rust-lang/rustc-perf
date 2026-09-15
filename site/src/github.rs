@@ -266,7 +266,7 @@ async fn send_request<T: serde::de::DeserializeOwned>(
         Err(e) => {
             return Err(anyhow::anyhow!("response = {:?}", response)
                 .context(e)
-                .into())
+                .into());
         }
     }
     Ok(response.json::<T>().await?)

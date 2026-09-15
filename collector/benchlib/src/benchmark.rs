@@ -1,4 +1,4 @@
-use crate::cli::{parse_cli, Args, BenchmarkArgs, ProfileArgs};
+use crate::cli::{Args, BenchmarkArgs, ProfileArgs, parse_cli};
 use crate::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 use crate::comm::output_message;
 use crate::measure::benchmark_function;

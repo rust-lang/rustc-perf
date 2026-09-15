@@ -5,7 +5,7 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::{DateTime, TimeZone, Utc};
-use database::pool::{postgres, sqlite, ConnectionManager};
+use database::pool::{ConnectionManager, postgres, sqlite};
 use futures_util::sink::SinkExt;
 use hashbrown::HashMap;
 use serde::{Serialize, Serializer};

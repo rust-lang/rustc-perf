@@ -1,9 +1,9 @@
 use crate::load::SiteCtxt;
 
 use collector::Bound;
+use database::ArtifactId;
 use database::selector::StatisticSeries;
 use database::selector::{BenchmarkQuery, SeriesResponse};
-use database::ArtifactId;
 use database::{Commit, Index};
 
 use std::ops::RangeInclusive;

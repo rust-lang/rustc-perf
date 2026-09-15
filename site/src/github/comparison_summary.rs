@@ -1,12 +1,12 @@
 use crate::comparison::{
-    deserves_attention_icount, write_summary_table, ArtifactComparison, ArtifactComparisonSummary,
-    Direction,
+    ArtifactComparison, ArtifactComparisonSummary, Direction, deserves_attention_icount,
+    write_summary_table,
 };
 use crate::load::SiteCtxt;
 
-use database::{metric::Metric, QueuedCommit};
+use database::{QueuedCommit, metric::Metric};
 
-use crate::github::triage::{is_triage_run, update_triage_body, TriageBuild};
+use crate::github::triage::{TriageBuild, is_triage_run, update_triage_body};
 use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;
 use std::fmt::Write;

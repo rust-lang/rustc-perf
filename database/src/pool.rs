@@ -419,9 +419,9 @@ impl Pool {
 mod tests {
     use super::*;
     use crate::metric::Metric;
-    use crate::tests::builder::{job, CollectorBuilder, RequestBuilder};
+    use crate::tests::builder::{CollectorBuilder, RequestBuilder, job};
     use crate::tests::run_postgres_test;
-    use crate::{tests::run_db_test, BenchmarkRequestType, Commit, CommitType, Date};
+    use crate::{BenchmarkRequestType, Commit, CommitType, Date, tests::run_db_test};
     use chrono::Utc;
     use std::collections::BTreeSet;
     use std::str::FromStr;
@@ -677,10 +677,11 @@ mod tests {
             let req = BenchmarkRequest::create_try_without_artifacts(42, "", "", "", "");
 
             db.insert_benchmark_request(&req).await.unwrap();
-            assert!(db
-                .attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
-                .await
-                .unwrap());
+            assert!(
+                db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
+                    .await
+                    .unwrap()
+            );
 
             let req_db = db
                 .load_pending_benchmark_requests()
@@ -724,10 +725,11 @@ mod tests {
             );
 
             db.insert_benchmark_request(&req).await.unwrap();
-            assert!(db
-                .attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
-                .await
-                .unwrap());
+            assert!(
+                db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
+                    .await
+                    .unwrap()
+            );
 
             let loaded = db
                 .load_pending_benchmark_requests()
@@ -752,10 +754,11 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
 
-            assert!(!db
-                .attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
-                .await
-                .unwrap());
+            assert!(
+                !db.attach_shas_to_try_benchmark_request(42, "sha1", "sha-parent-1", Utc::now())
+                    .await
+                    .unwrap()
+            );
 
             Ok(ctx)
         })
@@ -851,11 +854,12 @@ mod tests {
                     CommitType::Try,
                 )))
                 .await;
-            assert!(db
-                .get_compile_test_cases_with_measurements(&artifact2)
-                .await
-                .unwrap()
-                .is_empty());
+            assert!(
+                db.get_compile_test_cases_with_measurements(&artifact2)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
             Ok(ctx)
         })
         .await;
@@ -1015,10 +1019,11 @@ mod tests {
             db.insert_benchmark_request(&benchmark_request)
                 .await
                 .unwrap();
-            assert!(db
-                .maybe_mark_benchmark_request_as_completed("sha-1")
-                .await
-                .unwrap());
+            assert!(
+                db.maybe_mark_benchmark_request_as_completed("sha-1")
+                    .await
+                    .unwrap()
+            );
             Ok(ctx)
         })
         .await;
@@ -1316,22 +1321,24 @@ mod tests {
             .unwrap();
             db.purge_artifact(&ArtifactId::Tag("foo".to_string())).await;
 
-            assert!(!db
-                .load_benchmark_request_index()
-                .await
-                .unwrap()
-                .contains_tag("foo"));
+            assert!(
+                !db.load_benchmark_request_index()
+                    .await
+                    .unwrap()
+                    .contains_tag("foo")
+            );
 
             let collector = ctx.add_collector(CollectorBuilder::default()).await;
-            assert!(db
-                .dequeue_benchmark_job(
+            assert!(
+                db.dequeue_benchmark_job(
                     collector.name(),
                     collector.target(),
                     collector.benchmark_set(),
                 )
                 .await
                 .unwrap()
-                .is_none());
+                .is_none()
+            );
 
             Ok(ctx)
         })

@@ -1,6 +1,6 @@
 use futures::stream::{FuturesOrdered, StreamExt};
 
-use crate::api::{toolchain, ServerResult};
+use crate::api::{ServerResult, toolchain};
 use crate::load::SiteCtxt;
 use database::{ArtifactId, Target};
 

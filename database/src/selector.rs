@@ -28,8 +28,8 @@ use std::{
 };
 
 use crate::{
-    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
-    CodegenBackend, Connection, FrontendThreads, Index, Lookup, Profile, Scenario, Target,
+    ArtifactId, ArtifactIdIter, Benchmark, CodegenBackend, Connection, FrontendThreads, Index,
+    Lookup, Profile, Scenario, Target, interpolate::Interpolate, metric::Metric,
 };
 
 #[derive(Debug)]

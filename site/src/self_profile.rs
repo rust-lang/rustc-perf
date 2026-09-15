@@ -3,7 +3,7 @@
 
 use crate::api::detail_sections::CompilationSection;
 use crate::api::self_profile::ArtifactSize;
-use crate::api::{self_profile, ServerResult};
+use crate::api::{ServerResult, self_profile};
 use crate::load::SiteCtxt;
 use analyzeme::ProfilingData;
 use anyhow::Context;

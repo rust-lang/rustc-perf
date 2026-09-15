@@ -1,5 +1,5 @@
-use brotli::enc::BrotliEncoderParams;
 use brotli::BrotliCompress;
+use brotli::enc::BrotliEncoderParams;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::collections::HashMap;
@@ -12,18 +12,18 @@ use std::{fmt, str};
 use headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch};
 use http::header::CACHE_CONTROL;
 use http_body_util::{BodyExt, Full, Limited};
-use hyper::body::{Bytes, Incoming};
 use hyper::StatusCode;
+use hyper::body::{Bytes, Incoming};
 use hyper_util::rt::TokioIo;
 use log::{error, info};
 use parking_lot::RwLock;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 pub use crate::api::{
-    self, comparison, dashboard, github, graphs, info, self_profile, status, toolchain, triage,
-    ServerResult,
+    self, ServerResult, comparison, dashboard, github, graphs, info, self_profile, status,
+    toolchain, triage,
 };
 use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
@@ -334,7 +334,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             return Ok(http::Response::builder()
                 .status(StatusCode::PAYLOAD_TOO_LARGE)
                 .body(Bytes::default())
-                .unwrap())
+                .unwrap());
         }
         Err(err) => return Err(ServerError(format!("failed to read body: {err}"))),
     };
@@ -359,7 +359,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     return Ok(http::Response::builder()
                         .status(StatusCode::OK)
                         .body(Bytes::from("missing event header"))
-                        .unwrap())
+                        .unwrap());
                 }
             };
             match event.as_str() {

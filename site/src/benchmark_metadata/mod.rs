@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 use hashbrown::HashMap;
 use rust_embed::RustEmbed;
 
-use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::BenchmarkConfig;
+use collector::compile::benchmark::category::Category;
 
 use crate::benchmark_metadata::metadata::SERIALIZED_SUITE_NAME;
 

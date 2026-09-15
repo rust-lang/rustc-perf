@@ -6,7 +6,7 @@ use collector::{Bound, SelfProfileId};
 
 use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
-use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
+use crate::api::{ServerResult, detail_graphs, detail_sections, graphs, runtime_detail_graphs};
 use crate::load::SiteCtxt;
 use crate::self_profile::fetch_self_profile;
 
@@ -14,7 +14,7 @@ use database::selector::{
     CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
 };
 use database::{self, ArtifactId, CodegenBackend, Profile, Scenario, Target};
-use database::{interpolate::IsInterpolated, FrontendThreads};
+use database::{FrontendThreads, interpolate::IsInterpolated};
 
 /// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.

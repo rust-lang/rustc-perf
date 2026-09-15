@@ -1,20 +1,20 @@
+use crate::compile::benchmark::BenchmarkName;
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::target::Target;
-use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute;
 use crate::compile::execute::{
-    rustc, DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfileFiles,
-    Stats,
+    DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfileFiles, Stats,
+    rustc,
 };
 use crate::self_profile::SelfProfileId;
 use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
 use crate::{CollectorCtx, SelfProfileStorage};
 use database::CollectionId;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use std::future::Future;
 use std::pin::Pin;
 use std::process::Command;

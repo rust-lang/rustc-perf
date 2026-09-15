@@ -3,23 +3,22 @@ use crate::pool::{
 };
 use crate::selector::{CompileTestCase, RuntimeTestCase};
 use crate::{
-    parse_benchmarks, ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkJob,
-    BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest,
-    BenchmarkRequestIndex, BenchmarkRequestInsertResult, BenchmarkRequestStatus,
-    BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet, CodegenBackend, CollectionId,
-    CollectorConfig, Commit, CommitType, CompileBenchmark, Date, FrontendThreads, Index,
-    PendingBenchmarkRequests, Profile, Scenario, Target, BENCHMARK_JOB_STATUS_FAILURE_STR,
+    ArtifactId, ArtifactIdNumber, BENCHMARK_JOB_STATUS_FAILURE_STR,
     BENCHMARK_JOB_STATUS_IN_PROGRESS_STR, BENCHMARK_JOB_STATUS_QUEUED_STR,
     BENCHMARK_JOB_STATUS_SUCCESS_STR, BENCHMARK_REQUEST_MASTER_STR, BENCHMARK_REQUEST_RELEASE_STR,
     BENCHMARK_REQUEST_STATUS_ARTIFACTS_READY_STR, BENCHMARK_REQUEST_STATUS_COMPLETED_STR,
     BENCHMARK_REQUEST_STATUS_IN_PROGRESS_STR, BENCHMARK_REQUEST_STATUS_WAITING_FOR_ARTIFACTS_STR,
-    BENCHMARK_REQUEST_TRY_STR,
+    BENCHMARK_REQUEST_TRY_STR, Benchmark, BenchmarkJob, BenchmarkJobConclusion, BenchmarkJobKind,
+    BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
+    BenchmarkRequestStatus, BenchmarkRequestType, BenchmarkRequestWithErrors, BenchmarkSet,
+    CodegenBackend, CollectionId, CollectorConfig, Commit, CommitType, CompileBenchmark, Date,
+    FrontendThreads, Index, PendingBenchmarkRequests, Profile, Scenario, Target, parse_benchmarks,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::{HashMap, HashSet};
-use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::CertificateDer;
+use rustls::pki_types::pem::PemObject;
 use rustls::{ClientConfig, RootCertStore};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -807,8 +806,7 @@ impl PostgresConnection {
 }
 
 // `tag` should be kept as the first column
-const BENCHMARK_REQUEST_COLUMNS: &str =
-    "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets, benchmarks";
+const BENCHMARK_REQUEST_COLUMNS: &str = "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets, benchmarks";
 
 /// Parse a benchmark job out of a row.
 /// Expects to be used with `SELECT * FROM job_queue`.
@@ -1545,7 +1543,9 @@ where
         // We cannot use this function to mark requests as complete, as
         // we need to know if all jobs are complete first.
         if matches!(status, BenchmarkRequestStatus::Completed { .. }) {
-            panic!("Please use `mark_benchmark_request_as_completed(...)` to complete benchmark_requests");
+            panic!(
+                "Please use `mark_benchmark_request_as_completed(...)` to complete benchmark_requests"
+            );
         }
 
         let status_str = status.as_str();

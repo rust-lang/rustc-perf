@@ -1,6 +1,6 @@
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use log::debug;
 use reqwest::StatusCode;
 use std::ffi::OsStr;
@@ -625,9 +625,9 @@ pub fn get_local_toolchain(
             Some(clippy)
         } else {
             anyhow::bail!(
-                    "'Clippy' build specified but '--clippy' not specified and no 'clippy-driver' found \
+                "'Clippy' build specified but '--clippy' not specified and no 'clippy-driver' found \
                     next to 'rustc'"
-                );
+            );
         }
     } else {
         // No `clippy` provided, but none needed.

@@ -1,11 +1,11 @@
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
-use crate::api::{dashboard, ServerResult};
+use crate::api::{ServerResult, dashboard};
 use crate::benchmark_metadata::get_stable_benchmark_names;
 use crate::load::SiteCtxt;
-use database::{self, metric::Metric, ArtifactId, Profile, Scenario};
-use database::{selector, Target};
+use database::{self, ArtifactId, Profile, Scenario, metric::Metric};
+use database::{Target, selector};
 
 pub async fn handle_dashboard(
     query: dashboard::Request,
