@@ -116,6 +116,20 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                 <label>
                   <input
                     type="checkbox"
+                    id="profile-clippy"
+                    v-model="filter.profile.clippy"
+                  />
+                  <span class="label">clippy</span>
+                </label>
+                <Tooltip
+                  >Running the clippy linter. Does not generate any
+                  code.</Tooltip
+                >
+              </li>
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
                     id="profile-debug"
                     v-model="filter.profile.debug"
                   />

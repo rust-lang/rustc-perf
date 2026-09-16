@@ -10,6 +10,7 @@ import {
 export type CompileBenchmarkFilter = {
   profile: {
     check: boolean;
+    clippy: boolean;
     debug: boolean;
     opt: boolean;
     doc: boolean;
@@ -61,6 +62,7 @@ export function createDefaultCompileFilter(
     showRawData: false,
     profile: {
       check: true,
+      clippy: true,
       debug: true,
       opt: true,
       doc: true,
@@ -94,7 +96,7 @@ export function createDefaultCompileFilter(
   };
 }
 
-export type Profile = "check" | "debug" | "opt" | "doc";
+export type Profile = "check" | "clippy" | "debug" | "opt" | "doc" | "doc-json";
 export type CodegenBackend = "llvm" | "cranelift";
 export type Category = "primary" | "secondary";
 export type Target = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
@@ -169,6 +171,8 @@ export function computeCompileComparisonsWithNonRelevant(
   function profileFilter(profile: Profile): boolean {
     if (profile === "check") {
       return filter.profile.check;
+    } else if (profile === "clippy") {
+      return filter.profile.clippy;
     } else if (profile === "debug") {
       return filter.profile.debug;
     } else if (profile === "opt") {
