@@ -64,6 +64,11 @@ function loadFilterFromUrl(
     ),
     profile: {
       check: getBoolOrDefault(urlParams, "check", defaultFilter.profile.check),
+      clippy: getBoolOrDefault(
+        urlParams,
+        "clippy",
+        defaultFilter.profile.clippy
+      ),
       debug: getBoolOrDefault(urlParams, "debug", defaultFilter.profile.debug),
       opt: getBoolOrDefault(urlParams, "opt", defaultFilter.profile.opt),
       doc: getBoolOrDefault(urlParams, "doc", defaultFilter.profile.doc),
@@ -176,6 +181,12 @@ function storeFilterToUrl(
     "check",
     filter.profile.check,
     defaultFilter.profile.check
+  );
+  storeOrResetValue(
+    urlParams,
+    "clippy",
+    filter.profile.clippy,
+    defaultFilter.profile.clippy
   );
   storeOrResetValue(
     urlParams,
