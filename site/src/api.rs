@@ -4,8 +4,8 @@
 //!
 //! The responses are calculated in the server.rs file.
 
-use serde::de::{DeserializeOwned, Error};
 use serde::Deserializer;
+use serde::de::{DeserializeOwned, Error};
 use std::fmt::Formatter;
 use std::marker::PhantomData;
 use std::result::Result as StdResult;
@@ -269,7 +269,7 @@ pub mod toolchain {
 pub mod comparison {
     use crate::benchmark_metadata::ProfileMetadata;
     use collector::Bound;
-    use database::{metric::Metric, Date};
+    use database::{Date, metric::Metric};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 

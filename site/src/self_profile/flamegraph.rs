@@ -1,6 +1,6 @@
-use analyzeme::{collapse_stacks, ProfilingData};
+use analyzeme::{ProfilingData, collapse_stacks};
 use anyhow::Context;
-use inferno::flamegraph::{from_lines, Options as FlamegraphOptions};
+use inferno::flamegraph::{Options as FlamegraphOptions, from_lines};
 
 #[derive(serde::Deserialize, Debug)]
 pub struct Opt {}

@@ -34,7 +34,9 @@ pub fn codegen_diff(
     group: BenchmarkGroupCrate,
 ) -> anyhow::Result<()> {
     if !check_cargo_asm() {
-        return Err(anyhow::anyhow!("`cargo-show-asm` does not seem to be installed. Run `cargo install cargo-show-asm` first."));
+        return Err(anyhow::anyhow!(
+            "`cargo-show-asm` does not seem to be installed. Run `cargo install cargo-show-asm` first."
+        ));
     }
 
     // List functions and their indices from the baseline compiler

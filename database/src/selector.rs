@@ -28,8 +28,8 @@ use std::{
 };
 
 use crate::{
-    interpolate::Interpolate, metric::Metric, ArtifactId, ArtifactIdIter, Benchmark,
-    CodegenBackend, Connection, FrontendThreads, Index, Lookup, Profile, Scenario, Target,
+    ArtifactId, ArtifactIdIter, Benchmark, CodegenBackend, Connection, FrontendThreads, Index,
+    Lookup, Profile, Scenario, Target, interpolate::Interpolate, metric::Metric,
 };
 
 #[derive(Debug)]
@@ -284,7 +284,7 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
         let mut statistic_descriptions: Vec<_> = index
             .compile_statistic_descriptions()
             .filter(
-                |(&(b, p, s, backend, target, frontend_threads, metric), _)| {
+                |&(&(b, p, s, backend, target, frontend_threads, metric), _)| {
                     self.benchmark.matches(b)
                         && self.profile.matches(p)
                         && self.scenario.matches(s)
@@ -430,7 +430,7 @@ impl BenchmarkQuery for RuntimeBenchmarkQuery {
     ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
         let mut statistic_descriptions: Vec<_> = index
             .runtime_statistic_descriptions()
-            .filter(|(&(b, t, m), _)| {
+            .filter(|&(&(b, t, m), _)| {
                 self.benchmark.matches(b) && self.target.matches(t) && self.metric.matches(m)
             })
             .map(|(&(benchmark, target, _), sid)| (RuntimeTestCase { benchmark, target }, sid))

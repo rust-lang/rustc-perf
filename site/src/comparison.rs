@@ -6,14 +6,14 @@ use crate::api;
 use crate::github;
 use crate::load::SiteCtxt;
 
-use collector::compile::benchmark::category::Category;
 use collector::Bound;
+use collector::compile::benchmark::category::Category;
+use database::{ArtifactId, Benchmark, Lookup};
 use database::{
+    Target,
     metric::Metric,
     selector::{self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase},
-    Target,
 };
-use database::{ArtifactId, Benchmark, Lookup};
 use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
@@ -1275,11 +1275,7 @@ impl TestResultComparison {
 
         // How many times the threshold this change is.
         let factor = change.abs() / threshold;
-        if factor.is_finite() {
-            factor
-        } else {
-            0.0
-        }
+        if factor.is_finite() { factor } else { 0.0 }
     }
 
     /// Whether the comparison is relevant or not.

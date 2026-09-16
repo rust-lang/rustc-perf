@@ -6,7 +6,7 @@ use clap::builder::TypedValueParser;
 use clap::{Arg, Parser};
 use collector::compare::compare_artifacts;
 use hashbrown::HashSet;
-use humansize::{format_size, BINARY};
+use humansize::{BINARY, format_size};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
@@ -30,10 +30,10 @@ use tabled::settings::{Alignment, Color, Modify, Width};
 use tokio::runtime::Runtime;
 
 use collector::artifact_stats::{
-    compile_and_get_stats, ArtifactStats, ArtifactWithStats, CargoProfile,
+    ArtifactStats, ArtifactWithStats, CargoProfile, compile_and_get_stats,
 };
-use collector::benchmark_set::{get_benchmark_set, BenchmarkSetId, BenchmarkSetMember};
-use collector::codegen::{codegen_diff, CodegenType};
+use collector::benchmark_set::{BenchmarkSetId, BenchmarkSetMember, get_benchmark_set};
+use collector::codegen::{CodegenType, codegen_diff};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
 use collector::compile::benchmark::frontend_threads::FrontendThreads;
@@ -41,26 +41,26 @@ use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::target::Target;
 use collector::compile::benchmark::{
-    compile_benchmark_dir, get_compile_benchmarks, ArtifactType, Benchmark, BenchmarkName,
-    CompileBenchmarkFilter,
+    ArtifactType, Benchmark, BenchmarkName, CompileBenchmarkFilter, compile_benchmark_dir,
+    get_compile_benchmarks,
 };
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
 use collector::runtime::{
-    bench_runtime, get_runtime_benchmark_groups, prepare_runtime_benchmark_suite,
-    runtime_benchmark_dir, BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode,
-    RuntimeBenchmarkFilter, RuntimeProfiler, DEFAULT_RUNTIME_ITERATIONS,
+    BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode, DEFAULT_RUNTIME_ITERATIONS,
+    RuntimeBenchmarkFilter, RuntimeProfiler, bench_runtime, get_runtime_benchmark_groups,
+    prepare_runtime_benchmark_suite, runtime_benchmark_dir,
 };
-use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
+use collector::runtime::{RuntimeCompilationOpts, profile_runtime};
 use collector::toolchain::{
-    create_toolchain_from_published_version, get_local_toolchain, Sysroot, SysrootDownloadError,
-    Toolchain, ToolchainConfig,
+    Sysroot, SysrootDownloadError, Toolchain, ToolchainConfig,
+    create_toolchain_from_published_version, get_local_toolchain,
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
 use collector::{
-    command_output, utils, CollectorCtx, CollectorStepBuilder, LocalSelfProfileStorage,
-    S3SelfProfileStorage, SelfProfileStorage,
+    CollectorCtx, CollectorStepBuilder, LocalSelfProfileStorage, S3SelfProfileStorage,
+    SelfProfileStorage, command_output, utils,
 };
 use database::{
     ArtifactId, ArtifactIdNumber, BenchmarkJob, BenchmarkJobConclusion, CollectorConfig, Commit,
@@ -175,7 +175,10 @@ fn check_measureme_installed() -> Result<(), String> {
     if not_installed.is_empty() {
         Ok(())
     } else {
-        Err(format!("To run this command you need {0} on your PATH. To install run `cargo install --git https://github.com/rust-lang/measureme --branch stable {0}`\n", not_installed.join(" ")))
+        Err(format!(
+            "To run this command you need {0} on your PATH. To install run `cargo install --git https://github.com/rust-lang/measureme --branch stable {0}`\n",
+            not_installed.join(" ")
+        ))
     }
 }
 
@@ -1621,7 +1624,7 @@ async fn run_benchmark_job(
                         job.target().as_str(),
                         job.backend().as_str(),
                         job.profile().as_str()
-                    )))
+                    )));
                 }
                 Err(SysrootDownloadError::IO(error)) => return Err(error.into()),
             };
@@ -2434,11 +2437,11 @@ async fn record_toolchain_sizes(
         path: Option<&Path>,
         target: database::Target,
     ) {
-        if let Some(path) = path {
-            if let Ok(size) = fs::metadata(path).map(|m| m.len()) {
-                conn.record_artifact_size(aid, component, size, target)
-                    .await;
-            }
+        if let Some(path) = path
+            && let Ok(size) = fs::metadata(path).map(|m| m.len())
+        {
+            conn.record_artifact_size(aid, component, size, target)
+                .await;
         }
     }
 

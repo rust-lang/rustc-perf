@@ -148,10 +148,10 @@ mod tests {
     #[test]
     fn skips_unconsumable_channels() {
         // nightly never returns Anything
-        assert!(parse_release_string(
-            "static.rust-lang.org/dist/2016-05-31/channel-rust-nightly.toml"
-        )
-        .is_none());
+        assert!(
+            parse_release_string("static.rust-lang.org/dist/2016-05-31/channel-rust-nightly.toml")
+                .is_none()
+        );
 
         // versioned-beta artefacts are skipped too
         for should_ignore in [

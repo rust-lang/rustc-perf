@@ -105,9 +105,9 @@ mod imp {
     use std::process::{ChildStderr, ChildStdout};
     use std::slice;
 
+    use miow::Overlapped;
     use miow::iocp::{CompletionPort, CompletionStatus};
     use miow::pipe::NamedPipe;
-    use miow::Overlapped;
     use windows_sys::Win32::Foundation::ERROR_BROKEN_PIPE;
 
     struct Pipe<'a> {
@@ -160,15 +160,15 @@ mod imp {
         unsafe fn new<P: IntoRawHandle>(p: P, dst: &'a mut Vec<u8>) -> Pipe<'a> {
             Pipe {
                 dst,
-                pipe: NamedPipe::from_raw_handle(p.into_raw_handle()),
+                pipe: unsafe { NamedPipe::from_raw_handle(p.into_raw_handle()) },
                 overlapped: Overlapped::zero(),
                 done: false,
             }
         }
 
         unsafe fn read(&mut self) -> io::Result<()> {
-            let dst = slice_to_end(self.dst);
-            match self.pipe.read_overlapped(dst, self.overlapped.raw()) {
+            let dst = unsafe { slice_to_end(self.dst) };
+            match unsafe { self.pipe.read_overlapped(dst, self.overlapped.raw()) } {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     if e.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) {
@@ -183,7 +183,7 @@ mod imp {
 
         unsafe fn complete(&mut self, status: &CompletionStatus) {
             let prev = self.dst.len();
-            self.dst.set_len(prev + status.bytes_transferred() as usize);
+            unsafe { self.dst.set_len(prev + status.bytes_transferred() as usize) };
             if status.bytes_transferred() == 0 {
                 self.done = true;
             }
@@ -197,6 +197,6 @@ mod imp {
         if v.capacity() == v.len() {
             v.reserve(1);
         }
-        slice::from_raw_parts_mut(v.as_mut_ptr().add(v.len()), v.capacity() - v.len())
+        unsafe { slice::from_raw_parts_mut(v.as_mut_ptr().add(v.len()), v.capacity() - v.len()) }
     }
 }

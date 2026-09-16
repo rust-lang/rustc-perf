@@ -9,22 +9,22 @@ use thousands::Separable;
 use benchlib::benchmark::passes_filter;
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 pub use benchmark::{
-    get_runtime_benchmark_groups, prepare_runtime_benchmark_suite, runtime_benchmark_dir,
     BenchmarkGroup, BenchmarkGroupCrate, BenchmarkSuite, BenchmarkSuiteCompilation,
-    CargoIsolationMode, RuntimeBenchmarkFilter,
+    CargoIsolationMode, RuntimeBenchmarkFilter, get_runtime_benchmark_groups,
+    prepare_runtime_benchmark_suite, runtime_benchmark_dir,
 };
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::runtime_group_step_name;
 use crate::utils::git::get_rustc_perf_commit;
-use crate::{command_output, CollectorCtx};
+use crate::{CollectorCtx, command_output};
 
 mod benchmark;
 mod profile;
 
 use crate::compile::benchmark::target::Target;
 pub use benchmark::RuntimeCompilationOpts;
-pub use profile::{profile_runtime, RuntimeProfiler};
+pub use profile::{RuntimeProfiler, profile_runtime};
 
 pub const DEFAULT_RUNTIME_ITERATIONS: u32 = 5;
 

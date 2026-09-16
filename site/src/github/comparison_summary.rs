@@ -1,12 +1,12 @@
 use crate::comparison::{
-    deserves_attention_icount, write_summary_table, ArtifactComparison, ArtifactComparisonSummary,
-    Direction,
+    ArtifactComparison, ArtifactComparisonSummary, Direction, deserves_attention_icount,
+    write_summary_table,
 };
 use crate::load::SiteCtxt;
 
-use database::{metric::Metric, QueuedCommit};
+use database::{QueuedCommit, metric::Metric};
 
-use crate::github::triage::{is_triage_run, update_triage_body, TriageBuild};
+use crate::github::triage::{TriageBuild, is_triage_run, update_triage_body};
 use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;
 use std::fmt::Write;
@@ -71,10 +71,12 @@ pub async fn post_comparison_comment(
         PerfRunSource::TryBuild
     };
 
-    let body = summarize_run(ctxt, commit, source)
+    if let Some(body) = summarize_run(ctxt, commit, source)
         .await
-        .unwrap_or_else(|error| error);
-    client.post_comment(pr, body).await;
+        .unwrap_or_else(Some)
+    {
+        client.post_comment(pr, body).await;
+    }
 
     Ok(())
 }
@@ -132,7 +134,7 @@ async fn summarize_run(
     ctxt: &SiteCtxt,
     commit: QueuedCommit,
     source: PerfRunSource,
-) -> Result<String, String> {
+) -> Result<Option<String>, String> {
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let mut message = String::new();
@@ -193,6 +195,15 @@ async fn summarize_run(
     let is_regression =
         deserves_attention && matches!(direction, Direction::Regression | Direction::Mixed);
 
+    // Don't post a summary for perf runs that are a part of triage runs, that don't deserve attention
+    // We skip this because it's just another noisy ping,
+    // and only posting it when the results are relevant means people will pay more attention to it if it is posted
+    if let PerfRunSource::TriageBuild(_) = &source
+        && !deserves_attention
+    {
+        return Ok(None);
+    }
+
     writeln!(
         &mut message,
         "### Overall result: {}{}\n",
@@ -234,7 +245,7 @@ async fn summarize_run(
     write!(&mut message, "\n{bootstrap}").unwrap();
     write!(&mut message, "\n{artifact_size}").unwrap();
 
-    Ok(message)
+    Ok(Some(message))
 }
 
 pub async fn metrics_result(

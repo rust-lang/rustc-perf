@@ -8,7 +8,7 @@ use crate::compile::benchmark::target::Target;
 use crate::compile::execute::{CargoProcess, Processor};
 use crate::toolchain::Toolchain;
 use crate::utils::wait_for_future;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use database::selector::CompileTestCase;
 use log::debug;
 use std::collections::{HashMap, HashSet};
@@ -138,10 +138,10 @@ impl Benchmark {
         for entry in std::fs::read_dir(&path)? {
             let entry = entry?;
             let path = entry.path();
-            if let Some(ext) = path.extension() {
-                if ext == "patch" {
-                    patches.push(path.clone());
-                }
+            if let Some(ext) = path.extension()
+                && ext == "patch"
+            {
+                patches.push(path.clone());
             }
         }
 
@@ -814,7 +814,7 @@ fn substring_matches(
 
 #[cfg(test)]
 mod tests {
-    use crate::compile::benchmark::{get_compile_benchmarks, CompileBenchmarkFilter};
+    use crate::compile::benchmark::{CompileBenchmarkFilter, get_compile_benchmarks};
     use std::path::Path;
 
     #[test]

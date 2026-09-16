@@ -1,4 +1,4 @@
-use database::{intern_target_name, TargetName};
+use database::{TargetName, intern_target_name};
 use std::{fmt, str::FromStr};
 
 /// Target representing an Rust target triple, for a full list of targets and

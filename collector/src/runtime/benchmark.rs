@@ -372,10 +372,10 @@ pub fn get_runtime_benchmark_groups(
             .ok_or_else(|| anyhow::anyhow!("Cannot get filename of {}", path.display()))?
             .to_string();
 
-        if let Some(ref group) = group {
-            if group != &name {
-                continue;
-            }
+        if let Some(ref group) = group
+            && group != &name
+        {
+            continue;
         }
 
         groups.push(BenchmarkGroupCrate { name, path });

@@ -12,8 +12,8 @@ use crate::{
 use crate::{ArtifactIdNumber, Index};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::{HashMap, HashSet};
-use rusqlite::params;
 use rusqlite::OptionalExtension;
+use rusqlite::params;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;

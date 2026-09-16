@@ -1,6 +1,6 @@
-use crate::api::{github, ServerResult};
+use crate::api::{ServerResult, github};
 use crate::github::{
-    client, enqueue_sha, parse_homu_comment, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
+    COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL, client, enqueue_sha, parse_homu_comment,
 };
 use crate::load::SiteCtxt;
 use std::fmt::Write;
@@ -9,12 +9,12 @@ use crate::api::github::Issue;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::github::client::{Client, Commit, GraphQLClient};
 use crate::github::triage::{
-    changed_benchmarks_in_rollup, find_and_parse_unrolled_build_comment, triage_body_end_marker,
-    triage_body_start_marker, TRIAGE_MARKER,
+    TRIAGE_MARKER, changed_benchmarks_in_rollup, find_and_parse_unrolled_build_comment,
+    triage_body_end_marker, triage_body_start_marker,
 };
 use database::{
-    parse_backends, parse_benchmarks, parse_profiles, parse_targets, BenchmarkRequest,
-    BenchmarkRequestInsertResult, CodegenBackend, Profile, Target,
+    BenchmarkRequest, BenchmarkRequestInsertResult, CodegenBackend, Profile, Target,
+    parse_backends, parse_benchmarks, parse_profiles, parse_targets,
 };
 use futures::stream::{FuturesUnordered, StreamExt};
 use hashbrown::HashMap;
@@ -55,35 +55,35 @@ async fn handle_issue(ctxt: Arc<SiteCtxt>, issue: github::Issue, comment: github
     }
 
     let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
-    if comment.body.contains(" homu: ") {
-        if let Some(sha) = parse_homu_comment(&comment.body).await {
-            let commit = match gh_client.get_commit(&sha).await {
-                Ok(commit) => commit,
-                Err(error) => {
-                    gh_client
-                        .post_comment(
-                            issue.number,
-                            format!("Cannot fetch commit `{sha}` info: {error:?}"),
-                        )
-                        .await;
-                    return;
-                }
-            };
-
-            match enqueue_sha(&ctxt, commit, issue.number).await {
-                Ok(Some(mut msg)) => {
-                    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
-                    gh_client.post_comment(issue.number, msg).await;
-                }
-                Ok(None) => {
-                    // A try build without @rust-timer queue finished
-                }
-                Err(err) => {
-                    gh_client.post_comment(issue.number, err).await;
-                }
+    if comment.body.contains(" homu: ")
+        && let Some(sha) = parse_homu_comment(&comment.body).await
+    {
+        let commit = match gh_client.get_commit(&sha).await {
+            Ok(commit) => commit,
+            Err(error) => {
+                gh_client
+                    .post_comment(
+                        issue.number,
+                        format!("Cannot fetch commit `{sha}` info: {error:?}"),
+                    )
+                    .await;
+                return;
             }
-            return;
+        };
+
+        match enqueue_sha(&ctxt, commit, issue.number).await {
+            Ok(Some(mut msg)) => {
+                msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
+                gh_client.post_comment(issue.number, msg).await;
+            }
+            Ok(None) => {
+                // A try build without @rust-timer queue finished
+            }
+            Err(err) => {
+                gh_client.post_comment(issue.number, err).await;
+            }
         }
+        return;
     }
 
     // Do not react to @rust-timer commands sent by the bors GitHub App
@@ -457,8 +457,15 @@ pub fn parse_unrolled_build_message(commit_message: &str) -> Result<UnrolledBuil
     // The first line of the commit message will look like
     // `Unrolled build for #123 in rollup 123`
     let words = first_line.split(" ").collect::<Vec<_>>();
-    let ["Unrolled", "build", "for", member_pr_number, "in", "rollup", rollup_pr_number] =
-        words[..]
+    let [
+        "Unrolled",
+        "build",
+        "for",
+        member_pr_number,
+        "in",
+        "rollup",
+        rollup_pr_number,
+    ] = words[..]
     else {
         return Err(format!(
             "Unexpected commit name `{first_line}`, could not parse commit title. Is the commit an unrolled build?"

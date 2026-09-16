@@ -101,10 +101,11 @@ impl RequestBuilder {
         }
         // At this point all jobs of the request should be properly completed, so we can also
         // complete the request itself
-        assert!(db
-            .maybe_mark_benchmark_request_as_completed(&tag)
-            .await
-            .unwrap());
+        assert!(
+            db.maybe_mark_benchmark_request_as_completed(&tag)
+                .await
+                .unwrap()
+        );
         drop(to_complete);
         self
     }

@@ -1,20 +1,20 @@
+use crate::compile::benchmark::BenchmarkName;
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::target::Target;
-use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute;
 use crate::compile::execute::{
-    rustc, DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfileFiles,
-    Stats,
+    DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfileFiles, Stats,
+    rustc,
 };
 use crate::self_profile::SelfProfileId;
 use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
 use crate::{CollectorCtx, SelfProfileStorage};
 use database::CollectionId;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use std::future::Future;
 use std::pin::Pin;
 use std::process::Command;
@@ -251,10 +251,10 @@ impl Processor for BenchProcessor<'_> {
                 // Buffer up to 10 self-profile stores at a time.
                 let mut futures = JoinSet::new();
                 for profile in self.self_profiles.drain(..) {
-                    if futures.len() == 10 {
-                        if let Err(error) = futures.join_next().await.unwrap().unwrap() {
-                            log::error!("Failed to store self-profile result: {error:?}");
-                        }
+                    if futures.len() == 10
+                        && let Err(error) = futures.join_next().await.unwrap().unwrap()
+                    {
+                        log::error!("Failed to store self-profile result: {error:?}");
                     }
 
                     let id = SelfProfileId::Simple {

@@ -8,8 +8,8 @@
 
 mod compile_benchmarks;
 
-use crate::compile::benchmark::target::Target;
 use crate::compile::benchmark::BenchmarkName;
+use crate::compile::benchmark::target::Target;
 
 /// Represents a single set of master/try benchmarks.
 #[derive(Debug)]
@@ -227,10 +227,10 @@ pub fn get_benchmark_set(id: BenchmarkSetId) -> BenchmarkSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::benchmark_set::{get_benchmark_sets_for_target, BenchmarkSet, BenchmarkSetMember};
+    use crate::benchmark_set::{BenchmarkSet, BenchmarkSetMember, get_benchmark_sets_for_target};
     use crate::compile::benchmark::target::Target;
     use crate::compile::benchmark::{
-        get_compile_benchmarks, BenchmarkName, CompileBenchmarkFilter,
+        BenchmarkName, CompileBenchmarkFilter, get_compile_benchmarks,
     };
     use std::collections::HashSet;
     use std::path::Path;

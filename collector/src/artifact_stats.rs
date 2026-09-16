@@ -50,17 +50,16 @@ impl ArtifactStats {
 
         let mut stats: Option<Self> = None;
         for member in archive.members().flatten() {
-            if let Ok(name) = std::str::from_utf8(member.name()) {
-                if name.ends_with(".rcgu.o") {
-                    if let Ok(data) = member.data(&*data) {
-                        let entry_stats = Self::from_bytes(data)
-                            .with_context(|| format!("Cannot parse archive member `{name}`"))?;
-                        stats = match stats {
-                            Some(old_stats) => Some(old_stats.merge(entry_stats)),
-                            None => Some(entry_stats),
-                        };
-                    }
-                }
+            if let Ok(name) = std::str::from_utf8(member.name())
+                && name.ends_with(".rcgu.o")
+                && let Ok(data) = member.data(&*data)
+            {
+                let entry_stats = Self::from_bytes(data)
+                    .with_context(|| format!("Cannot parse archive member `{name}`"))?;
+                stats = match stats {
+                    Some(old_stats) => Some(old_stats.merge(entry_stats)),
+                    None => Some(entry_stats),
+                };
             }
         }
         Ok(stats.unwrap_or_default())
@@ -224,16 +223,16 @@ pub fn compile_and_get_stats(
             filenames,
             ..
         } = artifact;
-        if let Some(executable) = executable {
-            if target.is_bin() {
-                let stats = ArtifactStats::from_dynamic_object(executable.as_std_path())
-                    .with_context(|| format!("Cannot parse executable stats from {executable}"))?;
-                archives.push(ArtifactWithStats {
-                    path: executable.into_std_path_buf(),
-                    target_name: target.name.clone(),
-                    stats,
-                });
-            }
+        if let Some(executable) = executable
+            && target.is_bin()
+        {
+            let stats = ArtifactStats::from_dynamic_object(executable.as_std_path())
+                .with_context(|| format!("Cannot parse executable stats from {executable}"))?;
+            archives.push(ArtifactWithStats {
+                path: executable.into_std_path_buf(),
+                target_name: target.name.clone(),
+                stats,
+            });
         }
         for library in filenames {
             // We only care about local packages

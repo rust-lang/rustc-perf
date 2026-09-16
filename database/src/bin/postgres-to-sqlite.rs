@@ -4,8 +4,8 @@
 //! transactions, and will likely fail if used on a populated database.
 
 use chrono::{DateTime, Utc};
-use clap::{builder::PossibleValuesParser, ArgAction};
-use database::pool::{postgres, sqlite, ConnectionManager};
+use clap::{ArgAction, builder::PossibleValuesParser};
+use database::pool::{ConnectionManager, postgres, sqlite};
 use futures_util::StreamExt;
 use rusqlite::params;
 use std::time::Instant;

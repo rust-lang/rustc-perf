@@ -1,12 +1,12 @@
 //! Execute benchmarks.
 
+use crate::compile::benchmark::BenchmarkName;
 use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::frontend_threads::FrontendThreads;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::target::Target;
-use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Toolchain;
 use crate::utils::fs::EnsureImmutableFile;
 use crate::{async_command_output, command_output, utils};
@@ -47,9 +47,9 @@ impl PerfTool {
     // What cargo subcommand do we need to run for this profiler? If not
     // `rustc`, must be a subcommand that itself invokes `rustc`.
     fn cargo_subcommand(&self, profile: Profile) -> Option<&'static str> {
+        use PerfTool::*;
         use bencher::Bencher::*;
         use profiler::Profiler::*;
-        use PerfTool::*;
         match self {
             BenchTool(PerfStat)
             | BenchTool(PerfStatSelfProfile)
@@ -91,9 +91,9 @@ impl PerfTool {
     }
 
     fn is_scenario_allowed(&self, scenario: Scenario) -> bool {
+        use PerfTool::*;
         use bencher::Bencher::*;
         use profiler::Profiler::*;
-        use PerfTool::*;
         match self {
             BenchTool(PerfStat)
             | BenchTool(PerfStatSelfProfile)
@@ -368,7 +368,11 @@ impl<'a> CargoProcess<'a> {
             self.backend,
             self.target,
             self.frontend_threads.get(),
-            if needs_final { "benchmark" } else { "dependencies" }
+            if needs_final {
+                "benchmark"
+            } else {
+                "dependencies"
+            }
         );
 
         loop {
@@ -405,7 +409,7 @@ impl<'a> CargoProcess<'a> {
                             return Err(anyhow::anyhow!(
                                 "this perf tool doesn't support the {:?} profile",
                                 self.profile
-                            ))
+                            ));
                         }
                         Some(sub) => sub,
                     }
@@ -418,7 +422,10 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
 
-            assert!(!self.rustc_args.iter().any(|arg| arg.contains("-Zthreads")), "rustc_args should not contain -Zthreads, set frontend_threads in perf-config.json instead");
+            assert!(
+                !self.rustc_args.iter().any(|arg| arg.contains("-Zthreads")),
+                "rustc_args should not contain -Zthreads, set frontend_threads in perf-config.json instead"
+            );
             cmd.env(
                 "RUSTC_THREAD_COUNT",
                 self.frontend_threads.get().to_string(),

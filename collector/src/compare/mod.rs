@@ -1,6 +1,6 @@
 use anyhow::Context;
 use database::selector::{BenchmarkQuery, CompileBenchmarkQuery, CompileTestCase};
-use database::{metric::Metric, ArtifactId, Commit, Connection, Index};
+use database::{ArtifactId, Commit, Connection, Index, metric::Metric};
 use ratatui::prelude::Stylize;
 use ratatui::widgets::{Cell, List, ListState, Paragraph, Row, Table, TableState};
 use ratatui::{
