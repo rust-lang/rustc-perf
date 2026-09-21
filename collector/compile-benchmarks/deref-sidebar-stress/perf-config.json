@@ -1,0 +1,6 @@
+{
+    "cargo_rustc_opts": "-Znext-solver=coherence",
+    "category": "secondary",
+    "artifact": "library",
+    "excluded_profiles": ["Check", "Debug", "Opt", "Clippy", "DocJson"]
+}

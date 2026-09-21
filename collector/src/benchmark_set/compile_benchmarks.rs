@@ -28,6 +28,7 @@ pub(super) const DEEP_VECTOR: &str = "deep-vector";
 pub(super) const DEEPLY_NESTED_MULTI: &str = "deeply-nested-multi";
 pub(super) const DEEPLY_NESTED_MULTI_NEW_SOLVER: &str = "deeply-nested-multi-new-solver";
 pub(super) const DERIVE: &str = "derive";
+pub(super) const DEREF_SIDEBAR_STRESS: &str = "deref-sidebar-stress";
 pub(super) const DIESEL_2_2_10: &str = "diesel-2.2.10";
 pub(super) const DIESEL_2_2_10_NEW_SOLVER: &str = "diesel-2.2.10-new-solver";
 pub(super) const EXTERNS: &str = "externs";
