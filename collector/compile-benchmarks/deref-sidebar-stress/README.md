@@ -5,7 +5,7 @@ one unique.
 See rust-lang/rust#158174 and rust-lang/rust#162976
 
 Generated with (N = 800):
-
+```python
     N = 800
     with open("src/lib.rs", "w") as f:
         for i in range(N + 1):
@@ -20,3 +20,4 @@ Generated with (N = 800):
                 f"fn deref(&self) -> &S{j} {{ static V: S{j} = S{j}; &V }} "
                 "}\n"
             )
+```
