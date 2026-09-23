@@ -298,7 +298,7 @@ loadStatusData(loading);
                 </td>
                 <td>
                   {{ formatISODate(req.completedAt) }}
-                  <span v-if="req.endEstimated">(est.)</span>
+                  <span v-if="req.endEstimated">(approx.)</span>
                 </td>
                 <td style="text-align: right">
                   {{ getDuration(req) }}
