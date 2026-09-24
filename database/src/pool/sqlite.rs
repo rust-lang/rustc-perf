@@ -492,6 +492,7 @@ impl ConnectionManager for Sqlite {
         conn.pragma_update(None, "cache_size", -128000).unwrap();
         conn.pragma_update(None, "journal_mode", "WAL").unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        conn.pragma_update(None, "busy_timeout", "30000").unwrap();
 
         self.1.call_once(|| {
             let version: i32 = conn
@@ -733,14 +734,16 @@ impl Connection for SqliteConnection {
     async fn artifact_id(&self, artifact: &crate::ArtifactId) -> ArtifactIdNumber {
         let info = artifact.info();
 
-        self.raw_ref()
+        let mut conn = self.raw_ref();
+        let tx = conn.transaction().unwrap();
+        tx
             .execute(
                 "insert or ignore into artifact (name, date, type) VALUES (?, ?, ?)",
                 params![&info.name, &info.date.map(|d| d.timestamp()), &info.kind,],
             )
             .unwrap();
         ArtifactIdNumber(
-            self.raw_ref()
+            tx
                 .query_row(
                     "select id from artifact where name = $1",
                     params![&info.name],
