@@ -1,3 +1,4 @@
+use crate::comparison::ArtifactComparison;
 use crate::github::client::{Client, GraphQLClient, ResponseComment};
 use crate::github::comparison_summary::calculate_metric_comparison;
 use crate::load::SiteCtxt;
@@ -93,21 +94,24 @@ pub async fn changed_benchmarks_in_rollup(
     .await
     .map_err(|e| anyhow::anyhow!("{e}"))?;
 
+    Ok(changed_benchmarks(&comparison))
+}
+
+pub fn changed_benchmarks(comparison: &ArtifactComparison) -> Vec<String> {
     let compile_benchmarks = comparison.compile_comparisons.iter().flat_map(|c| {
         c.comparison
             .is_relevant()
             .then_some(c.test_case.benchmark.to_string())
     });
     // Include newly failed benchmarks so we can triage which PRs broke them
-    let newly_failed_benchmarks = comparison.newly_failed_benchmarks.into_keys();
+    let newly_failed_benchmarks = comparison.newly_failed_benchmarks.keys();
 
     let mut changed_benchmarks = compile_benchmarks
-        .chain(newly_failed_benchmarks)
+        .chain(newly_failed_benchmarks.cloned())
         .collect::<Vec<_>>();
     changed_benchmarks.sort();
     changed_benchmarks.dedup();
-
-    Ok(changed_benchmarks)
+    changed_benchmarks
 }
 
 pub fn find_and_parse_unrolled_build_comment<'a>(
