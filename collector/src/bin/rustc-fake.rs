@@ -86,15 +86,6 @@ fn main() {
     args.push(OsString::from("-Adeprecated"));
     args.push(OsString::from("-Aunknown-lints"));
 
-    // This forces incremental query hash verification on. Currently, rustc
-    // hashes 1/32 of queries loaded from disk without this flag, but that 1/32
-    // is based on the (expected) hash of the data, which can vary from build to
-    // build, adding a source of noise to our measurements, which we prefer to
-    // avoid. rustc-perf can accept the higher cost of always verifying hashes,
-    // and we currently prefer to avoid exposing a means of hard-disabling
-    // verification.
-    args.push(OsString::from("-Zincremental-verify-ich"));
-
     if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
         // Strip out the flag and its argument, and run rustc under the wrapper
         // program named by the argument.
