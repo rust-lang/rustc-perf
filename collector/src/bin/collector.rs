@@ -137,6 +137,7 @@ struct CompileBenchmarkConfig {
     bench_rustc: bool,
     targets: Vec<Target>,
     frontend_threads_config: FrontendThreadsConfig,
+    allow_errors: bool,
 }
 
 struct RuntimeBenchmarkConfig {
@@ -448,6 +449,10 @@ struct CompileTimeOptions {
     /// Parallel frontend thread count in comma-separated list
     #[arg(long = "frontend-threads", value_delimiter = ',')]
     frontend_threads_counts: Vec<u32>,
+
+    /// Whether to exit in the case of a failing benchmark
+    #[arg(long, default_value = "false")]
+    allow_errors: bool,
 }
 
 impl CompileTimeOptions {
@@ -1049,6 +1054,7 @@ fn main_result() -> anyhow::Result<i32> {
             let frontend_threads_config = opts.get_frontend_threads();
             let profiles = opts.profiles.0;
             let scenarios = opts.scenarios.0;
+            let allow_errors = opts.allow_errors;
             let backends = opts.codegen_backends.0;
 
             let pool = database::Pool::open(&db.db);
@@ -1100,6 +1106,7 @@ fn main_result() -> anyhow::Result<i32> {
                 bench_rustc: bench_rustc.bench_rustc,
                 targets: vec![Target::host()],
                 frontend_threads_config,
+                allow_errors,
             };
 
             rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
@@ -1140,6 +1147,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let profiles = &opts.profiles.0;
             let scenarios = &opts.scenarios.0;
+            let deny_errors = &!opts.allow_errors;
             let frontend_threads_config = opts.get_frontend_threads();
             let backends = &opts.codegen_backends.0;
 
@@ -1218,7 +1226,10 @@ fn main_result() -> anyhow::Result<i32> {
                 get_toolchain_and_profile(local.rustc.as_str(), "")?;
             }
 
-            errors.fail_if_nonzero()?;
+            if *deny_errors {
+                errors.fail_if_nonzero()?;
+            }
+
             Ok(0)
         }
 
@@ -1775,6 +1786,7 @@ async fn create_benchmark_configs(
             bench_rustc,
             targets: vec![job.target().into()],
             frontend_threads_config: FrontendThreadsConfig::FromBenchmark,
+            allow_errors: false,
         })
     } else {
         None
@@ -2186,14 +2198,22 @@ async fn run_benchmarks(
 
     // Compile benchmarks
     let compile_result = if let Some(compile) = compile {
+        let deny_errors = !compile.allow_errors;
         let errors = bench_compile(connection, &shared, compile, &collector).await;
-        errors
-            .fail_if_nonzero()
-            .context("Compile benchmarks failed")
+        if deny_errors {
+            errors
+                .fail_if_nonzero()
+                .context("Compile benchmarks failed")
+        } else {
+            eprintln!(
+                "{} benchmarks have failed, but continuing anyway (--allow-errors passed)",
+                errors.0
+            );
+            return Ok(());
+        }
     } else {
         Ok(())
     };
-
     // Runtime benchmarks
     let runtime_result = if let Some(runtime) = runtime {
         bench_runtime(
@@ -2271,6 +2291,7 @@ async fn bench_published_artifact(
             bench_rustc: false,
             targets: vec![Target::host()],
             frontend_threads_config,
+            allow_errors: false,
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
