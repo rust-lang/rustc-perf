@@ -1,7 +1,9 @@
 use crate::api::status;
+use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::job_queue::build_queue;
 use crate::load::SiteCtxt;
 use chrono::{DateTime, Utc};
+use collector::compile::benchmark::category::Category;
 use database::{
     BenchmarkJob, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestStatus,
     BenchmarkRequestType, Connection,
@@ -83,6 +85,17 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
     };
 
     let current_request_end = current_request_start + expected_duration;
+    // This assumes that the requested run is not a stable run, but the surrounding code is already wrong for stable runs
+    // anyway, and they're very rare so whatever
+    let compile_benchmark_count = get_compile_benchmarks_metadata()
+        .iter()
+        .filter(|(_, meta)| {
+            matches!(
+                meta.perf_config.category(),
+                Category::Primary | Category::Secondary
+            )
+        })
+        .count();
 
     let mut requests: Vec<status::BenchmarkRequest> = queue
         .iter()
@@ -90,6 +103,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
             &queue,
             expected_duration,
             current_request_end,
+            compile_benchmark_count,
         ))
         .map(|(req, estimated_end)| request_to_ui(req, HashMap::default(), Some(estimated_end)))
         .collect();
@@ -115,11 +129,22 @@ fn estimate_queue(
     queue: &[BenchmarkRequest],
     expected_duration: Duration,
     current_request_start: DateTime<Utc>,
+    total_benchmark_count: usize,
 ) -> impl Iterator<Item = DateTime<Utc>> {
+    let total_benchmark_count = total_benchmark_count.max(1); // avoid dividing by zero
     queue
         .iter()
-        .scan(current_request_start, move |current_time, _req| {
-            *current_time += expected_duration;
+        .scan(current_request_start, move |current_time, req| {
+            let req_benchmark_count = req.benchmarks().len();
+            // For benchmark requests that don't execute all benchmarks, we approximate that each benchmark takes the same time to execute
+            // and linearly scale the expected duration
+            let benchmark_percentage_executed = if req_benchmark_count == 0 {
+                1.0
+            } else {
+                let ratio = req_benchmark_count as f64 / total_benchmark_count as f64;
+                ratio.clamp(0.0, 1.0) // just in case
+            };
+            *current_time += expected_duration.mul_f64(benchmark_percentage_executed);
             Some(*current_time)
         })
 }
@@ -333,8 +358,19 @@ mod tests {
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
-            ], Duration::from_hours(1), start).collect::<Vec<_>>(),
+            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
             @"[0000-01-01T01:00:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z, 0000-01-01T04:00:00Z, 0000-01-01T05:00:00Z]"
+        );
+
+        insta::assert_compact_debug_snapshot!(
+            estimate_queue(&[
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "1,2"),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "3,4,5"),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "6"),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
+            @"[0000-01-01T00:20:00Z, 0000-01-01T01:20:00Z, 0000-01-01T01:50:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z]"
         );
     }
 }
