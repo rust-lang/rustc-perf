@@ -315,3 +315,26 @@ fn job_to_ui(job: &BenchmarkJob) -> status::BenchmarkJob {
         deque_counter: job.deque_count(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::request_handlers::status_page::estimate_queue;
+    use chrono::{TimeZone, Utc};
+    use database::BenchmarkRequest;
+    use std::time::Duration;
+
+    #[test]
+    fn test_estimate_queue() {
+        let start = Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap();
+        insta::assert_compact_debug_snapshot!(
+            estimate_queue(&[
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+            ], Duration::from_hours(1), start).collect::<Vec<_>>(),
+            @"[0000-01-01T01:00:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z, 0000-01-01T04:00:00Z, 0000-01-01T05:00:00Z]"
+        );
+    }
+}
