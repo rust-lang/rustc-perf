@@ -30,6 +30,9 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
         .collect::<Vec<String>>();
 
     // Figure out approximately how long was the most recent master benchmark request
+    // This ignores the fact that different kinds of requests (e.g. release ones) can have different
+    // durations, but these are rare and it's not worth the complexity to have multiple estimates
+    // here.
     let expected_duration = completed
         .iter()
         .filter(|req| req.request.is_master() && req.errors.is_empty())
@@ -79,23 +82,16 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
         now
     };
 
-    // Estimate when the current in-progress request should end
-    // This ignores the fact that different kinds of requests (e.g. release ones) can have different
-    // durations, but these are rare and it's not worth the complexity to have multiple estimates
-    // here.
     let current_request_end = current_request_start + expected_duration;
 
     let mut requests: Vec<status::BenchmarkRequest> = queue
-        .into_iter()
-        .enumerate()
-        .map(|(index, req)| {
-            let estimated_end = if req.is_in_progress() {
-                current_request_end
-            } else {
-                current_request_end + expected_duration * (index as u32)
-            };
-            request_to_ui(&req, HashMap::default(), Some(estimated_end))
-        })
+        .iter()
+        .zip(estimate_queue(
+            &queue,
+            expected_duration,
+            current_request_end,
+        ))
+        .map(|(req, estimated_end)| request_to_ui(req, HashMap::default(), Some(estimated_end)))
         .collect();
 
     // We reverse the queued requests so that they start with the request that will be benchmarked the latest
@@ -113,6 +109,19 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
         requests,
         collectors,
     })
+}
+
+fn estimate_queue(
+    queue: &[BenchmarkRequest],
+    expected_duration: Duration,
+    current_request_start: DateTime<Utc>,
+) -> impl Iterator<Item = DateTime<Utc>> {
+    queue
+        .iter()
+        .scan(current_request_start, move |current_time, _req| {
+            *current_time += expected_duration;
+            Some(*current_time)
+        })
 }
 
 async fn build_collectors(
