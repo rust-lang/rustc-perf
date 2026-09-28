@@ -12,6 +12,7 @@ pub struct TriageBuild {
 }
 
 pub const TRIAGE_MARKER: &str = "<!-- rust-timer: triage -->";
+pub const TRIAGE_REQUEST_PRIORITY: i32 = -10;
 
 pub fn triage_body_start_marker(pr: u32) -> String {
     format!("<!-- rust-timer:triage-body-start-pr-{pr} -->\n")

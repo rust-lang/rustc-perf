@@ -9,8 +9,8 @@ use crate::api::github::Issue;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::github::client::{Client, Commit, GraphQLClient};
 use crate::github::triage::{
-    TRIAGE_MARKER, changed_benchmarks_in_rollup, find_and_parse_unrolled_build_comment,
-    triage_body_end_marker, triage_body_start_marker,
+    TRIAGE_MARKER, TRIAGE_REQUEST_PRIORITY, changed_benchmarks_in_rollup,
+    find_and_parse_unrolled_build_comment, triage_body_end_marker, triage_body_start_marker,
 };
 use database::{
     BenchmarkRequest, BenchmarkRequestInsertResult, CodegenBackend, Profile, Target,
@@ -409,6 +409,7 @@ For this rollup, these benchmarks are:\n", benchmarks_to_run.len()).unwrap();
                 sha,
                 params: BenchmarkParameters {
                     benchmarks: Some(&benchmarks_to_run.join(",")),
+                    priority: Some(TRIAGE_REQUEST_PRIORITY),
                     ..Default::default()
                 },
             },
