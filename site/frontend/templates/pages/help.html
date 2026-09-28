@@ -45,6 +45,10 @@
     <li><code>benchmarks=&lt;BENCHMARKS&gt;</code> configures which benchmarks should be benchmarked.
       If no benchmarks are provided, all benchmarks will be executed.
     </li>
+    <li><code>priority=&lt;INT&gt;</code> configures the priority of this benchmark run.
+      The default priority of benchmark runs is 0. Priority can be set to a positive (higher priority) or negative (lower priority) number.
+      Triage runs have a priority of -10.
+    </li>
   </ul>
   <p><code>@rust-timer build $commit</code> will queue a perf run for the given commit
     <code>$commit</code>.
