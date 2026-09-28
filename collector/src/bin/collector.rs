@@ -1159,7 +1159,7 @@ fn main_result() -> anyhow::Result<i32> {
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {
                     let toolchain = get_local_toolchain(
                         profiles,
-                        &[CodegenBackend::Llvm],
+                        backends,
                         rustc,
                         *ToolchainConfig::default()
                             .rustdoc(opts.rustdoc.as_deref())
