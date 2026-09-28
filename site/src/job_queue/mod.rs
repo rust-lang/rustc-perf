@@ -260,7 +260,7 @@ pub async fn enqueue_benchmark_request(
     let backends = request.backends()?;
     let profiles = request.profiles()?;
     let targets = request.targets()?;
-    let benchmarks = request.benchmarks()?;
+    let benchmarks = request.benchmarks();
 
     #[derive(PartialEq, Debug)]
     enum EnqueueMode {

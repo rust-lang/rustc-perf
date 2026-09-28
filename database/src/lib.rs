@@ -1159,9 +1159,8 @@ impl BenchmarkRequest {
     }
 
     /// Get the targets for the request
-    pub fn benchmarks(&self) -> anyhow::Result<Vec<String>> {
-        let benchmarks = parse_benchmarks(&self.benchmarks).map_err(|e| anyhow::anyhow!("{e}"))?;
-        Ok(benchmarks)
+    pub fn benchmarks(&self) -> Vec<String> {
+        parse_benchmarks(&self.benchmarks)
     }
 
     pub fn is_completed(&self) -> bool {
@@ -1183,7 +1182,7 @@ pub enum BenchmarkRequestInsertResult {
     NothingInserted,
 }
 
-fn parse_comma_separated<T>(raw_string: &str, name: &str) -> Result<Vec<T>, String>
+fn parse_comma_separated<T>(raw_string: &str) -> Result<Vec<T>, <T as FromStr>::Err>
 where
     T: FromStr,
 {
@@ -1191,21 +1190,21 @@ where
         .split(',')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .map(|s| T::from_str(s).map_err(|_| format!("Invalid {name}: {s}")))
+        .map(|s| T::from_str(s))
         .collect()
 }
 
 pub fn parse_backends(backends: &str) -> Result<Vec<CodegenBackend>, String> {
-    parse_comma_separated(backends, "backend")
+    parse_comma_separated(backends).map_err(|e| format!("Invalid backend: {e}"))
 }
 
 pub fn parse_profiles(profiles: &str) -> Result<Vec<Profile>, String> {
-    parse_comma_separated(profiles, "profile")
+    parse_comma_separated(profiles).map_err(|e| format!("Invalid profile: {e}"))
 }
 
 pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
     let available = Target::available_targets();
-    let targets = parse_comma_separated(targets, "target")?;
+    let targets = parse_comma_separated(targets).map_err(|e| format!("Invalid target: {e}"))?;
     if !targets.iter().all(|t| available.contains(t)) {
         return Err(format!(
             "Only the available targets `{}` can be specified",
@@ -1219,8 +1218,9 @@ pub fn parse_targets(targets: &str) -> Result<Vec<Target>, String> {
     Ok(targets)
 }
 
-pub fn parse_benchmarks(benchmarks: &str) -> Result<Vec<String>, String> {
-    parse_comma_separated(benchmarks, "benchmark")
+pub fn parse_benchmarks(benchmarks: &str) -> Vec<String> {
+    let Ok(res) = parse_comma_separated(benchmarks);
+    res
 }
 
 /// Cached information about benchmark requests in the DB
@@ -1491,25 +1491,21 @@ mod test {
 
     #[test]
     fn test_comma_separated() {
-        assert!(parse_comma_separated::<String>("", "").unwrap().is_empty());
+        assert!(parse_comma_separated::<String>("").unwrap().is_empty());
         assert_eq!(
-            parse_comma_separated::<String>("a", "").unwrap().as_slice(),
+            parse_comma_separated::<String>("a").unwrap().as_slice(),
             ["a".to_string()]
         );
         assert_eq!(
-            parse_comma_separated::<String>("a,b", "")
-                .unwrap()
-                .as_slice(),
+            parse_comma_separated::<String>("a,b").unwrap().as_slice(),
             ["a".to_string(), "b".to_string()]
         );
         assert_eq!(
-            parse_comma_separated::<String>("a,b,c", "")
-                .unwrap()
-                .as_slice(),
+            parse_comma_separated::<String>("a,b,c").unwrap().as_slice(),
             ["a".to_string(), "b".to_string(), "c".to_string()]
         );
         assert_eq!(
-            parse_comma_separated::<String>("a, b ,c", "")
+            parse_comma_separated::<String>("a, b ,c")
                 .unwrap()
                 .as_slice(),
             ["a".to_string(), "b".to_string(), "c".to_string()]
