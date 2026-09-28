@@ -79,24 +79,34 @@ fn n_normal_benchmarks_remaining(n: usize) -> String {
     format!("{n} normal benchmark{suffix} remaining")
 }
 
-struct BenchmarkErrors(usize);
+struct BenchmarkErrors {
+    errors: usize,
+    successes: usize,
+}
 
 impl BenchmarkErrors {
     fn new() -> BenchmarkErrors {
-        BenchmarkErrors(0)
+        BenchmarkErrors {
+            errors: 0,
+            successes: 0,
+        }
     }
 
-    fn incr(&mut self) {
-        self.0 += 1;
+    fn incr_error(&mut self) {
+        self.errors += 1;
+    }
+
+    fn incr_success(&mut self) {
+        self.successes += 1;
     }
 
     fn add(&mut self, count: usize) {
-        self.0 += count;
+        self.errors += count;
     }
 
     fn fail_if_nonzero(self) -> anyhow::Result<()> {
-        if self.0 > 0 {
-            anyhow::bail!("{} benchmarks failed", self.0)
+        if self.errors > 0 {
+            anyhow::bail!("{} benchmarks failed", self.errors)
         }
         Ok(())
     }
@@ -232,9 +242,11 @@ fn generate_diffs(
                     let output = out_dir.join(filename(&format!("{prefix2}-diff"), &id_diff));
 
                     if let Err(e) = profiler.diff(&left, &right, &output) {
-                        errors.incr();
+                        errors.incr_error();
                         eprintln!("collector error: {e:?}");
                         continue;
+                    } else {
+                        errors.incr_success();
                     }
 
                     annotated_diffs.push(output);
@@ -2339,7 +2351,7 @@ async fn bench_compile(
         let result = measure(&mut processor).await;
         if let Err(s) = result {
             eprintln!("collector error: Failed to benchmark '{benchmark_name}', recorded: {s:#}");
-            errors.incr();
+            errors.incr_error();
             tx.conn()
                 .record_error(
                     collector.artifact_row_id,
@@ -2348,6 +2360,8 @@ async fn bench_compile(
                     shared.job_id,
                 )
                 .await;
+        } else {
+            errors.incr_success();
         };
         tx.commit().await.expect("committed");
     }
@@ -2412,8 +2426,8 @@ async fn bench_compile(
     let end = start.elapsed();
 
     eprintln!(
-        "collection took {:?} with {} failed benchmarks",
-        end, errors.0
+        "collection took {:?} with {} failed benchmarks. {} succesful benchmarks got written to the database",
+        end, errors.errors, errors.successes
     );
 
     // This ensures that we're good to go with the just updated data.
