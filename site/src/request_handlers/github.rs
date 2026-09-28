@@ -644,8 +644,7 @@ fn parse_benchmark_parameters<'a>(
     }
 
     if let Some(benchmarks) = &params.benchmarks {
-        let benchmarks =
-            parse_benchmarks(benchmarks).map_err(|e| format!("Cannot parse benchmarks: {e}"))?;
+        let benchmarks = parse_benchmarks(benchmarks);
         // FIXME This should be validated in `parse_benchmarks` but we don't have access to `get_compile_benchmarks_metadata` there
         let valid_benchmarks = get_compile_benchmarks_metadata();
         for benchmark in &benchmarks {
@@ -890,7 +889,7 @@ Otherwise LGTM."#),
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue profiles=Doc,Clippy,Opt backends=Cranelift,Llvm"),
             @r#"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: Some("Cranelift,Llvm"), profiles: Some("Doc,Clippy,Opt"), targets: None, benchmarks: None } }))"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue profiles=Foo"),
-            @r#"Err("Cannot parse profiles: Invalid profile: Foo. Valid values are: check, debug, opt, doc, doc-json, clippy")"#);
+            @r#"Err("Cannot parse profiles: Invalid profile: Foo is not a profile. Valid values are: check, debug, opt, doc, doc-json, clippy")"#);
         insta::assert_compact_debug_snapshot!(parse_command("@rust-timer queue profiles=check"),
             @r#"Ok(Queue(QueueCommand { params: BenchmarkParameters { backends: None, profiles: Some("check"), targets: None, benchmarks: None } }))"#);
     }

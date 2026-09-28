@@ -843,7 +843,7 @@ fn parse_benchmark_job_from_row(row: &Row) -> anyhow::Result<BenchmarkJob> {
         deque_counter: row.get::<_, i32>(10) as u32,
         kind: BenchmarkJobKind::from_str(row.get::<_, &str>(12)).map_err(|e| anyhow::anyhow!(e))?,
         is_optional: row.get::<_, bool>(13),
-        benchmarks: parse_benchmarks(&row.get::<_, String>(14)).map_err(|e| anyhow::anyhow!(e))?,
+        benchmarks: parse_benchmarks(&row.get::<_, String>(14)),
     })
 }
 
@@ -1927,8 +1927,7 @@ where
                     kind: BenchmarkJobKind::from_str(row.get::<_, &str>(7))
                         .map_err(|e| anyhow::anyhow!(e))?,
                     is_optional: row.get::<_, bool>(8),
-                    benchmarks: parse_benchmarks(&row.get::<_, String>(9))
-                        .map_err(|e| anyhow::anyhow!(e))?,
+                    benchmarks: parse_benchmarks(&row.get::<_, String>(9)),
                 };
                 let commit_type = row.get::<_, &str>(10);
                 let commit_date = row.get::<_, Option<DateTime<Utc>>>(11);
