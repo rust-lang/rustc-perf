@@ -84,7 +84,6 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
         now
     };
 
-    let current_request_end = current_request_start + expected_duration;
     // This assumes that the requested run is not a stable run, but the surrounding code is already wrong for stable runs
     // anyway, and they're very rare so whatever
     let compile_benchmark_count = get_compile_benchmarks_metadata()
@@ -102,7 +101,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
         .zip(estimate_queue(
             &queue,
             expected_duration,
-            current_request_end,
+            current_request_start,
             compile_benchmark_count,
         ))
         .map(|(req, estimated_end)| request_to_ui(req, HashMap::default(), Some(estimated_end)))
