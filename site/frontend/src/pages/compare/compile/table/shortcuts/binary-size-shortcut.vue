@@ -7,23 +7,17 @@
 import {CompileTestCase} from "../../common";
 import {ArtifactDescription} from "../../../types";
 import Tooltip from "../../../tooltip.vue";
-import {normalizeProfile} from "./utils";
-import {cargo_collector_command} from "../../../../../utils/cargo";
+import {normalizeProfile} from "../../../../../utils/cargo";
+import {
+  cargo_collector_command,
+  normalizeBackendName,
+} from "../../../../../utils/cargo";
 
 const props = defineProps<{
   artifact: ArtifactDescription;
   baseArtifact: ArtifactDescription;
   testCase: CompileTestCase;
 }>();
-
-function normalizeBackend(backend: string): string {
-  if (backend === "llvm") {
-    return "Llvm";
-  } else if (backend == "cranelift") {
-    return "Cranelift";
-  }
-  return "<invalid backend>";
-}
 </script>
 
 <template>
@@ -42,7 +36,7 @@ function normalizeBackend(backend: string): string {
     --rustc2 +{{ props.artifact.commit }} \
     --exact-match {{ testCase.benchmark }} \
     --profile {{ normalizeProfile(testCase.profile) }} \
-    --backend {{ normalizeBackend(testCase.backend) }}</code></pre>
+    --backend {{ normalizeBackendName(testCase.backend) }}</code></pre>
 </template>
 
 <style scoped lang="scss">

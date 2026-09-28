@@ -5,8 +5,12 @@
 
 import {CompileTestCase} from "../../common";
 import {computed} from "vue";
-import {normalizeProfile, normalizeScenario} from "./utils";
-import {cargo_collector_command} from "../../../../../utils/cargo";
+import {
+  cargo_collector_command,
+  normalizeBackendName,
+  normalizeProfile,
+  normalizeScenario,
+} from "../../../../../utils/cargo";
 
 const props = defineProps<{
   commit: string;
@@ -30,7 +34,9 @@ const firstCommit = computed(() => {
     --rustc2 +{{ props.commit }} \</template>
     --exact-match {{ testCase.benchmark }} \
     --profiles {{ normalizeProfile(testCase.profile) }} \
-    --scenarios {{ normalizeScenario(testCase.scenario) }}</code></pre>
+    --scenarios {{ normalizeScenario(testCase.scenario) }} \
+    --backends {{ normalizeBackendName(props.testCase.backend) }} \
+    --frontend-threads {{ props.testCase.frontend_threads }}</code></pre>
 </template>
 
 <style scoped lang="scss">
