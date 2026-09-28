@@ -456,6 +456,8 @@ static MIGRATIONS: &[&str] = &[
     ALTER TABLE artifact_size DROP CONSTRAINT artifact_size_aid_component_key;
     ALTER TABLE artifact_size ADD CONSTRAINT aid_target_component UNIQUE(aid, target, component);
     "#,
+    // Add priority to benchmark_request
+    r#"ALTER TABLE benchmark_request ADD COLUMN priority INT NOT NULL DEFAULT 0"#,
 ];
 
 #[async_trait::async_trait]
@@ -806,7 +808,7 @@ impl PostgresConnection {
 }
 
 // `tag` should be kept as the first column
-const BENCHMARK_REQUEST_COLUMNS: &str = "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets, benchmarks";
+const BENCHMARK_REQUEST_COLUMNS: &str = "tag, parent_sha, pr, commit_type, status, created_at, completed_at, backends, profiles, commit_date, duration_ms, targets, benchmarks, priority";
 
 /// Parse a benchmark job out of a row.
 /// Expects to be used with `SELECT * FROM job_queue`.
@@ -1474,6 +1476,7 @@ where
             profiles,
             targets,
             benchmarks,
+            priority,
         } = benchmark_request;
 
         let row_insert_count = self
@@ -1491,9 +1494,10 @@ where
                     profiles,
                     targets,
                     commit_date,
-                    benchmarks
+                    benchmarks,
+                    priority
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 ON CONFLICT DO NOTHING;
             "#,
                 &[
@@ -1508,6 +1512,7 @@ where
                     targets,
                     commit_date,
                     benchmarks,
+                    priority,
                 ],
             )
             .await
@@ -2062,8 +2067,8 @@ where
 
         for row in rows {
             let tag = row.get::<_, &str>(0);
-            let error_benchmark = row.get::<_, Option<String>>(13);
-            let error_content = row.get::<_, Option<String>>(14);
+            let error_benchmark = row.get::<_, Option<String>>(14);
+            let error_content = row.get::<_, Option<String>>(15);
 
             // We already saw this request, just add errors
             if let Some(errors) = errors.get_mut(tag) {
@@ -2233,6 +2238,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
     let duration_ms = row.get::<_, Option<i32>>(10 + row_offset);
     let targets = row.get::<_, String>(11 + row_offset);
     let benchmarks = row.get::<_, String>(12 + row_offset);
+    let priority = row.get::<_, i32>(13 + row_offset);
 
     let pr = pr.map(|v| v as u32);
 
@@ -2267,6 +2273,7 @@ fn row_to_benchmark_request(row: &Row, row_offset: Option<usize>) -> BenchmarkRe
         profiles,
         targets,
         benchmarks,
+        priority,
     }
 }
 

@@ -103,9 +103,11 @@ async fn record_try_benchmark_request_without_artifacts(
     profiles: &str,
     targets: &str,
     benchmarks: &str,
+    priority: i32,
 ) -> String {
-    let try_request =
-        BenchmarkRequest::create_try_without_artifacts(pr, backends, profiles, targets, benchmarks);
+    let try_request = BenchmarkRequest::create_try_without_artifacts(
+        pr, backends, profiles, targets, benchmarks, priority,
+    );
     log::info!("Inserting try benchmark request {try_request:?}");
 
     match conn.insert_benchmark_request(&try_request).await {
@@ -235,6 +237,7 @@ async fn handle_rust_timer(
                 cmd.params.profiles.unwrap_or(""),
                 cmd.params.targets.unwrap_or(""),
                 cmd.params.benchmarks.unwrap_or(""),
+                0, //TODO
             )
             .await;
             main_client.post_comment(issue.number, comment).await;
@@ -507,6 +510,7 @@ async fn enqueue_sha_build(
             cmd.params.profiles.unwrap_or(""),
             cmd.params.targets.unwrap_or(""),
             cmd.params.benchmarks.unwrap_or(""),
+            0, // TOOD
         )
         .await;
     }

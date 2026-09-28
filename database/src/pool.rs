@@ -575,7 +575,7 @@ mod tests {
             // But this should fail, as we can't have two queued requests at once
             let result = db
                 .insert_benchmark_request(&BenchmarkRequest::create_try_without_artifacts(
-                    42, "", "", "", "",
+                    42, "", "", "", "", 0,
                 ))
                 .await
                 .unwrap();
@@ -674,7 +674,7 @@ mod tests {
         run_postgres_test(|ctx| async {
             let db = ctx.db();
 
-            let req = BenchmarkRequest::create_try_without_artifacts(42, "", "", "", "");
+            let req = BenchmarkRequest::create_try_without_artifacts(42, "", "", "", "", 0);
 
             db.insert_benchmark_request(&req).await.unwrap();
             assert!(
@@ -722,6 +722,7 @@ mod tests {
                 "profiles",
                 "targets",
                 "benchmarks",
+                67,
             );
 
             db.insert_benchmark_request(&req).await.unwrap();
@@ -743,6 +744,7 @@ mod tests {
             assert_eq!(req.backends, loaded.backends);
             assert_eq!(req.targets, loaded.targets);
             assert_eq!(req.benchmarks, loaded.benchmarks);
+            assert_eq!(req.priority, loaded.priority);
 
             Ok(ctx)
         })

@@ -353,22 +353,22 @@ mod tests {
         let start = Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap();
         insta::assert_compact_debug_snapshot!(
             estimate_queue(&[
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
             ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
             @"[0000-01-01T01:00:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z, 0000-01-01T04:00:00Z, 0000-01-01T05:00:00Z]"
         );
 
         insta::assert_compact_debug_snapshot!(
             estimate_queue(&[
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "1,2"),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "3,4,5"),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "6"),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", ""),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "1,2", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "3,4,5", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "6", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
             ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
             @"[0000-01-01T00:20:00Z, 0000-01-01T01:20:00Z, 0000-01-01T01:50:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z]"
         );
