@@ -561,7 +561,7 @@ mod tests {
             let db = ctx.db();
 
             // Insert a try build
-            ctx.insert_try_request(42).await;
+            ctx.insert_try_request(42, 0).await;
             db.attach_shas_to_try_benchmark_request(42, "sha-1", "sha-parent-1", Utc::now())
                 .await
                 .unwrap();
@@ -571,7 +571,7 @@ mod tests {
 
             // Insert a try build for the same PR again
             // This should be fine, because the previous request was already completed
-            ctx.insert_try_request(42).await;
+            ctx.insert_try_request(42, 0).await;
             // But this should fail, as we can't have two queued requests at once
             let result = db
                 .insert_benchmark_request(&BenchmarkRequest::create_try_without_artifacts(
@@ -628,7 +628,7 @@ mod tests {
             // ArtifactsReady
             let req_b = ctx.insert_release_request("1.80.0").await;
             // WaitingForArtifacts
-            ctx.insert_try_request(50).await;
+            ctx.insert_try_request(50, 0).await;
             // InProgress
             let req_d = ctx.insert_master_request("sha-2", "parent-sha-2", 51).await;
             // Completed
