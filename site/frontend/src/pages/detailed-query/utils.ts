@@ -2,13 +2,15 @@ import {
   chromeProfileUrl,
   processedSelfProfileRelativeUrl,
 } from "../../self-profile";
-import {cargo_collector_command} from "../../utils/cargo";
+import {cargo_collector_command, normalizeBackendName} from "../../utils/cargo";
+import {normalizeProfile, normalizeScenario} from "../../utils/cargo";
+import {Profile} from "../compare/compile/common";
 
 export interface Selector {
   commit: string;
   base_commit: string | null;
   benchmark: string;
-  profile: string;
+  profile: Profile;
   scenario: string;
   backend: string;
   target: string;
@@ -159,27 +161,6 @@ export function createDownloadLinksData(selector: Selector | null): {
     };
 
   const state = selector;
-  const profile = (p: string) =>
-    p == "opt"
-      ? "Opt"
-      : p == "doc"
-      ? "Doc"
-      : p == "debug"
-      ? "Debug"
-      : p == "check"
-      ? "Check"
-      : "???";
-  const scenarioFilter = (s: string) =>
-    s == "full"
-      ? "Full"
-      : s == "incr-full"
-      ? "IncrFull"
-      : s == "incr-unchanged"
-      ? "IncrUnchanged"
-      : s.startsWith("incr-patched")
-      ? "IncrPatched"
-      : "???";
-
   const createLinks = (commit: string) => ({
     raw: `/perf/download-raw-self-profile?commit=${commit}&benchmark=${state.benchmark}&profile=${state.profile}&scenario=${state.scenario}&backend=${state.backend}&target=${state.target}&frontend_threads=${state.frontend_threads}`,
     flamegraph: processedSelfProfileRelativeUrl(
@@ -252,8 +233,10 @@ export function createDownloadLinksData(selector: Selector | null): {
       cmd += ` +${commit}`;
     }
     cmd += ` --exact-match ${state.benchmark}`;
-    cmd += ` --profiles ${profile(state.profile)}`;
-    cmd += ` --scenarios ${scenarioFilter(state.scenario)}`;
+    cmd += ` --profiles ${normalizeProfile(state.profile)}`;
+    cmd += ` --scenarios ${normalizeScenario(state.scenario)}`;
+    cmd += ` --backends ${normalizeBackendName(state.backend)}`;
+    cmd += ` --frontend-threads ${state.frontend_threads}`;
     return cmd;
   }
 

@@ -14,6 +14,7 @@ import {
   DeltaData,
   TableRowData,
 } from "./utils";
+import {Profile} from "../compare/compile/common";
 
 const loading = ref(true);
 const data: Ref<SelfProfileResponse | null> = ref(null);
@@ -219,7 +220,7 @@ async function loadData() {
     base_commit: base_commit ?? null,
     benchmark: benchmarkSeparate,
     scenario,
-    profile,
+    profile: profile as Profile,
     backend,
     target,
     frontend_threads,
