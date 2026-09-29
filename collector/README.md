@@ -279,16 +279,21 @@ might be optimized.
 
 ### Preparation
 
-If you are going to use any of the profilers that rely on line numbers
-(OProfile, Cachegrind, Callgrind, DHAT, Massif or Bytehound) use the following
-`bootstrap.toml` file for your local build.
+Add the following entries to the `bootstrap.toml` file for your local build.
+```
+[rust]
+debuginfo-level = 1  # needed for line numbers in profiler output
+[build]
+allocator = "jemalloc"  # needed to match official builds
+```
+If you need line numbers in the profiler output for code *within the LLVM
+backend* (which is unlikely) you should also add these entries.
 ```
 [llvm]
+download-ci-llvm = false
 release-debuginfo = true
-[rust]
-debuginfo-level = 1
 ```
-Without this you won't get useful file names and line numbers in the output.
+That will cause LLVM to be built locally, which takes a long time.
 
 ### Profiling local builds
 
