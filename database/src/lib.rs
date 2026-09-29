@@ -1075,7 +1075,7 @@ impl BenchmarkRequest {
             profiles: String::new(),
             targets: String::new(),
             benchmarks: String::new(),
-            priority: 0,
+            priority: 10,
         }
     }
 

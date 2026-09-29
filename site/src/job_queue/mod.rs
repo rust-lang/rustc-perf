@@ -840,7 +840,7 @@ mod tests {
             ctx.insert_master_request("2038", "1f88", 148350).await;
 
             let queue = build_queue(db).await?;
-            queue_order_matches(&queue, &["1f88", "60ce", "2038", "5f9d", "90b6"]);
+            queue_order_matches(&queue, &["1f88", "2038", "60ce", "5f9d", "90b6"]);
             Ok(ctx)
         })
         .await;
