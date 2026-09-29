@@ -152,8 +152,8 @@ impl TestContext {
     }
 
     /// Create a new try benchmark request without artifacts and add it to the DB.
-    pub async fn insert_try_request(&self, pr: u32) -> BenchmarkRequest {
-        let req = BenchmarkRequest::create_try_without_artifacts(pr, "", "", "", "");
+    pub async fn insert_try_request(&self, pr: u32, priority: i32) -> BenchmarkRequest {
+        let req = BenchmarkRequest::create_try_without_artifacts(pr, "", "", "", "", priority);
         self.db().insert_benchmark_request(&req).await.unwrap();
         req
     }

@@ -153,6 +153,8 @@ fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRe
         let level = &mut pending[finished..][..level_len];
         level.sort_unstable_by_key(|bmr| {
             (
+                // Higher priority requests go first
+                -bmr.priority(),
                 // PR number takes priority
                 bmr.pr().unwrap_or(0),
                 // Order master commits before try commits
@@ -622,7 +624,7 @@ mod tests {
     }
 
     fn create_try(pr: u32) -> BenchmarkRequest {
-        BenchmarkRequest::create_try_without_artifacts(pr, "", "", "", "")
+        BenchmarkRequest::create_try_without_artifacts(pr, "", "", "", "", 0)
     }
 
     fn create_release(tag: &str) -> BenchmarkRequest {
@@ -827,7 +829,7 @@ mod tests {
             // Artifacts ready
             ctx.insert_master_request("5f9d", "2038", 148456).await;
             ctx.insert_master_request("90b6", "5f9d", 148462).await;
-            ctx.insert_try_request(112049).await;
+            ctx.insert_try_request(112049, 0).await;
 
             let db = ctx.db();
             assert!(
@@ -838,7 +840,7 @@ mod tests {
             ctx.insert_master_request("2038", "1f88", 148350).await;
 
             let queue = build_queue(db).await?;
-            queue_order_matches(&queue, &["1f88", "60ce", "2038", "5f9d", "90b6"]);
+            queue_order_matches(&queue, &["1f88", "2038", "60ce", "5f9d", "90b6"]);
             Ok(ctx)
         })
         .await;
@@ -854,6 +856,45 @@ mod tests {
 
             let queue = build_queue(ctx.db()).await?;
             queue_order_matches(&queue, &["sha2", "sha1"]);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn queue_priority() {
+        run_postgres_test(|ctx| async {
+            ctx.add_collector(CollectorBuilder::default()).await;
+
+            ctx.insert_master_request("base", "base2", 1).await;
+            ctx.insert_try_request(2, -1).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(2, "pr2", "base", Utc::now())
+                .await
+                .unwrap();
+            ctx.insert_try_request(3, 0).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(3, "pr3", "base", Utc::now())
+                .await
+                .unwrap();
+            ctx.insert_try_request(4, 1).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(4, "pr4", "base", Utc::now())
+                .await
+                .unwrap();
+            ctx.insert_try_request(5, 0).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(5, "pr5", "base", Utc::now())
+                .await
+                .unwrap();
+            ctx.insert_try_request(6, -1).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(6, "pr6", "base", Utc::now())
+                .await
+                .unwrap();
+
+            let queue = build_queue(ctx.db()).await?;
+            queue_order_matches(&queue, &["base", "pr4", "pr3", "pr5", "pr2", "pr6"]);
             Ok(ctx)
         })
         .await;

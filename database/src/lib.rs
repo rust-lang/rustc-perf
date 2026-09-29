@@ -1013,6 +1013,7 @@ pub struct BenchmarkRequest {
     profiles: String,
     targets: String,
     benchmarks: String,
+    priority: i32,
 }
 
 impl BenchmarkRequest {
@@ -1029,6 +1030,7 @@ impl BenchmarkRequest {
             profiles: String::new(),
             targets: String::new(),
             benchmarks: String::new(),
+            priority: 0,
         }
     }
 
@@ -1039,6 +1041,7 @@ impl BenchmarkRequest {
         profiles: &str,
         targets: &str,
         benchmarks: &str,
+        priority: i32,
     ) -> Self {
         Self {
             commit_type: BenchmarkRequestType::Try {
@@ -1053,6 +1056,7 @@ impl BenchmarkRequest {
             profiles: profiles.to_string(),
             targets: targets.to_string(),
             benchmarks: benchmarks.to_string(),
+            priority,
         }
     }
 
@@ -1071,6 +1075,7 @@ impl BenchmarkRequest {
             profiles: String::new(),
             targets: String::new(),
             benchmarks: String::new(),
+            priority: 10,
         }
     }
 
@@ -1161,6 +1166,10 @@ impl BenchmarkRequest {
     /// Get the targets for the request
     pub fn benchmarks(&self) -> Vec<String> {
         parse_benchmarks(&self.benchmarks)
+    }
+
+    pub fn priority(&self) -> i32 {
+        self.priority
     }
 
     pub fn is_completed(&self) -> bool {
