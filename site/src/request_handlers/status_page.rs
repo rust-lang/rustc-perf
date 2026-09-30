@@ -1,6 +1,6 @@
 use crate::api::status;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::job_queue::build_queue;
+use crate::job_queue::{build_queue, estimate_queue};
 use crate::load::SiteCtxt;
 use chrono::{DateTime, Utc};
 use collector::compile::benchmark::category::Category;
@@ -122,30 +122,6 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
         requests,
         collectors,
     })
-}
-
-fn estimate_queue(
-    queue: &[BenchmarkRequest],
-    expected_duration: Duration,
-    current_request_start: DateTime<Utc>,
-    total_benchmark_count: usize,
-) -> impl Iterator<Item = DateTime<Utc>> {
-    let total_benchmark_count = total_benchmark_count.max(1); // avoid dividing by zero
-    queue
-        .iter()
-        .scan(current_request_start, move |current_time, req| {
-            let req_benchmark_count = req.benchmarks().len();
-            // For benchmark requests that don't execute all benchmarks, we approximate that each benchmark takes the same time to execute
-            // and linearly scale the expected duration
-            let benchmark_percentage_executed = if req_benchmark_count == 0 {
-                1.0
-            } else {
-                let ratio = req_benchmark_count as f64 / total_benchmark_count as f64;
-                ratio.clamp(0.0, 1.0) // just in case
-            };
-            *current_time += expected_duration.mul_f64(benchmark_percentage_executed);
-            Some(*current_time)
-        })
 }
 
 async fn build_collectors(
@@ -337,39 +313,5 @@ fn job_to_ui(job: &BenchmarkJob) -> status::BenchmarkJob {
             }
         },
         deque_counter: job.deque_count(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::request_handlers::status_page::estimate_queue;
-    use chrono::{TimeZone, Utc};
-    use database::BenchmarkRequest;
-    use std::time::Duration;
-
-    #[test]
-    fn test_estimate_queue() {
-        let start = Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap();
-        insta::assert_compact_debug_snapshot!(
-            estimate_queue(&[
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
-            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
-            @"[0000-01-01T01:00:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z, 0000-01-01T04:00:00Z, 0000-01-01T05:00:00Z]"
-        );
-
-        insta::assert_compact_debug_snapshot!(
-            estimate_queue(&[
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "1,2", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "3,4,5", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "6", 0),
-                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
-            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
-            @"[0000-01-01T00:20:00Z, 0000-01-01T01:20:00Z, 0000-01-01T01:50:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z]"
-        );
     }
 }

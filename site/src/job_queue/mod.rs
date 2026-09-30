@@ -4,7 +4,7 @@ use crate::github::comparison_summary::post_comparison_comment;
 use crate::job_queue::utils::{parse_release_string, partition_in_place};
 use crate::load::SiteCtxt;
 use anyhow::Context;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use collector::benchmark_set::{
     BENCHMARK_SET_RUNTIME_BENCHMARKS, BENCHMARK_SET_RUSTC, get_benchmark_sets_for_target,
 };
@@ -242,6 +242,30 @@ pub async fn build_queue(
     let mut pending = sort_benchmark_requests(pending);
     queue.append(&mut pending);
     Ok(queue)
+}
+
+pub fn estimate_queue(
+    queue: &[BenchmarkRequest],
+    expected_duration: Duration,
+    current_request_start: DateTime<Utc>,
+    total_benchmark_count: usize,
+) -> impl Iterator<Item = DateTime<Utc>> {
+    let total_benchmark_count = total_benchmark_count.max(1); // avoid dividing by zero
+    queue
+        .iter()
+        .scan(current_request_start, move |current_time, req| {
+            let req_benchmark_count = req.benchmarks().len();
+            // For benchmark requests that don't execute all benchmarks, we approximate that each benchmark takes the same time to execute
+            // and linearly scale the expected duration
+            let benchmark_percentage_executed = if req_benchmark_count == 0 {
+                1.0
+            } else {
+                let ratio = req_benchmark_count as f64 / total_benchmark_count as f64;
+                ratio.clamp(0.0, 1.0) // just in case
+            };
+            *current_time += expected_duration.mul_f64(benchmark_percentage_executed);
+            Some(*current_time)
+        })
 }
 
 /// Create all necessary jobs for the given benchmark request
@@ -609,8 +633,8 @@ pub async fn create_job_queue_process(
 
 #[cfg(test)]
 mod tests {
-    use crate::job_queue::{build_queue, process_benchmark_requests};
-    use chrono::Utc;
+    use crate::job_queue::{build_queue, estimate_queue, process_benchmark_requests};
+    use chrono::{TimeZone, Utc};
     use database::pool::JobEnqueueResult;
     use database::tests::builder::CollectorBuilder;
     use database::tests::run_postgres_test;
@@ -618,6 +642,7 @@ mod tests {
         BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestStatus,
         BenchmarkSet, CodegenBackend, Profile, Target,
     };
+    use std::time::Duration;
 
     fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
         BenchmarkRequest::create_master(sha, parent, pr, Utc::now())
@@ -921,5 +946,31 @@ mod tests {
             Ok(ctx)
         })
         .await;
+    }
+
+    #[test]
+    fn test_estimate_queue() {
+        let start = Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap();
+        insta::assert_compact_debug_snapshot!(
+            estimate_queue(&[
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
+            @"[0000-01-01T01:00:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z, 0000-01-01T04:00:00Z, 0000-01-01T05:00:00Z]"
+        );
+
+        insta::assert_compact_debug_snapshot!(
+            estimate_queue(&[
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "1,2", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "3,4,5", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "6", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
+            @"[0000-01-01T00:20:00Z, 0000-01-01T01:20:00Z, 0000-01-01T01:50:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z]"
+        );
     }
 }
