@@ -302,6 +302,7 @@ fn request_to_ui(
         duration_s,
         errors,
         end_estimated: estimated_end.is_some(),
+        priority: req.priority(),
     }
 }
 

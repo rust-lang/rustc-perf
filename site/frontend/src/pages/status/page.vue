@@ -272,6 +272,7 @@ loadStatusData(loading);
               <th>Progress</th>
               <th>Complete at</th>
               <th>Duration</th>
+              <th>Priority</th>
               <th>Errors</th>
             </tr>
           </thead>
@@ -302,6 +303,9 @@ loadStatusData(loading);
                 </td>
                 <td style="text-align: right">
                   {{ getDuration(req) }}
+                </td>
+                <td>
+                  {{ req.priority }}
                 </td>
 
                 <td>
