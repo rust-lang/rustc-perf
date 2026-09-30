@@ -10,6 +10,7 @@ export type BenchmarkRequest = {
   completedAt: string | null;
   endEstimated: boolean;
   durationS: number | null;
+  priority: number
   errors: Dict<string>;
 };
 
