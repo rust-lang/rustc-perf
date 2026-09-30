@@ -304,7 +304,7 @@ loadStatusData(loading);
                 <td style="text-align: right">
                   {{ getDuration(req) }}
                 </td>
-                <td>
+                <td style="text-align: right">
                   {{ req.priority }}
                 </td>
 
