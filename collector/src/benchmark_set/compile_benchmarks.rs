@@ -49,6 +49,7 @@ pub(super) const MANY_ASSOC_ITEMS: &str = "many-assoc-items";
 pub(super) const MATCH_STRESS: &str = "match-stress";
 pub(super) const NALGEBRA_0_33_0: &str = "nalgebra-0.33.0";
 pub(super) const NALGEBRA_0_33_0_NEW_SOLVER: &str = "nalgebra-0.33.0-new-solver";
+pub(super) const NEXT_SOLVER_STRESS: &str = "next-solver-stress";
 pub(super) const PROJECTION_CACHING: &str = "projection-caching";
 pub(super) const REGEX_AUTOMATA_0_4_8: &str = "regex-automata-0.4.8";
 pub(super) const REGRESSION_31157: &str = "regression-31157";

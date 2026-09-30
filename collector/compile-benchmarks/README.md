@@ -104,6 +104,13 @@ compiler in interesting ways.
   one involving
   [`exhaustive_patterns`](https://github.com/rust-lang/rust/pull/79394)) of
   `match` code that caused bad performance in the past.
+- **next-solver-stress**: Contains reduced cases for several next-solver
+  performance regressions: redundant fulfillment scans
+  ([rust-lang/rust#159933](https://github.com/rust-lang/rust/issues/159933)),
+  nested RPIT parser combinators
+  ([trait-system-refactor-initiative#254](https://github.com/rust-lang/trait-system-refactor-initiative/issues/254)),
+  and an opaque-type candidate blowup
+  ([trait-system-refactor-initiative#267](https://github.com/rust-lang/trait-system-refactor-initiative/issues/267)).
 - **projection-caching**: A small program that causes extremely, deeply nested
   types which stress the trait system's projection cache. Removing that cache
   resulted in hours long compilations for some programs using futures,
