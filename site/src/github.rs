@@ -2,8 +2,9 @@ pub mod client;
 pub mod comparison_summary;
 pub mod triage;
 
-use crate::job_queue::build_queue;
+use crate::job_queue::{build_queue, estimate_queue_using_conn};
 use crate::load::SiteCtxt;
+use anyhow::bail;
 use chrono::Utc;
 use serde::Deserialize;
 use std::time::Duration;
@@ -19,7 +20,7 @@ pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-la
 pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 
 use crate::github::client::Commit;
-use database::{BenchmarkJobStatus, BenchmarkRequestStatus, Connection};
+use database::Connection;
 
 /// Enqueues the given SHA and returns a message that should be sent as a comment to the corresponding PR.
 /// If no benchmark request was found to which the commit SHA could be attached, returns `Ok(None)`.
@@ -82,91 +83,18 @@ fn comparison_url(commit: &str, parent: &str) -> String {
 async fn estimate_queue_info(
     conn: &dyn Connection,
     commit_sha: &str,
-) -> anyhow::Result<(u64, Duration)> {
+) -> anyhow::Result<(usize, Duration)> {
     let queue = build_queue(conn).await?;
+    let estimates = estimate_queue_using_conn(conn, &queue).await?;
 
-    // Queue without in-progress artifacts
-    let queue_waiting = queue
-        .iter()
-        .filter(|req| match req.status() {
-            BenchmarkRequestStatus::WaitingForArtifacts
-            | BenchmarkRequestStatus::ArtifactsReady => true,
-            BenchmarkRequestStatus::Completed { .. } | BenchmarkRequestStatus::InProgress => false,
-        })
-        .collect::<Vec<_>>();
-
-    // Measure expected duration of waiting artifacts
-    // How many commits are waiting (i.e. not running) in the queue before the specified commit?
-    let preceding_waiting = queue_waiting
-        .iter()
-        .position(|c| c.tag() == Some(commit_sha))
-        .unwrap_or(queue_waiting.len().saturating_sub(1)) as u64;
-
-    // Guess the expected full run duration of a waiting commit
-    let last_duration = conn
-        .get_last_n_completed_benchmark_requests(10)
-        .await?
-        .into_iter()
-        .find(|request| request.request.is_master())
-        .map(|collection| match collection.request.status() {
-            BenchmarkRequestStatus::WaitingForArtifacts
-            | BenchmarkRequestStatus::ArtifactsReady
-            | BenchmarkRequestStatus::InProgress => {
-                unreachable!(
-                    "Non-completed request returned from `get_last_n_completed_benchmark_requests`"
-                )
-            }
-            BenchmarkRequestStatus::Completed { duration, .. } => duration,
-        })
-        .unwrap_or(Duration::ZERO);
-
-    // Guess that the duration will take approximately 40 minutes if we don't have data or it's
-    // suspiciously fast.
-    let last_duration = last_duration.max(Duration::from_secs(2400));
-
-    let mut expected_duration = last_duration * (preceding_waiting + 1) as u32;
-    let mut preceding = preceding_waiting;
-
-    // Add in-progress artifact duration and count
-    let now = Utc::now();
-    let jobs = conn.get_jobs_of_in_progress_benchmark_requests().await?;
-    for req in queue
-        .into_iter()
-        .filter(|req| matches!(req.status(), BenchmarkRequestStatus::InProgress))
-    {
-        let Some(tag) = req.tag() else {
-            continue;
-        };
-        if tag == commit_sha {
-            continue;
+    for (i, (req, estimate)) in queue.iter().zip(estimates).enumerate() {
+        if req.tag() == Some(commit_sha) {
+            let now = Utc::now();
+            return Ok((i, (estimate - now).to_std().unwrap_or_default()));
         }
-        let Some(jobs) = jobs.get(tag) else {
-            preceding += 1;
-            expected_duration += last_duration;
-            continue;
-        };
-        let duration_elapsed = jobs
-            .iter()
-            .map(|j| match j.status() {
-                BenchmarkJobStatus::Queued => Duration::ZERO,
-                BenchmarkJobStatus::InProgress { started_at, .. } => now
-                    .signed_duration_since(started_at)
-                    .to_std()
-                    .unwrap_or_default(),
-                BenchmarkJobStatus::Completed {
-                    completed_at,
-                    started_at,
-                    ..
-                } => completed_at
-                    .signed_duration_since(started_at)
-                    .to_std()
-                    .unwrap_or_default(),
-            })
-            .sum::<Duration>();
-        preceding += 1;
-        expected_duration += last_duration.saturating_sub(duration_elapsed);
     }
-    Ok((preceding, expected_duration))
+
+    bail!("Tried to estimate queue info for commit `{commit_sha}` which is not in queue");
 }
 
 #[derive(Debug, Deserialize)]
