@@ -423,8 +423,11 @@ impl<'a> CargoProcess<'a> {
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
 
             assert!(
-                !self.rustc_args.iter().any(|arg| arg.contains("-Zthreads")),
-                "rustc_args should not contain -Zthreads, set frontend_threads in perf-config.json instead"
+                !self
+                    .rustc_args
+                    .iter()
+                    .any(|arg| arg.contains("--jobs-frontend")),
+                "rustc_args should not contain --jobs-frontend, set frontend_threads in perf-config.json instead"
             );
             cmd.env(
                 "RUSTC_THREAD_COUNT",
