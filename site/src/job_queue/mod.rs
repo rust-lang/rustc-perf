@@ -155,11 +155,10 @@ fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRe
             (
                 // Higher priority requests go first
                 -bmr.priority(),
-                // PR number takes priority
-                bmr.pr().unwrap_or(0),
+                // Older requests take priority
+                bmr.created_at(),
                 // Order master commits before try commits
                 if bmr.is_master() { 0 } else { 1 },
-                bmr.created_at(),
             )
         });
         for c in level {
@@ -923,7 +922,7 @@ mod tests {
                 .unwrap();
 
             let queue = build_queue(ctx.db()).await?;
-            queue_order_matches(&queue, &["base", "pr2", "pr3", "pr4"]);
+            queue_order_matches(&queue, &["base", "pr4", "pr2", "pr3"]);
             Ok(ctx)
         })
         .await;
