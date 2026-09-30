@@ -1,5 +1,5 @@
 use crate::api::status;
-use crate::job_queue::{build_queue, estimate_queue_using_jobs};
+use crate::job_queue::{build_queue, estimate_queue_times_using_jobs};
 use crate::load::SiteCtxt;
 use chrono::{DateTime, Utc};
 use database::{
@@ -37,7 +37,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::R
 
     let mut requests: Vec<status::BenchmarkRequest> = queue
         .iter()
-        .zip(estimate_queue_using_jobs(
+        .zip(estimate_queue_times_using_jobs(
             &queue,
             &in_progress_jobs,
             &completed,

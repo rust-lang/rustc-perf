@@ -2,7 +2,7 @@ pub mod client;
 pub mod comparison_summary;
 pub mod triage;
 
-use crate::job_queue::{build_queue, estimate_queue_using_conn};
+use crate::job_queue::{build_queue, estimate_queue_times_using_conn};
 use crate::load::SiteCtxt;
 use anyhow::bail;
 use chrono::Utc;
@@ -85,7 +85,7 @@ async fn estimate_queue_info(
     commit_sha: &str,
 ) -> anyhow::Result<(usize, Duration)> {
     let queue = build_queue(conn).await?;
-    let estimates = estimate_queue_using_conn(conn, &queue).await?;
+    let estimates = estimate_queue_times_using_conn(conn, &queue).await?;
 
     for (i, (req, estimate)) in queue.iter().zip(estimates).enumerate() {
         if req.tag() == Some(commit_sha) {

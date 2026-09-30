@@ -248,20 +248,20 @@ pub async fn build_queue(
     Ok(queue)
 }
 
-pub async fn estimate_queue_using_conn(
+pub async fn estimate_queue_times_using_conn(
     conn: &dyn Connection,
     queue: &[BenchmarkRequest],
 ) -> Result<impl Iterator<Item = DateTime<Utc>>, anyhow::Error> {
     let in_progress_jobs = conn.get_jobs_of_in_progress_benchmark_requests().await?;
     let completed = conn.get_last_n_completed_benchmark_requests(10).await?;
-    Ok(estimate_queue_using_jobs(
+    Ok(estimate_queue_times_using_jobs(
         queue,
         &in_progress_jobs,
         &completed,
     ))
 }
 
-pub fn estimate_queue_using_jobs<'a>(
+pub fn estimate_queue_times_using_jobs<'a>(
     queue: &'a [BenchmarkRequest],
     in_progress_jobs: &HashMap<String, Vec<database::BenchmarkJob>>,
     completed: &[BenchmarkRequestWithErrors],
@@ -324,7 +324,7 @@ pub fn estimate_queue_using_jobs<'a>(
         })
         .count();
 
-    estimate_queue(
+    estimate_queue_times(
         queue,
         expected_duration,
         current_request_start,
@@ -332,7 +332,7 @@ pub fn estimate_queue_using_jobs<'a>(
     )
 }
 
-pub fn estimate_queue(
+pub fn estimate_queue_times(
     queue: &[BenchmarkRequest],
     expected_duration: Duration,
     current_request_start: DateTime<Utc>,
@@ -721,7 +721,7 @@ pub async fn create_job_queue_process(
 
 #[cfg(test)]
 mod tests {
-    use crate::job_queue::{build_queue, estimate_queue, process_benchmark_requests};
+    use crate::job_queue::{build_queue, estimate_queue_times, process_benchmark_requests};
     use chrono::{TimeZone, Utc};
     use database::pool::JobEnqueueResult;
     use database::tests::builder::CollectorBuilder;
@@ -1040,7 +1040,7 @@ mod tests {
     fn test_estimate_queue() {
         let start = Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap();
         insta::assert_compact_debug_snapshot!(
-            estimate_queue(&[
+            estimate_queue_times(&[
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
@@ -1051,7 +1051,7 @@ mod tests {
         );
 
         insta::assert_compact_debug_snapshot!(
-            estimate_queue(&[
+            estimate_queue_times(&[
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "1,2", 0),
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
                 BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "3,4,5", 0),
