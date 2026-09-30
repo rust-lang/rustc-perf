@@ -19,6 +19,7 @@ use database::{
 };
 use hashbrown::HashMap;
 use parking_lot::RwLock;
+use std::cmp::Reverse;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::time::{self, Duration, MissedTickBehavior};
@@ -158,7 +159,7 @@ fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRe
         level.sort_unstable_by_key(|bmr| {
             (
                 // Higher priority requests go first
-                -bmr.priority(),
+                Reverse(bmr.priority()),
                 // Older requests take priority
                 bmr.created_at(),
                 // Order master commits before try commits
