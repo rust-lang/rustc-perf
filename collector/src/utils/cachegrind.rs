@@ -103,7 +103,7 @@ fn run_cg_diff(cgout1: &Path, cgout2: &Path, path: &Path) -> anyhow::Result<()> 
 fn annotate_diff(cgout: &Path, path: &Path) -> anyhow::Result<()> {
     check_installed("cg_annotate")?;
     let status = Command::new("cg_annotate")
-        .arg("--show-percs=no")
+        .arg("--show-percs=yes")
         .arg(cgout)
         .stderr(Stdio::inherit())
         .stdout(File::create(path)?)
