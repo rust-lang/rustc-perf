@@ -1,19 +1,23 @@
 mod utils;
 
+use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::github::comparison_summary::post_comparison_comment;
 use crate::job_queue::utils::{parse_release_string, partition_in_place};
 use crate::load::SiteCtxt;
 use anyhow::Context;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use collector::benchmark_set::{
     BENCHMARK_SET_RUNTIME_BENCHMARKS, BENCHMARK_SET_RUSTC, get_benchmark_sets_for_target,
 };
+use collector::compile::benchmark::category::Category;
 use database::pool::{JobEnqueueResult, Transaction};
 use database::{
-    BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestIndex, BenchmarkRequestInsertResult,
-    BenchmarkRequestStatus, BenchmarkRequestType, CodegenBackend, Connection, Date,
-    PendingBenchmarkRequests, Profile, QueuedCommit, Target,
+    BenchmarkJobKind, BenchmarkJobStatus, BenchmarkRequest, BenchmarkRequestIndex,
+    BenchmarkRequestInsertResult, BenchmarkRequestStatus, BenchmarkRequestType,
+    BenchmarkRequestWithErrors, CodegenBackend, Connection, Date, PendingBenchmarkRequests,
+    Profile, QueuedCommit, Target,
 };
+use hashbrown::HashMap;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Instant;
@@ -242,6 +246,114 @@ pub async fn build_queue(
     let mut pending = sort_benchmark_requests(pending);
     queue.append(&mut pending);
     Ok(queue)
+}
+
+pub async fn estimate_queue_times_using_conn(
+    conn: &dyn Connection,
+    queue: &[BenchmarkRequest],
+) -> Result<impl Iterator<Item = DateTime<Utc>>, anyhow::Error> {
+    let in_progress_jobs = conn.get_jobs_of_in_progress_benchmark_requests().await?;
+    let completed = conn.get_last_n_completed_benchmark_requests(10).await?;
+    Ok(estimate_queue_times_using_jobs(
+        queue,
+        &in_progress_jobs,
+        &completed,
+    ))
+}
+
+pub fn estimate_queue_times_using_jobs<'a>(
+    queue: &'a [BenchmarkRequest],
+    in_progress_jobs: &HashMap<String, Vec<database::BenchmarkJob>>,
+    completed: &[BenchmarkRequestWithErrors],
+) -> impl Iterator<Item = DateTime<Utc>> + use<'a> {
+    // Figure out approximately how long was the most recent master benchmark request
+    // This ignores the fact that different kinds of requests (e.g. release ones) can have different
+    // durations, but these are rare and it's not worth the complexity to have multiple estimates
+    // here.
+    let expected_duration = completed
+        .iter()
+        .filter(|req| req.request.is_master() && req.errors.is_empty())
+        .filter_map(|req| match req.request.status() {
+            BenchmarkRequestStatus::Completed { duration, .. } => Some(duration),
+            _ => None,
+        })
+        .next()
+        .unwrap_or(Duration::from_secs(3600));
+
+    // Here we compute the estimated end time for queued requests, and convert the requests to their
+    // frontend representation.
+    // We assume that at most a single request is in progress
+    let now = Utc::now();
+
+    // The estimated start time of the current in-progress request
+    let current_request_start = if let Some(req) = queue.first().take_if(|req| req.is_in_progress())
+    {
+        // Here we need to somehow guess when did the current in-progress request actually start,
+        // as we do not have that information readily available
+        let request_jobs = in_progress_jobs
+            .get(req.tag().expect("In progress request without a tag"))
+            .map(|jobs| jobs.as_slice())
+            .unwrap_or(&[]);
+
+        // Take the earliest start time, if some job has already started
+        // If there are no started jobs yet, just fall back to the current time (we guess that a
+        // job will start "any time now")
+        request_jobs
+            .iter()
+            .filter_map(|job| match job.status() {
+                BenchmarkJobStatus::Queued => None,
+                BenchmarkJobStatus::InProgress { started_at, .. }
+                | BenchmarkJobStatus::Completed { started_at, .. } => Some(*started_at),
+            })
+            .min()
+            .unwrap_or(now)
+    } else {
+        // Assume that the next request (if any) will start at any given moment
+        now
+    };
+
+    // This assumes that the requested run is not a stable run, but the surrounding code is already wrong for stable runs
+    // anyway, and they're very rare so whatever
+    let compile_benchmark_count = get_compile_benchmarks_metadata()
+        .iter()
+        .filter(|(_, meta)| {
+            matches!(
+                meta.perf_config.category(),
+                Category::Primary | Category::Secondary
+            )
+        })
+        .count();
+
+    estimate_queue_times(
+        queue,
+        expected_duration,
+        current_request_start,
+        compile_benchmark_count,
+    )
+}
+
+pub fn estimate_queue_times(
+    queue: &[BenchmarkRequest],
+    expected_duration: Duration,
+    current_request_start: DateTime<Utc>,
+    total_benchmark_count: usize,
+) -> impl Iterator<Item = DateTime<Utc>> {
+    let total_benchmark_count = total_benchmark_count.max(1); // avoid dividing by zero
+    queue
+        .iter()
+        .scan(current_request_start, move |current_time, req| {
+            let req_benchmark_count = req.benchmarks().len();
+            // For benchmark requests that don't execute all benchmarks, we approximate that each benchmark takes the same time to execute
+            // and linearly scale the expected duration
+            let benchmark_percentage_executed = if req_benchmark_count == 0 {
+                1.0
+            } else {
+                let ratio = req_benchmark_count as f64 / total_benchmark_count as f64;
+                ratio.clamp(0.0, 1.0) // just in case
+            };
+            *current_time += expected_duration.mul_f64(benchmark_percentage_executed);
+            Some(*current_time)
+        })
 }
 
 /// Create all necessary jobs for the given benchmark request
@@ -609,8 +721,8 @@ pub async fn create_job_queue_process(
 
 #[cfg(test)]
 mod tests {
-    use crate::job_queue::{build_queue, process_benchmark_requests};
-    use chrono::Utc;
+    use crate::job_queue::{build_queue, estimate_queue_times, process_benchmark_requests};
+    use chrono::{TimeZone, Utc};
     use database::pool::JobEnqueueResult;
     use database::tests::builder::CollectorBuilder;
     use database::tests::run_postgres_test;
@@ -618,6 +730,7 @@ mod tests {
         BenchmarkJobConclusion, BenchmarkJobKind, BenchmarkRequest, BenchmarkRequestStatus,
         BenchmarkSet, CodegenBackend, Profile, Target,
     };
+    use std::time::Duration;
 
     fn create_master(sha: &str, parent: &str, pr: u32) -> BenchmarkRequest {
         BenchmarkRequest::create_master(sha, parent, pr, Utc::now())
@@ -921,5 +1034,31 @@ mod tests {
             Ok(ctx)
         })
         .await;
+    }
+
+    #[test]
+    fn test_estimate_queue() {
+        let start = Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap();
+        insta::assert_compact_debug_snapshot!(
+            estimate_queue_times(&[
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
+            @"[0000-01-01T01:00:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z, 0000-01-01T04:00:00Z, 0000-01-01T05:00:00Z]"
+        );
+
+        insta::assert_compact_debug_snapshot!(
+            estimate_queue_times(&[
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "1,2", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "3,4,5", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "6", 0),
+                BenchmarkRequest::create_try_without_artifacts(0, "", "", "", "", 0),
+            ], Duration::from_hours(1), start, 6).collect::<Vec<_>>(),
+            @"[0000-01-01T00:20:00Z, 0000-01-01T01:20:00Z, 0000-01-01T01:50:00Z, 0000-01-01T02:00:00Z, 0000-01-01T03:00:00Z]"
+        );
     }
 }

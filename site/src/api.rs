@@ -393,6 +393,7 @@ pub mod status {
         // If true, then `completed_at` is only an estimation of when will the request complete
         pub end_estimated: bool,
         pub duration_s: Option<u64>,
+        pub priority: i32,
         pub errors: HashMap<String, String>,
     }
 
