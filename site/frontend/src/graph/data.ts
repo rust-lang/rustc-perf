@@ -15,7 +15,7 @@ export interface GraphsSelector {
 }
 
 export interface Series {
-  points: [number];
+  points: number[];
   interpolated_indices: Set<number> | number[];
 }
 
