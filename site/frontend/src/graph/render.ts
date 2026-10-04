@@ -495,7 +495,8 @@ export function renderPlots(
         scenarios[Object.keys(scenarios)[0]].interpolated_indices
       );
 
-      let plotOpts = genPlotOpts({
+      type PlotOpts = ReturnType<typeof genPlotOpts> & {title?: string};
+      let plotOpts: PlotOpts = genPlotOpts({
         width,
         height,
         yAxisLabel,
