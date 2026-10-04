@@ -375,22 +375,11 @@ function genPlotOpts({
 }
 
 function normalizeData(data: CompileGraphData) {
-  function optInterpolated(profile) {
-    for (const scenario in profile) {
-      profile[scenario].interpolated_indices = new Set(
-        profile[scenario].interpolated_indices
-      );
-    }
-
-    return profile;
-  }
-
   for (const name of Object.keys(data.benchmarks)) {
     for (const profile of profiles) {
       if (data.benchmarks[name].hasOwnProperty(profile)) {
-        data.benchmarks[name][profile.toLowerCase()] = optInterpolated(
-          data.benchmarks[name][profile]
-        );
+        data.benchmarks[name][profile.toLowerCase()] =
+          data.benchmarks[name][profile];
         delete data.benchmarks[name][profile];
       }
     }
@@ -502,9 +491,12 @@ export function renderPlots(
         });
       }
 
-      let indices = scenarios[Object.keys(scenarios)[0]].interpolated_indices;
+      let indices = new Set(
+        scenarios[Object.keys(scenarios)[0]].interpolated_indices
+      );
 
-      let plotOpts = genPlotOpts({
+      type PlotOpts = ReturnType<typeof genPlotOpts> & {title?: string};
+      let plotOpts: PlotOpts = genPlotOpts({
         width,
         height,
         yAxisLabel,
