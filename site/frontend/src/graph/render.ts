@@ -502,7 +502,9 @@ export function renderPlots(
         });
       }
 
-      let indices = scenarios[Object.keys(scenarios)[0]].interpolated_indices;
+      let indices = new Set(
+        scenarios[Object.keys(scenarios)[0]].interpolated_indices
+      );
 
       let plotOpts = genPlotOpts({
         width,
