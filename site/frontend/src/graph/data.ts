@@ -16,7 +16,7 @@ export interface GraphsSelector {
 
 export interface Series {
   points: number[];
-  interpolated_indices: Set<number> | number[];
+  interpolated_indices: number[];
 }
 
 // Graph data received from the server
