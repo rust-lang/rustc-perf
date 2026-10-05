@@ -242,7 +242,10 @@ async fn summarize_run(
         metrics_result(ctxt, &commit, false).await?
     )
     .unwrap();
-    write!(&mut message, "\n{bootstrap}").unwrap();
+    // never available for triage builds
+    if !matches!(source, PerfRunSource::TriageBuild(_)) {
+        write!(&mut message, "\n{bootstrap}").unwrap();
+    }
     write!(&mut message, "\n{artifact_size}").unwrap();
 
     Ok(Some(message))
