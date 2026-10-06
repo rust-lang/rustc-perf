@@ -10,6 +10,7 @@ import {
   DEFAULT_COMPILE_TARGET_TRIPLE,
 } from "../../api";
 import uPlot, {TypedArray} from "uplot";
+import {wheelZoomUplotPlugin} from "../../utils/chart";
 
 type ScaleKind = "linear" | "log";
 type Profile = "check" | "debug" | "opt" | "doc";
@@ -215,6 +216,10 @@ function renderChart(
       },
       y: yScale,
     },
+    plugins: [
+      tooltipPlugin(versions, yAxisLabel),
+      wheelZoomUplotPlugin({factor: 0.75}),
+    ],
   };
 
   const versionIndices = versions.map((_, index) => index);
@@ -223,6 +228,91 @@ function renderChart(
     elementId,
     new uPlot(plotOpts, plotData as any as TypedArray[], element)
   );
+}
+
+function tooltipPlugin(
+  versions: string[],
+  unit: string,
+  {shiftX = 10, shiftY = 10} = {}
+) {
+  let tooltipLeftOffset = 0;
+  let tooltipTopOffset = 0;
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "u-tooltip";
+
+  let seriesIdx: number | null = null;
+  let dataIdx: number | null = null;
+
+  let over: any | null = null;
+
+  let tooltipVisible = false;
+
+  function showTooltip() {
+    if (!tooltipVisible) {
+      tooltip.style.display = "block";
+      over.style.cursor = "pointer";
+      tooltipVisible = true;
+    }
+  }
+
+  function hideTooltip() {
+    if (tooltipVisible) {
+      tooltip.style.display = "none";
+      over.style.cursor = null;
+      tooltipVisible = false;
+    }
+  }
+
+  function setTooltip(u: any) {
+    showTooltip();
+
+    let top = u.valToPos(u.data[seriesIdx!][dataIdx!], "y");
+    let lft = u.valToPos(u.data[0][dataIdx!], "x");
+
+    tooltip.style.top = tooltipTopOffset + top + shiftY + "px";
+    tooltip.style.left = tooltipLeftOffset + lft + shiftX + "px";
+    tooltip.style.borderColor = u.series[seriesIdx!].stroke(u, seriesIdx!);
+
+    const value = u.data[seriesIdx!][dataIdx!];
+    tooltip.textContent = `${versions[dataIdx!]}
+${value.toFixed(3)} ${unit.toLowerCase()}`;
+  }
+
+  return {
+    hooks: {
+      ready: [
+        (u: any) => {
+          over = u.root.querySelector(".u-over");
+
+          tooltipLeftOffset = parseFloat(over.style.left);
+          tooltipTopOffset = parseFloat(over.style.top);
+          u.root.querySelector(".u-wrap").appendChild(tooltip);
+        },
+      ],
+      setCursor: [
+        (u: any) => {
+          let c = u.cursor;
+
+          if (dataIdx != c.idx) {
+            dataIdx = c.idx;
+
+            if (seriesIdx != null) setTooltip(u);
+          }
+        },
+      ],
+      setSeries: [
+        (u: any, sidx: number | null) => {
+          if (seriesIdx != sidx) {
+            seriesIdx = sidx;
+
+            if (sidx == null) hideTooltip();
+            else if (dataIdx != null) setTooltip(u);
+          }
+        },
+      ],
+    },
+  };
 }
 
 function renderCharts(data: DashboardData) {
