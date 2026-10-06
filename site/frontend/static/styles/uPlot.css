@@ -1,0 +1,35 @@
+.uplot {
+  display: inline-block;
+  vertical-align: top;
+  width: min-content;
+}
+
+.u-over {
+  box-shadow: 0 0 0 0.5px #ccc;
+}
+
+.u-legend {
+  text-align: left;
+  padding-left: 50px;
+}
+
+.u-inline tr {
+  margin-right: 8px;
+}
+
+.u-label {
+  font-size: 12px;
+}
+
+.u-tooltip {
+  font-size: 10pt;
+  position: absolute;
+  background: #fff;
+  display: none;
+  border: 2px solid black;
+  padding: 4px;
+  pointer-events: none;
+  z-index: 100;
+  white-space: pre;
+  font-family: monospace;
+}
