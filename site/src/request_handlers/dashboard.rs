@@ -138,7 +138,8 @@ pub async fn handle_dashboard(
 
     let runtime_benchmark_query = selector::RuntimeBenchmarkQuery::default()
         .benchmark(selector::Selector::All)
-        .metric(selector::Selector::One(Metric::WallTime));
+        .metric(selector::Selector::One(Metric::WallTime))
+        .target(selector::Selector::One(target));
 
     let responses = ctxt
         .statistic_series(runtime_benchmark_query.clone(), aids.clone())
