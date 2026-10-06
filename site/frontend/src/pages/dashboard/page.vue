@@ -148,8 +148,17 @@ function renderChart(
 
   const element = document.getElementById(elementId)!;
 
-  const columns = 2;
-  const width = Math.floor(wrapperRef.value.clientWidth / columns) - 10;
+  let columns = 2;
+  const parentWidth = wrapperRef.value!.clientWidth;
+
+  const smallDisplay = parentWidth < 1000;
+
+  // Small display, reduce column count to 1
+  if (smallDisplay) {
+    columns = 1;
+  }
+
+  const width = Math.floor(parentWidth / columns) - 10;
   const height = 300;
   const yScale: {distr?: number; log?: 2 | 10} = {};
   if (scale.value === "log") {
@@ -183,9 +192,14 @@ function renderChart(
         label: "Version",
         splits: (_u: any) => {
           // Show every even version, plus the last beta
+          // On small displays, show less versions
+          let factor = 2;
+          if (smallDisplay) {
+            factor = 4;
+          }
           const ticks = [];
           for (let i = 0; i < versions.length; i++) {
-            if (i % 2 == 0) {
+            if (i % factor == 0) {
               ticks.push(i);
             }
           }
@@ -365,7 +379,7 @@ async function getCompileTargets() {
   }
 }
 
-const wrapperRef = ref(null);
+const wrapperRef: Ref<HTMLElement | null> = ref(null);
 
 onMounted(async () => {
   await Promise.all([getCompileTargets(), getDataAndRenderCharts()]);
