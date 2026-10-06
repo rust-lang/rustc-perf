@@ -190,7 +190,7 @@ function renderChart(
     axes: [
       {
         label: "Version",
-        splits: (_u: any) => {
+        splits: (_u: unknown) => {
           // Show every even version, plus the last beta
           // On small displays, show less versions
           let factor = 2;
@@ -209,7 +209,8 @@ function renderChart(
           }
           return ticks;
         },
-        values: (_u: any, splits: number[]) => splits.map((i) => versions[i]),
+        values: (_u: unknown, splits: number[]) =>
+          splits.map((i) => versions[i]),
         rotate: 45,
         size: 90, // to avoid cutting off the label
         grid: {
@@ -223,7 +224,7 @@ function renderChart(
     scales: {
       x: {
         time: false, // not a timestamp axis
-        range: (_u: any, min: number, max: number): [number, number] => [
+        range: (_u: unknown, min: number, max: number): [number, number] => [
           min - 0.5,
           max + 0.5,
         ], // padding at the edges
