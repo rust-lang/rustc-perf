@@ -1,6 +1,5 @@
 <script setup lang="tsx">
 import {ref, Ref, onMounted} from "vue";
-import Highcharts from "highcharts";
 
 import {getUrlParams} from "../../utils/navigation";
 import {DASHBOARD_DATA_URL} from "../../urls";
@@ -10,6 +9,7 @@ import {
   loadBenchmarkInfo,
   DEFAULT_COMPILE_TARGET_TRIPLE,
 } from "../../api";
+import uPlot, {TypedArray} from "uplot";
 
 type ScaleKind = "linear" | "log";
 type Profile = "check" | "debug" | "opt" | "doc";
@@ -48,69 +48,65 @@ function clearError() {
 
 function handleScaleChange(e: Event) {
   const value = (e.target as HTMLInputElement).value;
-  if (value !== "linear" && value != "log") {
-    console.error("Invalid scale");
-  } else if (scale.value !== value) {
-    scale.value = value;
+  if (scale.value !== value) {
+    scale.value = value as ScaleKind;
     getDataAndRenderCharts();
   }
 }
 
-function render(
-  element: string,
+const charts = new Map<string, uPlot>();
+
+function renderCompileTime(
+  elementId: string,
   name: Profile,
   data: DashboardCompileBenchmarkCases,
   versions: string[]
 ) {
-  let articles = {check: "a", debug: "a", opt: "an", doc: "a"};
+  const articles = {check: "a", debug: "a", opt: "an", doc: "a"};
 
-  Highcharts.chart({
-    chart: {
-      renderTo: element,
-      zooming: {
-        type: "xy",
-      },
-      type: "line",
+  const commonCacheStateColors = {
+    full: "#7cb5ec",
+    "incr-full": "#434348",
+    "incr-unchanged": "#90ed7d",
+    "incr-patched: println": "#f7a35c",
+  };
+  const series = [
+    {
+      label: "full",
+      width: devicePixelRatio,
+      stroke: commonCacheStateColors["full"],
     },
-    title: {
-      text: `Average time for ${articles[name]} ${name} build`,
+    {
+      label: "incremental full",
+      width: devicePixelRatio,
+      stroke: commonCacheStateColors["incr-full"],
     },
-    yAxis: {
-      title: {text: "Seconds"},
-      min: scale.value === "linear" ? 0 : undefined,
-      type: scale.value === "log" ? "logarithmic" : undefined,
+    {
+      label: "incremental unchanged",
+      width: devicePixelRatio,
+      stroke: commonCacheStateColors["incr-unchanged"],
     },
-    xAxis: {
-      categories: versions,
-      title: {text: "Version"},
+    {
+      label: "incremental patched: println",
+      width: devicePixelRatio,
+      stroke: commonCacheStateColors["incr-patched: println"],
     },
-    series: [
-      {
-        type: "line",
-        name: "full",
-        animation: false,
-        data: data.clean_averages,
-      },
-      {
-        type: "line",
-        name: "incremental full",
-        animation: false,
-        data: data.base_incr_averages,
-      },
-      {
-        type: "line",
-        name: "incremental unchanged",
-        animation: false,
-        data: data.clean_incr_averages,
-      },
-      {
-        type: "line",
-        name: "incremental patched: println",
-        animation: false,
-        data: data.println_incr_averages,
-      },
-    ],
-  });
+  ];
+
+  const plotData = [
+    data.clean_averages,
+    data.clean_incr_averages,
+    data.base_incr_averages,
+    data.println_incr_averages,
+  ];
+  renderChart(
+    elementId,
+    plotData,
+    series,
+    versions,
+    `Average time for ${articles[name]} ${name} build`,
+    "Seconds"
+  );
 }
 
 function renderRuntime(element: string, data: number[], versions: string[]) {
@@ -120,50 +116,126 @@ function renderRuntime(element: string, data: number[], versions: string[]) {
     .filter((data) => data != null)
     .map((data) => data / 1_000_000);
   const nullCount = data.length - formattedData.length;
+  const versionsNormalized = versions.slice(nullCount);
 
-  Highcharts.chart({
-    chart: {
-      renderTo: element,
-      zooming: {
-        type: "xy",
-      },
-      type: "line",
-    },
-    title: {
-      text: `Average time for a runtime benchmark`,
-    },
-    yAxis: {
-      title: {text: "Miliseconds"},
-      min: scale.value === "linear" ? 0 : undefined,
-      type: scale.value === "log" ? "logarithmic" : undefined,
-    },
-    xAxis: {
-      categories: versions.slice(nullCount),
-      title: {text: "Version"},
-    },
-    series: [
-      {
-        showInLegend: false,
-        type: "line",
-        animation: false,
-        data: formattedData,
-      },
-    ],
-  });
+  const series = [{width: devicePixelRatio, stroke: "#7cb5ec"}];
+  renderChart(
+    element,
+    [formattedData],
+    series,
+    versionsNormalized,
+    "Average time for a runtime benchmark",
+    "Milliseconds",
+    false
+  );
 }
 
-function renderCharts() {
-  const data = response.value;
-  render("check-average-times", "check", data.check, data.versions);
-  render("debug-average-times", "debug", data.debug, data.versions);
-  render("opt-average-times", "opt", data.opt, data.versions);
-  render("doc-average-times", "doc", data.doc, data.versions);
+function renderChart(
+  elementId: string,
+  data: number[][],
+  series: any[],
+  versions: string[],
+  title: string,
+  yAxisLabel: string,
+  showLegend: boolean = true
+) {
+  // Clear the old chart, if present
+  const oldChart = charts.get(elementId);
+  if (oldChart !== undefined) {
+    oldChart.destroy();
+  }
+
+  const element = document.getElementById(elementId)!;
+
+  const columns = 2;
+  const width = Math.floor(wrapperRef.value.clientWidth / columns) - 10;
+  const height = 300;
+  const yScale: {distr?: number; log?: 2 | 10} = {};
+  if (scale.value === "log") {
+    yScale["distr"] = 3; // logarithmic scale
+    yScale["log"] = 10; // base 10
+  }
+
+  const plotOpts = {
+    title,
+    series: [{}, ...series],
+    width,
+    height,
+    legend: {
+      live: false,
+      show: showLegend,
+    },
+    focus: {
+      alpha: 0.3,
+    },
+    cursor: {
+      focus: {
+        prox: 5,
+      },
+      drag: {
+        x: true,
+        y: true,
+      },
+    },
+    axes: [
+      {
+        label: "Version",
+        splits: (_u: any) => {
+          // Show every even version, plus the last beta
+          const ticks = [];
+          for (let i = 0; i < versions.length; i++) {
+            if (i % 2 == 0) {
+              ticks.push(i);
+            }
+          }
+          // Include last version (usually beta)
+          if (ticks[-1] !== versions.length - 1) {
+            ticks.push(versions.length - 1);
+          }
+          return ticks;
+        },
+        values: (_u: any, splits: number[]) => splits.map((i) => versions[i]),
+        rotate: 45,
+        size: 90, // to avoid cutting off the label
+        grid: {
+          show: false,
+        },
+      },
+      {
+        label: yAxisLabel,
+      },
+    ],
+    scales: {
+      x: {
+        time: false, // not a timestamp axis
+        range: (_u: any, min: number, max: number): [number, number] => [
+          min - 0.5,
+          max + 0.5,
+        ], // padding at the edges
+      },
+      y: yScale,
+    },
+  };
+
+  const versionIndices = versions.map((_, index) => index);
+  const plotData = [versionIndices, ...data];
+  charts.set(
+    elementId,
+    new uPlot(plotOpts, plotData as any as TypedArray[], element)
+  );
+}
+
+function renderCharts(data: DashboardData) {
+  renderCompileTime("check-average-times", "check", data.check, data.versions);
+  renderCompileTime("debug-average-times", "debug", data.debug, data.versions);
+  renderCompileTime("opt-average-times", "opt", data.opt, data.versions);
+  renderCompileTime("doc-average-times", "doc", data.doc, data.versions);
   renderRuntime("runtime-average-times", data.runtime, data.versions);
 }
 
 async function getDataAndRenderCharts() {
   clearError();
-  if (!response.value) {
+  if (response.value === null) {
     const urlParams = getUrlParams();
     try {
       const apiResponse = await getJson<DashboardData>(
@@ -171,10 +243,13 @@ async function getDataAndRenderCharts() {
         urlParams
       );
       response.value = apiResponse;
-      renderCharts();
+      renderCharts(apiResponse);
+      return;
     } catch (e) {
       error.value = e.error;
     }
+  } else {
+    renderCharts(response.value);
   }
 }
 
@@ -200,6 +275,8 @@ async function getCompileTargets() {
   }
 }
 
+const wrapperRef = ref(null);
+
 onMounted(async () => {
   await Promise.all([getCompileTargets(), getDataAndRenderCharts()]);
 });
@@ -220,10 +297,10 @@ function getActiveClass(target: CompileTarget): string {
 
     The dashboard shows performance results for all stable Rust releases going
     back to
-    <code>1.28.0</code>, along with the latest <code>beta</code> release. The
+    <code>1.26.0</code>, along with the latest <code>beta</code> release. The
     displayed duration is an arithmetic mean amongst all
     <a
-      href="https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks#stable"
+      href="https://github.com/rust-lang/rustc-perf/tree/main/collector/compile-benchmarks#stable"
       >stable</a
     >
     benchmarks. The dashboard also shows the average duration of runtime
@@ -269,12 +346,12 @@ function getActiveClass(target: CompileTarget): string {
     </div>
   </div>
 
-  <div v-if="error == null" class="graphs">
-    <div id="check-average-times"></div>
-    <div id="debug-average-times"></div>
-    <div id="opt-average-times"></div>
-    <div id="doc-average-times"></div>
-    <div id="runtime-average-times"></div>
+  <div v-if="error == null" class="graphs" ref="wrapperRef">
+    <div id="check-average-times" class="graph"></div>
+    <div id="debug-average-times" class="graph"></div>
+    <div id="opt-average-times" class="graph"></div>
+    <div id="doc-average-times" class="graph"></div>
+    <div id="runtime-average-times" class="graph"></div>
   </div>
   <h2 v-else>Error: {{ error }}</h2>
 </template>
@@ -286,6 +363,10 @@ function getActiveClass(target: CompileTarget): string {
 
   @media screen and (max-width: 768px) {
     grid-template-columns: 1fr;
+  }
+
+  .graph {
+    margin-top: 20px;
   }
 }
 
