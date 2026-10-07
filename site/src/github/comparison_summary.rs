@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{QueuedCommit, metric::Metric};
 
-use crate::github::triage::{TriageBuild, is_triage_run, update_triage_body};
+use crate::github::triage::{TriageBuild, changed_benchmarks, is_triage_run, update_triage_body};
 use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use humansize::BINARY;
 use std::fmt::Write;
@@ -218,8 +218,16 @@ async fn summarize_run(
     )
     .unwrap();
 
+    const PREVENT_ROLLUP_CUTOFF: usize = 8;
+    let rollup_mode = if !deserves_attention {
+        RollupMode::Allow
+    } else if changed_benchmarks(&inst_comparison).len() < PREVENT_ROLLUP_CUTOFF {
+        RollupMode::Iffy
+    } else {
+        RollupMode::Never
+    };
     let next_steps = match &source {
-        PerfRunSource::TryBuild => try_run_body(is_regression, deserves_attention),
+        PerfRunSource::TryBuild => try_run_body(is_regression, rollup_mode),
         PerfRunSource::MasterCommit | PerfRunSource::TriageBuild(..) => {
             master_run_body(is_regression)
         }
@@ -435,7 +443,14 @@ cc @rust-lang/wg-compiler-performance
     .to_string()
 }
 
-fn try_run_body(is_regression: bool, deserves_attention: bool) -> String {
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum RollupMode {
+    Allow,
+    Iffy,
+    Never,
+}
+
+fn try_run_body(is_regression: bool, rollup_mode: RollupMode) -> String {
     let next_steps = if is_regression {
         "\n\n**Next, please**: If you can, justify the regressions found in \
             this try perf run in writing \
@@ -449,17 +464,18 @@ fn try_run_body(is_regression: bool, deserves_attention: bool) -> String {
     // We mark PRs as rollup=never if perf deserves attention, so we don't need to debug the perf in the rollup
     // We don't remove `rollup=never` if perf does not deserve attention, as sometimes there are multiple perf. runs on the same PR,
     // and it's not always the case that the latest version that gets approved is the one for which we ran perf.
-    let rollup_never = if deserves_attention {
-        // We set the PR note to "rustc-perf", which will be interpreted by bors to mark the PR
-        // as having significant performance results.
-        "@bors rollup=never rustc-perf"
-    } else {
-        ""
+    //
+    // We set the PR note to "rustc-perf", which will be interpreted by bors to mark the PR
+    // as having significant performance results.
+    let rollup_instructions = match rollup_mode {
+        RollupMode::Allow => "",
+        RollupMode::Iffy => "@bors rollup=iffy rustc-perf",
+        RollupMode::Never => "@bors rollup=never rustc-perf",
     };
 
     // If perf does not deserve attention, don't say that the PR was automatically marked as not fit for rolling up
     // But point out that it can be manually marked as such
-    let rollup_comment = if deserves_attention {
+    let rollup_comment = if rollup_mode == RollupMode::Never {
         "It's automatically marked not fit for rolling up. \
 Overriding is possible but disadvised: \
 it risks changing compiler perf."
@@ -473,7 +489,7 @@ it risks changing compiler perf."
 Benchmarking means the PR may be perf-sensitive. \
 {rollup_comment}{next_steps}
 
-{rollup_never}
+{rollup_instructions}
 @rustbot label: -S-waiting-on-perf {sign}perf-regression",
     )
 }
