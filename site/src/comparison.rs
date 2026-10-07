@@ -99,7 +99,7 @@ pub async fn handle_triage(
             && github::pr_title(pr).await.starts_with("Rollup of")
             && expand_rollup(
                 pr,
-                &start,
+                &before,
                 metric,
                 master_commits,
                 &benchmark_map,
