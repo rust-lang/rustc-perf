@@ -6,8 +6,8 @@ use crate::api;
 use crate::github;
 use crate::load::SiteCtxt;
 
-use collector::Bound;
 use collector::compile::benchmark::category::Category;
+use collector::{Bound, MasterCommit};
 use database::{ArtifactId, Benchmark, Lookup};
 use database::{
     Target,
@@ -18,7 +18,10 @@ use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
+use crate::github::client::GraphQLClient;
+use crate::github::triage::find_and_parse_unrolled_build_comment;
 use crate::server::comparison::StatComparison;
+use anyhow::anyhow;
 use collector::compile::benchmark::ArtifactType;
 use database::selector::{CompileTestCase, RuntimeTestCase};
 use database::{CommitType, CompileBenchmark};
@@ -91,8 +94,29 @@ pub async fn handle_triage(
             comparison.a.artifact
         );
 
-        // handle results of comparison
-        populate_report(&comparison, &benchmark_map, metric, &mut report).await;
+        // Try to expand rollup into member PRs
+        if let Some(pr) = comparison.b.pr
+            && github::pr_title(pr).await.starts_with("Rollup of")
+            && expand_rollup(
+                pr,
+                &start,
+                metric,
+                master_commits,
+                &benchmark_map,
+                &mut report,
+                ctxt,
+            )
+            .await
+            .unwrap_or_else(|e| {
+                log::error!("Failed to expand rollup #{pr}: {e}");
+                false
+            })
+        {
+            // rollup was fully expanded, no need to include rollup itself into the comparison
+        } else {
+            // the rollup was not fully expanded, we should still include it
+            populate_report(&comparison, &benchmark_map, metric, &mut report, None).await;
+        }
 
         // If we already know this is the last iteration, we can stop
         if comparison.b.artifact == end_artifact {
@@ -136,6 +160,42 @@ pub async fn handle_triage(
 
     let report = generate_report(&start, &end, summary, report, num_comparisons).await;
     Ok(api::triage::Response(report))
+}
+
+async fn expand_rollup(
+    pr: u32,
+    start: &Bound,
+    metric: Metric,
+    master_commits: &[MasterCommit],
+    benchmark_map: &HashMap<Benchmark, Category>,
+    report: &mut HashMap<Direction, Vec<String>>,
+    ctxt: &SiteCtxt,
+) -> anyhow::Result<bool> {
+    let graphql = GraphQLClient::from_ctxt(ctxt);
+    let comments = graphql.get_comments(pr).await?;
+    let mut complete = true;
+    for member_sha in
+        find_and_parse_unrolled_build_comment(comments.iter().map(|c| c.body.as_str()))?
+    {
+        let comparison = compare_given_commits(
+            start.clone(),
+            Bound::Commit(member_sha.to_string()),
+            metric,
+            Some(Target::X86_64UnknownLinuxGnu),
+            ctxt,
+            master_commits,
+        )
+        .await
+        .map_err(|e| anyhow!("error comparing commits: {e}"))?;
+        match comparison {
+            None => complete = false,
+            Some(comparison) => {
+                populate_report(&comparison, benchmark_map, metric, report, Some(pr)).await;
+            }
+        }
+    }
+
+    Ok(complete)
 }
 
 pub async fn handle_compare(
@@ -231,6 +291,7 @@ async fn populate_report(
     benchmark_map: &HashMap<Benchmark, Category>,
     metric: Metric,
     report: &mut HashMap<Direction, Vec<String>>,
+    from_rollup: Option<u32>,
 ) {
     let (primary, secondary) = comparison
         .clone()
@@ -252,7 +313,7 @@ async fn populate_report(
 
     if include_in_triage {
         let entry = report.entry(direction).or_default();
-        entry.push(write_triage_summary(comparison, &primary, &secondary).await);
+        entry.push(write_triage_summary(comparison, &primary, &secondary, from_rollup).await);
     }
 }
 
@@ -524,6 +585,7 @@ async fn write_triage_summary(
     comparison: &ArtifactComparison,
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
+    from_rollup: Option<u32>,
 ) -> String {
     let mut result = if let Some(pr) = comparison.b.pr {
         let title = github::pr_title(pr).await;
@@ -534,7 +596,15 @@ async fn write_triage_summary(
     let start = &comparison.a.artifact;
     let end = &comparison.b.artifact;
     let link = &compare_link(start, end);
-    write!(&mut result, " [(Comparison Link)]({link})\n\n").unwrap();
+    writeln!(&mut result, " [(Comparison Link)]({link})").unwrap();
+    if let Some(rollup) = from_rollup {
+        writeln!(
+            &mut result,
+            "Merged as part of rollup [#{rollup}](https://github.com/rust-lang/rust/pull/{rollup})"
+        )
+        .unwrap();
+    }
+    writeln!(&mut result).unwrap();
 
     write_summary_table(primary, secondary, true, &mut result);
 
