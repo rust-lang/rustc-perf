@@ -115,7 +115,7 @@ pub async fn handle_triage(
             // rollup was fully expanded, no need to include rollup itself into the comparison
         } else {
             // the rollup was not fully expanded, we should still include it
-            populate_report(&comparison, &benchmark_map, metric, &mut report).await;
+            populate_report(&comparison, &benchmark_map, metric, &mut report, None).await;
         }
 
         // If we already know this is the last iteration, we can stop
@@ -190,7 +190,7 @@ async fn expand_rollup(
         match comparison {
             None => complete = false,
             Some(comparison) => {
-                populate_report(&comparison, benchmark_map, metric, report).await;
+                populate_report(&comparison, benchmark_map, metric, report, Some(pr)).await;
             }
         }
     }
@@ -291,6 +291,7 @@ async fn populate_report(
     benchmark_map: &HashMap<Benchmark, Category>,
     metric: Metric,
     report: &mut HashMap<Direction, Vec<String>>,
+    from_rollup: Option<u32>,
 ) {
     let (primary, secondary) = comparison
         .clone()
@@ -312,7 +313,7 @@ async fn populate_report(
 
     if include_in_triage {
         let entry = report.entry(direction).or_default();
-        entry.push(write_triage_summary(comparison, &primary, &secondary).await);
+        entry.push(write_triage_summary(comparison, &primary, &secondary, from_rollup).await);
     }
 }
 
@@ -584,6 +585,7 @@ async fn write_triage_summary(
     comparison: &ArtifactComparison,
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
+    from_rollup: Option<u32>,
 ) -> String {
     let mut result = if let Some(pr) = comparison.b.pr {
         let title = github::pr_title(pr).await;
@@ -594,7 +596,15 @@ async fn write_triage_summary(
     let start = &comparison.a.artifact;
     let end = &comparison.b.artifact;
     let link = &compare_link(start, end);
-    write!(&mut result, " [(Comparison Link)]({link})\n\n").unwrap();
+    writeln!(&mut result, " [(Comparison Link)]({link})").unwrap();
+    if let Some(rollup) = from_rollup {
+        writeln!(
+            &mut result,
+            "Merged as part of rollup [#{rollup}](https://github.com/rust-lang/rust/pull/{rollup})"
+        )
+        .unwrap();
+    }
+    writeln!(&mut result).unwrap();
 
     write_summary_table(primary, secondary, true, &mut result);
 
