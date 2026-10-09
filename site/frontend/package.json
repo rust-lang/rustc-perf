@@ -23,7 +23,6 @@
   "dependencies": {
     "@types/node": "^22.18.11",
     "date-fns": "^2.30.0",
-    "highcharts": "^11.4.1",
     "msgpack-lite": "^0.1.26",
     "parcel": "^2.8.3",
     "sass": "^1.59.3",
