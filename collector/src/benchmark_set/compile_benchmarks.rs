@@ -24,6 +24,7 @@ pub(super) const CLAP_DERIVE_4_5_32_NLL: &str = "clap_derive-4.5.32-nll";
 pub(super) const COERCIONS: &str = "coercions";
 pub(super) const CRANELIFT_CODEGEN_0_119_0: &str = "cranelift-codegen-0.119.0";
 pub(super) const CTFE_STRESS_5: &str = "ctfe-stress-5";
+pub(super) const C_LIKE_ENUM_STRESS: &str = "c-like-enum-stress";
 pub(super) const DEEP_VECTOR: &str = "deep-vector";
 pub(super) const DEEPLY_NESTED_MULTI: &str = "deeply-nested-multi";
 pub(super) const DEEPLY_NESTED_MULTI_NEW_SOLVER: &str = "deeply-nested-multi-new-solver";
