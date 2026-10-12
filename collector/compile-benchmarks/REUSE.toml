@@ -221,6 +221,11 @@ SPDX-FileCopyrightText = "Sébastien Crozet"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "next-solver-stress/**"
+SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
 path = "piston-image/**"
 SPDX-FileCopyrightText = "piston contributors"
 SPDX-License-Identifier = "MIT"
