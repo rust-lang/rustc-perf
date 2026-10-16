@@ -1,5 +1,6 @@
 // Generated with the following Python script:
 // print("""#![allow(warnings)]
+// #[derive(Debug)]
 // enum A {""")
 // for i in range(8192):
 //     print(f"    Var{i},")
@@ -12,6 +13,7 @@
 // }""")
 
 #![allow(warnings)]
+#[derive(Debug)]
 enum A {
     Var0,
     Var1,
