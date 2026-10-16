@@ -7,6 +7,9 @@
 //! module). The combination forms the `match-stress` benchmark. This was done
 //! because having two different match stress tests cluttered up the results. A
 //! single stress test should be enough to identify any regressions.
+//!
+//! Later we added `#[derive(Debug)]` to the big enum to stress test the
+//! implementation for that particular type (C-like enum).
 
 #![feature(exhaustive_patterns)]
 
