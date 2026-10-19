@@ -96,8 +96,8 @@ function renderCompileTime(
 
   const plotData = [
     data.clean_averages,
-    data.clean_incr_averages,
     data.base_incr_averages,
+    data.clean_incr_averages,
     data.println_incr_averages,
   ];
   renderChart(
