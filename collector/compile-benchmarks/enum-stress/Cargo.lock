@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "match-stress"
+name = "enum-stress"
 version = "0.1.0"

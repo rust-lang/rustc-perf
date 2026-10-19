@@ -206,7 +206,7 @@ SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-l
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "match-stress/**"
+path = "enum-stress/**"
 SPDX-FileCopyrightText = "The Rust Project Developers (see https://thanks.rust-lang.org)"
 SPDX-License-Identifier = "MIT"
 
