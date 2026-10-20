@@ -80,7 +80,7 @@ impl Client {
     ) -> Result<reqwest::Response, reqwest::Error> {
         request
             .header(USER_AGENT, BOT_USER_AGENT)
-            .basic_auth("rust-timer", Some(&self.token))
+            .header(header::AUTHORIZATION, format!("token {}", self.token))
             .send()
             .await
     }
