@@ -99,7 +99,7 @@ compiler in interesting ways.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
-- **match-stress**: Contains examples 
+- **enum-stress**: Contains examples 
   (one involving [a huge enum](https://github.com/rust-lang/rust/issues/7462),
   one involving
   [`exhaustive_patterns`](https://github.com/rust-lang/rust/pull/79394)) of

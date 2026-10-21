@@ -1,15 +1,9 @@
 {
-    "cargo_opts": "--features=i128,const-generics",
-    "artifact": "library",
-    "category": "secondary",
-    "cargo_rustc_opts": "-Znext-solver=globally",
-    "excluded_profiles": [
-        "Doc",
-        "DocJson"
-    ],
-    "excluded_scenarios": [
-        "IncrFull",
-        "IncrPatched",
-        "IncrUnchanged"
-    ]
+  "cargo_opts": "--features=i128,const-generics",
+  "artifact": "library",
+  "category": "secondary",
+  "cargo_rustc_opts": "-Znext-solver=globally",
+  "excluded_profiles": ["Doc", "DocJson"],
+  "excluded_scenarios": ["IncrFull", "IncrPatched", "IncrUnchanged"],
+  "frontend_threads": [1, 4]
 }
