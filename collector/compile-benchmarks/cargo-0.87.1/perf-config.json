@@ -4,5 +4,6 @@
   "runs": 1,
   "touch_file": "src/cargo/lib.rs",
   "category": "primary",
-  "artifact": "library"
+  "artifact": "library",
+  "frontend_threads": [1, 4]
 }
