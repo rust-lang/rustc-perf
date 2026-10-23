@@ -284,7 +284,7 @@ fn profile_compile(
             let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
             eprintln!("Executing benchmark {benchmark_id}");
             let mut processor = ProfileProcessor::new(profiler, out_dir, &toolchain.id);
-            let result = wait_for_future(benchmark.measure(
+            let result = wait_for_future(benchmark.prepare_and_measure(
                 &mut processor,
                 profiles,
                 scenarios,
@@ -2385,7 +2385,7 @@ async fn bench_compile(
                 )
             },
             async |processor| {
-                with_timeout(benchmark.measure(
+                with_timeout(benchmark.prepare_and_measure(
                     processor,
                     &config.profiles,
                     &config.scenarios,

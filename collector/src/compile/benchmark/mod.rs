@@ -132,6 +132,21 @@ pub struct Benchmark {
     config: BenchmarkConfig,
 }
 
+// These two "leaf" benchmark parameters are nested together,
+// because different values of scenarios and frontend threads can share the same target dir.
+struct LeafParameters {
+    scenario: Scenario,
+    frontend_threads: FrontendThreads,
+}
+
+pub struct BenchmarkDir {
+    dir: TempDir,
+    profile: Profile,
+    backend: CodegenBackend,
+    target: Target,
+    leaf_parameters: Vec<LeafParameters>,
+}
+
 impl Benchmark {
     pub fn new(name: String, path: PathBuf) -> anyhow::Result<Self> {
         let mut patches = vec![];
@@ -252,9 +267,7 @@ impl Benchmark {
         }
     }
 
-    /// Run a specific benchmark under a processor + profiler combination.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn measure(
+    pub async fn prepare_and_measure(
         &self,
         processor: &mut dyn Processor,
         profiles: &[Profile],
@@ -266,12 +279,35 @@ impl Benchmark {
         frontend_threads_counts: &[FrontendThreads],
         already_computed: &hashbrown::HashSet<CompileTestCase>,
     ) -> anyhow::Result<()> {
+        let benchmark_dirs = self
+            .prepare(
+                profiles,
+                scenarios,
+                backends,
+                toolchain,
+                targets,
+                frontend_threads_counts,
+                already_computed,
+            )
+            .await?;
+        self.measure(processor, toolchain, iterations, benchmark_dirs)
+            .await
+    }
+
+    pub async fn prepare(
+        &self,
+        profiles: &[Profile],
+        scenarios: &[Scenario],
+        backends: &[CodegenBackend],
+        toolchain: &Toolchain,
+        targets: &[Target],
+        frontend_threads_counts: &[FrontendThreads],
+        already_computed: &hashbrown::HashSet<CompileTestCase>,
+    ) -> anyhow::Result<Vec<BenchmarkDir>> {
         if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
-
-        let iterations = iterations.unwrap_or(self.config.runs);
 
         let profiles: Vec<Profile> = profiles
             .iter()
@@ -281,7 +317,7 @@ impl Benchmark {
 
         if profiles.is_empty() {
             eprintln!("Skipping {}: no profiles selected", self.name);
-            return Ok(());
+            return Ok(vec![]);
         }
 
         let scenarios: Vec<Scenario> = scenarios
@@ -292,22 +328,7 @@ impl Benchmark {
 
         if scenarios.is_empty() {
             eprintln!("Skipping {}: no scenarios selected", self.name);
-            return Ok(());
-        }
-
-        // These two "leaf" benchmark parameters are nested together,
-        // because different values of scenarios and frontend threads can share the same target dir.
-        struct LeafParameters {
-            scenario: Scenario,
-            frontend_threads: FrontendThreads,
-        }
-
-        struct BenchmarkDir {
-            dir: TempDir,
-            profile: Profile,
-            backend: CodegenBackend,
-            target: Target,
-            leaf_parameters: Vec<LeafParameters>,
+            return Ok(vec![]);
         }
 
         // Materialize the test cases that we want to benchmark
@@ -360,7 +381,7 @@ impl Benchmark {
                 "Skipping {}: all test cases were previously computed",
                 self.name
             );
-            return Ok(());
+            return Ok(vec![]);
         }
 
         eprintln!("Preparing {}", self.name);
@@ -440,6 +461,20 @@ impl Benchmark {
             self.name,
             preparation_start.elapsed().as_secs_f64()
         );
+
+        Ok(benchmark_dirs)
+    }
+
+    /// Run a specific benchmark under a processor + profiler combination.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn measure(
+        &self,
+        processor: &mut dyn Processor,
+        toolchain: &Toolchain,
+        iterations: Option<usize>,
+        benchmark_dirs: Vec<BenchmarkDir>,
+    ) -> anyhow::Result<()> {
+        let iterations = iterations.unwrap_or(self.config.runs);
 
         // We need to hold on to the directories to keep the files alive until
         // the processor post-processes them. We also store them in `ManuallyDrop`
