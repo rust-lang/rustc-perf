@@ -267,6 +267,7 @@ impl Benchmark {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn prepare_and_measure(
         &self,
         processor: &mut dyn Processor,
@@ -279,22 +280,21 @@ impl Benchmark {
         frontend_threads_counts: &[FrontendThreads],
         already_computed: &hashbrown::HashSet<CompileTestCase>,
     ) -> anyhow::Result<()> {
-        let benchmark_dirs = self
-            .prepare(
-                profiles,
-                scenarios,
-                backends,
-                toolchain,
-                targets,
-                frontend_threads_counts,
-                already_computed,
-            )
-            .await?;
+        let benchmark_dirs = self.prepare(
+            profiles,
+            scenarios,
+            backends,
+            toolchain,
+            targets,
+            frontend_threads_counts,
+            already_computed,
+        )?;
         self.measure(processor, toolchain, iterations, benchmark_dirs)
             .await
     }
 
-    pub async fn prepare(
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare(
         &self,
         profiles: &[Profile],
         scenarios: &[Scenario],
@@ -466,7 +466,6 @@ impl Benchmark {
     }
 
     /// Run a specific benchmark under a processor + profiler combination.
-    #[allow(clippy::too_many_arguments)]
     pub async fn measure(
         &self,
         processor: &mut dyn Processor,
