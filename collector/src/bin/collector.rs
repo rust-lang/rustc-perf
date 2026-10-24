@@ -7,6 +7,7 @@ use clap::{Arg, Parser};
 use collector::compare::compare_artifacts;
 use hashbrown::HashSet;
 use humansize::{BINARY, format_size};
+use rayon::ThreadPoolBuilder;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
@@ -41,8 +42,8 @@ use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::target::Target;
 use collector::compile::benchmark::{
-    ArtifactType, Benchmark, BenchmarkName, CompileBenchmarkFilter, compile_benchmark_dir,
-    get_compile_benchmarks,
+    ArtifactType, Benchmark, BenchmarkDir, BenchmarkName, CompileBenchmarkFilter,
+    compile_benchmark_dir, get_compile_benchmarks,
 };
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
@@ -284,7 +285,7 @@ fn profile_compile(
             let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
             eprintln!("Executing benchmark {benchmark_id}");
             let mut processor = ProfileProcessor::new(profiler, out_dir, &toolchain.id);
-            let result = wait_for_future(benchmark.measure(
+            let result = wait_for_future(benchmark.prepare_and_measure(
                 &mut processor,
                 profiles,
                 scenarios,
@@ -2296,7 +2297,7 @@ async fn bench_published_artifact(
 
 const COMPILE_BENCHMARK_TIMEOUT: Duration = Duration::from_secs(60 * 30);
 
-async fn with_timeout<F: Future<Output = anyhow::Result<()>>>(fut: F) -> anyhow::Result<()> {
+async fn with_timeout<T, F: Future<Output = anyhow::Result<T>>>(fut: F) -> anyhow::Result<T> {
     match tokio::time::timeout(COMPILE_BENCHMARK_TIMEOUT, fut).await {
         Ok(res) => res,
         Err(_) => Err(anyhow::anyhow!(
@@ -2324,7 +2325,7 @@ async fn bench_compile(
     let start = Instant::now();
 
     #[allow(clippy::too_many_arguments)]
-    async fn measure_and_record<F: AsyncFn(&mut BenchProcessor) -> anyhow::Result<()>>(
+    async fn measure_and_record<F: AsyncFnOnce(&mut BenchProcessor) -> anyhow::Result<()>>(
         collector: &CollectorCtx,
         shared: &SharedBenchmarkConfig,
         config: &CompileBenchmarkConfig,
@@ -2366,10 +2367,29 @@ async fn bench_compile(
         tx.commit().await.expect("committed");
     }
 
-    // Normal benchmarks.
-    for (nth_benchmark, benchmark) in config.benchmarks.iter().enumerate() {
-        let frontend_threads = config.frontend_threads_config.expand(benchmark);
+    // Prepare normal benchmarks in parallel, limit threads to keep memory usage under control
+    const PREPARE_THREADS: usize = 4;
+    let prepared_dirs: Vec<anyhow::Result<Vec<BenchmarkDir>>> = collect_parallel(
+        &config.benchmarks,
+        |benchmark| {
+            let frontend_threads = config.frontend_threads_config.expand(benchmark);
+            benchmark.prepare(
+                &config.profiles,
+                &config.scenarios,
+                &config.backends,
+                &shared.toolchain,
+                &config.targets,
+                &frontend_threads,
+                &collector.measured_compile_test_cases,
+            )
+        },
+        PREPARE_THREADS,
+    );
 
+    // Normal benchmarks.
+    for (nth_benchmark, (benchmark, prepared_dirs)) in
+        config.benchmarks.iter().zip(prepared_dirs).enumerate()
+    {
         measure_and_record(
             collector,
             shared,
@@ -2385,16 +2405,12 @@ async fn bench_compile(
                 )
             },
             async |processor| {
+                let prepared_dirs = prepared_dirs?;
                 with_timeout(benchmark.measure(
                     processor,
-                    &config.profiles,
-                    &config.scenarios,
-                    &config.backends,
                     &shared.toolchain,
                     config.iterations,
-                    &config.targets,
-                    &frontend_threads,
-                    &collector.measured_compile_test_cases,
+                    prepared_dirs,
                 ))
                 .await
                 .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
@@ -2433,6 +2449,18 @@ async fn bench_compile(
     // This ensures that we're good to go with the just updated data.
     conn.maybe_create_indices().await;
     errors
+}
+
+fn collect_parallel<T: Sync, V: Send>(
+    slice: &[T],
+    f: impl Fn(&T) -> V + Sync,
+    max_threads: usize,
+) -> Vec<V> {
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(max_threads)
+        .build()
+        .unwrap();
+    pool.install(|| slice.par_iter().map(&f).collect())
 }
 
 /// Records the sizes of individual components (rustc, libLLVM, etc.) for the given toolchain
