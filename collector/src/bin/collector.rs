@@ -8,7 +8,7 @@ use collector::compare::compare_artifacts;
 use hashbrown::HashSet;
 use humansize::{BINARY, format_size};
 use rayon::ThreadPoolBuilder;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{Either, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -42,8 +42,8 @@ use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::target::Target;
 use collector::compile::benchmark::{
-    ArtifactType, Benchmark, BenchmarkDir, BenchmarkName, CompileBenchmarkFilter,
-    compile_benchmark_dir, get_compile_benchmarks,
+    ArtifactType, Benchmark, BenchmarkName, CompileBenchmarkFilter, compile_benchmark_dir,
+    get_compile_benchmarks,
 };
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
@@ -2368,8 +2368,9 @@ async fn bench_compile(
     }
 
     // Prepare normal benchmarks in parallel, limit threads to keep memory usage under control
+    // Note that preparation already happens in parallel internally
     const PREPARE_THREADS: usize = 4;
-    let prepared_dirs: Vec<anyhow::Result<Vec<BenchmarkDir>>> = collect_parallel(
+    let prepared_dirs = parallelize(
         &config.benchmarks,
         |benchmark| {
             let frontend_threads = config.frontend_threads_config.expand(benchmark);
@@ -2451,16 +2452,24 @@ async fn bench_compile(
     errors
 }
 
-fn collect_parallel<T: Sync, V: Send>(
+/// If `max_threads == 0`, panics
+/// If `max_threads == 1`, returns a lazy iterator of `slice` mapped with `f`
+/// If `max_threads > 1`, eagerly maps `slice` with `f` in parallel with `max_threads` threads, and returns an iterator over the collected result
+fn parallelize<T: Sync, V: Send>(
     slice: &[T],
     f: impl Fn(&T) -> V + Sync,
     max_threads: usize,
-) -> Vec<V> {
-    let pool = ThreadPoolBuilder::new()
-        .num_threads(max_threads)
-        .build()
-        .unwrap();
-    pool.install(|| slice.par_iter().map(&f).collect())
+) -> impl Iterator<Item=V> {
+    assert_ne!(max_threads, 0);
+    if max_threads == 1 {
+        Either::Left(slice.iter().map(f))
+    } else {
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(max_threads)
+            .build()
+            .unwrap();
+        Either::Right(pool.install(|| slice.par_iter().map(&f).collect::<Vec<_>>().into_iter()))
+    }
 }
 
 /// Records the sizes of individual components (rustc, libLLVM, etc.) for the given toolchain

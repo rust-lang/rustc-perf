@@ -473,6 +473,9 @@ impl Benchmark {
         iterations: Option<usize>,
         benchmark_dirs: Vec<BenchmarkDir>,
     ) -> anyhow::Result<()> {
+        if benchmark_dirs.is_empty() {
+            return Ok(());
+        }
         let iterations = iterations.unwrap_or(self.config.runs);
 
         // We need to hold on to the directories to keep the files alive until
