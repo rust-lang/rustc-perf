@@ -3,7 +3,6 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::github;
 use crate::load::SiteCtxt;
 
 use collector::compile::benchmark::category::Category;
@@ -19,7 +18,7 @@ use serde::Serialize;
 use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::github::RUST_REPO_GITHUB_API_URL;
-use crate::github::client::{Client, GraphQLClient};
+use crate::github::client::{Client, GraphQLClient, PullRequest};
 use crate::github::triage::find_and_parse_unrolled_build_comment;
 use crate::server::comparison::StatComparison;
 use anyhow::anyhow;
@@ -177,7 +176,8 @@ pub async fn handle_triage(
         None => String::from("**ERROR**: no data found for end bound"),
     };
 
-    let report = generate_report(&start, &end, summary, report, num_comparisons).await;
+    let report =
+        generate_report(&rest_client, &start, &end, summary, report, num_comparisons).await;
     Ok(api::triage::Response(report))
 }
 
@@ -1560,6 +1560,7 @@ impl Magnitude {
 }
 
 async fn generate_report(
+    client: &Client,
     start: &Bound,
     end: &Bound,
     summary: String,
@@ -1578,10 +1579,10 @@ async fn generate_report(
     let regressions = report.remove(&Direction::Regression).unwrap_or_default();
     let improvements = report.remove(&Direction::Improvement).unwrap_or_default();
     let mixed = report.remove(&Direction::Mixed).unwrap_or_default();
-    let untriaged = match github::untriaged_perf_regressions().await {
+    let untriaged = match client.rustc_untriaged_perf_regressions().await {
         Ok(u) => u
             .iter()
-            .map(|github::PullRequest { title, number }| {
+            .map(|PullRequest { title, number }| {
                 format!("- [#{number} {title}](https://github.com/rust-lang/rust/pull/{number})")
             })
             .collect::<Vec<_>>()

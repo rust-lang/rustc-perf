@@ -9,8 +9,6 @@ use chrono::Utc;
 use serde::Deserialize;
 use std::time::Duration;
 
-type BoxedError = Box<dyn std::error::Error + Send + Sync>;
-
 pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-lang/rust";
 
 /// Comments that are temporary and do not add any value once there has been a new development
@@ -127,51 +125,4 @@ pub async fn parse_homu_comment(comment_body: &str) -> Option<String> {
     };
 
     Some(sha)
-}
-
-#[derive(serde::Deserialize)]
-pub(crate) struct PullRequest {
-    pub number: u64,
-    pub title: String,
-}
-
-#[derive(serde::Deserialize)]
-struct PullRequestResponse {
-    items: Vec<PullRequest>,
-}
-
-/// Fetch all merged PRs that are labeled with `perf-regression` and not `perf-regression-triaged`
-pub(crate) async fn untriaged_perf_regressions() -> Result<Vec<PullRequest>, BoxedError> {
-    let url = "https://api.github.com/search/issues?q=repo:rust-lang/rust+label:perf-regression+-label:perf-regression-triaged+is:merged".to_owned();
-    let request = github_request(&url);
-    Ok(send_request::<PullRequestResponse>(request).await?.items)
-}
-
-fn github_request(url: &str) -> reqwest::RequestBuilder {
-    let client = reqwest::Client::new();
-    let mut request = client
-        .get(url)
-        .header("Content-Type", "application/json")
-        .header("User-Agent", "rustc-perf");
-    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-        let mut value = reqwest::header::HeaderValue::from_str(&format!("token {token}")).unwrap();
-        value.set_sensitive(true);
-        request = request.header("Authorization", value);
-    }
-    request
-}
-
-async fn send_request<T: serde::de::DeserializeOwned>(
-    request: reqwest::RequestBuilder,
-) -> Result<T, BoxedError> {
-    let response = request.send().await?;
-    match response.error_for_status_ref() {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(anyhow::anyhow!("response = {:?}", response)
-                .context(e)
-                .into());
-        }
-    }
-    Ok(response.json::<T>().await?)
 }

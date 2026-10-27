@@ -58,14 +58,29 @@ impl Client {
         }
 
         let response = response
-            .json::<serde_json::Value>()
+            .json::<PullRequest>()
             .await
-            .context("malformed JSON")?;
-        response
-            .get("title")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_owned())
-            .ok_or_else(|| anyhow::anyhow!("Missing title attribute on PR"))
+            .context("malformed pull request response")?;
+        Ok(response.title)
+    }
+
+    /// Fetch all merged PRs that are labeled with `perf-regression` and not `perf-regression-triaged`
+    pub(crate) async fn rustc_untriaged_perf_regressions(
+        &self,
+    ) -> anyhow::Result<Vec<PullRequest>> {
+        #[derive(serde::Deserialize)]
+        struct PullRequestResponse {
+            items: Vec<PullRequest>,
+        }
+
+        // Note: this hardcodes rust-lang/rust, but we'll hardly use triage for any other repo
+        let url = "https://api.github.com/search/issues?q=repo:rust-lang/rust+label:perf-regression+-label:perf-regression-triaged+is:merged";
+        let req = self.inner.get(url);
+        let response = self.send(req).await?;
+        if !response.status().is_success() {
+            anyhow::bail!("{:?} != 200 OK", response.status());
+        }
+        Ok(response.json::<PullRequestResponse>().await?.items)
     }
 
     pub async fn post_comment<B>(&self, pr_number: u32, body: B)
@@ -106,6 +121,12 @@ impl Client {
             .send()
             .await
     }
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct PullRequest {
+    pub number: u64,
+    pub title: String,
 }
 
 const GRAPHQL_API_BASE: &str = "https://api.github.com/graphql";
