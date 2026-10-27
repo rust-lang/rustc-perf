@@ -78,9 +78,12 @@ impl Client {
         &self,
         request: reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, reqwest::Error> {
+        let mut value = header::HeaderValue::from_str(&format!("token {token}")).unwrap();
+        value.set_sensitive(true);
+
         request
             .header(USER_AGENT, BOT_USER_AGENT)
-            .header(header::AUTHORIZATION, format!("token {}", self.token))
+            .header(header::AUTHORIZATION, value)
             .send()
             .await
     }
