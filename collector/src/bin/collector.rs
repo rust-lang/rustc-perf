@@ -75,6 +75,9 @@ const TOOLCHAIN_CACHE_DIRECTORY: &str = "cache";
 /// If the directory will have more toolchains, it will be purged.
 const TOOLCHAIN_CACHE_MAX_TOOLCHAINS: usize = 30;
 
+/// The amount of prepare jobs used by the job queue
+const PREPARE_JOBS_JOB_QUEUE: usize = 1;
+
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
     format!("{n} normal benchmark{suffix} remaining")
@@ -148,6 +151,7 @@ struct CompileBenchmarkConfig {
     bench_rustc: bool,
     targets: Vec<Target>,
     frontend_threads_config: FrontendThreadsConfig,
+    prepare_jobs: usize,
 }
 
 struct RuntimeBenchmarkConfig {
@@ -461,6 +465,10 @@ struct CompileTimeOptions {
     /// Parallel frontend thread count in comma-separated list
     #[arg(long = "frontend-threads", value_delimiter = ',')]
     frontend_threads_counts: Vec<u32>,
+
+    /// Amount of threads used to prepare benchmarks
+    #[arg(long, default_value = "1")]
+    prepare_jobs: usize,
 }
 
 impl CompileTimeOptions {
@@ -1113,6 +1121,7 @@ fn main_result() -> anyhow::Result<i32> {
                 bench_rustc: bench_rustc.bench_rustc,
                 targets: vec![Target::host()],
                 frontend_threads_config,
+                prepare_jobs: opts.prepare_jobs,
             };
 
             rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
@@ -1788,6 +1797,7 @@ async fn create_benchmark_configs(
             bench_rustc,
             targets: vec![job.target().into()],
             frontend_threads_config: FrontendThreadsConfig::FromBenchmark,
+            prepare_jobs: PREPARE_JOBS_JOB_QUEUE,
         })
     } else {
         None
@@ -2284,6 +2294,7 @@ async fn bench_published_artifact(
             bench_rustc: false,
             targets: vec![Target::host()],
             frontend_threads_config,
+            prepare_jobs: PREPARE_JOBS_JOB_QUEUE,
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
@@ -2369,7 +2380,6 @@ async fn bench_compile(
 
     // Prepare normal benchmarks in parallel, limit threads to keep memory usage under control
     // Note that preparation already happens in parallel internally
-    const PREPARE_THREADS: usize = 4;
     let prepared_dirs = parallelize(
         &config.benchmarks,
         |benchmark| {
@@ -2384,7 +2394,7 @@ async fn bench_compile(
                 &collector.measured_compile_test_cases,
             )
         },
-        PREPARE_THREADS,
+        config.prepare_jobs,
     );
 
     // Normal benchmarks.
@@ -2459,7 +2469,7 @@ fn parallelize<T: Sync, V: Send>(
     slice: &[T],
     f: impl Fn(&T) -> V + Sync,
     max_threads: usize,
-) -> impl Iterator<Item=V> {
+) -> impl Iterator<Item = V> {
     assert_ne!(max_threads, 0);
     if max_threads == 1 {
         Either::Left(slice.iter().map(f))
