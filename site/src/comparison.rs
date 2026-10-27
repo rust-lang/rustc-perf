@@ -87,7 +87,6 @@ pub async fn handle_triage(
                 break before;
             }
         };
-        num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
             comparison.b.artifact,
@@ -116,6 +115,7 @@ pub async fn handle_triage(
             // rollup was fully expanded, no need to include rollup itself into the comparison
         } else {
             // the rollup was not fully expanded, we should still include it
+            num_comparisons += 1;
             populate_report(&comparison, &benchmark_map, metric, &mut report, None).await;
         }
 
