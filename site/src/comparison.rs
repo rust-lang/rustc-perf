@@ -87,7 +87,6 @@ pub async fn handle_triage(
                 break before;
             }
         };
-        num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
             comparison.b.artifact,
@@ -104,6 +103,7 @@ pub async fn handle_triage(
                 master_commits,
                 &benchmark_map,
                 &mut report,
+                &mut num_comparisons,
                 ctxt,
             )
             .await
@@ -115,6 +115,7 @@ pub async fn handle_triage(
             // rollup was fully expanded, no need to include rollup itself into the comparison
         } else {
             // the rollup was not fully expanded, we should still include it
+            num_comparisons += 1;
             populate_report(&comparison, &benchmark_map, metric, &mut report, None).await;
         }
 
@@ -162,6 +163,7 @@ pub async fn handle_triage(
     Ok(api::triage::Response(report))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn expand_rollup(
     pr: u32,
     start: &Bound,
@@ -169,6 +171,7 @@ async fn expand_rollup(
     master_commits: &[MasterCommit],
     benchmark_map: &HashMap<Benchmark, Category>,
     report: &mut HashMap<Direction, Vec<String>>,
+    num_comparisons: &mut usize,
     ctxt: &SiteCtxt,
 ) -> anyhow::Result<bool> {
     let graphql = GraphQLClient::from_ctxt(ctxt);
@@ -177,6 +180,7 @@ async fn expand_rollup(
     for member_sha in
         find_and_parse_unrolled_build_comment(comments.iter().map(|c| c.body.as_str()))?
     {
+        *num_comparisons += 1;
         let comparison = compare_given_commits(
             start.clone(),
             Bound::Commit(member_sha.to_string()),
