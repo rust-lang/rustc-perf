@@ -1,10 +1,9 @@
+use crate::load::SiteCtxt;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use http::header;
 use http::header::USER_AGENT;
 use serde::de::DeserializeOwned;
-
-use crate::load::SiteCtxt;
 
 const BOT_USER_AGENT: &str = "perf-rust-lang-org-server";
 
@@ -49,6 +48,26 @@ impl Client {
             .map_err(|e| anyhow::anyhow!("cannot deserialize commit: {:?}", e))
     }
 
+    /// Get the title of a PR with the given number
+    pub(crate) async fn pr_title(&self, pr: u32) -> anyhow::Result<String> {
+        let url = format!("{}/pulls/{pr}", self.repository_url);
+        let req = self.inner.get(url);
+        let response = self.send(req).await.context("cannot get PR")?;
+        if !response.status().is_success() {
+            anyhow::bail!("{:?} != 200 OK", response.status());
+        }
+
+        let response = response
+            .json::<serde_json::Value>()
+            .await
+            .context("malformed JSON")?;
+        response
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_owned())
+            .ok_or_else(|| anyhow::anyhow!("Missing title attribute on PR"))
+    }
+
     pub async fn post_comment<B>(&self, pr_number: u32, body: B)
     where
         B: Into<String>,
@@ -78,7 +97,7 @@ impl Client {
         &self,
         request: reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        let mut value = header::HeaderValue::from_str(&format!("token {token}")).unwrap();
+        let mut value = header::HeaderValue::from_str(&format!("token {}", self.token)).unwrap();
         value.set_sensitive(true);
 
         request

@@ -147,30 +147,6 @@ pub(crate) async fn untriaged_perf_regressions() -> Result<Vec<PullRequest>, Box
     Ok(send_request::<PullRequestResponse>(request).await?.items)
 }
 
-/// Get the title of a PR with the given number
-pub(crate) async fn pr_title(pr: u32) -> String {
-    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{pr}");
-    let request = github_request(&url);
-
-    async fn send(request: reqwest::RequestBuilder) -> Result<String, BoxedError> {
-        let body = send_request::<serde_json::Value>(request).await?;
-        Ok(body
-            .get("title")
-            .ok_or_else(malformed_json_error)?
-            .as_str()
-            .ok_or_else(malformed_json_error)?
-            .to_owned())
-    }
-    let request_dbg = format!("{request:?}");
-    match send(request).await {
-        Ok(t) => t,
-        Err(e) => {
-            log::error!("Error fetching {}: {:?}", request_dbg, e);
-            String::from("<UNKNOWN>")
-        }
-    }
-}
-
 fn github_request(url: &str) -> reqwest::RequestBuilder {
     let client = reqwest::Client::new();
     let mut request = client
@@ -198,8 +174,4 @@ async fn send_request<T: serde::de::DeserializeOwned>(
         }
     }
     Ok(response.json::<T>().await?)
-}
-
-fn malformed_json_error() -> String {
-    "JSON was malformed".to_owned()
 }
