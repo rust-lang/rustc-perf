@@ -2666,3 +2666,33 @@ fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
             }
         }))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parallelize;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering::Relaxed;
+
+    #[test]
+    fn test_parallelize_lazy() {
+        let did_work = AtomicBool::new(false);
+        let mut iter = parallelize(
+            &[1, 2, 3],
+            |n| {
+                did_work.store(true, Relaxed);
+                n + 1
+            },
+            1,
+        );
+
+        // Check that parallelize is lazy with `max_threads=1`
+        assert!(!did_work.load(Relaxed));
+
+        // Check that the functional behaviour is correct
+        assert_eq!(iter.next().unwrap(), 2);
+        assert!(did_work.load(Relaxed));
+        assert_eq!(iter.next().unwrap(), 3);
+        assert_eq!(iter.next().unwrap(), 4);
+        assert!(iter.next().is_none());
+    }
+}
