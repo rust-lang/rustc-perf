@@ -3,7 +3,6 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::github;
 use crate::load::SiteCtxt;
 
 use collector::compile::benchmark::category::Category;
@@ -18,7 +17,8 @@ use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::github::client::GraphQLClient;
+use crate::github::RUST_REPO_GITHUB_API_URL;
+use crate::github::client::{Client, GraphQLClient, PullRequest};
 use crate::github::triage::find_and_parse_unrolled_build_comment;
 use crate::server::comparison::StatComparison;
 use anyhow::anyhow;
@@ -65,6 +65,9 @@ pub async fn handle_triage(
     let metric = body.metric.unwrap_or(Metric::InstructionsUser);
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
+    let rest_client = Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
+    let graphql_client = GraphQLClient::from_ctxt(ctxt);
+
     let end = loop {
         // For triage, we will only show x64 for now
         let comparison = match compare_given_commits(
@@ -95,8 +98,14 @@ pub async fn handle_triage(
 
         // Try to expand rollup into member PRs
         if let Some(pr) = comparison.b.pr
-            && github::pr_title(pr).await.starts_with("Rollup of")
+            && rest_client
+                .pr_title(pr)
+                .await
+                .map_err(|e| e.to_string())?
+                .starts_with("Rollup of")
             && expand_rollup(
+                &rest_client,
+                &graphql_client,
                 pr,
                 &before,
                 metric,
@@ -116,7 +125,15 @@ pub async fn handle_triage(
         } else {
             // the rollup was not fully expanded, we should still include it
             num_comparisons += 1;
-            populate_report(&comparison, &benchmark_map, metric, &mut report, None).await;
+            populate_report(
+                &rest_client,
+                &comparison,
+                &benchmark_map,
+                metric,
+                &mut report,
+                None,
+            )
+            .await;
         }
 
         // If we already know this is the last iteration, we can stop
@@ -159,12 +176,15 @@ pub async fn handle_triage(
         None => String::from("**ERROR**: no data found for end bound"),
     };
 
-    let report = generate_report(&start, &end, summary, report, num_comparisons).await;
+    let report =
+        generate_report(&rest_client, &start, &end, summary, report, num_comparisons).await;
     Ok(api::triage::Response(report))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 async fn expand_rollup(
+    client: &Client,
+    graphql: &GraphQLClient,
     pr: u32,
     start: &Bound,
     metric: Metric,
@@ -174,7 +194,6 @@ async fn expand_rollup(
     num_comparisons: &mut usize,
     ctxt: &SiteCtxt,
 ) -> anyhow::Result<bool> {
-    let graphql = GraphQLClient::from_ctxt(ctxt);
     let comments = graphql.get_comments(pr).await?;
     let mut complete = true;
     for member_sha in
@@ -194,7 +213,7 @@ async fn expand_rollup(
         match comparison {
             None => complete = false,
             Some(comparison) => {
-                populate_report(&comparison, benchmark_map, metric, report, Some(pr)).await;
+                populate_report(client, &comparison, benchmark_map, metric, report, Some(pr)).await;
             }
         }
     }
@@ -291,6 +310,7 @@ pub async fn handle_compare(
 }
 
 async fn populate_report(
+    client: &Client,
     comparison: &ArtifactComparison,
     benchmark_map: &HashMap<Benchmark, Category>,
     metric: Metric,
@@ -317,7 +337,9 @@ async fn populate_report(
 
     if include_in_triage {
         let entry = report.entry(direction).or_default();
-        entry.push(write_triage_summary(comparison, &primary, &secondary, from_rollup).await);
+        entry.push(
+            write_triage_summary(client, comparison, &primary, &secondary, from_rollup).await,
+        );
     }
 }
 
@@ -586,13 +608,17 @@ pub(crate) fn deserves_attention_icount(
 }
 
 async fn write_triage_summary(
+    client: &Client,
     comparison: &ArtifactComparison,
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
     from_rollup: Option<u32>,
 ) -> String {
     let mut result = if let Some(pr) = comparison.b.pr {
-        let title = github::pr_title(pr).await;
+        let title = client
+            .pr_title(pr)
+            .await
+            .unwrap_or_else(|_| "<Unknown Change>".to_string());
         format!("{title} [#{pr}](https://github.com/rust-lang/rust/pull/{pr})")
     } else {
         String::from("<Unknown Change>")
@@ -1534,6 +1560,7 @@ impl Magnitude {
 }
 
 async fn generate_report(
+    client: &Client,
     start: &Bound,
     end: &Bound,
     summary: String,
@@ -1552,10 +1579,10 @@ async fn generate_report(
     let regressions = report.remove(&Direction::Regression).unwrap_or_default();
     let improvements = report.remove(&Direction::Improvement).unwrap_or_default();
     let mixed = report.remove(&Direction::Mixed).unwrap_or_default();
-    let untriaged = match github::untriaged_perf_regressions().await {
+    let untriaged = match client.rustc_untriaged_perf_regressions().await {
         Ok(u) => u
             .iter()
-            .map(|github::PullRequest { title, number }| {
+            .map(|PullRequest { title, number }| {
                 format!("- [#{number} {title}](https://github.com/rust-lang/rust/pull/{number})")
             })
             .collect::<Vec<_>>()
