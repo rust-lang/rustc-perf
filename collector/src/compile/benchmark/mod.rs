@@ -743,11 +743,21 @@ pub fn get_compile_benchmarks(
             .into_iter()
             .map(|(path, name)| Benchmark::new(name, path))
             .collect::<anyhow::Result<Vec<Benchmark>>>()?,
-        CompileBenchmarkFilter::Exact(names) => paths
-            .into_iter()
-            .filter(|(_, name)| names.contains(name))
-            .map(|(path, name)| Benchmark::new(name, path))
-            .collect::<anyhow::Result<Vec<Benchmark>>>()?,
+        CompileBenchmarkFilter::Exact(names) => {
+            // Convert `paths` to hashmap for efficient lookup
+            let mut paths_map = paths
+                .into_iter()
+                .map(|(path, name)| (name, Some(path)))
+                .collect::<HashMap<_, _>>();
+            names
+                .iter()
+                .map(|name| match paths_map.get_mut(name) {
+                    Some(path @ Some(_)) => Benchmark::new(name.clone(), path.take().unwrap()),
+                    Some(None) => bail!("Compile benchmark `{name}` specified multiple times"),
+                    None => bail!("Compile benchmark `{name}` does not exist"),
+                })
+                .collect::<anyhow::Result<Vec<Benchmark>>>()?
+        }
         CompileBenchmarkFilter::Fuzzy {
             include,
             exclude,
@@ -874,5 +884,23 @@ mod tests {
                 benchmark.name
             );
         }
+
+        // Test that `CompileBenchmarkFilter::Exact` checks whether the benchmarks exist
+        assert!(
+            get_compile_benchmarks(
+                &benchmark_dir,
+                CompileBenchmarkFilter::Exact(&["does_not_exist".into()])
+            )
+            .is_err()
+        );
+
+        // Test that `CompileBenchmarkFilter::Exact` checks duplicates
+        assert!(
+            get_compile_benchmarks(
+                &benchmark_dir,
+                CompileBenchmarkFilter::Exact(&["syn".into(), "syn".into()])
+            )
+            .is_err()
+        );
     }
 }
