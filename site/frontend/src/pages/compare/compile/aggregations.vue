@@ -63,7 +63,6 @@ const totalAfter = computed(() =>
                 <div class="group-header">{{ profile }}</div>
                 <SummaryTable
                   :summary="calculateSummary('profile', profile)"
-                  :withLegend="false"
                 ></SummaryTable>
               </div>
             </div>
@@ -83,7 +82,6 @@ const totalAfter = computed(() =>
                 <div class="group-header">{{ scenario }}</div>
                 <SummaryTable
                   :summary="calculateSummary('scenario', scenario)"
-                  :withLegend="false"
                 ></SummaryTable>
               </div>
             </div>
@@ -95,7 +93,6 @@ const totalAfter = computed(() =>
                 <div class="group-header">{{ category }}</div>
                 <SummaryTable
                   :summary="calculateSummary('category', category)"
-                  :withLegend="false"
                 ></SummaryTable>
               </div>
             </div>

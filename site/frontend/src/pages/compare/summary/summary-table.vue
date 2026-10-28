@@ -5,15 +5,9 @@ import SummaryRange from "./range.vue";
 import SummaryCount from "./count.vue";
 import SummaryPercentValue from "./percent-value.vue";
 
-const props = withDefaults(
-  defineProps<{
-    summary: SummaryGroup;
-    withLegend?: boolean;
-  }>(),
-  {
-    withLegend: true,
-  }
-);
+const props = defineProps<{
+  summary: SummaryGroup;
+}>();
 const summary = computed(() => props.summary);
 </script>
 
@@ -30,7 +24,7 @@ const summary = computed(() => props.summary);
     <span>No results</span>
   </div>
   <table v-else class="summary-table">
-    <thead v-if="withLegend">
+    <thead>
       <tr>
         <th><!-- icon --></th>
         <th>Mean</th>
@@ -40,7 +34,7 @@ const summary = computed(() => props.summary);
     </thead>
     <tbody>
       <tr>
-        <td title="Regressions" v-if="withLegend">❌</td>
+        <td title="Regressions">❌</td>
         <template v-if="summary.regressions.count !== 0">
           <td>
             <SummaryPercentValue :value="summary.regressions.average" />
@@ -60,7 +54,7 @@ const summary = computed(() => props.summary);
         </template>
       </tr>
       <tr>
-        <td title="Improvements" v-if="withLegend">✅</td>
+        <td title="Improvements">✅</td>
         <template v-if="summary.improvements.count !== 0">
           <td>
             <SummaryPercentValue :value="summary.improvements.average" />
@@ -80,7 +74,7 @@ const summary = computed(() => props.summary);
         </template>
       </tr>
       <tr>
-        <td title="All changes" v-if="withLegend">❌,✅</td>
+        <td title="All changes">❌,✅</td>
         <td>
           <SummaryPercentValue :value="summary.all.average" />
         </td>
