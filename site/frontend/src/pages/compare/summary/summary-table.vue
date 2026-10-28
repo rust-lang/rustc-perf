@@ -33,8 +33,8 @@ const summary = computed(() => props.summary);
     <thead v-if="withLegend">
       <tr>
         <th><!-- icon --></th>
-        <th>Range</th>
         <th>Mean</th>
+        <th>Range</th>
         <th>Count</th>
       </tr>
     </thead>
@@ -43,10 +43,10 @@ const summary = computed(() => props.summary);
         <td title="Regressions" v-if="withLegend">❌</td>
         <template v-if="summary.regressions.count !== 0">
           <td>
-            <SummaryRange :range="summary.regressions.range" />
+            <SummaryPercentValue :value="summary.regressions.average" />
           </td>
           <td>
-            <SummaryPercentValue :value="summary.regressions.average" />
+            <SummaryRange :range="summary.regressions.range" />
           </td>
           <td class="positive">
             <SummaryCount
@@ -63,10 +63,10 @@ const summary = computed(() => props.summary);
         <td title="Improvements" v-if="withLegend">✅</td>
         <template v-if="summary.improvements.count !== 0">
           <td>
-            <SummaryRange :range="summary.improvements.range" />
+            <SummaryPercentValue :value="summary.improvements.average" />
           </td>
           <td>
-            <SummaryPercentValue :value="summary.improvements.average" />
+            <SummaryRange :range="summary.improvements.range" />
           </td>
           <td class="negative">
             <SummaryCount
@@ -82,10 +82,10 @@ const summary = computed(() => props.summary);
       <tr>
         <td title="All changes" v-if="withLegend">❌,✅</td>
         <td>
-          <SummaryRange :range="summary.all.range" />
+          <SummaryPercentValue :value="summary.all.average" />
         </td>
         <td>
-          <SummaryPercentValue :value="summary.all.average" />
+          <SummaryRange :range="summary.all.range" />
         </td>
         <td>
           <SummaryCount
