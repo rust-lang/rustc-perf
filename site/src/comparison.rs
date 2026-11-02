@@ -25,6 +25,7 @@ use anyhow::anyhow;
 use collector::compile::benchmark::ArtifactType;
 use database::selector::{CompileTestCase, RuntimeTestCase};
 use database::{CommitType, CompileBenchmark};
+use futures::StreamExt;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -166,28 +167,42 @@ async fn populate_report_from_comparisons(
     ctxt: &SiteCtxt,
 ) -> api::ServerResult<(HashMap<Direction, Vec<String>>, usize)> {
     let graphql_client = GraphQLClient::from_ctxt(ctxt);
-    let mut report = HashMap::new();
+
+    // Run the report population in parallel, as otherwise we hit the 60 second gateway timeout for large reports
+    let mut stream =
+        futures::stream::iter(comparisons.into_iter().map(|(before, comparison)| async {
+            let mut report = HashMap::new();
+            let mut num_comparisons = 0;
+            populate_report_from_comparison(
+                before,
+                comparison,
+                metric,
+                rest_client,
+                &graphql_client,
+                master_commits,
+                benchmark_map,
+                &mut report,
+                &mut num_comparisons,
+                ctxt,
+            )
+            .await?;
+            Result::<_, String>::Ok((report, num_comparisons))
+        }))
+        .buffered(10);
+
     let mut num_comparisons = 0;
-
-    for (before, comparison) in comparisons {
-        () = populate_report_from_comparison(
-            before,
-            comparison,
-            metric,
-            rest_client,
-            &graphql_client,
-            master_commits,
-            benchmark_map,
-            &mut report,
-            &mut num_comparisons,
-            ctxt,
-        )
-        .await?;
+    let mut report: HashMap<Direction, Vec<String>> = HashMap::new();
+    while let Some(res) = stream.next().await {
+        let (sub_report, sub_num_comparisons) = res?;
+        num_comparisons += sub_num_comparisons;
+        for (dir, res) in sub_report {
+            report.entry(dir).or_default().extend(res);
+        }
     }
-
     Ok((report, num_comparisons))
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn populate_report_from_comparison(
     before: Bound,
     comparison: ArtifactComparison,
@@ -208,13 +223,13 @@ async fn populate_report_from_comparison(
             .map_err(|e| e.to_string())?
             .starts_with("Rollup of")
         && expand_rollup(
-            &rest_client,
-            &graphql_client,
+            rest_client,
+            graphql_client,
             pr,
             &before,
             metric,
             master_commits,
-            &benchmark_map,
+            benchmark_map,
             report,
             num_comparisons,
             ctxt,
@@ -230,9 +245,9 @@ async fn populate_report_from_comparison(
         // the rollup was not fully expanded, we should still include it
         *num_comparisons += 1;
         populate_report(
-            &rest_client,
+            rest_client,
             &comparison,
-            &benchmark_map,
+            benchmark_map,
             metric,
             report,
             None,
