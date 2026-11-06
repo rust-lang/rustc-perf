@@ -1,4 +1,4 @@
-FROM node:18 as frontend
+FROM node:22 as frontend
 
 COPY ./site/frontend ./site/frontend
 RUN cd site/frontend && npm ci
