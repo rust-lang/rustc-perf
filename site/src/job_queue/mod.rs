@@ -19,6 +19,7 @@ use database::{
 };
 use hashbrown::HashMap;
 use parking_lot::RwLock;
+use std::cmp::Reverse;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::time::{self, Duration, MissedTickBehavior};
@@ -158,12 +159,11 @@ fn sort_benchmark_requests(pending: PendingBenchmarkRequests) -> Vec<BenchmarkRe
         level.sort_unstable_by_key(|bmr| {
             (
                 // Higher priority requests go first
-                -bmr.priority(),
-                // PR number takes priority
-                bmr.pr().unwrap_or(0),
+                Reverse(bmr.priority()),
+                // Older requests take priority
+                bmr.created_at(),
                 // Order master commits before try commits
                 if bmr.is_master() { 0 } else { 1 },
-                bmr.created_at(),
             )
         });
         for c in level {
@@ -1008,6 +1008,35 @@ mod tests {
 
             let queue = build_queue(ctx.db()).await?;
             queue_order_matches(&queue, &["base", "pr4", "pr3", "pr5", "pr2", "pr6"]);
+            Ok(ctx)
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn queue_oldest_request_first() {
+        run_postgres_test(|ctx| async {
+            ctx.add_collector(CollectorBuilder::default()).await;
+
+            ctx.insert_master_request("base", "base2", 1).await;
+            ctx.insert_try_request(4, 0).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(4, "pr4", "base", Utc::now())
+                .await
+                .unwrap();
+            ctx.insert_try_request(2, 0).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(2, "pr2", "base", Utc::now())
+                .await
+                .unwrap();
+            ctx.insert_try_request(3, 0).await;
+            ctx.db()
+                .attach_shas_to_try_benchmark_request(3, "pr3", "base", Utc::now())
+                .await
+                .unwrap();
+
+            let queue = build_queue(ctx.db()).await?;
+            queue_order_matches(&queue, &["base", "pr4", "pr2", "pr3"]);
             Ok(ctx)
         })
         .await;
