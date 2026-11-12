@@ -12,11 +12,13 @@ You can build the website in multiple ways:
 - Use the provided Docker image:
   ```console
   $ git clone https://github.com/rust-lang/rustc-perf.git
+  $ cd rustc-perf
   $ docker build -t rustc-perf .
   ```
 - Build it yourself:
   ```console
   $ git clone https://github.com/rust-lang/rustc-perf.git
+  $ cd rustc-perf
   
   # Build frontend
   $ cd site/frontend
