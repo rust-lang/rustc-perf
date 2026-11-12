@@ -411,6 +411,9 @@ jobs:
       - name: Install Python dependencies
         run: python3 -m pip install msgpack requests
 
+      - name: Test site readiness checks
+        run: python3 -m unittest discover -s ci -p test_check_site.py -v
+
       # Check that data from the /get endpoint can be successfully queried.
       - name: Query compare page data
         run: |
