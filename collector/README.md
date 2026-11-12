@@ -51,7 +51,7 @@ request a run on the benchmark server for a specific PR.
 First, create a PR with the changes.
 
 After that, you need try privileges, or the assistance of someone with try
-privileges. Ask in #t-compiler/help on [Zulip](rust-lang.zulipchat.com) and/or
+privileges. Ask in #t-compiler/help on [Zulip](https://rust-lang.zulipchat.com) and/or
 ping `@simulacrum` as a starting point.
 
 There are two ways for that person to do a benchmark run.
