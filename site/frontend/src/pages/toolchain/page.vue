@@ -64,8 +64,8 @@ loadToolchainData(selector, loading);
   </div>
   <div v-else>
     <div>
-      See <a href="/compare.html">compare page</a> for descriptions of what the
-      names mean.
+      See the <a href="/compare.html">compare page</a> for descriptions of what
+      the names mean.
     </div>
   </div>
   <!-- These elements are always present and use v-once to avoid Vue recreating

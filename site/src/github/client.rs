@@ -1,10 +1,9 @@
+use crate::load::SiteCtxt;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use http::header;
 use http::header::USER_AGENT;
 use serde::de::DeserializeOwned;
-
-use crate::load::SiteCtxt;
 
 const BOT_USER_AGENT: &str = "perf-rust-lang-org-server";
 
@@ -49,6 +48,41 @@ impl Client {
             .map_err(|e| anyhow::anyhow!("cannot deserialize commit: {:?}", e))
     }
 
+    /// Get the title of a PR with the given number
+    pub(crate) async fn pr_title(&self, pr: u32) -> anyhow::Result<String> {
+        let url = format!("{}/pulls/{pr}", self.repository_url);
+        let req = self.inner.get(url);
+        let response = self.send(req).await.context("cannot get PR")?;
+        if !response.status().is_success() {
+            anyhow::bail!("{:?} != 200 OK", response.status());
+        }
+
+        let response = response
+            .json::<PullRequest>()
+            .await
+            .context("malformed pull request response")?;
+        Ok(response.title)
+    }
+
+    /// Fetch all merged PRs that are labeled with `perf-regression` and not `perf-regression-triaged`
+    pub(crate) async fn rustc_untriaged_perf_regressions(
+        &self,
+    ) -> anyhow::Result<Vec<PullRequest>> {
+        #[derive(serde::Deserialize)]
+        struct PullRequestResponse {
+            items: Vec<PullRequest>,
+        }
+
+        // Note: this hardcodes rust-lang/rust, but we'll hardly use triage for any other repo
+        let url = "https://api.github.com/search/issues?q=repo:rust-lang/rust+label:perf-regression+-label:perf-regression-triaged+is:merged";
+        let req = self.inner.get(url);
+        let response = self.send(req).await?;
+        if !response.status().is_success() {
+            anyhow::bail!("{:?} != 200 OK", response.status());
+        }
+        Ok(response.json::<PullRequestResponse>().await?.items)
+    }
+
     pub async fn post_comment<B>(&self, pr_number: u32, body: B)
     where
         B: Into<String>,
@@ -78,12 +112,21 @@ impl Client {
         &self,
         request: reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, reqwest::Error> {
+        let mut value = header::HeaderValue::from_str(&format!("token {}", self.token)).unwrap();
+        value.set_sensitive(true);
+
         request
             .header(USER_AGENT, BOT_USER_AGENT)
-            .header(header::AUTHORIZATION, format!("token {}", self.token))
+            .header(header::AUTHORIZATION, value)
             .send()
             .await
     }
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct PullRequest {
+    pub number: u64,
+    pub title: String,
 }
 
 const GRAPHQL_API_BASE: &str = "https://api.github.com/graphql";

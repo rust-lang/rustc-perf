@@ -161,11 +161,11 @@ loadGraphData(selector, loading);
     @change="updateSelection"
   ></DataSelector>
   <div>
-    See <a href="/compare.html">compare page</a> for descriptions of what the
-    names mean.
+    See the <a href="/compare.html">compare page</a> for descriptions of what
+    the names mean.
   </div>
   <div>
-    <strong>Note:</strong> pink in the graphs represent data points that are
+    <strong>Note:</strong> pink in the graphs represents data points that are
     interpolated due to missing data. Interpolated data is simply the last known
     data point repeated until another known data point is found.
   </div>

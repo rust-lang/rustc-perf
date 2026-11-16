@@ -92,7 +92,7 @@ impl<'a> BenchmarkGroup<'a> {
         for (name, benchmark_fns) in items {
             let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
             // Warm-up
-            for _ in 0..3 {
+            for _ in 0..args.warmups {
                 let benchmark_stats = (benchmark_fns.benchmark_fn)()?;
                 black_box(benchmark_stats);
             }

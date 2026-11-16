@@ -3,7 +3,6 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::github;
 use crate::load::SiteCtxt;
 
 use collector::compile::benchmark::category::Category;
@@ -18,13 +17,15 @@ use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::github::client::GraphQLClient;
+use crate::github::RUST_REPO_GITHUB_API_URL;
+use crate::github::client::{Client, GraphQLClient, PullRequest};
 use crate::github::triage::find_and_parse_unrolled_build_comment;
 use crate::server::comparison::StatComparison;
 use anyhow::anyhow;
 use collector::compile::benchmark::ArtifactType;
 use database::selector::{CompileTestCase, RuntimeTestCase};
 use database::{CommitType, CompileBenchmark};
+use futures::StreamExt;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -44,97 +45,23 @@ pub async fn handle_triage(
     let end = body.end;
     let master_commits = &ctxt.get_master_commits().commits;
 
-    let start_artifact = ctxt
-        .artifact_id_for_bound(start.clone(), true)
-        .ok_or(format!("could not find start commit for bound {start:?}"))?;
-    let end_artifact = ctxt
-        .artifact_id_for_bound(end.clone(), false)
-        .ok_or(format!("could not find end commit for bound {end:?}"))?;
-    // This gives a better error, but is still not great -- the common case here
-    // is that we've had a 422 error and as such had a fork. It's possible we
-    // could diagnose that and give a nicer error here telling the user which
-    // commit to use.
-    let mut next = next_commit(&start_artifact, master_commits)
-        .map(|c| Bound::Commit(c.sha.clone()))
-        .ok_or(format!("no next commit for {start_artifact:?}"))?;
-
-    let mut report = HashMap::new();
-    let mut before = start.clone();
-
-    let mut num_comparisons = 0;
+    // Find list of artifact comparisons for this request
     let metric = body.metric.unwrap_or(Metric::InstructionsUser);
     let benchmark_map = ctxt.get_benchmark_category_map().await;
+    let rest_client = Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
+    let (end, artifact_comparisons) =
+        find_comparisons(&start, &end, metric, master_commits, ctxt).await?;
 
-    let end = loop {
-        // For triage, we will only show x64 for now
-        let comparison = match compare_given_commits(
-            before.clone(),
-            next.clone(),
-            metric,
-            Some(Target::X86_64UnknownLinuxGnu),
-            ctxt,
-            master_commits,
-        )
-        .await
-        .map_err(|e| format!("error comparing commits: {e}"))?
-        {
-            Some(c) => c,
-            None => {
-                log::info!(
-                    "No data found for end bound {:?}. Ending comparison...",
-                    next
-                );
-                break before;
-            }
-        };
-        num_comparisons += 1;
-        log::info!(
-            "Comparing {} to {}",
-            comparison.b.artifact,
-            comparison.a.artifact
-        );
-
-        // Try to expand rollup into member PRs
-        if let Some(pr) = comparison.b.pr
-            && github::pr_title(pr).await.starts_with("Rollup of")
-            && expand_rollup(
-                pr,
-                &before,
-                metric,
-                master_commits,
-                &benchmark_map,
-                &mut report,
-                ctxt,
-            )
-            .await
-            .unwrap_or_else(|e| {
-                log::error!("Failed to expand rollup #{pr}: {e}");
-                false
-            })
-        {
-            // rollup was fully expanded, no need to include rollup itself into the comparison
-        } else {
-            // the rollup was not fully expanded, we should still include it
-            populate_report(&comparison, &benchmark_map, metric, &mut report, None).await;
-        }
-
-        // If we already know this is the last iteration, we can stop
-        if comparison.b.artifact == end_artifact {
-            break before;
-        }
-
-        // Decide whether to keep doing comparisons or not
-        match comparison.next(master_commits).map(Bound::Commit) {
-            // There is a next commit, and it is not the end bound.
-            // We keep doing comparisons...
-            Some(n) => {
-                before = next;
-                next = n;
-            }
-            // There is no next commit so we stop.
-            None => break before,
-        }
-    };
+    // Populate report from comparisons
+    let (report, num_comparisons) = populate_report_from_comparisons(
+        artifact_comparisons,
+        metric,
+        &rest_client,
+        master_commits,
+        &benchmark_map,
+        ctxt,
+    )
+    .await?;
 
     // Summarize the entire triage from start commit to end commit
     let summary = match compare_given_commits(
@@ -158,25 +85,197 @@ pub async fn handle_triage(
         None => String::from("**ERROR**: no data found for end bound"),
     };
 
-    let report = generate_report(&start, &end, summary, report, num_comparisons).await;
+    let report =
+        generate_report(&rest_client, &start, &end, summary, report, num_comparisons).await;
     Ok(api::triage::Response(report))
 }
 
+async fn find_comparisons(
+    start: &Bound,
+    end: &Bound,
+    metric: Metric,
+    master_commits: &[MasterCommit],
+    ctxt: &SiteCtxt,
+) -> api::ServerResult<(Bound, Vec<(Bound, ArtifactComparison)>)> {
+    let start_artifact = ctxt
+        .artifact_id_for_bound(start.clone(), true)
+        .ok_or(format!("could not find start commit for bound {start:?}"))?;
+    let end_artifact = ctxt
+        .artifact_id_for_bound(end.clone(), false)
+        .ok_or(format!("could not find end commit for bound {end:?}"))?;
+    let mut comparisons = Vec::new();
+
+    // This gives a better error, but is still not great -- the common case here
+    // is that we've had a 422 error and as such had a fork. It's possible we
+    // could diagnose that and give a nicer error here telling the user which
+    // commit to use.
+    let mut next = next_commit(&start_artifact, master_commits)
+        .map(|c| Bound::Commit(c.sha.clone()))
+        .ok_or(format!("no next commit for {start_artifact:?}"))?;
+    let mut before = start.clone();
+    let end = loop {
+        // For triage, we will only show x64 for now
+        let comparison = match compare_given_commits(
+            before.clone(),
+            next.clone(),
+            metric,
+            Some(Target::X86_64UnknownLinuxGnu),
+            ctxt,
+            master_commits,
+        )
+        .await
+        .map_err(|e| format!("error comparing commits: {e}"))?
+        {
+            Some(c) => c,
+            None => {
+                log::info!(
+                    "No data found for end bound {:?}. Ending comparison...",
+                    next
+                );
+                break before;
+            }
+        };
+
+        comparisons.push((before.clone(), comparison.clone()));
+
+        // If we already know this is the last iteration, we can stop
+        if comparison.b.artifact == end_artifact {
+            break before;
+        }
+
+        // Decide whether to keep doing comparisons or not
+        match comparison.next(master_commits).map(Bound::Commit) {
+            // There is a next commit, and it is not the end bound.
+            // We keep doing comparisons...
+            Some(n) => {
+                before = next;
+                next = n;
+            }
+            // There is no next commit so we stop.
+            None => break before,
+        }
+    };
+    Ok((end, comparisons))
+}
+
+async fn populate_report_from_comparisons(
+    comparisons: Vec<(Bound, ArtifactComparison)>,
+    metric: Metric,
+    rest_client: &Client,
+    master_commits: &[MasterCommit],
+    benchmark_map: &HashMap<Benchmark, Category>,
+    ctxt: &SiteCtxt,
+) -> api::ServerResult<(HashMap<Direction, Vec<String>>, usize)> {
+    let graphql_client = GraphQLClient::from_ctxt(ctxt);
+
+    // Run the report population in parallel, as otherwise we hit the 60 second gateway timeout for large reports
+    let mut stream =
+        futures::stream::iter(comparisons.into_iter().map(|(before, comparison)| async {
+            let mut report = HashMap::new();
+            let mut num_comparisons = 0;
+            populate_report_from_comparison(
+                before,
+                comparison,
+                metric,
+                rest_client,
+                &graphql_client,
+                master_commits,
+                benchmark_map,
+                &mut report,
+                &mut num_comparisons,
+                ctxt,
+            )
+            .await?;
+            Result::<_, String>::Ok((report, num_comparisons))
+        }))
+        .buffered(10);
+
+    let mut num_comparisons = 0;
+    let mut report: HashMap<Direction, Vec<String>> = HashMap::new();
+    while let Some(res) = stream.next().await {
+        let (sub_report, sub_num_comparisons) = res?;
+        num_comparisons += sub_num_comparisons;
+        for (dir, res) in sub_report {
+            report.entry(dir).or_default().extend(res);
+        }
+    }
+    Ok((report, num_comparisons))
+}
+
+#[expect(clippy::too_many_arguments)]
+async fn populate_report_from_comparison(
+    before: Bound,
+    comparison: ArtifactComparison,
+    metric: Metric,
+    rest_client: &Client,
+    graphql_client: &GraphQLClient,
+    master_commits: &[MasterCommit],
+    benchmark_map: &HashMap<Benchmark, Category>,
+    report: &mut HashMap<Direction, Vec<String>>,
+    num_comparisons: &mut usize,
+    ctxt: &SiteCtxt,
+) -> Result<(), String> {
+    // Try to expand rollup into member PRs
+    if let Some(pr) = comparison.b.pr
+        && rest_client
+            .pr_title(pr)
+            .await
+            .map_err(|e| e.to_string())?
+            .starts_with("Rollup of")
+        && expand_rollup(
+            rest_client,
+            graphql_client,
+            pr,
+            &before,
+            metric,
+            master_commits,
+            benchmark_map,
+            report,
+            num_comparisons,
+            ctxt,
+        )
+        .await
+        .unwrap_or_else(|e| {
+            log::error!("Failed to expand rollup #{pr}: {e}");
+            false
+        })
+    {
+        // rollup was fully expanded, no need to include rollup itself into the comparison
+    } else {
+        // the rollup was not fully expanded, we should still include it
+        *num_comparisons += 1;
+        populate_report(
+            rest_client,
+            &comparison,
+            benchmark_map,
+            metric,
+            report,
+            None,
+        )
+        .await;
+    }
+    Ok(())
+}
+
+#[expect(clippy::too_many_arguments)]
 async fn expand_rollup(
+    client: &Client,
+    graphql: &GraphQLClient,
     pr: u32,
     start: &Bound,
     metric: Metric,
     master_commits: &[MasterCommit],
     benchmark_map: &HashMap<Benchmark, Category>,
     report: &mut HashMap<Direction, Vec<String>>,
+    num_comparisons: &mut usize,
     ctxt: &SiteCtxt,
 ) -> anyhow::Result<bool> {
-    let graphql = GraphQLClient::from_ctxt(ctxt);
     let comments = graphql.get_comments(pr).await?;
     let mut complete = true;
     for member_sha in
         find_and_parse_unrolled_build_comment(comments.iter().map(|c| c.body.as_str()))?
     {
+        *num_comparisons += 1;
         let comparison = compare_given_commits(
             start.clone(),
             Bound::Commit(member_sha.to_string()),
@@ -190,7 +289,7 @@ async fn expand_rollup(
         match comparison {
             None => complete = false,
             Some(comparison) => {
-                populate_report(&comparison, benchmark_map, metric, report, Some(pr)).await;
+                populate_report(client, &comparison, benchmark_map, metric, report, Some(pr)).await;
             }
         }
     }
@@ -287,6 +386,7 @@ pub async fn handle_compare(
 }
 
 async fn populate_report(
+    client: &Client,
     comparison: &ArtifactComparison,
     benchmark_map: &HashMap<Benchmark, Category>,
     metric: Metric,
@@ -313,7 +413,9 @@ async fn populate_report(
 
     if include_in_triage {
         let entry = report.entry(direction).or_default();
-        entry.push(write_triage_summary(comparison, &primary, &secondary, from_rollup).await);
+        entry.push(
+            write_triage_summary(client, comparison, &primary, &secondary, from_rollup).await,
+        );
     }
 }
 
@@ -582,13 +684,17 @@ pub(crate) fn deserves_attention_icount(
 }
 
 async fn write_triage_summary(
+    client: &Client,
     comparison: &ArtifactComparison,
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
     from_rollup: Option<u32>,
 ) -> String {
     let mut result = if let Some(pr) = comparison.b.pr {
-        let title = github::pr_title(pr).await;
+        let title = client
+            .pr_title(pr)
+            .await
+            .unwrap_or_else(|_| "<Unknown Change>".to_string());
         format!("{title} [#{pr}](https://github.com/rust-lang/rust/pull/{pr})")
     } else {
         String::from("<Unknown Change>")
@@ -1530,6 +1636,7 @@ impl Magnitude {
 }
 
 async fn generate_report(
+    client: &Client,
     start: &Bound,
     end: &Bound,
     summary: String,
@@ -1548,10 +1655,10 @@ async fn generate_report(
     let regressions = report.remove(&Direction::Regression).unwrap_or_default();
     let improvements = report.remove(&Direction::Improvement).unwrap_or_default();
     let mixed = report.remove(&Direction::Mixed).unwrap_or_default();
-    let untriaged = match github::untriaged_perf_regressions().await {
+    let untriaged = match client.rustc_untriaged_perf_regressions().await {
         Ok(u) => u
             .iter()
-            .map(|github::PullRequest { title, number }| {
+            .map(|PullRequest { title, number }| {
                 format!("- [#{number} {title}](https://github.com/rust-lang/rust/pull/{number})")
             })
             .collect::<Vec<_>>()

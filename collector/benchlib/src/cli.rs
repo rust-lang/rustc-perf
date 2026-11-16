@@ -12,6 +12,10 @@ pub enum Args {
 
 #[derive(clap::Parser, Debug)]
 pub struct BenchmarkArgs {
+    /// How many warm-up executions should each benchmark perform before measuring.
+    #[arg(long, default_value = "3")]
+    pub warmups: u32,
+
     /// How many times should each benchmark be repeated.
     #[arg(long, default_value = "5")]
     pub iterations: u32,

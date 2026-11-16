@@ -7,7 +7,8 @@ use clap::{Arg, Parser};
 use collector::compare::compare_artifacts;
 use hashbrown::HashSet;
 use humansize::{BINARY, format_size};
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::ThreadPoolBuilder;
+use rayon::iter::{Either, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -73,6 +74,9 @@ const TOOLCHAIN_CACHE_DIRECTORY: &str = "cache";
 /// Maximum allowed number of toolchains in the toolchain cache directory.
 /// If the directory will have more toolchains, it will be purged.
 const TOOLCHAIN_CACHE_MAX_TOOLCHAINS: usize = 30;
+
+/// The amount of prepare jobs used by the job queue
+const PREPARE_JOBS_JOB_QUEUE: usize = 1;
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -147,6 +151,7 @@ struct CompileBenchmarkConfig {
     bench_rustc: bool,
     targets: Vec<Target>,
     frontend_threads_config: FrontendThreadsConfig,
+    prepare_jobs: usize,
 }
 
 struct RuntimeBenchmarkConfig {
@@ -284,7 +289,7 @@ fn profile_compile(
             let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
             eprintln!("Executing benchmark {benchmark_id}");
             let mut processor = ProfileProcessor::new(profiler, out_dir, &toolchain.id);
-            let result = wait_for_future(benchmark.measure(
+            let result = wait_for_future(benchmark.prepare_and_measure(
                 &mut processor,
                 profiles,
                 scenarios,
@@ -460,6 +465,10 @@ struct CompileTimeOptions {
     /// Parallel frontend thread count in comma-separated list
     #[arg(long = "frontend-threads", value_delimiter = ',')]
     frontend_threads_counts: Vec<u32>,
+
+    /// Amount of threads used to prepare benchmarks
+    #[arg(long, default_value = "1")]
+    prepare_jobs: usize,
 }
 
 impl CompileTimeOptions {
@@ -1112,6 +1121,7 @@ fn main_result() -> anyhow::Result<i32> {
                 bench_rustc: bench_rustc.bench_rustc,
                 targets: vec![Target::host()],
                 frontend_threads_config,
+                prepare_jobs: opts.prepare_jobs,
             };
 
             rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
@@ -1787,6 +1797,7 @@ async fn create_benchmark_configs(
             bench_rustc,
             targets: vec![job.target().into()],
             frontend_threads_config: FrontendThreadsConfig::FromBenchmark,
+            prepare_jobs: PREPARE_JOBS_JOB_QUEUE,
         })
     } else {
         None
@@ -2283,6 +2294,7 @@ async fn bench_published_artifact(
             bench_rustc: false,
             targets: vec![Target::host()],
             frontend_threads_config,
+            prepare_jobs: PREPARE_JOBS_JOB_QUEUE,
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
@@ -2296,7 +2308,7 @@ async fn bench_published_artifact(
 
 const COMPILE_BENCHMARK_TIMEOUT: Duration = Duration::from_secs(60 * 30);
 
-async fn with_timeout<F: Future<Output = anyhow::Result<()>>>(fut: F) -> anyhow::Result<()> {
+async fn with_timeout<T, F: Future<Output = anyhow::Result<T>>>(fut: F) -> anyhow::Result<T> {
     match tokio::time::timeout(COMPILE_BENCHMARK_TIMEOUT, fut).await {
         Ok(res) => res,
         Err(_) => Err(anyhow::anyhow!(
@@ -2324,7 +2336,7 @@ async fn bench_compile(
     let start = Instant::now();
 
     #[allow(clippy::too_many_arguments)]
-    async fn measure_and_record<F: AsyncFn(&mut BenchProcessor) -> anyhow::Result<()>>(
+    async fn measure_and_record<F: AsyncFnOnce(&mut BenchProcessor) -> anyhow::Result<()>>(
         collector: &CollectorCtx,
         shared: &SharedBenchmarkConfig,
         config: &CompileBenchmarkConfig,
@@ -2366,10 +2378,29 @@ async fn bench_compile(
         tx.commit().await.expect("committed");
     }
 
-    // Normal benchmarks.
-    for (nth_benchmark, benchmark) in config.benchmarks.iter().enumerate() {
-        let frontend_threads = config.frontend_threads_config.expand(benchmark);
+    // Prepare normal benchmarks in parallel, limit threads to keep memory usage under control
+    // Note that preparation already happens in parallel internally
+    let prepared_dirs = parallelize(
+        &config.benchmarks,
+        |benchmark| {
+            let frontend_threads = config.frontend_threads_config.expand(benchmark);
+            benchmark.prepare(
+                &config.profiles,
+                &config.scenarios,
+                &config.backends,
+                &shared.toolchain,
+                &config.targets,
+                &frontend_threads,
+                &collector.measured_compile_test_cases,
+            )
+        },
+        config.prepare_jobs,
+    );
 
+    // Normal benchmarks.
+    for (nth_benchmark, (benchmark, prepared_dirs)) in
+        config.benchmarks.iter().zip(prepared_dirs).enumerate()
+    {
         measure_and_record(
             collector,
             shared,
@@ -2385,16 +2416,12 @@ async fn bench_compile(
                 )
             },
             async |processor| {
+                let prepared_dirs = prepared_dirs?;
                 with_timeout(benchmark.measure(
                     processor,
-                    &config.profiles,
-                    &config.scenarios,
-                    &config.backends,
                     &shared.toolchain,
                     config.iterations,
-                    &config.targets,
-                    &frontend_threads,
-                    &collector.measured_compile_test_cases,
+                    prepared_dirs,
                 ))
                 .await
                 .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
@@ -2433,6 +2460,26 @@ async fn bench_compile(
     // This ensures that we're good to go with the just updated data.
     conn.maybe_create_indices().await;
     errors
+}
+
+/// If `max_threads == 0`, panics
+/// If `max_threads == 1`, returns a lazy iterator of `slice` mapped with `f`
+/// If `max_threads > 1`, eagerly maps `slice` with `f` in parallel with `max_threads` threads, and returns an iterator over the collected result
+fn parallelize<T: Sync, V: Send>(
+    slice: &[T],
+    f: impl Fn(&T) -> V + Sync,
+    max_threads: usize,
+) -> impl Iterator<Item = V> {
+    assert_ne!(max_threads, 0);
+    if max_threads == 1 {
+        Either::Left(slice.iter().map(f))
+    } else {
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(max_threads)
+            .build()
+            .unwrap();
+        Either::Right(pool.install(|| slice.par_iter().map(&f).collect::<Vec<_>>().into_iter()))
+    }
 }
 
 /// Records the sizes of individual components (rustc, libLLVM, etc.) for the given toolchain
@@ -2618,4 +2665,34 @@ fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
                 r#type: CommitType::Master,
             }
         }))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parallelize;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering::Relaxed;
+
+    #[test]
+    fn test_parallelize_lazy() {
+        let did_work = AtomicBool::new(false);
+        let mut iter = parallelize(
+            &[1, 2, 3],
+            |n| {
+                did_work.store(true, Relaxed);
+                n + 1
+            },
+            1,
+        );
+
+        // Check that parallelize is lazy with `max_threads=1`
+        assert!(!did_work.load(Relaxed));
+
+        // Check that the functional behaviour is correct
+        assert_eq!(iter.next().unwrap(), 2);
+        assert!(did_work.load(Relaxed));
+        assert_eq!(iter.next().unwrap(), 3);
+        assert_eq!(iter.next().unwrap(), 4);
+        assert!(iter.next().is_none());
+    }
 }

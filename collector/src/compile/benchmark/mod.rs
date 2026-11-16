@@ -132,6 +132,21 @@ pub struct Benchmark {
     config: BenchmarkConfig,
 }
 
+// These two "leaf" benchmark parameters are nested together,
+// because different values of scenarios and frontend threads can share the same target dir.
+struct LeafParameters {
+    scenario: Scenario,
+    frontend_threads: FrontendThreads,
+}
+
+pub struct BenchmarkDir {
+    dir: TempDir,
+    profile: Profile,
+    backend: CodegenBackend,
+    target: Target,
+    leaf_parameters: Vec<LeafParameters>,
+}
+
 impl Benchmark {
     pub fn new(name: String, path: PathBuf) -> anyhow::Result<Self> {
         let mut patches = vec![];
@@ -252,9 +267,8 @@ impl Benchmark {
         }
     }
 
-    /// Run a specific benchmark under a processor + profiler combination.
     #[allow(clippy::too_many_arguments)]
-    pub async fn measure(
+    pub async fn prepare_and_measure(
         &self,
         processor: &mut dyn Processor,
         profiles: &[Profile],
@@ -266,12 +280,34 @@ impl Benchmark {
         frontend_threads_counts: &[FrontendThreads],
         already_computed: &hashbrown::HashSet<CompileTestCase>,
     ) -> anyhow::Result<()> {
+        let benchmark_dirs = self.prepare(
+            profiles,
+            scenarios,
+            backends,
+            toolchain,
+            targets,
+            frontend_threads_counts,
+            already_computed,
+        )?;
+        self.measure(processor, toolchain, iterations, benchmark_dirs)
+            .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare(
+        &self,
+        profiles: &[Profile],
+        scenarios: &[Scenario],
+        backends: &[CodegenBackend],
+        toolchain: &Toolchain,
+        targets: &[Target],
+        frontend_threads_counts: &[FrontendThreads],
+        already_computed: &hashbrown::HashSet<CompileTestCase>,
+    ) -> anyhow::Result<Vec<BenchmarkDir>> {
         if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
-
-        let iterations = iterations.unwrap_or(self.config.runs);
 
         let profiles: Vec<Profile> = profiles
             .iter()
@@ -281,7 +317,7 @@ impl Benchmark {
 
         if profiles.is_empty() {
             eprintln!("Skipping {}: no profiles selected", self.name);
-            return Ok(());
+            return Ok(vec![]);
         }
 
         let scenarios: Vec<Scenario> = scenarios
@@ -292,22 +328,7 @@ impl Benchmark {
 
         if scenarios.is_empty() {
             eprintln!("Skipping {}: no scenarios selected", self.name);
-            return Ok(());
-        }
-
-        // These two "leaf" benchmark parameters are nested together,
-        // because different values of scenarios and frontend threads can share the same target dir.
-        struct LeafParameters {
-            scenario: Scenario,
-            frontend_threads: FrontendThreads,
-        }
-
-        struct BenchmarkDir {
-            dir: TempDir,
-            profile: Profile,
-            backend: CodegenBackend,
-            target: Target,
-            leaf_parameters: Vec<LeafParameters>,
+            return Ok(vec![]);
         }
 
         // Materialize the test cases that we want to benchmark
@@ -360,7 +381,7 @@ impl Benchmark {
                 "Skipping {}: all test cases were previously computed",
                 self.name
             );
-            return Ok(());
+            return Ok(vec![]);
         }
 
         eprintln!("Preparing {}", self.name);
@@ -440,6 +461,22 @@ impl Benchmark {
             self.name,
             preparation_start.elapsed().as_secs_f64()
         );
+
+        Ok(benchmark_dirs)
+    }
+
+    /// Run a specific benchmark under a processor + profiler combination.
+    pub async fn measure(
+        &self,
+        processor: &mut dyn Processor,
+        toolchain: &Toolchain,
+        iterations: Option<usize>,
+        benchmark_dirs: Vec<BenchmarkDir>,
+    ) -> anyhow::Result<()> {
+        if benchmark_dirs.is_empty() {
+            return Ok(());
+        }
+        let iterations = iterations.unwrap_or(self.config.runs);
 
         // We need to hold on to the directories to keep the files alive until
         // the processor post-processes them. We also store them in `ManuallyDrop`
@@ -706,11 +743,21 @@ pub fn get_compile_benchmarks(
             .into_iter()
             .map(|(path, name)| Benchmark::new(name, path))
             .collect::<anyhow::Result<Vec<Benchmark>>>()?,
-        CompileBenchmarkFilter::Exact(names) => paths
-            .into_iter()
-            .filter(|(_, name)| names.contains(name))
-            .map(|(path, name)| Benchmark::new(name, path))
-            .collect::<anyhow::Result<Vec<Benchmark>>>()?,
+        CompileBenchmarkFilter::Exact(names) => {
+            // Convert `paths` to hashmap for efficient lookup
+            let mut paths_map = paths
+                .into_iter()
+                .map(|(path, name)| (name, Some(path)))
+                .collect::<HashMap<_, _>>();
+            names
+                .iter()
+                .map(|name| match paths_map.get_mut(name) {
+                    Some(path @ Some(_)) => Benchmark::new(name.clone(), path.take().unwrap()),
+                    Some(None) => bail!("Compile benchmark `{name}` specified multiple times"),
+                    None => bail!("Compile benchmark `{name}` does not exist"),
+                })
+                .collect::<anyhow::Result<Vec<Benchmark>>>()?
+        }
         CompileBenchmarkFilter::Fuzzy {
             include,
             exclude,
@@ -837,5 +884,23 @@ mod tests {
                 benchmark.name
             );
         }
+
+        // Test that `CompileBenchmarkFilter::Exact` checks whether the benchmarks exist
+        assert!(
+            get_compile_benchmarks(
+                &benchmark_dir,
+                CompileBenchmarkFilter::Exact(&["does_not_exist".into()])
+            )
+            .is_err()
+        );
+
+        // Test that `CompileBenchmarkFilter::Exact` checks duplicates
+        assert!(
+            get_compile_benchmarks(
+                &benchmark_dir,
+                CompileBenchmarkFilter::Exact(&["syn".into(), "syn".into()])
+            )
+            .is_err()
+        );
     }
 }
