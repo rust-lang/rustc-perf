@@ -218,18 +218,32 @@ async fn summarize_run(
     )
     .unwrap();
 
-    const PREVENT_ROLLUP_CUTOFF: usize = 8;
-    let rollup_mode = if !deserves_attention {
-        RollupMode::Allow
-    } else if changed_benchmarks(&inst_comparison).len() < PREVENT_ROLLUP_CUTOFF {
-        RollupMode::Iffy
-    } else {
-        RollupMode::Never
-    };
     let next_steps = match &source {
-        PerfRunSource::TryBuild => try_run_body(is_regression, rollup_mode),
+        PerfRunSource::TryBuild => {
+            // Deduplicates by benchmark name, so multiple regressions on the same benchmark with different parameters
+            // are counted as one. We do this because we don't have the ability to only return some of the
+            // configurations of a benchmark.
+            const PREVENT_ROLLUP_CUTOFF: usize = 8;
+            let rollup_mode = if !deserves_attention {
+                RollupMode::Allow
+            } else if changed_benchmarks(&inst_comparison).len() < PREVENT_ROLLUP_CUTOFF {
+                RollupMode::Iffy
+            } else {
+                RollupMode::Never
+            };
+            try_run_body(is_regression, rollup_mode)
+        }
         PerfRunSource::MasterCommit | PerfRunSource::TriageBuild(..) => {
-            master_run_body(is_regression)
+            // Does not deduplicate by benchmark name, so every regression is counted
+            const NOTIFY_WG_PERFORMANCE_CUTOFF: usize = 24;
+            let regressed_comparisons = inst_comparison
+                .compile_comparisons
+                .iter()
+                .filter(|c| c.comparison.is_relevant() && c.comparison.is_regression())
+                .count();
+            let notify_wg_performance = matches!(source, PerfRunSource::MasterCommit)
+                || regressed_comparisons >= NOTIFY_WG_PERFORMANCE_CUTOFF;
+            master_run_body(is_regression, notify_wg_performance)
         }
     };
     writeln!(&mut message, "{next_steps}\n").unwrap();
@@ -415,9 +429,10 @@ fn write_metric_summary(
     }
 }
 
-fn master_run_body(is_regression: bool) -> String {
+fn master_run_body(is_regression: bool, notify_wg_performance: bool) -> String {
     if is_regression {
-        r#"
+        format!(
+            r#"
 Our benchmarks found a performance regression caused by this PR.
 This might be an actual regression, but it can also be just noise.
 
@@ -430,17 +445,27 @@ please write a comment with sufficient written justification, and add
 a new PR with a fix for the regression.
 - If you do not understand the regression or you think that it is just noise,
 you can ask the `@rust-lang/wg-compiler-performance` working group for help (members of this group
-were already notified of this PR).
+were {} notified of this PR).
 
 @rustbot label: +perf-regression
-cc @rust-lang/wg-compiler-performance
-"#
+{}"#,
+            if notify_wg_performance {
+                "already"
+            } else {
+                "not yet"
+            },
+            if notify_wg_performance {
+                "cc @rust-lang/wg-compiler-performance\n"
+            } else {
+                ""
+            }
+        )
     } else {
         "
 @rustbot label: -perf-regression
 "
+        .to_string()
     }
-    .to_string()
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]

@@ -1422,7 +1422,7 @@ impl TestResultComparison {
     /// we cannot determine from historical data
     const DEFAULT_SIGNIFICANCE_THRESHOLD: f64 = 0.002;
 
-    fn is_regression(&self) -> bool {
+    pub fn is_regression(&self) -> bool {
         let (a, b) = self.results;
         b > a
     }
