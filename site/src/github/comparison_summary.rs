@@ -218,16 +218,18 @@ async fn summarize_run(
     )
     .unwrap();
 
-    const PREVENT_ROLLUP_CUTOFF: usize = 8;
-    let rollup_mode = if !deserves_attention {
-        RollupMode::Allow
-    } else if changed_benchmarks(&inst_comparison).len() < PREVENT_ROLLUP_CUTOFF {
-        RollupMode::Iffy
-    } else {
-        RollupMode::Never
-    };
     let next_steps = match &source {
-        PerfRunSource::TryBuild => try_run_body(is_regression, rollup_mode),
+        PerfRunSource::TryBuild => {
+            const PREVENT_ROLLUP_CUTOFF: usize = 8;
+            let rollup_mode = if !deserves_attention {
+                RollupMode::Allow
+            } else if changed_benchmarks(&inst_comparison).len() < PREVENT_ROLLUP_CUTOFF {
+                RollupMode::Iffy
+            } else {
+                RollupMode::Never
+            };
+            try_run_body(is_regression, rollup_mode)
+        }
         PerfRunSource::MasterCommit | PerfRunSource::TriageBuild(..) => {
             master_run_body(is_regression)
         }
