@@ -88,8 +88,6 @@ compiler in interesting ways.
   `include_bytes!`. Its build script generates 30 MiB blobs that are then included into the program.
 - **issue-46449**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
-- **issue-58319**: A small program that caused [poor
-  performance](https://github.com/rust-lang/rust/issues/58319) in the past.
 - **issue-88862**: A MCVE of a program that had a
   [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
   when trying to normalize large opaque types with late-bound regions.

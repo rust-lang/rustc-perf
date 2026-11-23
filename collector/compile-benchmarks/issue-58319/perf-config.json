@@ -1,5 +1,0 @@
-{
-    "cargo_rustc_opts": "-Znext-solver=coherence",
-    "category": "secondary",
-    "artifact": "binary"
-}

@@ -41,7 +41,6 @@ pub(super) const HYPER_1_6_0: &str = "hyper-1.6.0";
 pub(super) const IMAGE_0_25_6: &str = "image-0.25.6";
 pub(super) const INCLUDE_BLOB: &str = "include-blob";
 pub(super) const ISSUE_46449: &str = "issue-46449";
-pub(super) const ISSUE_58319: &str = "issue-58319";
 pub(super) const ISSUE_88862: &str = "issue-88862";
 pub(super) const LARGE_WORKSPACE: &str = "large-workspace";
 pub(super) const LIBC_0_2_172: &str = "libc-0.2.172";
