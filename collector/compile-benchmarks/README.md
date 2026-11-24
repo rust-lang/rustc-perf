@@ -77,7 +77,7 @@ compiler in interesting ways.
 - **deep-vector**: A test containing a single large vector of zeroes, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/20936) in
   the past. Stresses macro expansion and type inference.
-- **derive-2**: A large number of types with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
+- **derive-stress**: A large number of types with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
 - **deref-sidebar-stress**: A deep `Deref` chain where every target defines a
   method with the same name, which caused [quadratic sidebar
   generation](https://github.com/rust-lang/rust/issues/158174) in rustdoc.
