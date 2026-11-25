@@ -4,6 +4,6 @@ interface PageData {
 
 // Static data passed by the backend to every page through the #page-data
 // element.
-const PAGE_DATA: PageData = JSON.parse(
+export const PAGE_DATA: PageData = JSON.parse(
   document.getElementById("page-data")!.textContent
 );
