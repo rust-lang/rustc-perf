@@ -11,7 +11,11 @@ use std::time::Duration;
 
 /// Get the GitHub API URL for performing API requests to the repository that we are working with.
 pub fn github_api_url(ctxt: &SiteCtxt) -> String {
-    format!("https://api.github.com/repos/{}", ctxt.config.repository)
+    format!(
+        "https://api.github.com/repos/{}/{}",
+        ctxt.config.repo_owner(),
+        ctxt.config.repo_name()
+    )
 }
 
 /// Comments that are temporary and do not add any value once there has been a new development

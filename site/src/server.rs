@@ -187,7 +187,7 @@ impl std::error::Error for ServerError {}
 
 async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError> {
     // Don't attempt to get lock if we're updating
-    let Some(ctxt) = server.ctxt.read().as_ref().map(|c| Arc::clone(c)) else {
+    let Some(ctxt) = server.ctxt.read().as_ref().cloned() else {
         return Ok(Response::new(Bytes::from("no data yet, please wait")));
     };
 
@@ -558,9 +558,14 @@ fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
 
     type HmacSha256 = Hmac<Sha256>;
 
-    let mut mac =
-        HmacSha256::new_from_slice(cfg.keys.github_webhook_secret.as_ref().unwrap().as_bytes())
-            .expect("HMAC can take key of any size");
+    let mut mac = HmacSha256::new_from_slice(
+        cfg.keys()
+            .github_webhook_secret
+            .as_ref()
+            .unwrap()
+            .as_bytes(),
+    )
+    .expect("HMAC can take key of any size");
     mac.update(body);
     let sha = header.strip_prefix("sha256=")?;
     let sha = hex::decode(sha).ok()?;

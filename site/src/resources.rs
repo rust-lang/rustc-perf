@@ -85,7 +85,7 @@ impl ResourceResolver {
         context.insert(
             "data",
             &PageData {
-                repository: ctxt.config.repository.as_str(),
+                repository: ctxt.config.repo_full_name().as_str(),
             },
         );
         let rendered = self.tera.read().await.render(path, &context)?;

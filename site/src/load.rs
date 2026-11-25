@@ -1,13 +1,13 @@
+use anyhow::Context;
+use arc_swap::{ArcSwap, Guard};
+use log::error;
+use parking_lot::Mutex;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Instant;
-
-use arc_swap::{ArcSwap, Guard};
-use log::error;
-use parking_lot::Mutex;
-use serde::Deserialize;
 
 use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
@@ -31,9 +31,40 @@ pub struct Keys {
 /// Site configuration
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub keys: Keys,
+    keys: Keys,
     /// Repository that this rustc-perf instance is attached to, e.g. rust-lang/rust.
-    pub repository: String,
+    /// Split into two fields (owner and repository).
+    repo_owner: String,
+    repo_name: String,
+}
+
+impl Config {
+    pub fn new(keys: Keys, repo: String) -> anyhow::Result<Self> {
+        let (owner, name) = repo
+            .split_once("/")
+            .context("Repository must be in the format <owner/repo>.")?;
+        Ok(Self {
+            keys,
+            repo_owner: owner.to_string(),
+            repo_name: name.to_string(),
+        })
+    }
+
+    pub fn keys(&self) -> &Keys {
+        &self.keys
+    }
+
+    pub fn repo_owner(&self) -> &str {
+        &self.repo_owner
+    }
+
+    pub fn repo_name(&self) -> &str {
+        &self.repo_name
+    }
+
+    pub fn repo_full_name(&self) -> String {
+        format!("{}/{}", self.repo_owner, self.repo_name)
+    }
 }
 
 #[derive(Debug)]
@@ -107,13 +138,13 @@ impl SiteCtxt {
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
         } else {
-            Config {
-                keys: Keys {
+            Config::new(
+                Keys {
                     github_api_token: std::env::var("GITHUB_API_TOKEN").ok(),
                     github_webhook_secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
                 },
-                repository: "rust-lang/rust".to_string(),
-            }
+                "rust-lang/rust".to_string(),
+            )?
         };
 
         let master_commits = MasterCommitCache::download().await?;

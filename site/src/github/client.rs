@@ -28,7 +28,7 @@ impl Client {
     pub fn from_ctxt(ctxt: &SiteCtxt, repository_url: String) -> Self {
         let token = ctxt
             .config
-            .keys
+            .keys()
             .github_api_token
             .clone()
             .expect("needs github API token");
@@ -134,7 +134,8 @@ const GRAPHQL_API_BASE: &str = "https://api.github.com/graphql";
 /// A client for interacting with the GraphQL GitHub API.
 pub struct GraphQLClient {
     inner: reqwest::Client,
-    repo: &'static str,
+    repo_owner: String,
+    repo_name: String,
 }
 
 impl GraphQLClient {
@@ -142,14 +143,10 @@ impl GraphQLClient {
     pub fn from_ctxt(ctxt: &SiteCtxt) -> Self {
         let token = ctxt
             .config
-            .keys
+            .keys()
             .github_api_token
             .as_ref()
             .expect("needs github API token");
-        Self::from_token(token, "rust")
-    }
-
-    fn from_token(token: &str, repo: &'static str) -> Self {
         let mut headers = header::HeaderMap::new();
         headers.insert(USER_AGENT, header::HeaderValue::from_static(BOT_USER_AGENT));
         headers.insert(
@@ -163,7 +160,8 @@ impl GraphQLClient {
             .unwrap();
         Self {
             inner: client,
-            repo,
+            repo_owner: ctxt.config.repo_owner().to_string(),
+            repo_name: ctxt.config.repo_name().to_string(),
         }
     }
 
@@ -207,8 +205,6 @@ impl GraphQLClient {
             page_info: GraphPageInfo,
         }
 
-        let owner = "rust-lang";
-
         let mut comments = Vec::new();
         let mut cursor = None;
         loop {
@@ -216,8 +212,8 @@ impl GraphQLClient {
                 .send(
                     QUERY,
                     serde_json::json!({
-                        "owner": owner,
-                        "repo": self.repo,
+                        "owner": self.repo_owner,
+                        "repo": self.repo_name,
                         "pr": pull_request,
                         "cursor": cursor,
                     }),
