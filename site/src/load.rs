@@ -32,6 +32,8 @@ pub struct Keys {
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub keys: Keys,
+    /// Repository that this rustc-perf instance is attached to, e.g. rust-lang/rust.
+    pub repository: String,
 }
 
 #[derive(Debug)]
@@ -110,6 +112,7 @@ impl SiteCtxt {
                     github_api_token: std::env::var("GITHUB_API_TOKEN").ok(),
                     github_webhook_secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
                 },
+                repository: "rust-lang/rust".to_string(),
             }
         };
 

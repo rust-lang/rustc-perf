@@ -1,6 +1,7 @@
 use tera::Tera;
 use tokio::sync::RwLock;
 
+use crate::load::SiteCtxt;
 use rust_embed::RustEmbed;
 
 /// Static files and templates are embedded into the binary (in release mode) or hot-reloaded
@@ -39,6 +40,12 @@ pub enum Payload {
     Uncompressed(Vec<u8>),
 }
 
+/// Data that is put into every page, and is then available in the PAGE_DATA global variable.
+#[derive(serde::Serialize)]
+struct PageData<'a> {
+    repository: &'a str,
+}
+
 pub struct ResourceResolver {
     tera: RwLock<Tera>,
 }
@@ -67,14 +74,20 @@ impl ResourceResolver {
             .map(|file| Payload::Uncompressed(file.data.to_vec()))
     }
 
-    pub async fn get_template(&self, path: &str) -> anyhow::Result<Vec<u8>> {
+    pub async fn get_template(&self, ctxt: &SiteCtxt, path: &str) -> anyhow::Result<Vec<u8>> {
         // Live-reload the template if we're in debug mode
         #[cfg(debug_assertions)]
         {
             *self.tera.write().await = load_templates()?;
         }
 
-        let context = tera::Context::new();
+        let mut context = tera::Context::new();
+        context.insert(
+            "data",
+            &PageData {
+                repository: ctxt.config.repository.as_str(),
+            },
+        );
         let rendered = self.tera.read().await.render(path, &context)?;
         Ok(rendered.into_bytes())
     }
