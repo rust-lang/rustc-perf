@@ -86,7 +86,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                 Whether to show test case results that are not relevant (i.e.,
                 not significant or have a large enough magnitude). You can see
                 <a
-                  href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#how-is-relevance-of-a-test-run-summary-determined"
+                  href="https://github.com/rust-lang/rustc-perf/blob/main/docs/comparison-analysis.md#how-is-relevance-of-a-test-run-summary-determined"
                 >
                   here</a
                 >
