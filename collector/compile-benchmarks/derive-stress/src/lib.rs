@@ -1,4 +1,4 @@
-// An adaption of the `tests/ui/derives/deriving-all-codegen.rs` test.
+// An adaptation of the `tests/ui/derives/deriving-all-codegen.rs` test.
 #![allow(nonstandard_style)]
 #![allow(dead_code)]
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
