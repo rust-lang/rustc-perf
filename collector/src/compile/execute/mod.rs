@@ -446,7 +446,13 @@ impl<'a> CargoProcess<'a> {
                     rustflags.push_str(" -Wclippy::all");
                     cmd.env("RUSTFLAGS", rustflags);
                 }
-                Profile::Debug => {}
+                Profile::Debug => {
+                    // Cargo is planning to change the default dev profile to use
+                    // `-Cdebuginfo=line-tables-only` by default.
+                    // For now, opt into using full debuginfo instead, to match the previous
+                    // behavior of our "debug" profile.
+                    cmd.env("CARGO_PROFILE_DEV_DEBUG", "full");
+                }
                 Profile::Doc => {}
                 Profile::DocJson => {
                     // Enable JSON output
