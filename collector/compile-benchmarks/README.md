@@ -77,7 +77,7 @@ compiler in interesting ways.
 - **deep-vector**: A test containing a single large vector of zeroes, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/20936) in
   the past. Stresses macro expansion and type inference.
-- **derive**: A large number of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
+- **derive-stress**: A large number of types with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
 - **deref-sidebar-stress**: A deep `Deref` chain where every target defines a
   method with the same name, which caused [quadratic sidebar
   generation](https://github.com/rust-lang/rust/issues/158174) in rustdoc.
@@ -88,8 +88,6 @@ compiler in interesting ways.
   `include_bytes!`. Its build script generates 30 MiB blobs that are then included into the program.
 - **issue-46449**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
-- **issue-58319**: A small program that caused [poor
-  performance](https://github.com/rust-lang/rust/issues/58319) in the past.
 - **issue-88862**: A MCVE of a program that had a
   [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
   when trying to normalize large opaque types with late-bound regions.
