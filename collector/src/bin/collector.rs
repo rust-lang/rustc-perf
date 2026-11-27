@@ -54,8 +54,8 @@ use collector::runtime::{
 };
 use collector::runtime::{RuntimeCompilationOpts, profile_runtime};
 use collector::toolchain::{
-    SharedToolchainRequestOpts, Sysroot, SysrootDownloadError, Toolchain, ToolchainConfig,
-    resolve_local_toolchain, resolve_published_toolchain,
+    SharedToolchainRequestOpts, Toolchain, ToolchainConfig, ToolchainDownloadError,
+    resolve_local_toolchain, resolve_published_toolchain, resolve_rustc_commit_toolchain_via_ci,
     resolve_rustc_commit_toolchain_via_rustup,
 };
 use collector::utils::cachegrind::cachegrind_diff;
@@ -1264,20 +1264,21 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = get_commit_or_fake_it(&last_sha).expect("success");
 
             let rt = build_async_runtime();
-            let mut sysroot = rt
-                .block_on(Sysroot::install(
+
+            // Download the toolchain and cache it locally
+            let mut toolchain = rt
+                .block_on(resolve_rustc_commit_toolchain_via_ci(
+                    &commit.sha,
                     Path::new(TOOLCHAIN_CACHE_DIRECTORY),
-                    commit.sha,
                     &require_host_target_tuple(),
                     Profile::Check,
                     &codegen_backends.0,
                 ))
-                .map_err(SysrootDownloadError::as_anyhow_error)?;
-            sysroot.preserve(); // don't delete it
+                .map_err(ToolchainDownloadError::as_anyhow_error)?;
 
             // Print the directory containing the toolchain.
-            sysroot.components.rustc.pop();
-            let s = format!("{:?}", sysroot.components.rustc);
+            toolchain.components.rustc.pop();
+            let s = format!("{:?}", toolchain.components.rustc);
             println!("{}", &s[1..s.len() - 1]);
 
             Ok(0)
@@ -1661,17 +1662,20 @@ async fn run_benchmark_job(
     log::info!("Downloading sysroot");
     let toolchain = match &artifact_id {
         ArtifactId::Commit(commit) => {
-            let mut sysroot = match Sysroot::install(
+            // Download the toolchain from CI.
+            // Avoids redownloading the same sysroot multiple times for different jobs, even
+            // across collector restarts.
+            match resolve_rustc_commit_toolchain_via_ci(
+                &commit.sha,
                 Path::new(TOOLCHAIN_CACHE_DIRECTORY),
-                commit.sha.clone(),
                 job.target().as_str(),
                 job.profile().into(),
                 &[job.backend().into()],
             )
             .await
             {
-                Ok(sysroot) => sysroot,
-                Err(SysrootDownloadError::SysrootShaNotFound) => {
+                Ok(toolchain) => toolchain,
+                Err(ToolchainDownloadError::RustcShaNotFound) => {
                     return Err(BenchmarkJobError::Permanent(anyhow::anyhow!(
                         "Artifacts for SHA `{}`, target `{}`, backend `{}` and profile `{}` were not found on CI servers",
                         commit.sha,
@@ -1680,14 +1684,10 @@ async fn run_benchmark_job(
                         job.profile().as_str()
                     )));
                 }
-                Err(SysrootDownloadError::IO(error)) => return Err(error.into()),
-            };
-            // Avoid redownloading the same sysroot multiple times for different jobs, even
-            // across collector restarts.
-            sysroot.preserve();
-            Toolchain::from_sysroot(&sysroot, commit.sha.clone())
+                Err(ToolchainDownloadError::IO(error)) => return Err(error.into()),
+            }
         }
-        ArtifactId::Tag(tag) => resolve_published_toolchain(&tag, job.target().as_str()).await?,
+        ArtifactId::Tag(tag) => resolve_published_toolchain(tag, job.target().as_str()).await?,
     };
     log::info!("Sysroot download finished");
 
