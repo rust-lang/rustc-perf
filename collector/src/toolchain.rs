@@ -12,119 +12,261 @@ use std::{fmt, str};
 use tar::Archive;
 use xz2::bufread::XzDecoder;
 
-pub enum SysrootDownloadError {
-    SysrootShaNotFound,
+pub struct SharedToolchainRequestOpts<'a> {
+    pub config: ToolchainConfig<'a>,
+    pub profiles: &'a [Profile],
+    pub codegen_backends: &'a [CodegenBackend],
+    pub target_triple: &'a str,
+    pub id_suffix: &'a str,
+}
+
+/// Creates a toolchain from a rustc commit SHA, using `rustup-toolchain-install-master`.
+pub async fn resolve_rustc_commit_toolchain_via_rustup(
+    sha: &str,
+    opts: SharedToolchainRequestOpts<'_>,
+) -> anyhow::Result<Toolchain> {
+    let output = tokio::process::Command::new("rustup")
+        .args(["which", "rustc", "--toolchain", sha])
+        .output()
+        .await
+        .context("failed to run `rustup which rustc`")?;
+
+    // No such toolchain exists, so let's try to install it with
+    // rustup-toolchain-install-master.
+    if !output.status.success() {
+        if tokio::process::Command::new("rustup-toolchain-install-master")
+            .arg("-V")
+            .output()
+            .await
+            .is_err()
+        {
+            return Err(anyhow::anyhow!(
+                "rustup-toolchain-install-master is not installed but must be"
+            ));
+        }
+
+        let mut additional_components = vec![];
+        if opts.codegen_backends.contains(&CodegenBackend::Cranelift) {
+            additional_components.push("rustc-codegen-cranelift");
+        }
+        if opts.profiles.contains(&Profile::Clippy) {
+            additional_components.push("clippy");
+        }
+
+        let mut cmd = tokio::process::Command::new("rustup-toolchain-install-master");
+        cmd.arg(sha);
+        for component in additional_components {
+            cmd.arg("-c").arg(component);
+        }
+
+        if !cmd
+            .status()
+            .await
+            .context("failed to run `rustup-toolchain-install-master`")?
+            .success()
+        {
+            return Err(anyhow::anyhow!(
+                "commit-like toolchain {sha} did not install successfully",
+            ));
+        }
+    }
+
+    let output = tokio::process::Command::new("rustup")
+        .args(["which", "rustc", "--toolchain", sha])
+        .output()
+        .await
+        .context("failed to run `rustup which rustc`")?;
+
+    anyhow::ensure!(
+        output.status.success(),
+        "did not manage to obtain toolchain {sha}"
+    );
+
+    let s = String::from_utf8(output.stdout)
+        .context("failed to convert `rustup which rustc` output to utf8")?;
+
+    let rustc = PathBuf::from(s.trim());
+    debug!("found rustc: {rustc:?}");
+
+    // When the id comes from a +toolchain, the suffix is *not* added.
+    let id = if let Some(id) = opts.config.id {
+        let mut id = id.to_owned();
+        id.push_str(opts.id_suffix);
+        id
+    } else {
+        sha.to_owned()
+    };
+    toolchain_from_rustc(rustc, id, opts)
+}
+
+/// Creates a toolchain from a path to a local `rustc` binary.
+pub fn resolve_local_toolchain(
+    rustc: &Path,
+    opts: SharedToolchainRequestOpts,
+) -> anyhow::Result<Toolchain> {
+    let rustc = PathBuf::from(rustc)
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize rustc executable {rustc:?}"))?;
+
+    // When specifying rustc via a path, the suffix is always added to the
+    // id.
+    let mut id = if let Some(id) = opts.config.id {
+        id.to_owned()
+    } else {
+        "Id".to_string()
+    };
+    id.push_str(opts.id_suffix);
+
+    toolchain_from_rustc(rustc, id, opts)
+}
+
+/// Creates a toolchain from a *published* Rust version downloaded by rustup.
+pub async fn resolve_published_toolchain(
+    version: &str,
+    target_triple: &str,
+) -> anyhow::Result<Toolchain> {
+    let status = tokio::process::Command::new("rustup")
+        .args(["install", "--profile=minimal", version])
+        .status()
+        .await
+        .context("rustup install")?;
+    if !status.success() {
+        return Err(anyhow::anyhow!("failed to install toolchain for {version}",));
+    }
+
+    let which = |tool| -> anyhow::Result<PathBuf> {
+        let path = String::from_utf8(
+            Command::new("rustup")
+                .arg("which")
+                .arg("--toolchain")
+                .arg(version)
+                .arg(tool)
+                .output()
+                .context(format!("rustup which {tool}"))?
+                .stdout,
+        )
+        .context("utf8")?;
+        Ok(PathBuf::from(path.trim()))
+    };
+    let rustc = which("rustc")?;
+    let rustdoc = which("rustdoc")?;
+    let clippy = which("clippy")?;
+    let cargo = which("cargo")?;
+
+    debug!("Found rustc: {}", rustc.display());
+    debug!("Found rustdoc: {}", rustdoc.display());
+    debug!("Found clippy: {}", clippy.display());
+    debug!("Found cargo: {}", cargo.display());
+
+    let host_lib_dir = get_lib_dir_from_rustc(&rustc)?;
+    let target_lib_dir = target_libdir_from_host_libdir(&host_lib_dir, target_triple);
+
+    let components = ToolchainComponents::from_binaries_and_libdir(
+        rustc,
+        Some(rustdoc),
+        Some(clippy),
+        cargo,
+        &host_lib_dir,
+        &target_lib_dir,
+    )?;
+
+    Ok(Toolchain {
+        components,
+        id: version.to_string(),
+        triple: target_triple.to_string(),
+    })
+}
+
+/// Resolve a toolchain from a `rust-lang/rust` commit SHA.
+/// The toolchain is downloaded directly from the CI builds, not through Rustup.
+/// The resulting toolchain is cached within `cache_directory`.
+pub async fn resolve_rustc_commit_toolchain_via_ci(
+    sha: &str,
+    cache_directory: &Path,
+    target_triple: &str,
+    profile: Profile,
+    backends: &[CodegenBackend],
+) -> Result<Toolchain, ToolchainDownloadError> {
+    // The structure of this directory is load-bearing.
+    // We use the commit SHA as the top-level key, to have a quick way of estimating how many
+    // toolchains have been installed in the cache directory.
+    // We also use a nested directory below the target tuple, because rustc outputs weird things
+    // when we query it with `--print sysroot` and its sysroot is located in a directory that
+    // corresponds to a valid target name.
+    let cache_directory = cache_directory
+        .join(sha)
+        .join(target_triple)
+        .join("toolchain");
+    fs::create_dir_all(&cache_directory).map_err(|e| ToolchainDownloadError::IO(e.into()))?;
+
+    let download = ToolchainDownload {
+        cache_directory: cache_directory.clone(),
+        rust_sha: sha.to_string(),
+        triple: target_triple.to_string(),
+    };
+
+    let requires_cranelift = backends.contains(&CodegenBackend::Cranelift);
+    let requires_clippy = profile == Profile::Clippy;
+
+    let stamp = ToolchainStamp::load_from_dir(&cache_directory);
+    match stamp {
+        Ok(stamp) => {
+            log::debug!("Found existing stamp for {sha}/{target_triple}: {stamp:?}");
+            // We should already have a complete sysroot present on disk, check if we need to
+            // download optional components
+            if requires_cranelift && !stamp.cranelift {
+                download.get_and_extract(Component::Cranelift).await?;
+            }
+            if requires_clippy && !stamp.clippy {
+                download.get_and_extract(Component::Clippy).await?;
+            }
+        }
+        Err(_) => {
+            log::debug!(
+                "No existing stamp found for {sha}/{target_triple}, downloading a fresh sysroot"
+            );
+
+            // There is no stamp, download everything
+            download.get_and_extract(Component::Rustc).await?;
+            download.get_and_extract(Component::Std).await?;
+            download.get_and_extract(Component::Cargo).await?;
+            download.get_and_extract(Component::RustSrc).await?;
+            if requires_cranelift {
+                download.get_and_extract(Component::Cranelift).await?;
+            }
+            if requires_clippy {
+                download.get_and_extract(Component::Clippy).await?;
+            }
+        }
+    }
+
+    // Update the stamp
+    let stamp = ToolchainStamp {
+        cranelift: requires_cranelift,
+        clippy: requires_clippy,
+    };
+    stamp
+        .store_to_dir(&cache_directory)
+        .map_err(ToolchainDownloadError::IO)?;
+
+    download
+        .into_toolchain()
+        .map_err(ToolchainDownloadError::IO)
+}
+
+pub enum ToolchainDownloadError {
+    RustcShaNotFound,
     IO(anyhow::Error),
 }
 
-impl SysrootDownloadError {
+impl ToolchainDownloadError {
     pub fn as_anyhow_error(self) -> anyhow::Error {
         match self {
-            SysrootDownloadError::SysrootShaNotFound => {
+            ToolchainDownloadError::RustcShaNotFound => {
                 anyhow::anyhow!("Sysroot was not found on CI")
             }
-            SysrootDownloadError::IO(error) => error,
+            ToolchainDownloadError::IO(error) => error,
         }
-    }
-}
-
-/// Sysroot downloaded from CI.
-pub struct Sysroot {
-    sha: String,
-    pub components: ToolchainComponents,
-    triple: String,
-    preserve: bool,
-}
-
-impl Sysroot {
-    pub async fn install(
-        cache_directory: &Path,
-        sha: String,
-        triple: &str,
-        profile: Profile,
-        backends: &[CodegenBackend],
-    ) -> Result<Self, SysrootDownloadError> {
-        // The structure of this directory is load-bearing.
-        // We use the commit SHA as the top-level key, to have a quick way of estimating how many
-        // toolchains have been installed in the cache directory.
-        // We also use a nested directory below the target tuple, because rustc outputs weird things
-        // when we query it with `--print sysroot` and its sysroot is located in a directory that
-        // corresponds to a valid target name.
-        let cache_directory = cache_directory.join(&sha).join(triple).join("toolchain");
-        fs::create_dir_all(&cache_directory).map_err(|e| SysrootDownloadError::IO(e.into()))?;
-
-        let download = SysrootDownload {
-            cache_directory: cache_directory.clone(),
-            rust_sha: sha.clone(),
-            triple: triple.to_owned(),
-        };
-
-        let requires_cranelift = backends.contains(&CodegenBackend::Cranelift);
-        let requires_clippy = profile == Profile::Clippy;
-
-        let stamp = SysrootStamp::load_from_dir(&cache_directory);
-        match stamp {
-            Ok(stamp) => {
-                log::debug!("Found existing stamp for {sha}/{triple}: {stamp:?}");
-                // We should already have a complete sysroot present on disk, check if we need to
-                // download optional components
-                if requires_cranelift && !stamp.cranelift {
-                    download.get_and_extract(Component::Cranelift).await?;
-                }
-                if requires_clippy && !stamp.clippy {
-                    download.get_and_extract(Component::Clippy).await?;
-                }
-            }
-            Err(_) => {
-                log::debug!(
-                    "No existing stamp found for {sha}/{triple}, downloading a fresh sysroot"
-                );
-
-                // There is no stamp, download everything
-                download.get_and_extract(Component::Rustc).await?;
-                download.get_and_extract(Component::Std).await?;
-                download.get_and_extract(Component::Cargo).await?;
-                download.get_and_extract(Component::RustSrc).await?;
-                if requires_cranelift {
-                    download.get_and_extract(Component::Cranelift).await?;
-                }
-                if requires_clippy {
-                    download.get_and_extract(Component::Clippy).await?;
-                }
-            }
-        }
-
-        // Update the stamp
-        let stamp = SysrootStamp {
-            cranelift: requires_cranelift,
-            clippy: requires_clippy,
-        };
-        stamp
-            .store_to_dir(&cache_directory)
-            .map_err(SysrootDownloadError::IO)?;
-
-        let sysroot = download.into_sysroot().map_err(SysrootDownloadError::IO)?;
-
-        Ok(sysroot)
-    }
-
-    pub fn preserve(&mut self) {
-        self.preserve = true;
-    }
-}
-
-impl Drop for Sysroot {
-    fn drop(&mut self) {
-        if self.preserve {
-            return;
-        }
-        fs::remove_dir_all(format!("cache/{}", self.sha)).unwrap_or_else(|err| {
-            log::info!(
-                "failed to remove {:?}, please do so manually: {:?}",
-                format!("cache/{}", self.sha),
-                err
-            );
-        });
     }
 }
 
@@ -133,17 +275,17 @@ const SYSROOT_STAMP_FILENAME: &str = ".sysroot-stamp.json";
 /// Stores a proof on disk that we have downloaded a complete sysroot.
 /// It is used to avoid redownloading a sysroot if it already exists on disk.
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-struct SysrootStamp {
+struct ToolchainStamp {
     /// Was Cranelift downloaded as a part of the sysroot?
     cranelift: bool,
     /// Was Clippy downloaded as a part of the sysroot?
     clippy: bool,
 }
 
-impl SysrootStamp {
+impl ToolchainStamp {
     fn load_from_dir(dir: &Path) -> anyhow::Result<Self> {
         let data = std::fs::read(dir.join(SYSROOT_STAMP_FILENAME))?;
-        let stamp: SysrootStamp = serde_json::from_slice(&data)?;
+        let stamp: ToolchainStamp = serde_json::from_slice(&data)?;
         Ok(stamp)
     }
 
@@ -154,7 +296,7 @@ impl SysrootStamp {
 }
 
 #[derive(Debug, Clone)]
-struct SysrootDownload {
+struct ToolchainDownload {
     cache_directory: PathBuf,
     rust_sha: String,
     triple: String,
@@ -186,7 +328,7 @@ impl fmt::Display for Component {
 }
 
 impl Component {
-    fn url(&self, channel: &str, sysroot: &SysrootDownload, triple: &str) -> String {
+    fn url(&self, channel: &str, download: &ToolchainDownload, triple: &str) -> String {
         let suffix = if *self == Component::RustSrc {
             String::new()
         } else {
@@ -196,15 +338,15 @@ impl Component {
             "{base}/{sha}/{module}-{channel}{suffix}.tar.xz",
             base = BASE_URL,
             module = self,
-            sha = sysroot.rust_sha,
+            sha = download.rust_sha,
             channel = channel,
             suffix = suffix,
         )
     }
 }
 
-impl SysrootDownload {
-    fn into_sysroot(self) -> anyhow::Result<Sysroot> {
+impl ToolchainDownload {
+    fn into_toolchain(self) -> anyhow::Result<Toolchain> {
         let sysroot_bin_dir = self.cache_directory.join("bin");
         let sysroot_bin = |name| {
             let path = sysroot_bin_dir.join(name);
@@ -227,15 +369,14 @@ impl SysrootDownload {
             &target_libdir,
         )?;
 
-        Ok(Sysroot {
+        Ok(Toolchain {
             components,
-            sha: self.rust_sha,
+            id: self.rust_sha,
             triple: self.triple,
-            preserve: false,
         })
     }
 
-    async fn get_and_extract(&self, component: Component) -> Result<(), SysrootDownloadError> {
+    async fn get_and_extract(&self, component: Component) -> Result<(), ToolchainDownloadError> {
         // We usually have nightlies but we want to avoid breaking down if we
         // accidentally end up with a beta or stable commit.
         let urls = [
@@ -250,7 +391,7 @@ impl SysrootDownload {
             log::debug!("requesting: {}", url);
             let resp = reqwest::get(url)
                 .await
-                .map_err(|e| SysrootDownloadError::IO(e.into()))?;
+                .map_err(|e| ToolchainDownloadError::IO(e.into()))?;
             log::debug!("response status: {}", resp.status());
 
             match resp.status() {
@@ -258,7 +399,7 @@ impl SysrootDownload {
                     let bytes: Vec<u8> = resp
                         .bytes()
                         .await
-                        .map_err(|e| SysrootDownloadError::IO(e.into()))?
+                        .map_err(|e| ToolchainDownloadError::IO(e.into()))?
                         .into();
                     let reader = XzDecoder::new(BufReader::new(bytes.as_slice()));
                     match self.extract(component, reader) {
@@ -279,9 +420,9 @@ impl SysrootDownload {
 
         if !found_error_that_is_not_404 {
             // The only errors we saw were 404, so we assume that the toolchain is simply not on CI
-            Err(SysrootDownloadError::SysrootShaNotFound)
+            Err(ToolchainDownloadError::RustcShaNotFound)
         } else {
-            Err(SysrootDownloadError::IO(anyhow!(
+            Err(ToolchainDownloadError::IO(anyhow!(
                 "unable to download sha {} triple {} module {component} from any of {urls:?}",
                 self.rust_sha,
                 self.triple,
@@ -343,16 +484,6 @@ pub struct Toolchain {
     pub components: ToolchainComponents,
     pub id: String,
     pub triple: String,
-}
-
-impl Toolchain {
-    pub fn from_sysroot(sysroot: &Sysroot, id: String) -> Self {
-        Self {
-            components: sysroot.components.clone(),
-            id,
-            triple: sysroot.triple.clone(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -479,116 +610,17 @@ impl<'a> ToolchainConfig<'a> {
     }
 }
 
-/// Get a toolchain from the input.
-/// - `rustc`: check if the given one is acceptable.
-/// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
-///   the `Doc` profile is requested, look for one next to the given `rustc`.
-/// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
-///   for the nightly Cargo via `rustup`.
-pub fn get_local_toolchain(
-    profiles: &[Profile],
-    codegen_backends: &[CodegenBackend],
-    rustc: &str,
-    toolchain_config: ToolchainConfig<'_>,
-    id_suffix: &str,
-    target_triple: String,
+fn toolchain_from_rustc(
+    rustc: PathBuf,
+    id: String,
+    opts: SharedToolchainRequestOpts<'_>,
 ) -> anyhow::Result<Toolchain> {
-    // `+`-prefixed rustc is an indicator to fetch the rustc of the toolchain
-    // specified. This follows the similar pattern used by rustup's binaries
-    // (e.g., `rustc +stage1`).
-    let (rustc, id) = if let Some(toolchain) = rustc.strip_prefix('+') {
-        let output = Command::new("rustup")
-            .args(["which", "rustc", "--toolchain", toolchain])
-            .output()
-            .context("failed to run `rustup which rustc`")?;
-
-        // Looks like a commit hash? Try to install it...
-        if !output.status.success() && toolchain.len() == 40 {
-            // No such toolchain exists, so let's try to install it with
-            // rustup-toolchain-install-master.
-
-            if Command::new("rustup-toolchain-install-master")
-                .arg("-V")
-                .output()
-                .is_err()
-            {
-                anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
-            }
-
-            let mut additional_components = vec![];
-            if codegen_backends.contains(&CodegenBackend::Cranelift) {
-                additional_components.push("rustc-codegen-cranelift");
-            }
-            if profiles.contains(&Profile::Clippy) {
-                additional_components.push("clippy");
-            }
-
-            let mut cmd = Command::new("rustup-toolchain-install-master");
-            cmd.arg(toolchain);
-            for component in additional_components {
-                cmd.arg("-c").arg(component);
-            }
-
-            if !cmd
-                .status()
-                .context("failed to run `rustup-toolchain-install-master`")?
-                .success()
-            {
-                anyhow::bail!(
-                    "commit-like toolchain {} did not install successfully",
-                    toolchain
-                )
-            }
-        }
-
-        let output = Command::new("rustup")
-            .args(["which", "rustc", "--toolchain", toolchain])
-            .output()
-            .context("failed to run `rustup which rustc`")?;
-
-        anyhow::ensure!(
-            output.status.success(),
-            "did not manage to obtain toolchain {toolchain}"
-        );
-
-        let s = String::from_utf8(output.stdout)
-            .context("failed to convert `rustup which rustc` output to utf8")?;
-
-        let rustc = PathBuf::from(s.trim());
-        debug!("found rustc: {:?}", rustc);
-
-        // When the id comes from a +toolchain, the suffix is *not* added.
-        let id = if let Some(id) = toolchain_config.id {
-            let mut id = id.to_owned();
-            id.push_str(id_suffix);
-            id
-        } else {
-            toolchain.to_owned()
-        };
-        (rustc, id)
-    } else {
-        let rustc = PathBuf::from(rustc)
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize rustc executable {rustc:?}"))?;
-
-        // When specifying rustc via a path, the suffix is always added to the
-        // id.
-        let mut id = if let Some(id) = toolchain_config.id {
-            id.to_owned()
-        } else {
-            "Id".to_string()
-        };
-        id.push_str(id_suffix);
-
-        (rustc, id)
-    };
-
     let rustdoc =
-        if let Some(rustdoc) = &toolchain_config.rustdoc {
+        if let Some(rustdoc) = &opts.config.rustdoc {
             Some(rustdoc.canonicalize().with_context(|| {
                 format!("failed to canonicalize rustdoc executable {rustdoc:?}")
             })?)
-        } else if profiles.iter().any(|p| p.is_doc()) {
+        } else if opts.profiles.iter().any(|p| p.is_doc()) {
             // We need a `rustdoc`. Look for one next to `rustc`.
             if let Ok(rustdoc) = rustc
                 .with_file_name("rustdoc")
@@ -608,13 +640,13 @@ pub fn get_local_toolchain(
             None
         };
 
-    let clippy = if let Some(clippy) = &toolchain_config.clippy {
+    let clippy = if let Some(clippy) = &opts.config.clippy {
         Some(
             clippy
                 .canonicalize()
                 .with_context(|| format!("failed to canonicalize clippy executable {clippy:?}"))?,
         )
-    } else if profiles.contains(&Profile::Clippy) {
+    } else if opts.profiles.contains(&Profile::Clippy) {
         // We need a `clippy`. Look for one next to `rustc`.
         if let Ok(clippy) = rustc
             .with_file_name("clippy-driver")
@@ -633,7 +665,7 @@ pub fn get_local_toolchain(
         // No `clippy` provided, but none needed.
         None
     };
-    let cargo = if let Some(cargo) = &toolchain_config.cargo {
+    let cargo = if let Some(cargo) = &opts.config.cargo {
         cargo
             .canonicalize()
             .with_context(|| format!("failed to canonicalize cargo executable {cargo:?}"))?
@@ -658,7 +690,7 @@ pub fn get_local_toolchain(
         cargo
     };
     let host_lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;
-    let target_lib_dir = target_libdir_from_host_libdir(&host_lib_dir, &target_triple);
+    let target_lib_dir = target_libdir_from_host_libdir(&host_lib_dir, opts.target_triple);
 
     let mut components = ToolchainComponents::from_binaries_and_libdir(
         rustc,
@@ -668,69 +700,11 @@ pub fn get_local_toolchain(
         &host_lib_dir,
         &target_lib_dir,
     )?;
-    components.cargo_configs = toolchain_config.cargo_configs.to_vec();
+    components.cargo_configs = opts.config.cargo_configs.to_vec();
     Ok(Toolchain {
         components,
         id,
-        triple: target_triple,
-    })
-}
-
-/// Creates a toolchain from a *published* toolchain downloaded by rustup.
-pub fn create_toolchain_from_published_version(
-    toolchain: &str,
-    target_triple: &str,
-) -> anyhow::Result<Toolchain> {
-    let status = Command::new("rustup")
-        .args(["install", "--profile=minimal", toolchain])
-        .status()
-        .context("rustup install")?;
-    if !status.success() {
-        return Err(anyhow::anyhow!(
-            "failed to install toolchain for {toolchain}",
-        ));
-    }
-
-    let which = |tool| -> anyhow::Result<PathBuf> {
-        let path = String::from_utf8(
-            Command::new("rustup")
-                .arg("which")
-                .arg("--toolchain")
-                .arg(toolchain)
-                .arg(tool)
-                .output()
-                .context(format!("rustup which {tool}"))?
-                .stdout,
-        )
-        .context("utf8")?;
-        Ok(PathBuf::from(path.trim()))
-    };
-    let rustc = which("rustc")?;
-    let rustdoc = which("rustdoc")?;
-    let clippy = which("clippy")?;
-    let cargo = which("cargo")?;
-
-    debug!("Found rustc: {}", rustc.display());
-    debug!("Found rustdoc: {}", rustdoc.display());
-    debug!("Found clippy: {}", clippy.display());
-    debug!("Found cargo: {}", cargo.display());
-
-    let host_lib_dir = get_lib_dir_from_rustc(&rustc)?;
-    let target_lib_dir = target_libdir_from_host_libdir(&host_lib_dir, target_triple);
-
-    let components = ToolchainComponents::from_binaries_and_libdir(
-        rustc,
-        Some(rustdoc),
-        Some(clippy),
-        cargo,
-        &host_lib_dir,
-        &target_lib_dir,
-    )?;
-
-    Ok(Toolchain {
-        components,
-        id: toolchain.to_string(),
-        triple: target_triple.to_string(),
+        triple: opts.target_triple.to_string(),
     })
 }
 
