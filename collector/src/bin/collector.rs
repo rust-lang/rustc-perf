@@ -54,8 +54,8 @@ use collector::runtime::{
 };
 use collector::runtime::{RuntimeCompilationOpts, profile_runtime};
 use collector::toolchain::{
-    Sysroot, SysrootDownloadError, Toolchain, ToolchainConfig,
-    create_toolchain_from_published_version, get_local_toolchain,
+    Sysroot, SysrootDownloadError, Toolchain, ToolchainConfig, resolve_local_or_ci_toolchain,
+    resolve_published_toolchain,
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
@@ -976,7 +976,7 @@ fn main_result() -> anyhow::Result<i32> {
         } => {
             let host_target_tuple = require_host_target_tuple();
             let get_suite = |rustc: &str, id: &str| {
-                let toolchain = get_local_toolchain(
+                let toolchain = resolve_local_or_ci_toolchain(
                     &[Profile::Opt],
                     &[CodegenBackend::Llvm],
                     rustc,
@@ -1034,7 +1034,7 @@ fn main_result() -> anyhow::Result<i32> {
         } => {
             let host_target_tuple = require_host_target_tuple();
             let get_toolchain = |rustc: &str, id: &str| {
-                let toolchain = get_local_toolchain(
+                let toolchain = resolve_local_or_ci_toolchain(
                     &[Profile::Opt],
                     &[CodegenBackend::Llvm],
                     rustc,
@@ -1074,7 +1074,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(&db.db);
 
-            let toolchain = get_local_toolchain(
+            let toolchain = resolve_local_or_ci_toolchain(
                 &profiles,
                 &backends,
                 &local.rustc,
@@ -1133,8 +1133,7 @@ fn main_result() -> anyhow::Result<i32> {
             let pool = database::Pool::open(&db.db);
             let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
-            let toolchain =
-                create_toolchain_from_published_version(&toolchain, &require_host_target_tuple())?;
+            let toolchain = resolve_published_toolchain(&toolchain, &require_host_target_tuple())?;
             rt.block_on(bench_published_artifact(
                 conn,
                 toolchain,
@@ -1179,7 +1178,7 @@ fn main_result() -> anyhow::Result<i32> {
             let host_target_tuple = require_host_target_tuple();
             let mut get_toolchain_and_profile =
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {
-                    let toolchain = get_local_toolchain(
+                    let toolchain = resolve_local_or_ci_toolchain(
                         profiles,
                         backends,
                         rustc,
@@ -1655,9 +1654,7 @@ async fn run_benchmark_job(
             sysroot.preserve();
             Toolchain::from_sysroot(&sysroot, commit.sha.clone())
         }
-        ArtifactId::Tag(tag) => {
-            create_toolchain_from_published_version(tag, job.target().as_str())?
-        }
+        ArtifactId::Tag(tag) => resolve_published_toolchain(tag, job.target().as_str())?,
     };
     log::info!("Sysroot download finished");
 
@@ -1866,7 +1863,7 @@ fn binary_stats_compile(
     } = args;
 
     let codegen_backend2 = codegen_backend2.unwrap_or(codegen_backend);
-    let toolchain = get_local_toolchain(
+    let toolchain = resolve_local_or_ci_toolchain(
         &[Profile::Debug, Profile::Opt],
         &[codegen_backend],
         &local.rustc,
@@ -1878,7 +1875,7 @@ fn binary_stats_compile(
     )?;
     let toolchain2 = rustc2
         .map(|rustc| {
-            get_local_toolchain(
+            resolve_local_or_ci_toolchain(
                 &[Profile::Debug, Profile::Opt],
                 &[codegen_backend2],
                 &rustc,
@@ -2122,7 +2119,7 @@ fn get_local_toolchain_for_runtime_benchmarks(
     local: &LocalOptions,
     target_triple: &str,
 ) -> anyhow::Result<Toolchain> {
-    get_local_toolchain(
+    resolve_local_or_ci_toolchain(
         &[Profile::Opt],
         &[CodegenBackend::Llvm],
         &local.rustc,

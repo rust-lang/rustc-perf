@@ -479,13 +479,9 @@ impl<'a> ToolchainConfig<'a> {
     }
 }
 
-/// Get a toolchain from the input.
-/// - `rustc`: check if the given one is acceptable.
-/// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
-///   the `Doc` profile is requested, look for one next to the given `rustc`.
-/// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
-///   for the nightly Cargo via `rustup`.
-pub fn get_local_toolchain(
+/// Resolve a toolchain based either on a path to a local rustc binary, or
+/// a commit SHA downloaded from rust's CI.
+pub fn resolve_local_or_ci_toolchain(
     profiles: &[Profile],
     codegen_backends: &[CodegenBackend],
     rustc: &str,
@@ -676,19 +672,17 @@ pub fn get_local_toolchain(
     })
 }
 
-/// Creates a toolchain from a *published* toolchain downloaded by rustup.
-pub fn create_toolchain_from_published_version(
-    toolchain: &str,
+/// Creates a toolchain from a *published* Rust version downloaded by rustup.
+pub fn resolve_published_toolchain(
+    version: &str,
     target_triple: &str,
 ) -> anyhow::Result<Toolchain> {
     let status = Command::new("rustup")
-        .args(["install", "--profile=minimal", toolchain])
+        .args(["install", "--profile=minimal", version])
         .status()
         .context("rustup install")?;
     if !status.success() {
-        return Err(anyhow::anyhow!(
-            "failed to install toolchain for {toolchain}",
-        ));
+        return Err(anyhow::anyhow!("failed to install toolchain for {version}",));
     }
 
     let which = |tool| -> anyhow::Result<PathBuf> {
@@ -696,7 +690,7 @@ pub fn create_toolchain_from_published_version(
             Command::new("rustup")
                 .arg("which")
                 .arg("--toolchain")
-                .arg(toolchain)
+                .arg(version)
                 .arg(tool)
                 .output()
                 .context(format!("rustup which {tool}"))?
@@ -729,7 +723,7 @@ pub fn create_toolchain_from_published_version(
 
     Ok(Toolchain {
         components,
-        id: toolchain.to_string(),
+        id: version.to_string(),
         triple: target_triple.to_string(),
     })
 }
