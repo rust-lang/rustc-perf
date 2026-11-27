@@ -964,7 +964,13 @@ fn main_result() -> anyhow::Result<i32> {
                 iterations,
                 Target::from_str(&host_tuple).expect("Found unexpected host target"),
             );
-            rt.block_on(run_benchmarks(conn.as_mut(), shared, None, Some(config)))?;
+            rt.block_on(run_benchmarks(
+                &pool,
+                conn.as_mut(),
+                shared,
+                None,
+                Some(config),
+            ))?;
             Ok(0)
         }
         Commands::ProfileRuntime {
@@ -1124,7 +1130,13 @@ fn main_result() -> anyhow::Result<i32> {
                 prepare_jobs: opts.prepare_jobs,
             };
 
-            rt.block_on(run_benchmarks(conn.as_mut(), shared, Some(config), None))?;
+            rt.block_on(run_benchmarks(
+                &pool,
+                conn.as_mut(),
+                shared,
+                Some(config),
+                None,
+            ))?;
             Ok(0)
         }
 
@@ -1136,6 +1148,7 @@ fn main_result() -> anyhow::Result<i32> {
             let toolchain =
                 create_toolchain_from_published_version(&toolchain, &require_host_target_tuple())?;
             rt.block_on(bench_published_artifact(
+                &pool,
                 conn,
                 toolchain,
                 &benchmark_dirs,
@@ -1461,6 +1474,7 @@ async fn run_job_queue_benchmarks(
 
             log::info!("Dequeued job {benchmark_job:?}, artifact_id {artifact_id:?}");
             let result = run_benchmark_job(
+                &pool,
                 conn.as_mut(),
                 &benchmark_job,
                 artifact_id.clone(),
@@ -1601,6 +1615,7 @@ impl From<anyhow::Error> for BenchmarkJobError {
 }
 
 async fn run_benchmark_job(
+    pool: &Pool,
     conn: &mut dyn Connection,
     job: &BenchmarkJob,
     artifact_id: ArtifactId,
@@ -1682,7 +1697,7 @@ async fn run_benchmark_job(
 
     // A failure here means that it was not possible to compile something, that likely won't resolve
     // itself automatically.
-    run_benchmarks(conn, shared, compile_config, runtime_config)
+    run_benchmarks(pool, conn, shared, compile_config, runtime_config)
         .await
         .map_err(|error| {
             BenchmarkJobError::Permanent(anyhow::anyhow!("Cannot run benchmarks: {error:?}"))
@@ -2198,6 +2213,7 @@ async fn init_collection(
 
 /// Execute all benchmarks specified by the given configurations.
 async fn run_benchmarks(
+    pool: &Pool,
     connection: &mut dyn Connection,
     shared: SharedBenchmarkConfig,
     compile: Option<CompileBenchmarkConfig>,
@@ -2209,7 +2225,7 @@ async fn run_benchmarks(
 
     // Compile benchmarks
     let compile_result = if let Some(compile) = compile {
-        let errors = bench_compile(connection, &shared, compile, &collector).await;
+        let errors = bench_compile(pool, connection, &shared, compile, &collector).await;
         errors
             .fail_if_nonzero()
             .context("Compile benchmarks failed")
@@ -2238,6 +2254,7 @@ async fn run_benchmarks(
 
 /// Perform benchmarks on a published artifact.
 async fn bench_published_artifact(
+    pool: &Pool,
     mut connection: Box<dyn Connection>,
     toolchain: Toolchain,
     dirs: &BenchmarkDirs<'_>,
@@ -2282,6 +2299,7 @@ async fn bench_published_artifact(
         job_id: None,
     };
     run_benchmarks(
+        pool,
         connection.as_mut(),
         shared,
         Some(CompileBenchmarkConfig {
@@ -2320,6 +2338,7 @@ async fn with_timeout<T, F: Future<Output = anyhow::Result<T>>>(fut: F) -> anyho
 
 /// Perform compile benchmarks.
 async fn bench_compile(
+    pool: &Pool,
     conn: &mut dyn Connection,
     shared: &SharedBenchmarkConfig,
     config: CompileBenchmarkConfig,
@@ -2341,12 +2360,13 @@ async fn bench_compile(
         shared: &SharedBenchmarkConfig,
         config: &CompileBenchmarkConfig,
         errors: &mut BenchmarkErrors,
-        conn: &mut dyn Connection,
+        pool: &Pool,
         benchmark_name: &BenchmarkName,
         category: Category,
         print_intro: &dyn Fn(),
         measure: F,
     ) {
+        let mut conn = pool.connection().await;
         let mut tx = conn.transaction().await;
         let (supports_stable, category) = category.db_representation();
         tx.conn()
@@ -2406,7 +2426,7 @@ async fn bench_compile(
             shared,
             &config,
             &mut errors,
-            conn,
+            pool,
             &benchmark.name,
             benchmark.category(),
             &|| {
@@ -2437,7 +2457,7 @@ async fn bench_compile(
             shared,
             &config,
             &mut errors,
-            conn,
+            pool,
             &BenchmarkName("rustc".to_string()),
             Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
