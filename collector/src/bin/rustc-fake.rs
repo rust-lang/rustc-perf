@@ -80,7 +80,7 @@ fn main() {
         .ok()
         .and_then(|v| v.parse::<u32>().ok())
     {
-        args.push(OsString::from(format!("-Zthreads={count}")));
+        args.push(OsString::from(format!("--jobs-frontend={count}")));
     }
 
     args.push(OsString::from("-Adeprecated"));
