@@ -54,8 +54,9 @@ use collector::runtime::{
 };
 use collector::runtime::{RuntimeCompilationOpts, profile_runtime};
 use collector::toolchain::{
-    Sysroot, SysrootDownloadError, Toolchain, ToolchainConfig, resolve_local_or_ci_toolchain,
-    resolve_published_toolchain,
+    SharedToolchainRequestOpts, Sysroot, SysrootDownloadError, Toolchain, ToolchainConfig,
+    resolve_local_toolchain, resolve_published_toolchain,
+    resolve_rustc_commit_toolchain_via_rustup,
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
@@ -922,7 +923,11 @@ fn main_result() -> anyhow::Result<i32> {
             log_db(&db);
 
             let host_tuple = require_host_target_tuple();
-            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &host_tuple)?;
+            let rt = build_async_runtime();
+            let toolchain = rt.block_on(get_local_toolchain_for_runtime_benchmarks(
+                &local,
+                &host_tuple,
+            ))?;
             let pool = Pool::open(&db.db);
 
             let isolation_mode = if no_isolate {
@@ -931,7 +936,6 @@ fn main_result() -> anyhow::Result<i32> {
                 CargoIsolationMode::Isolated
             };
 
-            let rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
             let artifact_id = ArtifactId::Commit(Commit {
                 sha: toolchain.id.clone(),
@@ -975,15 +979,20 @@ fn main_result() -> anyhow::Result<i32> {
             benchmark,
         } => {
             let host_target_tuple = require_host_target_tuple();
+            let rt = build_async_runtime();
+
             let get_suite = |rustc: &str, id: &str| {
-                let toolchain = resolve_local_or_ci_toolchain(
-                    &[Profile::Opt],
-                    &[CodegenBackend::Llvm],
+                let toolchain = rt.block_on(resolve_toolchain(
                     rustc,
-                    ToolchainConfig::default(),
-                    id,
-                    host_target_tuple.clone(),
-                )?;
+                    SharedToolchainRequestOpts {
+                        config: ToolchainConfig::default(),
+                        profiles: &[Profile::Opt],
+                        codegen_backends: &[CodegenBackend::Llvm],
+                        target_triple: &host_target_tuple,
+                        id_suffix: id,
+                    },
+                ))?;
+
                 let suite = prepare_runtime_benchmark_suite(
                     &toolchain,
                     &runtime_benchmark_dir,
@@ -1033,16 +1042,18 @@ fn main_result() -> anyhow::Result<i32> {
             rustc2,
         } => {
             let host_target_tuple = require_host_target_tuple();
+            let rt = build_async_runtime();
             let get_toolchain = |rustc: &str, id: &str| {
-                let toolchain = resolve_local_or_ci_toolchain(
-                    &[Profile::Opt],
-                    &[CodegenBackend::Llvm],
+                rt.block_on(resolve_toolchain(
                     rustc,
-                    ToolchainConfig::default(),
-                    id,
-                    host_target_tuple.clone(),
-                )?;
-                Ok::<_, anyhow::Error>(toolchain)
+                    SharedToolchainRequestOpts {
+                        config: ToolchainConfig::default(),
+                        profiles: &[Profile::Opt],
+                        codegen_backends: &[CodegenBackend::Llvm],
+                        target_triple: &host_target_tuple,
+                        id_suffix: id,
+                    },
+                ))
             };
 
             let toolchain1 = get_toolchain(&rustc, "1")?;
@@ -1074,18 +1085,22 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(&db.db);
 
-            let toolchain = resolve_local_or_ci_toolchain(
-                &profiles,
-                &backends,
+            let rt = build_async_runtime();
+            let host_target_tuple = require_host_target_tuple();
+            let toolchain = rt.block_on(resolve_toolchain(
                 &local.rustc,
-                *ToolchainConfig::default()
-                    .rustdoc(opts.rustdoc.as_deref())
-                    .clippy(opts.clippy.as_deref())
-                    .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
-                    .id(local.id.as_deref()),
-                "",
-                require_host_target_tuple(),
-            )?;
+                SharedToolchainRequestOpts {
+                    config: *ToolchainConfig::default()
+                        .rustdoc(opts.rustdoc.as_deref())
+                        .clippy(opts.clippy.as_deref())
+                        .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
+                        .id(local.id.as_deref()),
+                    profiles: &profiles,
+                    codegen_backends: &backends,
+                    target_triple: &host_target_tuple,
+                    id_suffix: "",
+                },
+            ))?;
 
             let mut benchmarks = get_compile_benchmarks(&compile_benchmark_dir, (&local).into())?;
             benchmarks.retain(|b| local.category.0.contains(&b.category()));
@@ -1096,7 +1111,6 @@ fn main_result() -> anyhow::Result<i32> {
                 r#type: CommitType::Master,
             });
 
-            let rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
             if purge.purge {
                 rt.block_on(conn.purge_artifact(&artifact_id));
@@ -1132,14 +1146,13 @@ fn main_result() -> anyhow::Result<i32> {
             log_db(&db);
             let pool = database::Pool::open(&db.db);
             let rt = build_async_runtime();
-            let conn = rt.block_on(pool.connection());
-            let toolchain = resolve_published_toolchain(&toolchain, &require_host_target_tuple())?;
-            rt.block_on(bench_published_artifact(
-                conn,
-                toolchain,
-                &benchmark_dirs,
-                None,
-            ))?;
+            rt.block_on(async move {
+                let conn = pool.connection().await;
+                let toolchain =
+                    resolve_published_toolchain(&toolchain, &require_host_target_tuple()).await?;
+                bench_published_artifact(conn, toolchain, &benchmark_dirs, None).await?;
+                anyhow::Ok(())
+            })?;
             Ok(0)
         }
 
@@ -1176,20 +1189,23 @@ fn main_result() -> anyhow::Result<i32> {
                 .unwrap();
 
             let host_target_tuple = require_host_target_tuple();
+            let rt = build_async_runtime();
             let mut get_toolchain_and_profile =
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {
-                    let toolchain = resolve_local_or_ci_toolchain(
-                        profiles,
-                        backends,
+                    let toolchain = rt.block_on(resolve_toolchain(
                         rustc,
-                        *ToolchainConfig::default()
-                            .rustdoc(opts.rustdoc.as_deref())
-                            .clippy(opts.clippy.as_deref())
-                            .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
-                            .id(local.id.as_deref()),
-                        suffix,
-                        host_target_tuple.clone(),
-                    )?;
+                        SharedToolchainRequestOpts {
+                            config: *ToolchainConfig::default()
+                                .rustdoc(opts.rustdoc.as_deref())
+                                .clippy(opts.clippy.as_deref())
+                                .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
+                                .id(local.id.as_deref()),
+                            profiles,
+                            codegen_backends: backends,
+                            target_triple: &host_target_tuple,
+                            id_suffix: suffix,
+                        },
+                    ))?;
                     let id = toolchain.id.clone();
                     profile_compile(
                         &toolchain,
@@ -1402,6 +1418,23 @@ fn get_host_tuple_from_rustc(rustc: &str) -> anyhow::Result<String> {
             .trim()
             .to_string(),
     )
+}
+
+/// Resolves a toolchain request based on the passed `rustc` identifier.
+async fn resolve_toolchain<'a>(
+    rustc: &'a str,
+    opts: SharedToolchainRequestOpts<'a>,
+) -> anyhow::Result<Toolchain> {
+    if let Some(sha_like) = rustc.strip_prefix("+") {
+        if sha_like.len() != 40 {
+            return Err(anyhow::anyhow!(
+                "When using +<id> as the identifier for rustc, the `id` must correspond to a 40 character commit SHA"
+            ));
+        }
+        resolve_rustc_commit_toolchain_via_rustup(sha_like, opts).await
+    } else {
+        resolve_local_toolchain(Path::new(rustc), opts)
+    }
 }
 
 /// Maximum number of failures before a job will be marked as failed.
@@ -1654,7 +1687,7 @@ async fn run_benchmark_job(
             sysroot.preserve();
             Toolchain::from_sysroot(&sysroot, commit.sha.clone())
         }
-        ArtifactId::Tag(tag) => resolve_published_toolchain(tag, job.target().as_str())?,
+        ArtifactId::Tag(tag) => resolve_published_toolchain(&tag, job.target().as_str()).await?,
     };
     log::info!("Sysroot download finished");
 
@@ -1863,29 +1896,24 @@ fn binary_stats_compile(
     } = args;
 
     let codegen_backend2 = codegen_backend2.unwrap_or(codegen_backend);
-    let toolchain = resolve_local_or_ci_toolchain(
-        &[Profile::Debug, Profile::Opt],
-        &[codegen_backend],
-        &local.rustc,
-        *ToolchainConfig::default()
-            .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
-            .id(local.id.as_deref()),
-        "",
-        target_triple.to_string(),
-    )?;
-    let toolchain2 = rustc2
-        .map(|rustc| {
-            resolve_local_or_ci_toolchain(
-                &[Profile::Debug, Profile::Opt],
-                &[codegen_backend2],
-                &rustc,
-                *ToolchainConfig::default()
+    let rt = build_async_runtime();
+    let get_toolchain = |rustc: &str, codegen_backend: CodegenBackend| {
+        rt.block_on(resolve_toolchain(
+            rustc,
+            SharedToolchainRequestOpts {
+                config: *ToolchainConfig::default()
                     .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                     .id(local.id.as_deref()),
-                "",
-                target_triple.to_string(),
-            )
-        })
+                profiles: &[Profile::Debug, Profile::Opt],
+                codegen_backends: &[codegen_backend],
+                target_triple,
+                id_suffix: "",
+            },
+        ))
+    };
+    let toolchain = get_toolchain(&local.rustc, codegen_backend)?;
+    let toolchain2 = rustc2
+        .map(|rustc| get_toolchain(&rustc, codegen_backend2))
         .transpose()?;
     let profile = match profile {
         Profile::Debug => CargoProfile::Debug,
@@ -2115,20 +2143,23 @@ fn print_binary_stats(
     println!("{table}");
 }
 
-fn get_local_toolchain_for_runtime_benchmarks(
+async fn get_local_toolchain_for_runtime_benchmarks(
     local: &LocalOptions,
     target_triple: &str,
 ) -> anyhow::Result<Toolchain> {
-    resolve_local_or_ci_toolchain(
-        &[Profile::Opt],
-        &[CodegenBackend::Llvm],
+    resolve_toolchain(
         &local.rustc,
-        *ToolchainConfig::default()
-            .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
-            .id(local.id.as_deref()),
-        "",
-        target_triple.to_string(),
+        SharedToolchainRequestOpts {
+            config: *ToolchainConfig::default()
+                .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
+                .id(local.id.as_deref()),
+            profiles: &[Profile::Opt],
+            codegen_backends: &[CodegenBackend::Llvm],
+            target_triple,
+            id_suffix: "",
+        },
     )
+    .await
 }
 
 async fn load_runtime_benchmarks(
