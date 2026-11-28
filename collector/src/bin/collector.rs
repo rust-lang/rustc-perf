@@ -5,6 +5,7 @@ use chrono::Utc;
 use clap::builder::TypedValueParser;
 use clap::{Arg, Parser};
 use collector::compare::compare_artifacts;
+use futures::StreamExt;
 use hashbrown::HashSet;
 use humansize::{BINARY, format_size};
 use rayon::ThreadPoolBuilder;
@@ -22,6 +23,8 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::process::Command;
 use std::str::FromStr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use std::{str, time::Instant};
 use tabled::builder::Builder;
@@ -77,6 +80,8 @@ const TOOLCHAIN_CACHE_MAX_TOOLCHAINS: usize = 30;
 
 /// The amount of prepare jobs used by the job queue
 const PREPARE_JOBS_JOB_QUEUE: usize = 1;
+/// The amount of benchmark jobs used by the job queue
+const BENCHMARK_JOBS_JOB_QUEUE: usize = 1;
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -84,33 +89,35 @@ fn n_normal_benchmarks_remaining(n: usize) -> String {
 }
 
 struct BenchmarkErrors {
-    errors: usize,
-    successes: usize,
+    errors: AtomicUsize,
+    successes: AtomicUsize,
 }
 
 impl BenchmarkErrors {
     fn new() -> BenchmarkErrors {
         BenchmarkErrors {
-            errors: 0,
-            successes: 0,
+            errors: AtomicUsize::new(0),
+            successes: AtomicUsize::new(0),
         }
     }
 
-    fn incr_error(&mut self) {
-        self.errors += 1;
+    fn incr_error(&self) {
+        self.errors.fetch_add(1, Relaxed);
     }
 
-    fn incr_success(&mut self) {
-        self.successes += 1;
+    fn incr_success(&self) {
+        self.successes.fetch_add(1, Relaxed);
     }
 
-    fn add(&mut self, count: usize) {
-        self.errors += count;
+    fn add(&self, count: usize) {
+        self.errors.fetch_add(count, Relaxed);
     }
 
     fn fail_if_nonzero(self) -> anyhow::Result<()> {
-        if self.errors > 0 {
-            anyhow::bail!("{} benchmarks failed", self.errors)
+        if let errors = self.errors.load(Relaxed)
+            && errors > 0
+        {
+            anyhow::bail!("{} benchmarks failed", errors)
         }
         Ok(())
     }
@@ -152,6 +159,7 @@ struct CompileBenchmarkConfig {
     targets: Vec<Target>,
     frontend_threads_config: FrontendThreadsConfig,
     prepare_jobs: usize,
+    benchmark_jobs: usize,
 }
 
 struct RuntimeBenchmarkConfig {
@@ -469,6 +477,12 @@ struct CompileTimeOptions {
     /// Amount of threads used to prepare benchmarks
     #[arg(long, default_value = "1")]
     prepare_jobs: usize,
+
+    /// Amount of threads used to run benchmarks
+    /// Warning: Using more than 1 may introduce severe noise into any metrics other than `instructions`.
+    /// Even `instructions` might have slight additional noise.
+    #[arg(long, default_value = "1")]
+    benchmark_jobs: usize,
 }
 
 impl CompileTimeOptions {
@@ -1128,6 +1142,7 @@ fn main_result() -> anyhow::Result<i32> {
                 targets: vec![Target::host()],
                 frontend_threads_config,
                 prepare_jobs: opts.prepare_jobs,
+                benchmark_jobs: opts.benchmark_jobs,
             };
 
             rt.block_on(run_benchmarks(
@@ -1813,6 +1828,7 @@ async fn create_benchmark_configs(
             targets: vec![job.target().into()],
             frontend_threads_config: FrontendThreadsConfig::FromBenchmark,
             prepare_jobs: PREPARE_JOBS_JOB_QUEUE,
+            benchmark_jobs: BENCHMARK_JOBS_JOB_QUEUE,
         })
     } else {
         None
@@ -2313,6 +2329,7 @@ async fn bench_published_artifact(
             targets: vec![Target::host()],
             frontend_threads_config,
             prepare_jobs: PREPARE_JOBS_JOB_QUEUE,
+            benchmark_jobs: BENCHMARK_JOBS_JOB_QUEUE,
         }),
         Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
@@ -2344,7 +2361,7 @@ async fn bench_compile(
     config: CompileBenchmarkConfig,
     collector: &CollectorCtx,
 ) -> BenchmarkErrors {
-    let mut errors = BenchmarkErrors::new();
+    let errors = BenchmarkErrors::new();
     eprintln!(
         "Benchmarking {} for triple {}",
         shared.artifact_id, shared.toolchain.triple
@@ -2359,7 +2376,7 @@ async fn bench_compile(
         collector: &CollectorCtx,
         shared: &SharedBenchmarkConfig,
         config: &CompileBenchmarkConfig,
-        errors: &mut BenchmarkErrors,
+        errors: &BenchmarkErrors,
         pool: &Pool,
         benchmark_name: &BenchmarkName,
         category: Category,
@@ -2367,14 +2384,12 @@ async fn bench_compile(
         measure: F,
     ) {
         let mut conn = pool.connection().await;
-        let mut tx = conn.transaction().await;
         let (supports_stable, category) = category.db_representation();
-        tx.conn()
-            .record_compile_benchmark(&benchmark_name.0, Some(supports_stable), category)
+        conn.record_compile_benchmark(&benchmark_name.0, Some(supports_stable), category)
             .await;
         print_intro();
         let mut processor = BenchProcessor::new(
-            tx.conn(),
+            &mut *conn,
             benchmark_name,
             &shared.artifact_id,
             collector,
@@ -2384,18 +2399,16 @@ async fn bench_compile(
         if let Err(s) = result {
             eprintln!("collector error: Failed to benchmark '{benchmark_name}', recorded: {s:#}");
             errors.incr_error();
-            tx.conn()
-                .record_error(
-                    collector.artifact_row_id,
-                    &benchmark_name.0,
-                    &format!("{s:?}"),
-                    shared.job_id,
-                )
-                .await;
+            conn.record_error(
+                collector.artifact_row_id,
+                &benchmark_name.0,
+                &format!("{s:?}"),
+                shared.job_id,
+            )
+            .await;
         } else {
             errors.incr_success();
         };
-        tx.commit().await.expect("committed");
     }
 
     // Prepare normal benchmarks in parallel, limit threads to keep memory usage under control
@@ -2418,37 +2431,39 @@ async fn bench_compile(
     );
 
     // Normal benchmarks.
-    for (nth_benchmark, (benchmark, prepared_dirs)) in
-        config.benchmarks.iter().zip(prepared_dirs).enumerate()
-    {
-        measure_and_record(
-            collector,
-            shared,
-            &config,
-            &mut errors,
-            pool,
-            &benchmark.name,
-            benchmark.category(),
-            &|| {
-                eprintln!(
-                    "{}",
-                    n_normal_benchmarks_remaining(config.benchmarks.len() - nth_benchmark)
-                )
-            },
-            async |processor| {
-                let prepared_dirs = prepared_dirs?;
-                with_timeout(benchmark.measure(
-                    processor,
-                    &shared.toolchain,
-                    config.iterations,
-                    prepared_dirs,
-                ))
-                .await
-                .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
-            },
-        )
+    futures::stream::iter(config.benchmarks.iter().zip(prepared_dirs).enumerate())
+        .map(async |(nth_benchmark, (benchmark, prepared_dirs))| {
+            measure_and_record(
+                collector,
+                shared,
+                &config,
+                &errors,
+                pool,
+                &benchmark.name,
+                benchmark.category(),
+                &|| {
+                    eprintln!(
+                        "{}",
+                        n_normal_benchmarks_remaining(config.benchmarks.len() - nth_benchmark)
+                    )
+                },
+                async |processor| {
+                    let prepared_dirs = prepared_dirs?;
+                    with_timeout(benchmark.measure(
+                        processor,
+                        &shared.toolchain,
+                        config.iterations,
+                        prepared_dirs,
+                    ))
+                    .await
+                    .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
+                },
+            )
+            .await
+        })
+        .buffer_unordered(config.benchmark_jobs)
+        .collect::<Vec<()>>()
         .await;
-    }
 
     // The special rustc benchmark, if requested.
     if bench_rustc {
@@ -2456,7 +2471,7 @@ async fn bench_compile(
             collector,
             shared,
             &config,
-            &mut errors,
+            &errors,
             pool,
             &BenchmarkName("rustc".to_string()),
             Category::Primary,
@@ -2474,7 +2489,9 @@ async fn bench_compile(
 
     eprintln!(
         "collection took {:?} with {} failed benchmarks. {} succesful benchmarks got written to the database",
-        end, errors.errors, errors.successes
+        end,
+        errors.errors.load(Relaxed),
+        errors.successes.load(Relaxed)
     );
 
     // This ensures that we're good to go with the just updated data.
