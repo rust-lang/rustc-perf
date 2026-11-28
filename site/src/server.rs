@@ -5,12 +5,11 @@ use sha2::Sha256;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use std::{fmt, str};
 
-use headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch};
-use http::header::CACHE_CONTROL;
+use headers::{CacheControl, ContentType};
+
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::StatusCode;
 use hyper::body::{Bytes, Incoming};
@@ -19,7 +18,6 @@ use log::{error, info};
 use parking_lot::RwLock;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use uuid::Uuid;
 
 pub use crate::api::{
     self, ServerResult, comparison, dashboard, github, graphs, info, self_profile, status,
@@ -460,7 +458,8 @@ where
     }
 }
 
-static VERSION_UUID: LazyLock<Uuid> = LazyLock::new(Uuid::new_v4); // random UUID used as ETag for cache revalidation
+#[cfg(not(debug_assertions))]
+static VERSION_UUID: LazyLock<uuid::Uuid> = LazyLock::new(uuid::Uuid::new_v4); // random UUID used as ETag for cache revalidation
 static TEMPLATES: LazyLock<ResourceResolver> =
     LazyLock::new(|| ResourceResolver::new().expect("Cannot load resources"));
 
@@ -470,17 +469,33 @@ async fn handle_fs_path(req: &Request, path: &str, use_compression: bool) -> Opt
         return Some(not_found());
     }
 
-    let etag = ETag::from_str(&format!(r#""{}""#, *VERSION_UUID)).unwrap();
-    let mut response = http::Response::builder()
-        .header_typed(etag.clone())
-        .header(CACHE_CONTROL, "max-age=60, stale-while-revalidate=86400"); // tell client to use cached response for one day, but revalidate in background if older than one minute
+    #[cfg(debug_assertions)]
+    let mut response = {
+        let _ = req;
+        // Disable HTTP caching in debug builds so we can see changes immediately.
+        http::Response::builder().header_typed(CacheControl::new().with_no_cache().with_no_store())
+    };
 
-    let if_none_match = req.headers().typed_get::<IfNoneMatch>();
-    if let Some(if_none_match) = if_none_match
-        && !if_none_match.precondition_passes(&etag)
-    {
-        return Some(not_modified(response)); // tell client that the resource was not modified and to use cached response
-    }
+    #[cfg(not(debug_assertions))]
+    let mut response = {
+        use headers::{ETag, HeaderMapExt, IfNoneMatch};
+        use http::header::CACHE_CONTROL;
+        use std::str::FromStr;
+
+        let etag = ETag::from_str(&format!(r#""{}""#, *VERSION_UUID)).unwrap();
+        let response = http::Response::builder()
+            .header_typed(etag.clone())
+            .header(CACHE_CONTROL, "max-age=60, stale-while-revalidate=86400"); // tell client to use cached response for one day, but revalidate in background if older than one minute
+
+        let if_none_match = req.headers().typed_get::<IfNoneMatch>();
+        if let Some(if_none_match) = if_none_match
+            && !if_none_match.precondition_passes(&etag)
+        {
+            return Some(not_modified(response)); // tell client that the resource was not modified and to use cached response
+        }
+
+        response
+    };
 
     async fn resolve_template(path: &str) -> Vec<u8> {
         TEMPLATES
@@ -530,6 +545,7 @@ async fn handle_fs_path(req: &Request, path: &str, use_compression: bool) -> Opt
     Some(response.body(Bytes::from(source)).unwrap())
 }
 
+#[cfg(not(debug_assertions))]
 fn not_modified(response: http::response::Builder) -> Response {
     response
         .status(StatusCode::NOT_MODIFIED)
