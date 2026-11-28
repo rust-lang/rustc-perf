@@ -9,7 +9,14 @@ use chrono::Utc;
 use serde::Deserialize;
 use std::time::Duration;
 
-pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-lang/rust";
+/// Get the GitHub API URL for performing API requests to the repository that we are working with.
+pub fn github_api_url(ctxt: &SiteCtxt) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}",
+        ctxt.config.repo_owner(),
+        ctxt.config.repo_name()
+    )
+}
 
 /// Comments that are temporary and do not add any value once there has been a new development
 /// (a rustc build or a perf. run was finished) are marked with this comment.

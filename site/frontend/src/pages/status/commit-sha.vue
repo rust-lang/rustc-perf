@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {computed} from "vue";
 import {tagLooksLikeSha} from "./data";
+import {PAGE_DATA} from "../../data";
 
 const props = defineProps<{
   tag: string;
@@ -14,7 +15,7 @@ const looksLikeSha = computed(() => tagLooksLikeSha(props.tag));
   <a
     v-if="looksLikeSha"
     :title="tag"
-    :href="'https://github.com/rust-lang/rust/commit/' + tag"
+    :href="`https://github.com/${PAGE_DATA.repository}/commit/${tag}`"
   >
     {{ truncate ? tag.substring(0, 13) : tag }}
   </a>

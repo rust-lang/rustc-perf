@@ -187,9 +187,9 @@ impl std::error::Error for ServerError {}
 
 async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError> {
     // Don't attempt to get lock if we're updating
-    if server.ctxt.read().is_none() {
+    let Some(ctxt) = server.ctxt.read().as_ref().cloned() else {
         return Ok(Response::new(Bytes::from("no data yet, please wait")));
-    }
+    };
 
     if req.method() == http::Method::OPTIONS {
         return Ok(http::Response::builder()
@@ -220,7 +220,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         None
     };
 
-    if let Some(response) = handle_fs_path(&req, path, allow_compression).await {
+    if let Some(response) = handle_fs_path(&req, &ctxt, path, allow_compression).await {
         return Ok(response);
     }
 
@@ -244,8 +244,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 .await;
         }
         "/perf/status_page" => {
-            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-            let result = request_handlers::handle_status_page(ctxt).await;
+            let result = request_handlers::handle_status_page(&ctxt).await;
             return match result {
                 Ok(result) => Ok(http::Response::builder()
                     .header_typed(ContentType::json())
@@ -260,7 +259,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             };
         }
         "/perf/triage" if *req.method() == http::Method::GET => {
-            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
             let input: triage::Request = check!(parse_query_string(req.uri()));
             return Ok(to_triage_response(
                 crate::comparison::handle_triage(input, &ctxt).await,
@@ -302,12 +300,10 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             return Ok(server.handle_metrics(req).await);
         }
         "/perf/download-raw-self-profile" => {
-            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
             let req = check!(parse_query_string(req.uri()));
             return Ok(request_handlers::handle_self_profile_raw_download(req, &ctxt).await);
         }
         "/perf/processed-self-profile" => {
-            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
             let req = check!(parse_query_string(req.uri()));
             return Ok(request_handlers::handle_self_profile_processed_download(
                 req,
@@ -323,7 +319,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     // POST requests
     let (req, body) = req.into_parts();
     check_http_method!(req.method, http::Method::POST);
-    let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
     let body = match Limited::new(body, 1024 * 1024 * 10).collect().await {
         Ok(body) => body.to_bytes(),
         Err(err)
@@ -364,11 +359,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             };
             match event.as_str() {
                 "issue_comment" | "push" => Ok(to_response(
-                    request_handlers::handle_github_webhook(
-                        check!(parse_body(&body)),
-                        ctxt.clone(),
-                    )
-                    .await,
+                    request_handlers::handle_github_webhook(check!(parse_body(&body)), ctxt).await,
                     &compression,
                 )),
                 _ => Ok(http::Response::builder()
@@ -465,7 +456,12 @@ static TEMPLATES: LazyLock<ResourceResolver> =
     LazyLock::new(|| ResourceResolver::new().expect("Cannot load resources"));
 
 /// Handle the case where the path is to a static file
-async fn handle_fs_path(req: &Request, path: &str, use_compression: bool) -> Option<Response> {
+async fn handle_fs_path(
+    req: &Request,
+    ctxt: &SiteCtxt,
+    path: &str,
+    use_compression: bool,
+) -> Option<Response> {
     if path.contains("./") | path.contains("../") {
         return Some(not_found());
     }
@@ -482,12 +478,12 @@ async fn handle_fs_path(req: &Request, path: &str, use_compression: bool) -> Opt
         return Some(not_modified(response)); // tell client that the resource was not modified and to use cached response
     }
 
-    async fn resolve_template(path: &str) -> Vec<u8> {
+    let resolve_template = async |path: &str| -> Vec<u8> {
         TEMPLATES
-            .get_template(&format!("pages/{path}"))
+            .get_template(ctxt, &format!("pages/{path}"))
             .await
             .unwrap()
-    }
+    };
 
     let relative_path = path.trim_start_matches('/');
     let source = match path {
@@ -562,9 +558,14 @@ fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
 
     type HmacSha256 = Hmac<Sha256>;
 
-    let mut mac =
-        HmacSha256::new_from_slice(cfg.keys.github_webhook_secret.as_ref().unwrap().as_bytes())
-            .expect("HMAC can take key of any size");
+    let mut mac = HmacSha256::new_from_slice(
+        cfg.keys()
+            .github_webhook_secret
+            .as_ref()
+            .unwrap()
+            .as_bytes(),
+    )
+    .expect("HMAC can take key of any size");
     mac.update(body);
     let sha = header.strip_prefix("sha256=")?;
     let sha = hex::decode(sha).ok()?;

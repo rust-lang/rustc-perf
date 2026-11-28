@@ -7,10 +7,9 @@ use database::{
     BenchmarkRequestType, Connection,
 };
 use hashbrown::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
-pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> anyhow::Result<status::Response> {
+pub async fn handle_status_page(ctxt: &SiteCtxt) -> anyhow::Result<status::Response> {
     let conn = ctxt.conn().await;
 
     // The queue contains any in-progress request(s) and then the following requests in queue order

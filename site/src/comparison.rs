@@ -17,8 +17,8 @@ use serde::Serialize;
 
 use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
-use crate::github::RUST_REPO_GITHUB_API_URL;
 use crate::github::client::{Client, GraphQLClient, PullRequest};
+use crate::github::github_api_url;
 use crate::github::triage::find_and_parse_unrolled_build_comment;
 use crate::server::comparison::StatComparison;
 use anyhow::anyhow;
@@ -48,7 +48,7 @@ pub async fn handle_triage(
     // Find list of artifact comparisons for this request
     let metric = body.metric.unwrap_or(Metric::InstructionsUser);
     let benchmark_map = ctxt.get_benchmark_category_map().await;
-    let rest_client = Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
+    let rest_client = Client::from_ctxt(ctxt, github_api_url(ctxt));
     let (end, artifact_comparisons) =
         find_comparisons(&start, &end, metric, master_commits, ctxt).await?;
 

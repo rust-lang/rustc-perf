@@ -48,7 +48,7 @@ async function loadSections(): Promise<CompileDetailSections> {
 }
 
 function benchmarkLink(benchmark: string): string {
-  return `https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks/${benchmark}`;
+  return `https://github.com/rust-lang/rustc-perf/tree/main/collector/compile-benchmarks/${benchmark}`;
 }
 
 function detailedQueryLink(

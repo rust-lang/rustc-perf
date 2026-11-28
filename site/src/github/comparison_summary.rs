@@ -7,7 +7,7 @@ use crate::load::SiteCtxt;
 use database::{QueuedCommit, metric::Metric};
 
 use crate::github::triage::{TriageBuild, changed_benchmarks, is_triage_run, update_triage_body};
-use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
+use crate::github::{COMMENT_MARK_TEMPORARY, github_api_url};
 use humansize::BINARY;
 use std::fmt::Write;
 
@@ -19,7 +19,7 @@ pub async fn post_comparison_comment(
     commit: QueuedCommit,
     is_master_commit: bool,
 ) -> anyhow::Result<()> {
-    let mut client = super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
+    let mut client = super::client::Client::from_ctxt(ctxt, github_api_url(ctxt));
     let pr = commit.pr;
 
     // Scan comments to hide outdated ones and gather context

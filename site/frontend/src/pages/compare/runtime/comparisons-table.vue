@@ -61,7 +61,7 @@ const unit = computed(() => {
               the significance threshold, the noisier a test case is. You can
               see
               <a
-                href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant"
+                href="https://github.com/rust-lang/rustc-perf/blob/main/docs/comparison-analysis.md#what-makes-a-test-result-significant"
               >
                 here</a
               >

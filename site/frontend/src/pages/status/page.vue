@@ -24,6 +24,7 @@ import CommitSha from "./commit-sha.vue";
 import DateFmtPicker from "./date-format-selection.vue";
 import {DATE_FMT_12HR, DATE_FMT_24HR} from "../../utils/date-formats";
 import {DEFAULT_COMPILE_TARGET_TRIPLE} from "../../api";
+import {PAGE_DATA} from "../../data";
 
 const loading = ref(true);
 
@@ -141,7 +142,7 @@ function ExpectedCurrentRequestCompletion() {
     link = <CommitSha tag={req.tag}></CommitSha>;
     kind = "";
   } else {
-    const url = `https://github.com/rust-lang/rust/pull/${req.pr}`;
+    const url = `https://github.com/${PAGE_DATA.repository}/pull/${req.pr}`;
     link = (
       <a href={url} target="_blank">
         #{req.pr}
@@ -161,7 +162,7 @@ function PullRequestLink({request}: {request: BenchmarkRequest}) {
     return "";
   }
   return (
-    <a href={`https://github.com/rust-lang/rust/pull/${request.pr}`}>
+    <a href={`https://github.com/${PAGE_DATA.repository}/pull/${request.pr}`}>
       #{request.pr}
     </a>
   );

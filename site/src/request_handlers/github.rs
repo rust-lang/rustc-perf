@@ -1,6 +1,6 @@
 use crate::api::{ServerResult, github};
 use crate::github::{
-    COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL, client, enqueue_sha, parse_homu_comment,
+    COMMENT_MARK_TEMPORARY, client, enqueue_sha, github_api_url, parse_homu_comment,
 };
 use crate::load::SiteCtxt;
 use std::fmt::Write;
@@ -54,7 +54,7 @@ async fn handle_issue(ctxt: Arc<SiteCtxt>, issue: github::Issue, comment: github
         return;
     }
 
-    let gh_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
+    let gh_client = client::Client::from_ctxt(&ctxt, github_api_url(&ctxt));
     if comment.body.contains(" homu: ")
         && let Some(sha) = parse_homu_comment(&comment.body).await
     {

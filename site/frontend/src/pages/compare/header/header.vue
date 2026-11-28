@@ -2,6 +2,7 @@
 import {ArtifactDescription, CompareResponse, CompareSelector} from "../types";
 import {formatDate} from "../shared";
 import {computed} from "vue";
+import {PAGE_DATA} from "../../../data";
 
 const props = defineProps<{
   data: CompareResponse | null;
@@ -9,10 +10,10 @@ const props = defineProps<{
 }>();
 
 function prLink(pr: number | null): string {
-  return `https://github.com/rust-lang/rust/pull/${pr}`;
+  return `https://github.com/${PAGE_DATA.repository}/pull/${pr}`;
 }
 function commitLink(commit: string): string {
-  return `https://github.com/rust-lang/rust/commit/${commit}`;
+  return `https://github.com/${PAGE_DATA.repository}/commit/${commit}`;
 }
 function short(artifact: ArtifactDescription): string {
   return shortCommit(artifact.commit);
@@ -49,7 +50,7 @@ const nextLink = computed(
 );
 const compareLink = computed(
   () =>
-    `https://github.com/rust-lang/rust/compare/${props.data.a.commit}...${props.data.b.commit}`
+    `https://github.com/${PAGE_DATA.repository}/compare/${props.data.a.commit}...${props.data.b.commit}`
 );
 
 const before = computed(() =>
