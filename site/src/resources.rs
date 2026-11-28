@@ -22,7 +22,7 @@ struct StaticAssets;
 #[derive(RustEmbed)]
 #[folder = "frontend/dist"]
 #[include = "*.js"]
-#[include = "*.br"]
+#[cfg_attr(not(debug_assertions), include = "*.br")]
 #[include = "*.css"]
 // Source maps for debugging; only in debug mode since it increases binary size by ~6%
 #[cfg_attr(debug_assertions, include = "*.map")]
@@ -53,7 +53,9 @@ impl ResourceResolver {
     }
 
     pub fn get_static_asset(&self, path: &str, use_compression: bool) -> Option<Payload> {
-        if use_compression {
+        // `npm run watch` does not regenerate `.br` bundles, so skip this
+        // in debug builds to avoid having stale assets.
+        if cfg!(not(debug_assertions)) && use_compression {
             let compressed_path = path.to_owned() + ".br";
             let data =
                 StaticCompiledAssets::get(compressed_path.as_str()).map(|file| file.data.to_vec());
